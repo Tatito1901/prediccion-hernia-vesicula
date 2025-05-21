@@ -1,0 +1,286 @@
+"use client";
+
+import { useState, useMemo, useCallback } from "react"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SearchIcon } from "lucide-react"
+import { useAppContext } from "@/src/lib/context/app-context"
+import { NewPatientForm } from "@/components/patient-admision/new-patient-form"
+import { generateSurveyId } from "@/src/lib/form-utils"
+import { useRouter } from "next/navigation"
+import { useIsMobile } from "@/src/hooks/use-is-mobile"
+import { PatientTable } from "./patient-table"
+import { PatientCardMobile } from "../patient-admision/patient-card-mobile"
+import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+
+export function PatientManagement() {
+  const { patients } = useAppContext()
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [selectedPatient, setSelectedPatient] = useState<any>(null)
+  const [surveyLink, setSurveyLink] = useState("")
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editingPatientId, setEditingPatientId] = useState<number | null>(null)
+  const router = useRouter()
+  const isMobile = useIsMobile()
+
+  // Estados para la paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // Estados para el modal de encuesta y selección de paciente
+  const [showSurveyModal, setShowSurveyModal] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  // Memoizar la lista filtrada de pacientes para evitar recálculos innecesarios
+  const filteredPatientsRaw = useMemo(() => {
+    let filtered = patients
+
+    // Aplicar filtro de búsqueda
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (patient) =>
+          `${patient.nombre} ${patient.apellidos}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (patient.diagnostico && patient.diagnostico.toLowerCase().includes(searchTerm.toLowerCase())),
+      )
+    }
+
+    // Aplicar filtro de estado
+    if (statusFilter && statusFilter !== "todos") {
+      filtered = filtered.filter((patient) => patient.estado === statusFilter)
+    }
+
+    return filtered
+  }, [patients, searchTerm, statusFilter]);
+
+  // Calcular el número total de páginas
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredPatientsRaw.length / itemsPerPage);
+  }, [filteredPatientsRaw, itemsPerPage]);
+
+  // Obtener los pacientes para la página actual
+  const paginatedPatients = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredPatientsRaw.slice(startIndex, endIndex);
+  }, [filteredPatientsRaw, currentPage, itemsPerPage]);
+
+  // Memoizar la lista de pacientes sin encuesta
+  const patientsWithoutSurvey = useMemo(() => {
+    return patients.filter((patient) => !patient.encuesta)
+  }, [patients])
+
+  // Memoizar la función para obtener la clase de color según el estado
+  const getStatusColorClass = useCallback((status: string) => {
+    switch (status) {
+      case "Operado":
+        return "bg-green-100 text-green-800 dark:bg-green-800/20 dark:text-green-400"
+      case "No Operado":
+        return "bg-red-100 text-red-800 dark:bg-red-800/20 dark:text-red-400"
+      case "Pendiente de consulta":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-800/20 dark:text-yellow-400"
+      case "Seguimiento":
+        return "bg-purple-100 text-purple-800 dark:bg-purple-800/20 dark:text-purple-400"
+      case "Cancelado":
+        return "bg-gray-100 text-gray-800 dark:bg-gray-800/20 dark:text-gray-400"
+      default:
+        return ""
+    }
+  }, [])
+
+  // Función para ir a la página siguiente
+  const handleNextPage = () => {
+    setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+  };
+
+  // Función para ir a la página anterior
+  const handlePreviousPage = () => {
+    setCurrentPage((prev) => Math.max(prev - 1, 1));
+  };
+
+  // Función para abrir el diálogo de compartir encuesta
+  const handleShareSurvey = useCallback((patient: any) => {
+    const surveyId = generateSurveyId()
+    // Generar enlace para la ruta /survey/[id]
+    const link = `${window.location.origin}/survey/${surveyId}?patientId=${patient.id}`
+
+    setSelectedPatient(patient)
+    setSurveyLink(link)
+    setShareDialogOpen(true)
+  }, [])
+
+  // Función para contestar la encuesta directamente
+  const handleAnswerSurvey = useCallback(
+    (patient: any) => {
+      const surveyId = generateSurveyId()
+
+      // Mostrar notificación de redirección
+      toast.info(`Iniciando encuesta para ${patient.nombre} ${patient.apellidos}`, {
+        description: "Redirigiendo a la página de encuesta...",
+      })
+
+      // Redirigir al entorno aislado de la encuesta
+      router.push(`/survey/${surveyId}?patientId=${patient.id}&mode=internal`)
+    },
+    [router],
+  )
+
+  // Función para abrir el diálogo de edición de paciente
+  const handleEditPatient = useCallback((patient: any) => {
+    setEditingPatientId(patient.id)
+    setEditDialogOpen(true)
+  }, [])
+
+  // Función para manejar la selección de pacientes
+  const handlePatientSelect = useCallback(
+    (patient: any) => {
+      console.log("Patient selected:", patient)
+      setSelectedPatient(patient)
+      setLoading(true)
+
+      // Visual feedback
+      toast.info(`Seleccionado: ${patient.nombre} ${patient.apellidos}`, {
+        description: `ID: ${patient.id} - ${patient.diagnostico || "Sin diagnóstico"} - ${patient.estado || "Pendiente"}`,
+      })
+
+      // Check if survey is completed
+      if (!patient.encuesta) {
+        setLoading(false)
+        // Mostrar opciones para pacientes sin encuesta
+        setShowSurveyModal(true)
+      } else {
+        // Survey is completed, navigate to results with a slight delay for visual feedback
+        setTimeout(() => {
+          try {
+            router.push(`/survey-results/${patient.id}`)
+          } catch (error) {
+            console.error("Navigation error:", error)
+            toast.error("Error al navegar a los resultados", {
+              description: "Intente nuevamente o contacte al soporte técnico",
+            })
+          } finally {
+            setLoading(false)
+          }
+        }, 300)
+      }
+    },
+    [router],
+  )
+
+  // Función para iniciar la encuesta internamente desde el diálogo de compartir
+  const handleStartInternalSurvey = useCallback(() => {
+    if (selectedPatient) {
+      const surveyId = generateSurveyId()
+
+      // Cerrar el diálogo
+      setShareDialogOpen(false)
+
+      // Mostrar notificación de redirección
+      toast.info(`Iniciando encuesta para ${selectedPatient.nombre} ${selectedPatient.apellidos}`, {
+        description: "Redirigiendo a la página de encuesta...",
+      })
+
+      // Redirigir a la página de encuesta aislada
+      router.push(`/survey/${surveyId}?patientId=${selectedPatient.id}&mode=internal`)
+    }
+  }, [selectedPatient, router])
+
+  return (
+    <div className="w-full space-y-4">
+      <div className="px-4 pt-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex-1">
+            <h2 className="text-2xl font-bold tracking-tight mb-1">Gestión de Pacientes</h2>
+            <p className="text-muted-foreground">Administre la información de sus pacientes</p>
+          </div>
+          <div className="relative w-full sm:w-[280px] lg:w-[320px]">
+            <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar pacientes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 w-full"
+            />
+          </div>
+          <NewPatientForm />
+        </div>
+      </div>
+      <div className="px-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div className="flex justify-end">
+            <Select value={statusFilter || "todos"} onValueChange={(value) => {
+              setStatusFilter(value);
+              setCurrentPage(1); // Resetear a la primera página al cambiar el filtro
+            }}>
+              <SelectTrigger className="w-[140px] sm:w-[180px]">
+                <SelectValue placeholder="Filtrar por estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="Pendiente de consulta">Pendiente</SelectItem>
+                <SelectItem value="Operado">Operado</SelectItem>
+                <SelectItem value="No Operado">No Operado</SelectItem>
+                <SelectItem value="Seguimiento">Seguimiento</SelectItem>
+                <SelectItem value="Cancelado">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Contenedor principal para la tabla/tarjetas y paginación */}
+        {isMobile ? (
+          <div className="space-y-4">
+            {paginatedPatients.map((patient) => (
+              <PatientCardMobile
+                key={patient.id}
+                patient={patient}
+                onShare={() => handleShareSurvey(patient)} 
+                onAnswer={() => handleAnswerSurvey(patient)} 
+                onEdit={() => handleEditPatient(patient)} 
+                getStatusColorClass={getStatusColorClass} 
+                onSelectPatient={() => handlePatientSelect(patient)} 
+              />
+            ))}
+          </div>
+        ) : (
+          <PatientTable
+            patients={paginatedPatients} 
+            onShareSurvey={handleShareSurvey}
+            onAnswerSurvey={handleAnswerSurvey}
+            onEditPatient={handleEditPatient}
+            onSelectPatient={handlePatientSelect}
+          />
+        )}
+
+        {/* Controles de Paginación */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center space-x-4 mt-6 mb-4">
+            <Button onClick={handlePreviousPage} disabled={currentPage === 1} variant="outline">
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Página {currentPage} de {totalPages}
+            </span>
+            <Button onClick={handleNextPage} disabled={currentPage === totalPages} variant="outline">
+              Siguiente
+            </Button>
+          </div>
+        )}
+
+        {/* Diálogo para compartir encuesta */}
+        {selectedPatient && (
+          <SurveyShareDialog
+            isOpen={shareDialogOpen}
+            patient={selectedPatient}
+            surveyLink={surveyLink}
+            onStartInternal={handleStartInternalSurvey}
+            onClose={() => setShareDialogOpen(false)}
+          />
+        )}
+      </div>
+    </div>
+  )
+}

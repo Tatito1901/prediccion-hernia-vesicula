@@ -1,0 +1,1543 @@
+// app/pacientes/additional-patients.ts
+
+// --- Definiciones de Tipos Robustas ---
+
+/** Representa una fecha en formato ISO (YYYY-MM-DD) */
+export type ISODateString = string;
+
+/** Representa un número de teléfono */
+export type PhoneNumberString = string;
+
+/** Representa una dirección de correo electrónico */
+export type EmailString = string;
+
+/** Posibles estados de un paciente */
+export type PatientStatus =
+  | "Operado"
+  | "No Operado"
+  | "Pendiente de consulta"
+  | "En consulta"
+  | "Seguimiento"
+  | "Cancelado";
+
+/** Posibles orígenes de un paciente o encuesta */
+export type PatientOrigin =
+  | "Google"
+  | "Recomendación"
+  | "Sitio Web"
+  | "Facebook"
+  | "Instagram"
+  | "Urgencias"
+  | "Referido por Gastroenterólogo";
+
+/** Tipos de diagnóstico principales */
+export type DiagnosisType =
+  | "Hernia Inguinal"
+  | "Vesícula"
+  | "Hernia Umbilical"
+  | "Hernia Incisional"
+  | "Apendicitis" // Añadido desde los datos
+  | "Hernia Hiatal" // Añadido desde los datos
+  | "Lipoma Grande" // Añadido desde los datos
+  | "Hernia Inguinal Recidivante" // Añadido desde los datos
+  | "Quiste Sebáceo Infectado" // Añadido desde los datos
+  | "Eventración Abdominal" // Añadido desde los datos
+  | "Vesícula (Colecistitis Crónica)"; // Añadido desde los datos
+
+/** Severidad de la condición según la encuesta */
+export type SurveyConditionSeverity = "Leve" | "Moderada" | "Severa" | "Crítica";
+
+/** Nivel de afectación diaria según la encuesta */
+export type SurveyDailyAffectation =
+  | "Leve"
+  | "Moderada"
+  | "Severa"
+  | "No tengo limitaciones"
+  | "Crítica";
+
+/** Plazo deseado para la cirugía según la encuesta */
+export type SurveyDesiredTimeline =
+  | "30 días"
+  | "Urgente"
+  | "Sin prisa"
+  | "90 días"
+  | "60 días"
+  | "Inmediato"
+  | "30-60 días"
+  | "90-120 días";
+
+/**
+ * Define la estructura de la encuesta del paciente.
+ */
+export interface PatientSurvey {
+  nombre: string;
+  apellidos: string;
+  edad: number;
+  telefono: PhoneNumberString;
+  email: EmailString;
+  origen: PatientOrigin;
+  diagnosticoPrevio: boolean;
+  detallesDiagnostico?: string; // Opcional, puede no aplicar si diagnosticoPrevio es false
+  seguroMedico: string; // Podría ser un union type si hay una lista finita de seguros
+  sintomas: string[];
+  duracionSintomas: string;
+  severidadCondicion: SurveyConditionSeverity;
+  estudiosPrecios: boolean;
+  tratamientosPrevios: boolean;
+  /** Intensidad del dolor, usualmente en una escala (e.g., 0-10) */
+  intensidadDolor: number;
+  afectacionDiaria: SurveyDailyAffectation;
+  factoresImportantes: string[];
+  preocupacionesCirugia: string[];
+  plazoDeseado: SurveyDesiredTimeline;
+}
+
+/** Tipos de seguimiento */
+export type FollowUpType = "Consulta" | "Llamada" | "Email"; // Extrapolado, ajustar según necesidad
+
+/** Resultados posibles de un seguimiento */
+export type FollowUpResult = "Interesado" | "Indeciso" | "Decidido" | "No Contactado" | "Rechazado"; // Extrapolado
+
+/** Estados posibles de un seguimiento */
+export type FollowUpStatus = "Programado" | "Realizado" | "Cancelado" | "Pendiente";
+
+/**
+ * Define la estructura de un seguimiento de paciente.
+ */
+export interface FollowUp {
+  id: number;
+  patientId: number; // Relaciona con PatientData.id
+  fecha: ISODateString;
+  tipo: FollowUpType;
+  notas: string;
+  resultado: FollowUpResult;
+  proximoSeguimiento?: ISODateString; // Opcional
+  estado: FollowUpStatus;
+  asignadoA: string;
+}
+
+/**
+ * Define la estructura principal de los datos de un paciente.
+ */
+export interface PatientData {
+  id: number;
+  nombre: string;
+  apellidos: string;
+  edad: number;
+  fechaConsulta: ISODateString;
+  fechaRegistro: ISODateString;
+  diagnostico: DiagnosisType;
+  estado: PatientStatus;
+  /** Probabilidad de cirugía, valor entre 0 y 1 */
+  probabilidadCirugia: number;
+  fechaCirugia?: ISODateString; // Opcional, solo si estado es "Operado"
+  doctorAsignado: string;
+  ultimoContacto?: ISODateString; // Opcional
+  proximoContacto?: ISODateString; // Opcional
+  notaClinica: string;
+  encuesta?: PatientSurvey; // La encuesta puede no estar completada
+  recomendacionesSistema: string[];
+  seguimientos?: FollowUp[]; // Un paciente puede tener múltiples seguimientos o ninguno
+  etiquetas: string[];
+}
+
+/**
+ * Define la estructura para el conteo de diagnósticos comunes.
+ */
+export interface DiagnosisCount {
+  tipo: DiagnosisType;
+  cantidad: number;
+}
+
+/**
+ * Define la estructura para las métricas de la clínica.
+ */
+export interface ClinicMetrics {
+  totalPacientes: number;
+  pacientesNuevosMes: number;
+  pacientesOperados: number;
+  pacientesNoOperados: number;
+  pacientesSeguimiento: number;
+  /** Tasa de conversión, valor entre 0 y 1 */
+  tasaConversion: number;
+  /** Tiempo promedio para la toma de decisión del paciente, en días */
+  tiempoPromedioDecision: number;
+  fuentePrincipalPacientes: PatientOrigin | string; // Podría ser más genérico si no siempre es un PatientOrigin
+  diagnosticosMasComunes: DiagnosisCount[];
+}
+
+// --- Datos de Pacientes Adicionales ---
+export const additionalPatients: PatientData[] = [
+  // ENERO 2025
+  {
+    id: 11,
+    nombre: "Fernando",
+    apellidos: "Gutiérrez Vázquez",
+    edad: 47,
+    fechaConsulta: "2025-01-05",
+    fechaRegistro: "2024-12-28",
+    diagnostico: "Hernia Inguinal",
+    estado: "Operado",
+    probabilidadCirugia: 0.89,
+    fechaCirugia: "2025-01-15",
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    notaClinica: "Paciente con hernia inguinal derecha de tamaño considerable. Dolor que aumenta con actividad física. Se programa cirugía laparoscópica.",
+    encuesta: {
+      nombre: "Fernando",
+      apellidos: "Gutiérrez Vázquez",
+      edad: 47,
+      telefono: "555-123-0001",
+      email: "fernando.gutierrez@example.com",
+      origen: "Google",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Hernia inguinal derecha",
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Bulto o hinchazón visible", "Dolor que aumenta con esfuerzos", "Molestia al caminar"],
+      duracionSintomas: "6 meses",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: true,
+      tratamientosPrevios: false,
+      intensidadDolor: 6,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Experiencia", "Tecnología utilizada"],
+      preocupacionesCirugia: ["Tiempo de recuperación", "Costos"],
+      plazoDeseado: "30 días"
+    },
+    recomendacionesSistema: [
+      "Alta probabilidad de cirugía (89%)",
+      "Paciente informado sobre opciones",
+      "Enfatizar experiencia en técnica laparoscópica"
+    ],
+    etiquetas: ["Operado", "Google", "Seguro Privado"],
+  },
+  {
+    id: 12,
+    nombre: "Silvia",
+    apellidos: "Domínguez Cruz",
+    edad: 39,
+    fechaConsulta: "2025-01-08",
+    fechaRegistro: "2025-01-03",
+    diagnostico: "Vesícula",
+    estado: "Operado",
+    probabilidadCirugia: 0.95,
+    fechaCirugia: "2025-01-20",
+    doctorAsignado: "Dra. Ana Gutiérrez",
+    notaClinica: "Paciente con colelitiasis múltiple sintomática. Episodios frecuentes de dolor. Urgencia relativa. Se programa colecistectomía laparoscópica.",
+    encuesta: {
+      nombre: "Silvia",
+      apellidos: "Domínguez Cruz",
+      edad: 39,
+      telefono: "555-123-0002",
+      email: "silvia.dominguez@example.com",
+      origen: "Recomendación",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Colelitiasis con cálculos múltiples",
+      seguroMedico: "ISSSTE",
+      sintomas: ["Dolor después de comer", "Náuseas y/o vómitos", "Indigestión"],
+      duracionSintomas: "8 meses",
+      severidadCondicion: "Severa",
+      estudiosPrecios: false,
+      tratamientosPrevios: true,
+      intensidadDolor: 8,
+      afectacionDiaria: "Severa",
+      factoresImportantes: ["Seguridad", "Experiencia", "Proceso rápido"],
+      preocupacionesCirugia: ["Complicaciones"],
+      plazoDeseado: "Urgente"
+    },
+    recomendacionesSistema: [
+      "Muy alta probabilidad de cirugía (95%)",
+      "Caso urgente por sintomatología severa",
+      "Paciente bien informada y decidida"
+    ],
+    etiquetas: ["Operado", "Recomendación", "ISSSTE", "Urgente"],
+  },
+  {
+    id: 13,
+    nombre: "Antonio",
+    apellidos: "Reyes Mendoza",
+    edad: 52,
+    fechaConsulta: "2025-01-15",
+    fechaRegistro: "2025-01-10",
+    diagnostico: "Hernia Umbilical",
+    estado: "No Operado",
+    probabilidadCirugia: 0.30,
+    doctorAsignado: "Dr. Ricardo Fuentes",
+    ultimoContacto: "2025-01-25",
+    notaClinica: "Paciente con hernia umbilical pequeña. Asintomático. Se recomienda vigilancia y medidas conservadoras.",
+    encuesta: {
+      nombre: "Antonio",
+      apellidos: "Reyes Mendoza",
+      edad: 52,
+      telefono: "555-123-0003",
+      email: "antonio.reyes@example.com",
+      origen: "Sitio Web",
+      diagnosticoPrevio: false,
+      seguroMedico: "IMSS",
+      sintomas: ["Bulto o hinchazón visible"],
+      duracionSintomas: "3 meses",
+      severidadCondicion: "Leve",
+      estudiosPrecios: false,
+      tratamientosPrevios: false,
+      intensidadDolor: 2,
+      afectacionDiaria: "Leve",
+      factoresImportantes: ["Seguridad"],
+      preocupacionesCirugia: ["Dudas sobre necesidad real", "Miedo al procedimiento"],
+      plazoDeseado: "Sin prisa"
+    },
+    recomendacionesSistema: [
+      "Baja probabilidad de cirugía (30%)",
+      "Paciente con dudas sobre necesidad de cirugía",
+      "Recomendar seguimiento en 3-6 meses"
+    ],
+    etiquetas: ["No Operado", "Sitio Web", "IMSS"],
+  },
+
+  // FEBRERO 2025
+  {
+    id: 14,
+    nombre: "Gabriela",
+    apellidos: "Ortega Castillo",
+    edad: 44,
+    fechaConsulta: "2025-02-03",
+    fechaRegistro: "2025-01-25",
+    diagnostico: "Vesícula",
+    estado: "Operado",
+    probabilidadCirugia: 0.92,
+    fechaCirugia: "2025-02-15",
+    doctorAsignado: "Dra. Ana Gutiérrez",
+    notaClinica: "Paciente con colelitiasis y antecedente de colecistitis aguda tratada con antibióticos hace 2 meses. Se programa colecistectomía laparoscópica.",
+    encuesta: {
+      nombre: "Gabriela",
+      apellidos: "Ortega Castillo",
+      edad: 44,
+      telefono: "555-123-0004",
+      email: "gabriela.ortega@example.com",
+      origen: "Facebook",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Colelitiasis con episodio previo de colecistitis",
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Dolor después de comer", "Indigestión", "Dolor en la zona abdominal"],
+      duracionSintomas: "1 año",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: true,
+      tratamientosPrevios: true,
+      intensidadDolor: 7,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Experiencia", "Seguridad", "Proceso rápido"],
+      preocupacionesCirugia: ["Tiempo de recuperación", "Costos"],
+      plazoDeseado: "30 días"
+    },
+    recomendacionesSistema: [
+      "Muy alta probabilidad de cirugía (92%)",
+      "Paciente con antecedente de complicación (colecistitis)",
+      "Programar cirugía dentro del mes"
+    ],
+    etiquetas: ["Operado", "Facebook", "Seguro Privado"],
+  },
+  {
+    id: 15,
+    nombre: "Héctor",
+    apellidos: "Miranda Jiménez",
+    edad: 58,
+    fechaConsulta: "2025-02-12",
+    fechaRegistro: "2025-02-07",
+    diagnostico: "Hernia Inguinal",
+    estado: "Pendiente de consulta",
+    probabilidadCirugia: 0.75,
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    ultimoContacto: "2025-02-20",
+    proximoContacto: "2025-03-10",
+    notaClinica: "Paciente con hernia inguinal izquierda. Sintomático con molestias al realizar actividad física. Se recomienda cirugía electiva.",
+    encuesta: undefined, // Encuesta pendiente
+    recomendacionesSistema: [
+      "Probabilidad alta de cirugía (75%)",
+      "Paciente interesado pero necesita tiempo para organizar aspectos laborales",
+      "Programar seguimiento",
+      "Recordar completar encuesta inicial"
+    ],
+    etiquetas: ["Pendiente de consulta", "Recomendación", "IMSS", "Encuesta Pendiente"],
+  },
+  {
+    id: 16,
+    nombre: "Diana",
+    apellidos: "Navarro Soto",
+    edad: 36,
+    fechaConsulta: "2025-02-18",
+    fechaRegistro: "2025-02-15",
+    diagnostico: "Hernia Umbilical",
+    estado: "En consulta",
+    probabilidadCirugia: 0.82,
+    doctorAsignado: "Dr. Ricardo Fuentes",
+    ultimoContacto: "2025-02-18",
+    notaClinica: "Paciente con hernia umbilical de tamaño mediano. Sintomática con molestias y limitación de actividades habituales. Se recomienda cirugía.",
+    encuesta: undefined, // Encuesta pendiente
+    recomendacionesSistema: [
+      "Probabilidad alta de cirugía (82%)",
+      "Paciente con preocupación por resultado estético",
+      "Enfatizar experiencia y técnica mínimamente invasiva",
+      "Completar encuesta durante o después de la consulta"
+    ],
+    etiquetas: ["En consulta", "Instagram", "Seguro Privado", "Encuesta Pendiente"],
+  },
+  {
+    id: 17,
+    nombre: "Rodrigo",
+    apellidos: "Estrada Vargas",
+    edad: 41,
+    fechaConsulta: "2025-02-25",
+    fechaRegistro: "2025-02-20",
+    diagnostico: "Hernia Incisional",
+    estado: "Seguimiento",
+    probabilidadCirugia: 0.68,
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    ultimoContacto: "2025-02-25",
+    proximoContacto: "2025-03-15",
+    notaClinica: "Paciente con hernia incisional post-apendicectomía de tamaño mediano. Sintomático con molestias ocasionales. Se recomienda cirugía electiva.",
+    encuesta: {
+      nombre: "Rodrigo",
+      apellidos: "Estrada Vargas",
+      edad: 41,
+      telefono: "555-123-0007",
+      email: "rodrigo.estrada@example.com",
+      origen: "Google",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Hernia incisional post-apendicectomía",
+      seguroMedico: "Ninguno",
+      sintomas: ["Bulto o hinchazón visible", "Molestia al realizar esfuerzos"],
+      duracionSintomas: "6 meses",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: true,
+      tratamientosPrevios: false,
+      intensidadDolor: 5,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Experiencia", "Seguridad", "Costos"],
+      preocupacionesCirugia: ["Tiempo de recuperación", "Costos"],
+      plazoDeseado: "90 días"
+    },
+    recomendacionesSistema: [
+      "Probabilidad media-alta de cirugía (68%)",
+      "Paciente preocupado principalmente por costos",
+      "Ofrecer opciones de financiamiento"
+    ],
+    seguimientos: [{
+      id: 7,
+      patientId: 17,
+      fecha: "2025-02-25",
+      tipo: "Consulta",
+      notas: "Paciente interesado pero necesita tiempo para resolver aspectos financieros.",
+      resultado: "Interesado",
+      proximoSeguimiento: "2025-03-15",
+      estado: "Programado",
+      asignadoA: "María García",
+    }],
+    etiquetas: ["Seguimiento", "Google", "Sin Seguro", "Interesado"],
+  },
+
+  // MARZO 2025
+  {
+    id: 18,
+    nombre: "Carolina",
+    apellidos: "Aguirre Romero",
+    edad: 33,
+    fechaConsulta: "2025-03-05",
+    fechaRegistro: "2025-02-28",
+    diagnostico: "Vesícula",
+    estado: "Operado",
+    probabilidadCirugia: 0.90,
+    fechaCirugia: "2025-03-18",
+    doctorAsignado: "Dra. Ana Gutiérrez",
+    notaClinica: "Paciente con colelitiasis sintomática. Múltiples episodios de dolor. Ultrasonido confirma cálculos de tamaño significativo. Se programa colecistectomía laparoscópica.",
+    encuesta: {
+      nombre: "Carolina",
+      apellidos: "Aguirre Romero",
+      edad: 33,
+      telefono: "555-123-0008",
+      email: "carolina.aguirre@example.com",
+      origen: "Instagram",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Colelitiasis múltiple",
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Dolor después de comer", "Náuseas y/o vómitos", "Intolerancia a alimentos grasos"],
+      duracionSintomas: "9 meses",
+      severidadCondicion: "Severa",
+      estudiosPrecios: true,
+      tratamientosPrevios: true,
+      intensidadDolor: 8,
+      afectacionDiaria: "Severa",
+      factoresImportantes: ["Experiencia", "Seguridad", "Proceso rápido"],
+      preocupacionesCirugia: ["Tiempo de recuperación"],
+      plazoDeseado: "Urgente"
+    },
+    recomendacionesSistema: [
+      "Muy alta probabilidad de cirugía (90%)",
+      "Caso con sintomatología importante",
+      "Programar cirugía lo antes posible"
+    ],
+    etiquetas: ["Operado", "Instagram", "Seguro Privado", "Urgente"],
+  },
+  {
+    id: 19,
+    nombre: "Jorge",
+    apellidos: "Montes Velasco",
+    edad: 60,
+    fechaConsulta: "2025-03-12",
+    fechaRegistro: "2025-03-07",
+    diagnostico: "Hernia Inguinal",
+    estado: "No Operado",
+    probabilidadCirugia: 0.25,
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    ultimoContacto: "2025-03-20",
+    notaClinica: "Paciente con hernia inguinal derecha pequeña, asintomática, descubierta incidentalmente en chequeo rutinario. Se recomienda vigilancia y medidas conservadoras.",
+    encuesta: {
+      nombre: "Jorge",
+      apellidos: "Montes Velasco",
+      edad: 60,
+      telefono: "555-123-0009",
+      email: "jorge.montes@example.com",
+      origen: "Recomendación",
+      diagnosticoPrevio: false,
+      seguroMedico: "ISSSTE",
+      sintomas: ["Ninguno (hallazgo incidental)"],
+      duracionSintomas: "Desconocido",
+      severidadCondicion: "Leve",
+      estudiosPrecios: false,
+      tratamientosPrevios: false,
+      intensidadDolor: 0,
+      afectacionDiaria: "No tengo limitaciones",
+      factoresImportantes: ["Seguridad"],
+      preocupacionesCirugia: ["Miedo al procedimiento", "Dudas sobre necesidad real"],
+      plazoDeseado: "Sin prisa"
+    },
+    recomendacionesSistema: [
+      "Baja probabilidad de cirugía (25%)",
+      "Paciente asintomático sin necesidad inmediata de cirugía",
+      "Recomendar seguimiento en 6 meses"
+    ],
+    etiquetas: ["No Operado", "Recomendación", "ISSSTE", "Asintomático"],
+  },
+  {
+    id: 20,
+    nombre: "Verónica",
+    apellidos: "Castro Delgado",
+    edad: 47,
+    fechaConsulta: "2025-03-18",
+    fechaRegistro: "2025-03-15",
+    diagnostico: "Hernia Umbilical",
+    estado: "Seguimiento",
+    probabilidadCirugia: 0.70,
+    doctorAsignado: "Dr. Ricardo Fuentes",
+    ultimoContacto: "2025-03-18",
+    proximoContacto: "2025-04-08",
+    notaClinica: "Paciente con hernia umbilical de tamaño mediano. Sintomática con molestias moderadas. Se recomienda cirugía electiva.",
+    encuesta: {
+      nombre: "Verónica",
+      apellidos: "Castro Delgado",
+      edad: 47,
+      telefono: "555-123-0010",
+      email: "veronica.castro@example.com",
+      origen: "Facebook",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Hernia umbilical",
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Bulto o hinchazón visible", "Molestia al realizar esfuerzos"],
+      duracionSintomas: "1 año",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: true,
+      tratamientosPrevios: false,
+      intensidadDolor: 4,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Experiencia", "Resultado estético"],
+      preocupacionesCirugia: ["Tiempo de recuperación", "Resultado estético"],
+      plazoDeseado: "60 días"
+    },
+    recomendacionesSistema: [
+      "Probabilidad alta de cirugía (70%)",
+      "Paciente preocupada por resultado estético",
+      "Enfatizar experiencia y técnica con buenos resultados estéticos"
+    ],
+    seguimientos: [{
+      id: 8,
+      patientId: 20,
+      fecha: "2025-03-18",
+      tipo: "Consulta",
+      notas: "Paciente interesada pero quiere consultar con su seguro sobre cobertura.",
+      resultado: "Interesado",
+      proximoSeguimiento: "2025-04-08",
+      estado: "Programado",
+      asignadoA: "Carlos Rodríguez",
+    }],
+    etiquetas: ["Seguimiento", "Facebook", "Seguro Privado", "Interesado"],
+  },
+  {
+    id: 21,
+    nombre: "Armando",
+    apellidos: "Pérez Méndez",
+    edad: 55,
+    fechaConsulta: "2025-03-25",
+    fechaRegistro: "2025-03-20",
+    diagnostico: "Hernia Incisional",
+    estado: "Pendiente de consulta",
+    probabilidadCirugia: 0.85,
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    ultimoContacto: "2025-03-25",
+    proximoContacto: "2025-04-15",
+    notaClinica: "Paciente con hernia incisional post-colecistectomía. Sintomático con dolor y limitación funcional. Se recomienda cirugía con malla.",
+    encuesta: undefined, // Encuesta pendiente
+    recomendacionesSistema: [
+      "Alta probabilidad de cirugía (85%)",
+      "Paciente con sintomatología significativa",
+      "Programar cirugía una vez se complete evaluación preoperatoria",
+      "Recordar completar encuesta inicial"
+    ],
+    etiquetas: ["Pendiente de consulta", "Google", "IMSS", "Encuesta Pendiente"],
+  },
+
+  // ABRIL 2025
+  {
+    id: 22,
+    nombre: "Lucía",
+    apellidos: "Moreno Torres",
+    edad: 37,
+    fechaConsulta: "2025-04-02",
+    fechaRegistro: "2025-03-28",
+    diagnostico: "Vesícula",
+    estado: "Operado",
+    probabilidadCirugia: 0.93,
+    fechaCirugia: "2025-04-12",
+    doctorAsignado: "Dra. Ana Gutiérrez",
+    notaClinica: "Paciente con colelitiasis sintomática y episodio reciente de colecistitis aguda. Se programa colecistectomía laparoscópica urgente.",
+    encuesta: {
+      nombre: "Lucía",
+      apellidos: "Moreno Torres",
+      edad: 37,
+      telefono: "555-123-0012",
+      email: "lucia.moreno@example.com",
+      origen: "Google",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Colelitiasis con episodio de colecistitis aguda",
+      seguroMedico: "IMSS",
+      sintomas: ["Dolor después de comer", "Náuseas y/o vómitos", "Fiebre reciente"],
+      duracionSintomas: "2 años",
+      severidadCondicion: "Severa",
+      estudiosPrecios: false,
+      tratamientosPrevios: true,
+      intensidadDolor: 9,
+      afectacionDiaria: "Severa",
+      factoresImportantes: ["Experiencia", "Seguridad", "Proceso rápido"],
+      preocupacionesCirugia: ["Complicaciones"],
+      plazoDeseado: "Urgente"
+    },
+    recomendacionesSistema: [
+      "Muy alta probabilidad de cirugía (93%)",
+      "Caso urgente por colecistitis reciente",
+      "Programar cirugía lo antes posible"
+    ],
+    etiquetas: ["Operado", "Google", "IMSS", "Urgente"],
+  },
+  {
+    id: 23,
+    nombre: "Gustavo",
+    apellidos: "Flores Rivas",
+    edad: 43,
+    fechaConsulta: "2025-04-08",
+    fechaRegistro: "2025-04-03",
+    diagnostico: "Hernia Inguinal",
+    estado: "Seguimiento",
+    probabilidadCirugia: 0.72,
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    ultimoContacto: "2025-04-08",
+    proximoContacto: "2025-04-22",
+    notaClinica: "Paciente con hernia inguinal bilateral. Sintomático. Se recomienda reparación laparoscópica.",
+    encuesta: {
+      nombre: "Gustavo",
+      apellidos: "Flores Rivas",
+      edad: 43,
+      telefono: "555-123-0013",
+      email: "gustavo.flores@example.com",
+      origen: "Facebook",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Hernia inguinal bilateral",
+      seguroMedico: "Ninguno",
+      sintomas: ["Bulto o hinchazón visible", "Dolor que aumenta con esfuerzos"],
+      duracionSintomas: "1 año",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: true,
+      tratamientosPrevios: false,
+      intensidadDolor: 6,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Experiencia", "Costos"],
+      preocupacionesCirugia: ["Tiempo de recuperación", "Costos"],
+      plazoDeseado: "60 días"
+    },
+    recomendacionesSistema: [
+      "Probabilidad alta de cirugía (72%)",
+      "Paciente preocupado principalmente por costos",
+      "Ofrecer opciones de financiamiento"
+    ],
+    seguimientos: [{
+      id: 9,
+      patientId: 23,
+      fecha: "2025-04-08",
+      tipo: "Consulta",
+      notas: "Paciente interesado pero necesita evaluar opciones de financiamiento.",
+      resultado: "Interesado",
+      proximoSeguimiento: "2025-04-22",
+      estado: "Programado",
+      asignadoA: "María García",
+    }],
+    etiquetas: ["Seguimiento", "Facebook", "Sin Seguro", "Interesado"],
+  },
+  {
+    id: 24,
+    nombre: "Elena",
+    apellidos: "Sánchez Ibarra",
+    edad: 50,
+    fechaConsulta: "2025-04-15",
+    fechaRegistro: "2025-04-10",
+    diagnostico: "Hernia Umbilical",
+    estado: "En consulta",
+    probabilidadCirugia: 0.80,
+    doctorAsignado: "Dr. Ricardo Fuentes",
+    ultimoContacto: "2025-04-15",
+    notaClinica: "Paciente con hernia umbilical de mediano tamaño. Sintomática con molestias y limitación de actividades. Se recomienda cirugía.",
+    encuesta: undefined, // Encuesta pendiente
+    recomendacionesSistema: [
+      "Probabilidad alta de cirugía (80%)",
+      "Paciente con sintomatología progresiva",
+      "Enfatizar buenos resultados y rápida recuperación",
+      "Completar encuesta durante o después de la consulta"
+    ],
+    etiquetas: ["En consulta", "Recomendación", "ISSSTE", "Encuesta Pendiente"],
+  },
+  {
+    id: 25,
+    nombre: "Manuel",
+    apellidos: "Carrillo Vega",
+    edad: 65,
+    fechaConsulta: "2025-04-22",
+    fechaRegistro: "2025-04-18",
+    diagnostico: "Hernia Inguinal",
+    estado: "Cancelado",
+    probabilidadCirugia: 0.45,
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    ultimoContacto: "2025-04-30",
+    notaClinica: "Paciente con hernia inguinal pequeña, poco sintomática. Después de valoración decide manejo conservador por ahora debido a comorbilidades.",
+    encuesta: {
+      nombre: "Manuel",
+      apellidos: "Carrillo Vega",
+      edad: 65,
+      telefono: "555-123-0015",
+      email: "manuel.carrillo@example.com",
+      origen: "Sitio Web",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Hernia inguinal derecha",
+      seguroMedico: "IMSS",
+      sintomas: ["Bulto o hinchazón visible"],
+      duracionSintomas: "6 meses",
+      severidadCondicion: "Leve",
+      estudiosPrecios: false,
+      tratamientosPrevios: false,
+      intensidadDolor: 3,
+      afectacionDiaria: "Leve",
+      factoresImportantes: ["Seguridad"],
+      preocupacionesCirugia: ["Miedo al procedimiento", "Dudas sobre necesidad real"],
+      plazoDeseado: "Sin prisa"
+    },
+    recomendacionesSistema: [
+      "Probabilidad media-baja de cirugía (45%)",
+      "Paciente con comorbilidades que aumentan riesgo quirúrgico",
+      "Respetar decisión de manejo conservador",
+      "Programar seguimiento en 6 meses"
+    ],
+    etiquetas: ["Cancelado", "Sitio Web", "IMSS", "Comorbilidades"],
+  },
+
+  // MAYO 2025
+  {
+    id: 26,
+    nombre: "Adriana",
+    apellidos: "Luna Paredes",
+    edad: 29,
+    fechaConsulta: "2025-05-03",
+    fechaRegistro: "2025-04-28",
+    diagnostico: "Vesícula",
+    estado: "Pendiente de consulta",
+    probabilidadCirugia: 0.88,
+    doctorAsignado: "Dra. Ana Gutiérrez",
+    ultimoContacto: "2025-05-03",
+    proximoContacto: "2025-05-10",
+    notaClinica: "Paciente con colelitiasis sintomática. Episodios frecuentes de dolor postprandial. Se recomienda colecistectomía laparoscópica.",
+    encuesta: {
+      nombre: "Adriana",
+      apellidos: "Luna Paredes",
+      edad: 29,
+      telefono: "555-123-0016",
+      email: "adriana.luna@example.com",
+      origen: "Instagram",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Colelitiasis",
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Dolor después de comer", "Intolerancia a alimentos grasos", "Dolor en la zona abdominal"],
+      duracionSintomas: "6 meses",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: true,
+      tratamientosPrevios: false,
+      intensidadDolor: 7,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Experiencia", "Resultado estético", "Proceso rápido"],
+      preocupacionesCirugia: ["Tiempo de recuperación", "Cicatrices"],
+      plazoDeseado: "30 días"
+    },
+    recomendacionesSistema: [
+      "Alta probabilidad de cirugía (88%)",
+      "Paciente joven preocupada por resultado estético",
+      "Enfatizar técnica laparoscópica con mínimas cicatrices",
+      "Programar cirugía dentro del mes"
+    ],
+    etiquetas: ["Pendiente de consulta", "Instagram", "Seguro Privado", "Estética"],
+  },
+  {
+    id: 27,
+    nombre: "Ricardo",
+    apellidos: "Gómez Pineda",
+    edad: 54,
+    fechaConsulta: "2025-05-07",
+    fechaRegistro: "2025-05-02",
+    diagnostico: "Hernia Inguinal",
+    estado: "Operado",
+    probabilidadCirugia: 0.91,
+    fechaCirugia: "2025-05-17",
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    notaClinica: "Paciente con hernia inguinal derecha grande, sintomática. Se programa reparación laparoscópica con malla.",
+    encuesta: {
+      nombre: "Ricardo",
+      apellidos: "Gómez Pineda",
+      edad: 54,
+      telefono: "555-123-0017",
+      email: "ricardo.gomez@example.com",
+      origen: "Google",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Hernia inguinal derecha de gran tamaño",
+      seguroMedico: "ISSSTE",
+      sintomas: ["Bulto o hinchazón visible", "Dolor que aumenta con esfuerzos", "Dificultad para moverme"],
+      duracionSintomas: "1 año y medio",
+      severidadCondicion: "Severa",
+      estudiosPrecios: false,
+      tratamientosPrevios: false,
+      intensidadDolor: 8,
+      afectacionDiaria: "Severa",
+      factoresImportantes: ["Experiencia", "Seguridad"],
+      preocupacionesCirugia: ["Tiempo de recuperación"],
+      plazoDeseado: "Urgente"
+    },
+    recomendacionesSistema: [
+      "Muy alta probabilidad de cirugía (91%)",
+      "Caso con sintomatología importante y limitación funcional",
+      "Programar cirugía lo antes posible"
+    ],
+    etiquetas: ["Operado", "Google", "ISSSTE", "Urgente"],
+  },
+  {
+    id: 28,
+    nombre: "Mariana",
+    apellidos: "Torres Orozco",
+    edad: 45,
+    fechaConsulta: "2025-05-12",
+    fechaRegistro: "2025-05-08",
+    diagnostico: "Vesícula",
+    estado: "En consulta",
+    probabilidadCirugia: 0.85,
+    doctorAsignado: "Dra. Ana Gutiérrez",
+    ultimoContacto: "2025-05-12",
+    notaClinica: "Paciente con colelitiasis y episodios de dolor postprandial. Se recomienda colecistectomía laparoscópica.",
+    encuesta: undefined, // Encuesta pendiente
+    recomendacionesSistema: [
+      "Alta probabilidad de cirugía (85%)",
+      "Paciente con sintomatología típica de colelitiasis",
+      "Programar cirugía una vez complete evaluación",
+      "Completar encuesta durante o después de la consulta"
+    ],
+    etiquetas: ["En consulta", "Facebook", "Sin Seguro", "Encuesta Pendiente"],
+  },
+  {
+    id: 29,
+    nombre: "Alberto",
+    apellidos: "Medina Rosales",
+    edad: 60,
+    fechaConsulta: "2025-05-15",
+    fechaRegistro: "2025-05-10",
+    diagnostico: "Hernia Incisional",
+    estado: "Seguimiento",
+    probabilidadCirugia: 0.78,
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    ultimoContacto: "2025-05-15",
+    proximoContacto: "2025-05-25",
+    notaClinica: "Paciente con hernia incisional post-cirugía abdominal. Sintomático con dolor y limitación funcional. Se recomienda reparación con malla.",
+    encuesta: {
+      nombre: "Alberto",
+      apellidos: "Medina Rosales",
+      edad: 60,
+      telefono: "555-123-0019",
+      email: "alberto.medina@example.com",
+      origen: "Recomendación",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Hernia incisional post-cirugía de colon",
+      seguroMedico: "IMSS",
+      sintomas: ["Bulto o hinchazón visible", "Dolor que aumenta con esfuerzos"],
+      duracionSintomas: "9 meses",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: false,
+      tratamientosPrevios: false,
+      intensidadDolor: 6,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Experiencia", "Seguridad"],
+      preocupacionesCirugia: ["Tiempo de recuperación", "Riesgo de recurrencia"],
+      plazoDeseado: "60 días"
+    },
+    recomendacionesSistema: [
+      "Probabilidad alta de cirugía (78%)",
+      "Caso complejo por cirugía abdominal previa",
+      "Enfatizar experiencia del cirujano en hernias complejas"
+    ],
+    seguimientos: [{
+      id: 10,
+      patientId: 29,
+      fecha: "2025-05-15",
+      tipo: "Consulta",
+      notas: "Paciente interesado pero quiere consultar con su médico de cabecera antes de decidir.",
+      resultado: "Interesado",
+      proximoSeguimiento: "2025-05-25",
+      estado: "Programado",
+      asignadoA: "Carlos Rodríguez",
+    }],
+    etiquetas: ["Seguimiento", "Recomendación", "IMSS", "Interesado"],
+  },
+  {
+    id: 30,
+    nombre: "Carmen",
+    apellidos: "Vázquez Molina",
+    edad: 40,
+    fechaConsulta: "2025-05-18",
+    fechaRegistro: "2025-05-15",
+    diagnostico: "Hernia Umbilical",
+    estado: "No Operado",
+    probabilidadCirugia: 0.35,
+    doctorAsignado: "Dr. Ricardo Fuentes",
+    ultimoContacto: "2025-05-18",
+    notaClinica: "Paciente con pequeña hernia umbilical, mínimamente sintomática. Prefiere observación y manejo conservador por ahora.",
+    encuesta: {
+      nombre: "Carmen",
+      apellidos: "Vázquez Molina",
+      edad: 40,
+      telefono: "555-123-0020",
+      email: "carmen.vazquez@example.com",
+      origen: "Sitio Web",
+      diagnosticoPrevio: false,
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Bulto o hinchazón visible"],
+      duracionSintomas: "3 meses",
+      severidadCondicion: "Leve",
+      estudiosPrecios: true,
+      tratamientosPrevios: false,
+      intensidadDolor: 2,
+      afectacionDiaria: "Leve",
+      factoresImportantes: ["Seguridad", "Necesidad real de cirugía"],
+      preocupacionesCirugia: ["Dudas sobre necesidad real", "Tiempo de recuperación"],
+      plazoDeseado: "Sin prisa"
+    },
+    recomendacionesSistema: [
+      "Baja probabilidad de cirugía (35%)",
+      "Paciente con dudas sobre necesidad de cirugía",
+      "Respetar decisión de manejo conservador",
+      "Programar seguimiento en 3-4 meses"
+    ],
+    etiquetas: ["No Operado", "Sitio Web", "Seguro Privado", "Mínimamente sintomático"],
+  },
+
+  // JUNIO 2025 (NUEVOS PACIENTES)
+  {
+    id: 31,
+    nombre: "Roberto",
+    apellidos: "Juárez López",
+    edad: 50,
+    fechaConsulta: "2025-06-02",
+    fechaRegistro: "2025-05-28",
+    diagnostico: "Hernia Inguinal",
+    estado: "Pendiente de consulta",
+    probabilidadCirugia: 0.80,
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    ultimoContacto: "2025-06-02",
+    proximoContacto: "2025-06-10",
+    notaClinica: "Paciente con hernia inguinal izquierda, sintomática. Se discuten opciones quirúrgicas.",
+    encuesta: {
+      nombre: "Roberto",
+      apellidos: "Juárez López",
+      edad: 50,
+      telefono: "555-123-0021",
+      email: "roberto.juarez@example.com",
+      origen: "Recomendación",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Hernia inguinal izquierda",
+      seguroMedico: "IMSS",
+      sintomas: ["Bulto o hinchazón visible", "Dolor ocasional"],
+      duracionSintomas: "8 meses",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: false,
+      tratamientosPrevios: false,
+      intensidadDolor: 5,
+      afectacionDiaria: "Leve",
+      factoresImportantes: ["Experiencia", "Costos"],
+      preocupacionesCirugia: ["Tiempo de recuperación"],
+      plazoDeseado: "60 días"
+    },
+    recomendacionesSistema: [
+      "Alta probabilidad de cirugía (80%)",
+      "Programar estudios preoperatorios",
+      "Resolver dudas sobre recuperación"
+    ],
+    etiquetas: ["Pendiente de consulta", "Recomendación", "IMSS"],
+  },
+  {
+    id: 32,
+    nombre: "Laura",
+    apellidos: "Hernández Silva",
+    edad: 35,
+    fechaConsulta: "2025-06-05",
+    fechaRegistro: "2025-06-01",
+    diagnostico: "Vesícula",
+    estado: "Operado",
+    probabilidadCirugia: 0.94,
+    fechaCirugia: "2025-06-15",
+    doctorAsignado: "Dra. Ana Gutiérrez",
+    notaClinica: "Paciente con colelitiasis y cólicos biliares recurrentes. Se programa colecistectomía laparoscópica.",
+    encuesta: {
+      nombre: "Laura",
+      apellidos: "Hernández Silva",
+      edad: 35,
+      telefono: "555-123-0022",
+      email: "laura.hernandez@example.com",
+      origen: "Google",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Colelitiasis sintomática",
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Dolor abdominal intenso", "Náuseas", "Vómitos ocasionales"],
+      duracionSintomas: "1 año",
+      severidadCondicion: "Severa",
+      estudiosPrecios: true,
+      tratamientosPrevios: true,
+      intensidadDolor: 9,
+      afectacionDiaria: "Severa",
+      factoresImportantes: ["Alivio del dolor", "Proceso rápido"],
+      preocupacionesCirugia: ["Complicaciones"],
+      plazoDeseado: "Urgente"
+    },
+    recomendacionesSistema: [
+      "Muy alta probabilidad de cirugía (94%)",
+      "Priorizar por sintomatología severa",
+      "Confirmar disponibilidad de quirófano"
+    ],
+    etiquetas: ["Operado", "Google", "Seguro Privado", "Urgente"],
+  },
+  {
+    id: 33,
+    nombre: "Miguel Ángel",
+    apellidos: "Ramírez Ortiz",
+    edad: 62,
+    fechaConsulta: "2025-06-10",
+    fechaRegistro: "2025-06-05",
+    diagnostico: "Hernia Umbilical",
+    estado: "Seguimiento",
+    probabilidadCirugia: 0.65,
+    doctorAsignado: "Dr. Ricardo Fuentes",
+    ultimoContacto: "2025-06-10",
+    proximoContacto: "2025-06-24",
+    notaClinica: "Paciente con hernia umbilical reductible, poco sintomática. Considera cirugía pero desea evaluar riesgos/beneficios.",
+    encuesta: undefined, // Encuesta pendiente
+    recomendacionesSistema: [
+      "Probabilidad media de cirugía (65%)",
+      "Explicar detalladamente procedimiento y recuperación",
+      "Agendar seguimiento para toma de decisión"
+    ],
+    etiquetas: ["Seguimiento", "Sitio Web", "ISSSTE", "Encuesta Pendiente"],
+  },
+  {
+    id: 34,
+    nombre: "Sofía",
+    apellidos: "González Herrera",
+    edad: 28,
+    fechaConsulta: "2025-06-12",
+    fechaRegistro: "2025-06-08",
+    diagnostico: "Apendicitis",
+    estado: "Operado",
+    probabilidadCirugia: 1.00,
+    fechaCirugia: "2025-06-12",
+    doctorAsignado: "Dr. Carlos López",
+    notaClinica: "Paciente presenta cuadro de apendicitis aguda. Dolor abdominal intenso en fosa ilíaca derecha, fiebre y leucocitosis. Se realiza apendicectomía de urgencia.",
+    encuesta: {
+      nombre: "Sofía",
+      apellidos: "González Herrera",
+      edad: 28,
+      telefono: "555-123-0024",
+      email: "sofia.gonzalez@example.com",
+      origen: "Urgencias",
+      diagnosticoPrevio: false,
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Dolor abdominal severo", "Fiebre", "Náuseas", "Pérdida de apetito"],
+      duracionSintomas: "24 horas",
+      severidadCondicion: "Crítica",
+      estudiosPrecios: false,
+      tratamientosPrevios: false,
+      intensidadDolor: 10,
+      afectacionDiaria: "Crítica",
+      factoresImportantes: ["Alivio inmediato", "Seguridad"],
+      preocupacionesCirugia: ["Complicaciones postoperatorias"],
+      plazoDeseado: "Inmediato"
+    },
+    recomendacionesSistema: [
+      "Cirugía de urgencia realizada (100%)",
+      "Monitorizar recuperación postoperatoria",
+      "Administrar antibióticos según protocolo"
+    ],
+    etiquetas: ["Operado", "Urgencias", "Seguro Privado", "Apendicitis"],
+  },
+  {
+    id: 35,
+    nombre: "David",
+    apellidos: "Martínez Flores",
+    edad: 45,
+    fechaConsulta: "2025-06-18",
+    fechaRegistro: "2025-06-14",
+    diagnostico: "Hernia Hiatal",
+    estado: "En consulta",
+    probabilidadCirugia: 0.55,
+    doctorAsignado: "Dra. Isabel Rojas",
+    ultimoContacto: "2025-06-18",
+    notaClinica: "Paciente con síntomas de reflujo gastroesofágico crónico y diagnóstico de hernia hiatal por endoscopia. Se evalúa para posible funduplicatura.",
+    encuesta: {
+      nombre: "David",
+      apellidos: "Martínez Flores",
+      edad: 45,
+      telefono: "555-123-0025",
+      email: "david.martinez@example.com",
+      origen: "Referido por Gastroenterólogo",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Hernia hiatal tipo I y ERGE severo",
+      seguroMedico: "IMSS",
+      sintomas: ["Acidez estomacal frecuente", "Regurgitación", "Dolor torácico no cardíaco"],
+      duracionSintomas: "Más de 5 años",
+      severidadCondicion: "Moderada", // Ajustado, "Moderada-Severa" no es un valor único
+      estudiosPrecios: true,
+      tratamientosPrevios: true,
+      intensidadDolor: 7,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Alivio de síntomas a largo plazo", "Experiencia del cirujano"],
+      preocupacionesCirugia: ["Efectos secundarios de la cirugía (disfagia)", "Tiempo de recuperación"],
+      plazoDeseado: "90 días"
+    },
+    recomendacionesSistema: [
+      "Probabilidad media de cirugía (55%)",
+      "Discutir pros y contras de cirugía vs manejo médico continuo",
+      "Considerar pHmetría y manometría esofágica"
+    ],
+    etiquetas: ["En consulta", "Referido por Gastroenterólogo", "IMSS", "Hernia Hiatal", "ERGE"],
+  },
+
+  // JULIO 2025 (NUEVOS PACIENTES)
+  {
+    id: 36,
+    nombre: "Valeria",
+    apellidos: "Díaz Castillo",
+    edad: 32,
+    fechaConsulta: "2025-07-01",
+    fechaRegistro: "2025-06-25",
+    diagnostico: "Lipoma Grande",
+    estado: "Pendiente de consulta",
+    probabilidadCirugia: 0.90,
+    doctorAsignado: "Dr. Ricardo Fuentes",
+    ultimoContacto: "2025-07-01",
+    proximoContacto: "2025-07-10",
+    notaClinica: "Paciente con lipoma de gran tamaño (aprox 8cm) en espalda, refiere molestias posturales y preocupación estética. Se discute exéresis quirúrgica.",
+    encuesta: {
+      nombre: "Valeria",
+      apellidos: "Díaz Castillo",
+      edad: 32,
+      telefono: "555-123-0026",
+      email: "valeria.diaz@example.com",
+      origen: "Instagram",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Lipoma dorsal",
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Masa palpable", "Molestia al recostarse", "Preocupación estética"],
+      duracionSintomas: "2 años, crecimiento reciente",
+      severidadCondicion: "Moderada", // Ajustado "Leve-Moderada"
+      estudiosPrecios: false,
+      tratamientosPrevios: false,
+      intensidadDolor: 3,
+      afectacionDiaria: "Leve",
+      factoresImportantes: ["Resultado estético", "Mínima cicatriz"],
+      preocupacionesCirugia: ["Cicatriz", "Dolor postoperatorio"],
+      plazoDeseado: "30-60 días"
+    },
+    recomendacionesSistema: [
+      "Alta probabilidad de cirugía (90%)",
+      "Asegurar al paciente sobre resultado estético",
+      "Programar para exéresis electiva"
+    ],
+    etiquetas: ["Pendiente de consulta", "Instagram", "Seguro Privado", "Lipoma", "Estética"],
+  },
+  {
+    id: 37,
+    nombre: "Eduardo",
+    apellidos: "Santos Cruz",
+    edad: 58,
+    fechaConsulta: "2025-07-07",
+    fechaRegistro: "2025-07-02",
+    diagnostico: "Hernia Inguinal Recidivante",
+    estado: "Operado",
+    probabilidadCirugia: 0.92,
+    fechaCirugia: "2025-07-20",
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    notaClinica: "Paciente con antecedente de hernioplastia inguinal derecha hace 5 años, presenta recidiva sintomática. Se programa nueva reparación, probablemente con abordaje diferente o malla específica.",
+    encuesta: {
+      nombre: "Eduardo",
+      apellidos: "Santos Cruz",
+      edad: 58,
+      telefono: "555-123-0027",
+      email: "eduardo.santos@example.com",
+      origen: "Recomendación",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Recidiva de hernia inguinal derecha",
+      seguroMedico: "ISSSTE",
+      sintomas: ["Bulto en ingle", "Dolor con esfuerzo", "Sensación de pesadez"],
+      duracionSintomas: "3 meses",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: true,
+      tratamientosPrevios: true,
+      intensidadDolor: 6,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Solución definitiva", "Experiencia en recidivas"],
+      preocupacionesCirugia: ["Nueva recidiva", "Dolor crónico"],
+      plazoDeseado: "Urgente" // Ajustado "Lo antes posible"
+    },
+    recomendacionesSistema: [
+      "Muy alta probabilidad de cirugía (92%)",
+      "Planificar cuidadosamente abordaje por recidiva",
+      "Discutir expectativas y posibles complicaciones"
+    ],
+    etiquetas: ["Operado", "Recomendación", "ISSSTE", "Hernia Recidivante", "Urgente"],
+  },
+  {
+    id: 38,
+    nombre: "Beatriz",
+    apellidos: "Lara Ponce",
+    edad: 48,
+    fechaConsulta: "2025-07-14",
+    fechaRegistro: "2025-07-10",
+    diagnostico: "Quiste Sebáceo Infectado",
+    estado: "Operado",
+    probabilidadCirugia: 0.98,
+    fechaCirugia: "2025-07-15",
+    doctorAsignado: "Dr. Ricardo Fuentes",
+    notaClinica: "Paciente con quiste sebáceo en cuello, con signos de infección aguda (eritema, dolor, fluctuación). Se realiza incisión y drenaje, y se programará exéresis diferida si es necesario.",
+    encuesta: {
+      nombre: "Beatriz",
+      apellidos: "Lara Ponce",
+      edad: 48,
+      telefono: "555-123-0028",
+      email: "beatriz.lara@example.com",
+      origen: "Sitio Web",
+      diagnosticoPrevio: false,
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Bulto doloroso y rojo", "Supuración ocasional", "Fiebre leve"],
+      duracionSintomas: "5 días",
+      severidadCondicion: "Moderada", // Ajustado "Moderada-Severa"
+      estudiosPrecios: false,
+      tratamientosPrevios: false,
+      intensidadDolor: 8,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Alivio del dolor", "Evitar recurrencia"],
+      preocupacionesCirugia: ["Cicatriz", "Infección persistente"],
+      plazoDeseado: "Inmediato"
+    },
+    recomendacionesSistema: [
+      "Intervención realizada (98%)",
+      "Tratamiento antibiótico",
+      "Curaciones y seguimiento para exéresis completa si aplica"
+    ],
+    etiquetas: ["Operado", "Sitio Web", "Seguro Privado", "Quiste Infectado", "Urgente"],
+  },
+  {
+    id: 39,
+    nombre: "Francisco",
+    apellidos: "Rojas Solís",
+    edad: 67,
+    fechaConsulta: "2025-07-21",
+    fechaRegistro: "2025-07-16",
+    diagnostico: "Eventración Abdominal",
+    estado: "Seguimiento",
+    probabilidadCirugia: 0.70,
+    doctorAsignado: "Dr. Luis Ángel Medina",
+    ultimoContacto: "2025-07-21",
+    proximoContacto: "2025-08-05",
+    notaClinica: "Paciente con eventración abdominal post-laparotomía exploradora hace 2 años. Refiere aumento de tamaño y molestias. Se evalúa para reparación con malla.",
+    encuesta: {
+      nombre: "Francisco",
+      apellidos: "Rojas Solís",
+      edad: 67,
+      telefono: "555-123-0029",
+      email: "francisco.rojas@example.com",
+      origen: "Google",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Eventración postquirúrgica",
+      seguroMedico: "IMSS",
+      sintomas: ["Abultamiento abdominal", "Dolor leve", "Limitación para esfuerzos"],
+      duracionSintomas: "1.5 años",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: true,
+      tratamientosPrevios: false,
+      intensidadDolor: 4,
+      afectacionDiaria: "Moderada", // Ajustado "Leve-Moderada"
+      factoresImportantes: ["Mejorar calidad de vida", "Evitar complicaciones"],
+      preocupacionesCirugia: ["Recuperación prolongada", "Riesgos por edad"],
+      plazoDeseado: "90-120 días"
+    },
+    recomendacionesSistema: [
+      "Probabilidad alta de cirugía (70%)",
+      "Optimizar condiciones preoperatorias (control de comorbilidades)",
+      "Discutir riesgos y beneficios en paciente de edad avanzada"
+    ],
+    etiquetas: ["Seguimiento", "Google", "IMSS", "Eventración"],
+  },
+  {
+    id: 40,
+    nombre: "Isabel",
+    apellidos: "Guerrero Luna",
+    edad: 42,
+    fechaConsulta: "2025-07-28",
+    fechaRegistro: "2025-07-22",
+    diagnostico: "Vesícula (Colecistitis Crónica)",
+    estado: "Pendiente de consulta",
+    probabilidadCirugia: 0.88,
+    doctorAsignado: "Dra. Ana Gutiérrez",
+    ultimoContacto: "2025-07-28",
+    proximoContacto: "2025-08-10",
+    notaClinica: "Paciente con historia de múltiples episodios de dolor biliar, diagnosticada con colecistitis crónica calculosa. Se recomienda colecistectomía electiva.",
+    encuesta: {
+      nombre: "Isabel",
+      apellidos: "Guerrero Luna",
+      edad: 42,
+      telefono: "555-123-0030",
+      email: "isabel.guerrero@example.com",
+      origen: "Facebook",
+      diagnosticoPrevio: true,
+      detallesDiagnostico: "Colecistitis crónica litiásica",
+      seguroMedico: "Seguro Privado",
+      sintomas: ["Dolor recurrente en hipocondrio derecho", "Intolerancia a grasas", "Dispepsia"],
+      duracionSintomas: "Más de 2 años",
+      severidadCondicion: "Moderada",
+      estudiosPrecios: true,
+      tratamientosPrevios: true,
+      intensidadDolor: 6,
+      afectacionDiaria: "Moderada",
+      factoresImportantes: ["Eliminar el dolor", "Evitar complicaciones futuras"],
+      preocupacionesCirugia: ["Tiempo de recuperación", "Dolor postoperatorio"],
+      plazoDeseado: "30-60 días"
+    },
+    recomendacionesSistema: [
+      "Alta probabilidad de cirugía (88%)",
+      "Programar cirugía electiva",
+      "Informar sobre beneficios de la colecistectomía para evitar agudizaciones"
+    ],
+    etiquetas: ["Pendiente de consulta", "Facebook", "Seguro Privado", "Colecistitis Crónica"],
+  }
+];
+
+// --- Seguimientos Adicionales ---
+export const additionalFollowUps: FollowUp[] = [
+  // Seguimientos adicionales para pacientes existentes
+  {
+    id: 11,
+    patientId: 15, // Héctor Miranda (Pendiente)
+    fecha: "2025-02-20",
+    tipo: "Consulta",
+    notas: "Paciente interesado pero necesita tiempo para organizar aspectos laborales.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-03-10",
+    estado: "Programado",
+    asignadoA: "María García",
+  },
+  {
+    id: 12,
+    patientId: 15, // Héctor Miranda (continuación)
+    fecha: "2025-03-10",
+    tipo: "Consulta",
+    notas: "Paciente aún indeciso. Sigue preocupado por tiempo de ausencia laboral.",
+    resultado: "Indeciso",
+    proximoSeguimiento: "2025-03-25",
+    estado: "Programado",
+    asignadoA: "María García",
+  },
+  {
+    id: 13,
+    patientId: 17, // Rodrigo Estrada (Seguimiento)
+    fecha: "2025-03-15",
+    tipo: "Consulta",
+    notas: "Paciente ha conseguido parte del financiamiento. Quiere programar cita preoperatoria.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-03-30",
+    estado: "Programado",
+    asignadoA: "María García",
+  },
+  {
+    id: 14,
+    patientId: 20, // Verónica Castro (Seguimiento)
+    fecha: "2025-04-08",
+    tipo: "Consulta",
+    notas: "Seguro confirmó cobertura parcial. Paciente evaluando fecha para programar cirugía.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-04-22",
+    estado: "Programado",
+    asignadoA: "Carlos Rodríguez",
+  },
+  {
+    id: 15,
+    patientId: 21, // Armando Pérez (Pendiente)
+    fecha: "2025-04-15",
+    tipo: "Consulta",
+    notas: "Paciente completó evaluación preoperatoria. Interesado en programar cirugía para mayo.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-04-30",
+    estado: "Programado",
+    asignadoA: "María García",
+  },
+  {
+    id: 16,
+    patientId: 23, // Gustavo Flores (Seguimiento)
+    fecha: "2025-04-22",
+    tipo: "Consulta",
+    notas: "Paciente solicitó información sobre costos y opciones de pago. Interesado en programar para junio.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-05-10",
+    estado: "Programado",
+    asignadoA: "María García",
+  },
+  {
+    id: 17,
+    patientId: 26, // Adriana Luna (Pendiente)
+    fecha: "2025-05-10",
+    tipo: "Consulta",
+    notas: "Paciente ha completado estudios preoperatorios. Lista para programar cirugía a finales de mayo.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-05-17",
+    estado: "Programado",
+    asignadoA: "Carlos Rodríguez",
+  },
+  {
+    id: 18,
+    patientId: 29, // Alberto Medina (Seguimiento)
+    fecha: "2025-05-25",
+    tipo: "Consulta",
+    notas: "Médico de cabecera dio visto bueno. Paciente solicita programar cita preoperatoria.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-06-05",
+    estado: "Programado",
+    asignadoA: "Carlos Rodríguez",
+  },
+  // Seguimientos para los NUEVOS pacientes (ID 31 en adelante)
+  {
+    id: 19,
+    patientId: 31, // Roberto Juárez (Pendiente)
+    fecha: "2025-06-10",
+    tipo: "Consulta",
+    notas: "Paciente confirmó interés, solicitó información sobre preparación para cirugía.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-06-18",
+    estado: "Programado",
+    asignadoA: "Laura Martínez",
+  },
+  {
+    id: 20,
+    patientId: 33, // Miguel Ángel Ramírez (Seguimiento)
+    fecha: "2025-06-24",
+    tipo: "Consulta",
+    notas: "Se resolvieron dudas. Paciente decide proceder con cirugía. Pendiente agendar fecha.",
+    resultado: "Decidido",
+    proximoSeguimiento: "2025-07-01",
+    estado: "Programado",
+    asignadoA: "Sofía Beltrán",
+  },
+  {
+    id: 21,
+    patientId: 36, // Valeria Díaz (Pendiente)
+    fecha: "2025-07-10",
+    tipo: "Consulta",
+    notas: "Paciente confirma que desea programar la exéresis del lipoma para finales de julio.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-07-15",
+    estado: "Programado",
+    asignadoA: "Laura Martínez",
+  },
+  {
+    id: 22,
+    patientId: 39, // Francisco Rojas (Seguimiento)
+    fecha: "2025-08-05",
+    tipo: "Consulta",
+    notas: "Paciente discutiendo opciones con la familia. Solicita una semana más para decidir.",
+    resultado: "Indeciso",
+    proximoSeguimiento: "2025-08-12",
+    estado: "Programado",
+    asignadoA: "Sofía Beltrán",
+  },
+  {
+    id: 23,
+    patientId: 40, // Isabel Guerrero (Pendiente)
+    fecha: "2025-08-10",
+    tipo: "Consulta",
+    notas: "Paciente confirma que desea programar la colecistectomía. Se envían fechas disponibles.",
+    resultado: "Interesado",
+    proximoSeguimiento: "2025-08-15",
+    estado: "Programado",
+    asignadoA: "Laura Martínez",
+  }
+];
+
+// --- Funciones y Exportaciones Adicionales ---
+
+/**
+ * Obtiene los seguimientos cuyo estado es "Pendiente".
+ * Nota: Con los datos actuales en `additionalFollowUps`, esta función devolverá un array vacío
+ * ya que ninguno tiene `estado: "Pendiente"`. Para que devuelva resultados,
+ * algunos seguimientos deberían tener ese estado.
+ */
+export const getPendingFollowUps = (): FollowUp[] => {
+  return additionalFollowUps.filter(followUp => followUp.estado === "Pendiente");
+};
+
+// Definir y exportar samplePatients usando los datos ya definidos y tipados
+export const samplePatients: PatientData[] = additionalPatients;
+
+// Definir y exportar clinicMetrics con tipos robustos
+export const clinicMetrics: ClinicMetrics = {
+  totalPacientes: additionalPatients.length,
+  pacientesNuevosMes: additionalPatients.filter(p => {
+    const registro = new Date(p.fechaRegistro);
+    const hoy = new Date();
+    return registro.getMonth() === hoy.getMonth() && registro.getFullYear() === hoy.getFullYear();
+  }).length,
+  pacientesOperados: additionalPatients.filter(p => p.estado === "Operado").length,
+  pacientesNoOperados: additionalPatients.filter(p => p.estado === "No Operado").length,
+  pacientesSeguimiento: additionalPatients.filter(p => p.estado === "Seguimiento").length,
+  tasaConversion: 0.65, // Ejemplo, asegurar que sea un número entre 0 y 1
+  tiempoPromedioDecision: 15, // Ejemplo, en días
+  fuentePrincipalPacientes: "Google", // Ejemplo, debe ser un PatientOrigin o string
+  diagnosticosMasComunes: ((): DiagnosisCount[] => {
+    const counts: { [key in DiagnosisType]?: number } = {};
+    additionalPatients.forEach(p => {
+      counts[p.diagnostico] = (counts[p.diagnostico] || 0) + 1;
+    });
+    return (Object.keys(counts) as DiagnosisType[]).map(tipo => ({
+      tipo,
+      cantidad: counts[tipo]!,
+    })).sort((a,b) => b.cantidad - a.cantidad).slice(0, 2); // Ejemplo: top 2
+  })(),
+};

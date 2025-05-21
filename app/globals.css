@@ -1,0 +1,378 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Base colors - Fondo gris muy sutil con tono azulado */
+    --background: 210 30% 98%;
+    --foreground: 215 30% 15%;
+    --card: 210 30% 98%;
+    --card-foreground: 215 30% 15%;
+    --popover: 210 30% 98%;
+    --popover-foreground: 215 30% 15%;
+
+    /* Nuevo color primario: Azul marino elegante */
+    --primary: 210 75% 28%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Nuevo color secundario: Gris azulado claro */
+    --secondary: 210 20% 92%;
+    --secondary-foreground: 215 30% 15%;
+
+    --muted: 210 20% 92%;
+    --muted-foreground: 215 30% 45%;
+
+    /* Nuevo color de acento: Azul claro */
+    --accent: 200 85% 95%;
+    --accent-foreground: 215 30% 15%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 20% 88%;
+    --input: 210 20% 88%;
+    --ring: 210 75% 28%;
+    --radius: 0.5rem;
+
+    /* Primary color scale - Azul marino */
+    --primary-50: 210 75% 96%;
+    --primary-100: 210 75% 90%;
+    --primary-200: 210 75% 80%;
+    --primary-300: 210 75% 60%;
+    --primary-400: 210 75% 40%;
+    --primary-500: 210 75% 28%;
+    --primary-600: 210 75% 24%;
+    --primary-700: 210 75% 20%;
+    --primary-800: 210 75% 16%;
+    --primary-900: 210 75% 12%;
+    --primary-950: 210 75% 8%;
+
+    /* Status colors */
+    --success-light: 160 84% 94%;
+    --success: 160 84% 39%;
+    --success-dark: 160 84% 29%;
+
+    --warning-light: 40 90% 94%;
+    --warning: 40 90% 50%;
+    --warning-dark: 40 90% 40%;
+
+    --error-light: 0 84% 94%;
+    --error: 0 84% 60%;
+    --error-dark: 0 84% 50%;
+
+    --info-light: 200 85% 94%;
+    --info: 200 85% 50%;
+    --info-dark: 200 85% 40%;
+
+    /* Clinical status colors */
+    --clinical-pending: 40 90% 50%;
+    --clinical-active: 210 75% 28%;
+    --clinical-completed: 160 84% 39%;
+    --clinical-cancelled: 0 84% 60%;
+    --clinical-no-show: 210 10% 50%;
+
+    /* Sidebar colors */
+    --sidebar-background: 210 50% 98%;
+    --sidebar-foreground: 215 30% 15%;
+    --sidebar-primary: 210 75% 28%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 200 85% 95%;
+    --sidebar-accent-foreground: 215 30% 15%;
+    --sidebar-border: 210 30% 90%;
+    --sidebar-ring: 210 75% 28%;
+  }
+
+  .dark {
+    /* Base colors - Fondo azul oscuro elegante */
+    --background: 215 35% 12%;
+    --foreground: 210 30% 98%;
+    --card: 215 35% 12%;
+    --card-foreground: 210 30% 98%;
+    --popover: 215 35% 12%;
+    --popover-foreground: 210 30% 98%;
+
+    /* Nuevo color primario en modo oscuro: Azul más brillante */
+    --primary: 210 80% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 215 35% 20%;
+    --secondary-foreground: 210 30% 98%;
+    --muted: 215 35% 20%;
+    --muted-foreground: 210 30% 70%;
+    --accent: 215 35% 20%;
+    --accent-foreground: 210 30% 98%;
+    --destructive: 0 84% 65%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 35% 25%;
+    --input: 215 35% 25%;
+    --ring: 210 80% 50%;
+
+    /* Primary color scale - dark mode */
+    --primary-50: 210 75% 8%;
+    --primary-100: 210 75% 12%;
+    --primary-200: 210 75% 16%;
+    --primary-300: 210 75% 20%;
+    --primary-400: 210 75% 24%;
+    --primary-500: 210 80% 50%;
+    --primary-600: 210 75% 60%;
+    --primary-700: 210 75% 70%;
+    --primary-800: 210 75% 80%;
+    --primary-900: 210 75% 90%;
+    --primary-950: 210 75% 96%;
+
+    /* Status colors - dark mode */
+    --success-light: 160 84% 20%;
+    --success: 160 84% 49%;
+    --success-dark: 160 84% 59%;
+
+    --warning-light: 40 90% 30%;
+    --warning: 40 90% 60%;
+    --warning-dark: 40 90% 70%;
+
+    --error-light: 0 84% 30%;
+    --error: 0 84% 65%;
+    --error-dark: 0 84% 75%;
+
+    --info-light: 200 85% 30%;
+    --info: 200 85% 60%;
+    --info-dark: 200 85% 70%;
+
+    /* Clinical status colors - dark mode */
+    --clinical-pending: 40 90% 60%;
+    --clinical-active: 210 80% 50%;
+    --clinical-completed: 160 84% 49%;
+    --clinical-cancelled: 0 84% 65%;
+    --clinical-no-show: 210 10% 70%;
+
+    /* Sidebar colors - dark mode */
+    --sidebar-background: 215 35% 12%;
+    --sidebar-foreground: 210 30% 98%;
+    --sidebar-primary: 210 80% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 35% 20%;
+    --sidebar-accent-foreground: 210 30% 98%;
+    --sidebar-border: 215 35% 25%;
+    --sidebar-ring: 210 80% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Estilos para componentes comunes */
+@layer components {
+  /* Tarjetas con hover suave */
+  .hover-card {
+    @apply transition-all duration-200 hover:shadow-md hover:border-primary/20;
+  }
+
+  /* Badges de estado */
+  .status-badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  /* Contenedores responsivos */
+  .responsive-container {
+    @apply w-full px-4 mx-auto sm:px-6 lg:px-8 max-w-7xl;
+  }
+
+  /* Grids responsivos comunes */
+  .responsive-grid-2 {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2;
+  }
+
+  .responsive-grid-3 {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  .responsive-grid-4 {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4;
+  }
+
+  /* Animaciones */
+  .fade-in {
+    @apply animate-[fadeIn_0.3s_ease-in-out];
+  }
+
+  .slide-in {
+    @apply animate-[slideIn_0.3s_ease-in-out];
+  }
+
+  /* Estilos para tablas responsivas */
+  .table-responsive {
+    @apply w-full overflow-x-auto;
+  }
+
+  /* Estilos para formularios */
+  .form-group {
+    @apply space-y-2 mb-4;
+  }
+
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 dark:text-gray-300;
+  }
+
+  /* Estilos para botones de acción - Mejorados para mayor elegancia */
+  .action-button {
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors 
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 
+    disabled:opacity-50 disabled:pointer-events-none ring-offset-background shadow-sm;
+  }
+
+  /* Estilos para secciones de página */
+  .page-section {
+    @apply py-6 md:py-8;
+  }
+
+  .section-title {
+    @apply text-2xl font-bold tracking-tight mb-4;
+  }
+
+  .section-description {
+    @apply text-muted-foreground mb-6;
+  }
+
+  /* Botones con estilo mejorado */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 shadow-md;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
+  }
+
+  .btn-outline {
+    @apply border border-input bg-background hover:bg-accent hover:text-accent-foreground;
+  }
+
+  .btn-ghost {
+    @apply hover:bg-accent hover:text-accent-foreground;
+  }
+}
+
+/* Animaciones personalizadas */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Mejoras de accesibilidad */
+@layer utilities {
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary;
+  }
+
+  .sr-only {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+  }
+
+  /* Utilidades para espaciado consistente */
+  .section-spacing {
+    @apply my-8;
+  }
+
+  .content-spacing {
+    @apply my-4;
+  }
+
+  /* Utilidades para texto */
+  .truncate-2-lines {
+    @apply line-clamp-2;
+  }
+
+  .truncate-3-lines {
+    @apply line-clamp-3;
+  }
+
+  /* Utilidades para sombras elegantes */
+  .shadow-elegant {
+    @apply shadow-[0_4px_14px_0_rgba(0,0,0,0.08)];
+  }
+
+  .shadow-elegant-hover {
+    @apply hover:shadow-[0_6px_20px_0_rgba(0,0,0,0.1)] transition-shadow duration-300;
+  }
+}
+
+/* Mejoras para dispositivos móviles */
+@media (max-width: 640px) {
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Ajustes de tamaño para móviles */
+  .mobile-full-height {
+    height: calc(100vh - 64px);
+  }
+
+  .mobile-touch-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Mejoras para impresión */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #000;
+    background: #fff;
+  }
+
+  a {
+    text-decoration: none;
+    color: #000;
+  }
+
+  table {
+    page-break-inside: avoid;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+}
