@@ -20,7 +20,7 @@ import {
   Cell,
 } from "recharts"
 import { ArrowUpIcon, ArrowDownIcon } from "lucide-react"
-import { cn } from "@/src/lib/utils"
+import { cn } from "@/lib/utils"
 import type { PatientData } from "@/app/dashboard/data-model"
 
 interface ConversionAnalyticsProps {

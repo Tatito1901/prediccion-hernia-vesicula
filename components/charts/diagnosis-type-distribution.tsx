@@ -3,7 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
 import type { PatientData } from "@/app/dashboard/data-model"
-import { chartStyles } from "@/src/lib/chart-theme"
+import { chartStyles } from "@/lib/chart-theme"
 
 interface DiagnosisTypeDistributionProps {
   patients: PatientData[]

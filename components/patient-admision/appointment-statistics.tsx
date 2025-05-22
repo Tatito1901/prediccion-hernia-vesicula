@@ -1,12 +1,12 @@
 "use client"
-import { useState, useMemo, useEffect, useCallback, FC, memo } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { format, subDays, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, addDays, isSameDay } from "date-fns";
+import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, addDays, isSameDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { FileBarChart,Badge, BarChart2, RefreshCw, AlertCircle, Download, Settings } from "lucide-react";
+import { FileBarChart,Badge, RefreshCw, AlertCircle, Download } from "lucide-react";
 import { mockAppointments } from "@/app/admision/mock-data";
 
 // Importar los módulos personalizados

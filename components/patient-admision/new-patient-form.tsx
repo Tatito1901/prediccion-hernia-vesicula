@@ -30,7 +30,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { useAppContext } from "@/src/lib/context/app-context";
+import { useAppContext } from "@/lib/context/app-context";
 import type { DiagnosisType } from "@/app/dashboard/data-model";
 
 // Mejorar el esquema de validación con mensajes específicos
@@ -316,7 +316,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                       maxTime={timeRanges.maxTime}
                       placeholderText="Selecciona fecha y hora"
                       className={`w-full rounded-md border ${fieldState.error ? 'border-red-500' : 'border-input'} px-3 py-2 text-sm focus:ring-2 ${fieldState.error ? 'focus:ring-red-500' : 'focus:ring-primary'}`}
-                      calendarClassName="shadow-lg rounded-lg border bg-white p-2"
+                      calendarClassName="shadow-lg rounded-lg border bg-card text-card-foreground p-2"
                       popperClassName="shadow-xl"
                       popperPlacement="bottom-start"
                       showPopperArrow={false}

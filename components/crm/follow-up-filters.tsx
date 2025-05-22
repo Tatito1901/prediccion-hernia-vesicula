@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { cn } from "@/src/lib/utils"
+import { cn } from "@/lib/utils"
 import { CalendarIcon, FilterIcon, SortAscIcon } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"

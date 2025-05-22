@@ -58,7 +58,7 @@ export function SurveyShareDialog({ isOpen, patient, surveyLink, onStartInternal
           </TabsList>
 
           <TabsContent value="qr" className="flex flex-col items-center justify-center p-4">
-            <div className="bg-white p-4 rounded-lg mb-4">
+            <div className="bg-card text-card-foreground p-4 rounded-lg mb-4">
               <QRCodeSVG value={surveyLink} size={200} />
             </div>
             <p className="text-sm text-center text-muted-foreground mb-4">

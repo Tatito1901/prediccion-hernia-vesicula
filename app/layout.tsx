@@ -2,7 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { ThemeProvider } from "@/components/layout/theme-provider"
+import { ThemeProvider } from "@/components/theme/theme-provider"
 import { Toaster } from "sonner"
 import { AppProvider } from "@/lib/context/app-context"
 

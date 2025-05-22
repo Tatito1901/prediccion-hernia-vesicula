@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { PieChartIcon, CalendarIcon, FileBarChartIcon, PanelTopIcon, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useAppContext } from "@/src/lib/context/app-context"
+import { useAppContext } from "@/lib/context/app-context"
 
 export default function AdmisionPage() {
   const [activeTab, setActiveTab] = useState("admision")

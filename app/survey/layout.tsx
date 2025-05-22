@@ -1,6 +1,6 @@
 // app/survey/layout.tsx
 import { cn } from "@/src/lib/utils"
-import { ThemeProvider } from "@/components/layout/theme-provider"
+import { ThemeProvider } from "@/components/theme/theme-provider"
 import { AppContextProvider } from "@/src/lib/context/app-context-provider"
 
 export const metadata = {

@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { cn } from "@/src/lib/utils"
+import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { FollowUp, PatientData } from "@/app/dashboard/data-model"
 

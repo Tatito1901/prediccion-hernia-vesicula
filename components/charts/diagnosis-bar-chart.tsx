@@ -3,7 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import type { ClinicMetrics } from "@/app/dashboard/data-model"
-import { chartStyles } from "@/src/lib/chart-theme"
+import { chartStyles } from "@/lib/chart-theme"
 
 interface DiagnosisBarChartProps {
   metrics: Partial<ClinicMetrics> & {

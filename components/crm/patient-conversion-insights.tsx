@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { AlertTriangle, Lightbulb, Tag, MessageSquare } from "lucide-react"
 import type { PatientData } from "@/app/dashboard/data-model"
-import { surgeryPredictionModel } from "@/src/lib/prediction-model"
-import { generatePersuasiveMessages } from "@/src/lib/sentiment-analysis"
+import { surgeryPredictionModel } from "@/lib/prediction-model"
+import { generatePersuasiveMessages } from "@/lib/sentiment-analysis"
 import { useState, useEffect } from "react"
 
 interface PatientConversionInsightsProps {

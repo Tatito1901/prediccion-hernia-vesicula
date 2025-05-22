@@ -17,16 +17,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NewPatientForm } from "./new-patient-form"
 import { toast } from "sonner"
-import { useAppContext } from "@/src/lib/context/app-context"
+import { useAppContext } from "@/lib/context/app-context"
 import { Badge } from "@/components/ui/badge"
 import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog"
-import { generateSurveyId } from "@/src/lib/form-utils"
+import { generateSurveyId } from "@/lib/form-utils"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { format, isToday as dateIsToday, isBefore, isAfter, startOfDay, addDays } from "date-fns"
 import { es } from "date-fns/locale"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +54,7 @@ import {
 } from "@/components/ui/sheet"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { cn } from "@/src/lib/utils"
+import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "framer-motion"
 import type { DiagnosisType } from "@/app/dashboard/data-model";
 
@@ -987,7 +986,7 @@ export function PatientAdmission() {
     }
 
     toast.success(`Consulta completada: ${appointment.nombre}`, {
-      description: "El paciente ha pasado a seguimiento",
+      description: "El paciente ha pasado a estado de seguimiento",
       icon: <CheckCircle className="h-4 w-4 text-blue-500" />,
     });
     
@@ -1217,37 +1216,39 @@ export function PatientAdmission() {
               {confirmDialog.action === "noShow" && "¿Marcar como no asistió?"}
               {confirmDialog.action === "reschedule" && "Reagendar cita"}
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmDialog.appointmentData && (
-                <div className="text-sm mt-1 p-2 bg-muted/30 rounded-md">
-                  <div className="font-medium">{confirmDialog.appointmentData.nombre} {confirmDialog.appointmentData.apellidos}</div>
-                  <div className="text-xs mt-1 text-muted-foreground flex items-center gap-1">
-                    <CalendarIcon className="h-3 w-3" />
-                    {format(new Date(confirmDialog.appointmentData.fechaConsulta), "dd/MM/yyyy")}
-                    <Clock className="h-3 w-3 ml-1" />
-                    {confirmDialog.appointmentData.horaConsulta}
+            <AlertDialogDescription asChild>
+              <div>
+                {confirmDialog.appointmentData && (
+                  <div className="text-sm mt-1 p-2 bg-muted/30 rounded-md">
+                    <div className="font-medium">{confirmDialog.appointmentData.nombre} {confirmDialog.appointmentData.apellidos}</div>
+                    <div className="text-xs mt-1 text-muted-foreground flex items-center gap-1">
+                      <CalendarIcon className="h-3 w-3" />
+                      {format(new Date(confirmDialog.appointmentData.fechaConsulta), "dd/MM/yyyy")}
+                      <Clock className="h-3 w-3 ml-1" />
+                      {confirmDialog.appointmentData.horaConsulta}
+                    </div>
                   </div>
-                </div>
-              )}
-              
-              {confirmDialog.action !== "reschedule" ? (
-                <div className="mt-2">
-                  {confirmDialog.action === "checkIn" &&
-                    "El paciente aparecerá en el dashboard como pendiente de consulta."}
-                  {confirmDialog.action === "cancel" && "Esta acción no se puede deshacer."}
-                  {confirmDialog.action === "complete" && "El paciente pasará a estado de seguimiento."}
-                  {confirmDialog.action === "noShow" && "Se marcará que el paciente no asistió a la cita."}
-                </div>
-              ) : (
-                <div className="mt-4">
-                  <RescheduleDatePicker
-                    date={rescheduleDate}
-                    time={rescheduleTime}
-                    onDateChange={setRescheduleDate}
-                    onTimeChange={setRescheduleTime}
-                  />
-                </div>
-              )}
+                )}
+                
+                {confirmDialog.action !== "reschedule" ? (
+                  <div className="mt-2">
+                    {confirmDialog.action === "checkIn" &&
+                      "El paciente aparecerá en el dashboard como pendiente de consulta."}
+                    {confirmDialog.action === "cancel" && "Esta acción no se puede deshacer."}
+                    {confirmDialog.action === "complete" && "El paciente pasará a estado de seguimiento."}
+                    {confirmDialog.action === "noShow" && "Se marcará que el paciente no asistió a la cita."}
+                  </div>
+                ) : (
+                  <div className="mt-4">
+                    <RescheduleDatePicker
+                      date={rescheduleDate}
+                      time={rescheduleTime}
+                      onDateChange={setRescheduleDate}
+                      onTimeChange={setRescheduleTime}
+                    />
+                  </div>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-4">

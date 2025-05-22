@@ -440,7 +440,7 @@ export default function MedicalSurveyAnalysis() {
                     </thead>
                     <tbody>
                       {sampleData.pacientesPrioritarios.map((paciente, index) => (
-                        <tr key={paciente.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
+                        <tr key={paciente.id} className={index % 2 === 0 ? "bg-card" : "bg-muted/20"}>
                           <td className="whitespace-nowrap px-4 py-3">
                             <div className="font-medium">{paciente.nombre}</div>
                             <div className="text-xs text-muted-foreground">{paciente.edad} años</div>

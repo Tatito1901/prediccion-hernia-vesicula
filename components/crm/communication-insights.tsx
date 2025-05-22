@@ -19,7 +19,7 @@ import {
   Cell,
 } from "recharts"
 import { PhoneIcon, MailIcon, MessageSquareIcon, UserIcon } from "lucide-react"
-import { cn } from "@/src/lib/utils"
+import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { PatientData } from "@/app/dashboard/data-model"
 

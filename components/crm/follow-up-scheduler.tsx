@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format, isBefore, isAfter, isSameDay } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarIcon, CheckIcon, PhoneIcon, MailIcon, MessageSquareIcon } from "lucide-react"
-import { cn } from "@/src/lib/utils"
+import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { PatientData } from "@/app/dashboard/data-model"
 
