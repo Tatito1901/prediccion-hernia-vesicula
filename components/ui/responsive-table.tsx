@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useMemo, useCallback } from "react"
+import { useBreakpoint } from "@/hooks/use-breakpoint"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -32,7 +33,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { cn } from "@/src/lib/utils"
+import { cn } from "@/lib/utils"
 
 export interface Column<T> {
   key: string
@@ -68,6 +69,10 @@ export interface ResponsiveTableProps<T> {
   selectable?: boolean
   onSelectionChange?: (selectedRows: T[]) => void
   uniqueKey?: keyof T
+  forceCardView?: boolean // Nueva propiedad para forzar vista de tarjetas
+  showFirstButton?: boolean // Controla si mostrar el botón de primera página
+  showLastButton?: boolean // Controla si mostrar el botón de última página
+  siblingCount?: number // Número de páginas hermanas a mostrar
 }
 
 export function ResponsiveTable<T>({
@@ -92,7 +97,15 @@ export function ResponsiveTable<T>({
   selectable = false,
   onSelectionChange,
   uniqueKey,
+  forceCardView = false, // Nueva propiedad para forzar vista de tarjetas
 }: ResponsiveTableProps<T>) {
+  // Utilizar nuestro hook de breakpoint para detectar dispositivos
+  const { isMobile, isTablet } = useBreakpoint();
+  
+  // Determinar automáticamente si mostrar vista de tarjetas
+  const shouldUseCardView = useMemo(() => {
+    return forceCardView || isMobile || (isTablet && cardView);
+  }, [forceCardView, isMobile, isTablet, cardView]);
   const [searchTerm, setSearchTerm] = useState("")
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null)
   const [filters, setFilters] = useState<Record<string, any>>({})
@@ -339,118 +352,6 @@ export function ResponsiveTable<T>({
 
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
               {searchable && (
-                <div className="relative flex-1 sm:max-w-xs">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    placeholder={searchPlaceholder}
-                    className="pl-8"
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value)
-                      setCurrentPage(0) // Resetear a la primera página al buscar
-                    }}
-                  />
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                {columns.some((col) => col.filterable) && (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-9">
-                        <Filter className="mr-2 h-4 w-4" />
-                        Filtros
-                        {Object.keys(filters).length > 0 && (
-                          <Badge variant="secondary" className="ml-2 rounded-full">
-                            {Object.keys(filters).length}
-                          </Badge>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-72">
-                      <div className="space-y-4">
-                        <h4 className="font-medium">Filtrar por</h4>
-
-                        {columns
-                          .filter((col) => col.filterable)
-                          .map((column) => (
-                            <div key={column.key} className="space-y-2">
-                              <Label htmlFor={`filter-${column.key}`}>{column.title}</Label>
-                              <Select
-                                value={filters[column.key] || "all"}
-                                onValueChange={(value) => handleFilter(column.key, value)}
-                              >
-                                <SelectTrigger id={`filter-${column.key}`}>
-                                  <SelectValue placeholder="Todos" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="all">Todos</SelectItem>
-                                  {column.filterOptions
-                                    ? column.filterOptions.map((option) => (
-                                        <SelectItem key={option.value} value={option.value}>
-                                          {option.label}
-                                        </SelectItem>
-                                      ))
-                                    : Array.from(new Set(data.map((row) => String(row[column.key as keyof T])))).map(
-                                        (value) => (
-                                          <SelectItem key={value} value={value}>
-                                            {value}
-                                          </SelectItem>
-                                        ),
-                                      )}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          ))}
-
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={handleClearFilters}
-                          disabled={Object.keys(filters).length === 0 && !searchTerm}
-                        >
-                          Limpiar filtros
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                )}
-
-                {onRefresh && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9"
-                    onClick={onRefresh}
-                    title="Actualizar datos"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                )}
-
-                {onExport && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-9">
-                        <Download className="mr-2 h-4 w-4" />
-                        Exportar
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Formato</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => onExport("csv")}>CSV</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onExport("excel")}>Excel</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onExport("json")}>JSON</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-      )}
 
       <CardContent>
         <LoadingState isLoading={isLoading} showSpinnerOnly={false}>

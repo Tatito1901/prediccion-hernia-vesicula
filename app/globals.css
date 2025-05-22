@@ -5,33 +5,33 @@
 @layer base {
   :root {
     /* Base colors - Fondo gris muy sutil con tono azulado */
-    --background: 210 30% 98%;
-    --foreground: 215 30% 15%;
-    --card: 210 30% 98%;
-    --card-foreground: 215 30% 15%;
-    --popover: 210 30% 98%;
-    --popover-foreground: 215 30% 15%;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
 
     /* Nuevo color primario: Azul marino elegante */
-    --primary: 210 75% 28%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
 
     /* Nuevo color secundario: Gris azulado claro */
-    --secondary: 210 20% 92%;
-    --secondary-foreground: 215 30% 15%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
 
-    --muted: 210 20% 92%;
-    --muted-foreground: 215 30% 45%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
     /* Nuevo color de acento: Azul claro */
-    --accent: 200 85% 95%;
-    --accent-foreground: 215 30% 15%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 210 20% 88%;
-    --input: 210 20% 88%;
-    --ring: 210 75% 28%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
 
     /* Primary color scale - Azul marino */
@@ -72,40 +72,45 @@
     --clinical-no-show: 210 10% 50%;
 
     /* Sidebar colors */
-    --sidebar-background: 210 50% 98%;
-    --sidebar-foreground: 215 30% 15%;
-    --sidebar-primary: 210 75% 28%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 200 85% 95%;
-    --sidebar-accent-foreground: 215 30% 15%;
-    --sidebar-border: 210 30% 90%;
-    --sidebar-ring: 210 75% 28%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
   }
 
   .dark {
     /* Base colors - Fondo azul oscuro elegante */
-    --background: 215 35% 12%;
-    --foreground: 210 30% 98%;
-    --card: 215 35% 12%;
-    --card-foreground: 210 30% 98%;
-    --popover: 215 35% 12%;
-    --popover-foreground: 210 30% 98%;
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
 
     /* Nuevo color primario en modo oscuro: Azul más brillante */
-    --primary: 210 80% 50%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 215 35% 20%;
-    --secondary-foreground: 210 30% 98%;
-    --muted: 215 35% 20%;
-    --muted-foreground: 210 30% 70%;
-    --accent: 215 35% 20%;
-    --accent-foreground: 210 30% 98%;
-    --destructive: 0 84% 65%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 215 35% 25%;
-    --input: 215 35% 25%;
-    --ring: 210 80% 50%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
 
     /* Primary color scale - dark mode */
     --primary-50: 210 75% 8%;
@@ -145,14 +150,19 @@
     --clinical-no-show: 210 10% 70%;
 
     /* Sidebar colors - dark mode */
-    --sidebar-background: 215 35% 12%;
-    --sidebar-foreground: 210 30% 98%;
-    --sidebar-primary: 210 80% 50%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 35% 20%;
-    --sidebar-accent-foreground: 210 30% 98%;
-    --sidebar-border: 215 35% 25%;
-    --sidebar-ring: 210 80% 50%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
   }
 }
 

@@ -1,7 +1,6 @@
 "use client"
 
-import * as React from "react"
-import { useState, useEffect } from "react"
+import type * as React from "react"
 import { LogOutIcon } from "lucide-react"
 import Link from "next/link"
 
@@ -26,19 +25,11 @@ interface NavUserProps extends React.HTMLAttributes<HTMLDivElement> {
   user: {
     name: string
     email: string
-    avatar?: string
+    avatar: string
   }
-  isActuallyCollapsed: boolean;
 }
 
-export function NavUser({ user, className, isActuallyCollapsed, ...props }: NavUserProps) {
-  const [mounted, setMounted] = useState(false);
-  
-  // Comprobar si está montado para evitar errores de hidratación
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
+export function NavUser({ user, className, ...props }: NavUserProps) {
   return (
     <SidebarGroup className={className} {...props}>
       <SidebarGroupContent>
@@ -46,24 +37,17 @@ export function NavUser({ user, className, isActuallyCollapsed, ...props }: NavU
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuButton className="py-3 px-4 flex items-center justify-between w-full hover:bg-accent/50">
-                  <div className="flex items-center w-full overflow-hidden gap-3">
-                    <Avatar className="h-9 w-9 flex-shrink-0 border-2 border-background shadow-sm">
-                      <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
-                      <AvatarFallback className="text-xs font-medium bg-primary text-primary-foreground">
-                        {user.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
-                    {(!isActuallyCollapsed && mounted) && (
-                      <div className="flex-grow min-w-0 overflow-hidden">
-                        <p className="font-medium text-sm leading-tight truncate max-w-full">{user.name}</p>
-                        <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate max-w-full">{user.email}</p>
-                      </div>
-                    )}
-                  </div>
+                <SidebarMenuButton>
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
+                    <AvatarFallback>
+                      {user.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span>{user.name}</span>
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
@@ -77,7 +61,7 @@ export function NavUser({ user, className, isActuallyCollapsed, ...props }: NavU
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/logout" className="text-destructive">
+                  <Link href="/logout" className="text-red-500">
                     <LogOutIcon className="mr-2 h-4 w-4" />
                     <span>Cerrar Sesión</span>
                   </Link>

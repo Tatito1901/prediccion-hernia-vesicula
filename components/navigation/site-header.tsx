@@ -1,35 +1,28 @@
 "use client"
 
 import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Menu } from "lucide-react"
 
 interface SiteHeaderProps {
   title?: string
+  toggleSidebar?: () => void
 }
 
-export function SiteHeader({ title = "Dashboard de Predicción Quirúrgica" }: SiteHeaderProps) {
-  const { toggleSidebar, isMobile, openMobile, setOpenMobile } = useSidebar()
-
-  const handleMobileMenuToggle = () => {
-    if (isMobile) {
-      setOpenMobile(!openMobile)
-    }
-    // Optionally, if toggleSidebar from context is smart enough to handle both mobile and desktop:
-    // toggleSidebar(); 
-  }
-
+export function SiteHeader({ title = "Dashboard de Predicción Quirúrgica", toggleSidebar }: SiteHeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center border-b bg-background px-4 md:px-6 sticky top-0 z-30">
-      <Button variant="ghost" size="icon" className="md:hidden mr-2" onClick={handleMobileMenuToggle}>
-        <Menu className="h-5 w-5" />
-        <span className="sr-only">Toggle Menu</span>
-      </Button>
-      <SidebarTrigger className="-ml-1 hidden md:flex" /> 
-      <Separator orientation="vertical" className="mx-2 hidden h-6 md:flex" />
-      <div className="flex w-full items-center gap-1 lg:gap-2">
-        <h1 className="text-base font-medium text-foreground whitespace-nowrap overflow-hidden text-ellipsis">{title}</h1>
+    <header className="group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 flex h-12 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear">
+      <div className="flex h-16 items-center justify-between gap-4 border-b px-4 md:px-6">
+        <Button variant="outline" size="icon" className="md:hidden" onClick={toggleSidebar}>
+          <Menu className="h-5 w-5" />
+          <span className="sr-only">Toggle Menu</span>
+        </Button>
+        <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
+          <h1 className="text-base font-medium">{title}</h1>
+        </div>
       </div>
     </header>
   )

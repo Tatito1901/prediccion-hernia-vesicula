@@ -2,6 +2,7 @@
 
 import type * as React from "react"
 import Link from "next/link"
+import { useCallback } from "react"
 
 import {
   SidebarGroup,
@@ -19,10 +20,22 @@ interface NavSecondaryProps extends React.HTMLAttributes<HTMLDivElement> {
     icon: React.ElementType
   }[]
   pathname?: string
-  onMobileNavItemClick?: () => void
 }
 
-export function NavSecondary({ items, pathname, className, onMobileNavItemClick, ...props }: NavSecondaryProps) {
+export function NavSecondary({ items, pathname, className, ...props }: NavSecondaryProps) {
+  // Function to close sidebar on mobile after navigation
+  const closeSidebarOnMobile = useCallback(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      // Find the closest sidebar element and access its onOpenChange
+      const sidebarElement = document.querySelector("[data-sidebar-container]")
+      if (sidebarElement) {
+        // Dispatch a custom event that will be handled in the AppSidebar component
+        const event = new CustomEvent("closeSidebar")
+        sidebarElement.dispatchEvent(event)
+      }
+    }
+  }, [])
+
   return (
     <SidebarGroup className={className} {...props}>
       <SidebarGroupLabel>Soporte</SidebarGroupLabel>
@@ -33,8 +46,8 @@ export function NavSecondary({ items, pathname, className, onMobileNavItemClick,
             return (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild isActive={isActive}>
-                  <Link href={item.url} onClick={onMobileNavItemClick}>
-                    <item.icon className="h-4 w-4" />
+                  <Link href={item.url} onClick={closeSidebarOnMobile}>
+                    <item.icon />
                     <span>{item.title}</span>
                   </Link>
                 </SidebarMenuButton>

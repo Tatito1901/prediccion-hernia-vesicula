@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from "react";
+import { useBreakpoint } from "@/hooks/use-breakpoint";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAppContext } from '@/lib/context/app-context';
@@ -133,8 +134,27 @@ const WAIT_TIME_TRENDS = [
 ];
 
 // === COMPONENTE PRINCIPAL ===
+// Componente para adaptar gráficos a diferentes tamaños de pantalla
+const ResponsiveChartContainer = ({ children, className = "", height = 350 }: {
+  children: React.ReactNode;
+  className?: string;
+  height?: number;
+}) => {
+  const { isMobile, isTablet } = useBreakpoint();
+  
+  // Ajustar altura según el dispositivo
+  const chartHeight = isMobile ? 250 : isTablet ? 300 : height;
+  
+  return (
+    <div className={`w-full ${className}`} style={{ height: chartHeight }}>
+      {children}
+    </div>
+  );
+};
+
 export function ChartDiagnostic() {
-  const { patients } = useAppContext();
+  const { patients } = useAppContext()
+  const { isMobile, isTablet } = useBreakpoint();
   const [statsTab, setStatsTab] = useState<StatTab>('distribucion');
 
   // Cálculo de métricas basado en datos reales de pacientes
@@ -221,6 +241,17 @@ export function ChartDiagnostic() {
       proceso: SAMPLE_PROCESS_METRICS, 
     };
   }, [patients]);
+
+  // Configuración adaptativa para gráficos
+  const chartConfig = useMemo(() => {
+    return {
+      padding: isMobile ? { top: 10, right: 10, bottom: 30, left: 30 } : 
+               isTablet ? { top: 15, right: 20, bottom: 40, left: 40 } : 
+               { top: 20, right: 30, bottom: 50, left: 50 },
+      fontSize: isMobile ? 11 : isTablet ? 12 : 14,
+      legendPosition: isMobile ? "bottom" : "right"
+    };
+  }, [isMobile, isTablet]);
 
   // Componente para tarjeta de métrica simple
   const MetricCard = ({ title, value, subtitle, icon, color = "blue" }) => {
