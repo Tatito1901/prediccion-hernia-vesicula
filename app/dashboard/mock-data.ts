@@ -4,27 +4,11 @@ import type { DoctorData, ClinicMetrics, DiagnosisType, PatientOrigin } from './
 export const sampleDoctors: DoctorData[] = [
   {
     id: 1,
-    nombre: "Dr. Luis Ángel Medina",
+    nombre: "Dr. Luis Ángel Medina Andrade",
     especialidad: "Cirugía General y Laparoscópica",
     pacientesAtendidos: 120,
     tasaConversion: 0.68,
     foto: "/caring-doctor.png",
-  },
-  {
-    id: 2,
-    nombre: "Dra. Ana Gutiérrez",
-    especialidad: "Cirugía Laparoscópica",
-    pacientesAtendidos: 85,
-    tasaConversion: 0.72,
-    foto: "/female-doctor.png",
-  },
-  {
-    id: 3,
-    nombre: "Dr. Ricardo Fuentes",
-    especialidad: "Cirugía General",
-    pacientesAtendidos: 65,
-    tasaConversion: 0.6,
-    foto: "/male-doctor.png",
   },
 ];
 
@@ -39,20 +23,20 @@ export const clinicMetrics: ClinicMetrics = {
   fuentePrincipalPacientes: "Google",
   diagnosticosMasComunes: [
     {
-      tipo: "Hernia Inguinal",
-      cantidad: 95,
+      tipo: "Hernia Inguinal", cantidad: 95,
+      porcentaje: 0
     },
     {
-      tipo: "Vesícula",
-      cantidad: 85,
+      tipo: "Vesícula", cantidad: 85,
+      porcentaje: 0
     },
     {
-      tipo: "Hernia Umbilical",
-      cantidad: 45,
+      tipo: "Hernia Umbilical", cantidad: 45,
+      porcentaje: 0
     },
     {
-      tipo: "Hernia Incisional",
-      cantidad: 25,
+      tipo: "Hernia Incisional", cantidad: 25,
+      porcentaje: 0
     },
-  ]
+  ],
 };

@@ -40,6 +40,7 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  sidebarBehavior: "offcanvas" | "permanent"
 }
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -59,6 +60,7 @@ const SidebarProvider = React.forwardRef<
     defaultOpen?: boolean
     open?: boolean
     onOpenChange?: (open: boolean) => void
+    sidebarBehavior?: "offcanvas" | "permanent"
   }
 >(
   (
@@ -66,6 +68,7 @@ const SidebarProvider = React.forwardRef<
       defaultOpen = true,
       open: openProp,
       onOpenChange: setOpenProp,
+      sidebarBehavior = "permanent",
       className,
       style,
       children,
@@ -131,8 +134,9 @@ const SidebarProvider = React.forwardRef<
         openMobile,
         setOpenMobile,
         toggleSidebar,
+        sidebarBehavior,
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, sidebarBehavior]
     )
 
     return (

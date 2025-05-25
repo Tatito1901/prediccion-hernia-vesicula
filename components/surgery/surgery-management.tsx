@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { CalendarIcon, FileTextIcon, MoreHorizontalIcon, PlusIcon, UserIcon } from "lucide-react"
 import type { PatientData } from "@/app/dashboard/data-model"
-import { PatientDetails } from "./patient-details"
+import { PatientDetails } from "@/components/patients/patient-details"
 
 interface SurgeryManagementProps {
   patients: PatientData[]

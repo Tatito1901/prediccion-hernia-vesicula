@@ -4,15 +4,21 @@ import { useState, useEffect } from "react"
 import { SurveyResultsAnalyzer } from "@/components/surveys/survey-results-analyzer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2, ClipboardCheck, AlertCircle } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { toast } from "sonner"
+import { useAppContext } from "@/lib/context/app-context"
+import { generateSurveyId } from "@/lib/form-utils"
 import type { PatientData } from "@/app/dashboard/data-model"
 
 export default function SurveyResultsPage() {
   const router = useRouter()
   const params = useParams();
   const patientIdFromParams = params.id as string;
+  const patientId = parseInt(patientIdFromParams, 10);
+  
+  // Obtenemos los datos de los pacientes desde el contexto de la aplicación
+  const { patients } = useAppContext();
 
   const [isLoading, setIsLoading] = useState(true)
   const [patientData, setPatientData] = useState<PatientData | null>(null)
@@ -25,66 +31,34 @@ export default function SurveyResultsPage() {
       setError(null)
 
       try {
-        console.log("Fetching data for patient ID:", patientIdFromParams)
-
-        // In a real app, you would fetch the patient data from an API
-        // For now, we'll simulate a delay and use mock data
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-
-        // This would be replaced with actual API call
-        // const response = await fetch(`/api/patients/${params.id}`)
-        // const data = await response.json()
-
-        // For demo purposes, we'll just set mock data
-        // In a real app, this would come from the API
-        const mockData: PatientData = {
-          id: Number.parseInt(patientIdFromParams),
-          nombre: "Juan",
-          apellidos: "Pérez García",
-          edad: 45,
-          fechaConsulta: new Date().toISOString(),
-          fechaRegistro: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          diagnostico: "Hernia Inguinal",
-          estado: "Pendiente de consulta",
-          probabilidadCirugia: 0.65,
-          encuesta: {
-            nombre: "Juan",
-            apellidos: "Pérez García",
-            edad: 45,
-            telefono: "5512345678",
-            email: "juan.perez@ejemplo.com",
-            origen: "Google",
-            diagnosticoPrevio: true,
-            detallesDiagnostico: "Hernia inguinal derecha",
-            intensidadDolor: 7,
-            sintomas: ["Dolor en la zona abdominal", "Bulto o hinchazón visible", "Dolor que aumenta con esfuerzos"],
-            duracionSintomas: "6_12_meses",
-            severidadCondicion: "Moderada",
-            afectacionDiaria: "Moderada",
-            seguroMedico: "IMSS",
-            factoresImportantes: ["Seguridad", "Experiencia", "Proceso rápido"],
-            preocupacionesCirugia: ["Tiempo de recuperación", "Ausencia laboral"],
-            plazoDeseado: "30 días",
-            estudiosPrecios: true,
-            tratamientosPrevios: true,
-            submittedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-          },
+        console.log("Buscando datos para el paciente ID:", patientId)
+        
+        // Simular una pequeña demora para dar feedback visual
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        
+        // Buscar el paciente en nuestro contexto de aplicación
+        const patient = patients.find(p => p.id === patientId);
+        
+        if (!patient) {
+          throw new Error(`No se encontró un paciente con ID ${patientId}`);
         }
-
-        setPatientData(mockData)
-
-        if (mockData && !mockData.encuesta) {
-          setSurveyNotCompleted(true)
+        
+        // Verificar si el paciente tiene encuesta completada
+        if (!patient.encuesta) {
+          setSurveyNotCompleted(true);
+          setPatientData(patient);
+        } else {
+          setPatientData(patient);
         }
       } catch (error) {
-        console.error("Error fetching patient data:", error)
-        setError("No se pudo cargar la información del paciente. Por favor, intente nuevamente.")
+        console.error("Error al obtener datos del paciente:", error)
+        setError(error instanceof Error ? error.message : "Error al cargar los datos del paciente")
       } finally {
         setIsLoading(false)
       }
     }
 
-    if (patientIdFromParams) {
+    if (patientId) {
       fetchPatientData()
     }
   }, [patientIdFromParams])
@@ -156,17 +130,37 @@ export default function SurveyResultsPage() {
           </Button>
           <h1 className="text-2xl font-bold">Error</h1>
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>No se pudieron cargar los resultados</CardTitle>
-            <CardDescription>Ocurrió un error al intentar cargar los datos</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">{error}</p>
+        <Card className="mb-6 border-red-300 bg-red-50 dark:bg-red-950/20">
+          <CardContent className="pt-6">
+            <div className="text-red-600 dark:text-red-400 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Error al cargar los resultados</p>
+                <p className="text-sm">{error}</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => router.back()}>
+                  Volver a la lista de pacientes
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
     )
+  }
+
+  // Función para iniciar una nueva encuesta para el paciente
+  const handleStartSurvey = () => {
+    if (patientData) {
+      const surveyId = generateSurveyId()
+      
+      // Mostrar notificación de redirección
+      toast.info(`Iniciando encuesta para ${patientData.nombre} ${patientData.apellidos}`, {
+        description: "Redirigiendo a la página de encuesta...",
+      })
+      
+      // Redirigir a la encuesta con modo interno
+      router.push(`/survey/${surveyId}?patientId=${patientData.id}&mode=internal&returnTo=/survey-results/${patientData.id}`)
+    }
   }
 
   return (

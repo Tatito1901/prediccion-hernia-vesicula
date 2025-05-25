@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useCallback, useMemo, memo, useEffect, useRef } from "react";
 import { format, subDays, isValid } from "date-fns";
 import { es } from "date-fns/locale";
@@ -37,7 +35,7 @@ export interface Appointment {
   id: string;
   nombre: string;
   apellidos: string;
-  fechaConsulta: string; // ISO format YYYY-MM-DD
+  fechaConsulta: string; // ISO format yyyy-MM-DD
   horaConsulta: string; // Format HH:mm
   motivoConsulta: string;
   estado: AppointmentStatus;
@@ -82,7 +80,7 @@ export interface FilterSummaryProps {
  */
 export const formatDate = (date: Date | string | undefined, formatStr = "dd/MM/yyyy"): string => {
   if (!date) return "Fecha no definida";
-  
+
   try {
     const dateObj = typeof date === "string" ? new Date(date) : date;
     if (!isValid(dateObj)) return "Fecha inválida";
@@ -98,18 +96,18 @@ export const formatDate = (date: Date | string | undefined, formatStr = "dd/MM/y
  */
 export const hourToDecimal = (timeStr: string): number => {
   if (!timeStr || typeof timeStr !== 'string') return 0;
-  
+
   const timeParts = timeStr.split(':');
   if (timeParts.length !== 2) return 0;
-  
+
   try {
     const hours = parseInt(timeParts[0], 10);
     const minutes = parseInt(timeParts[1], 10);
-    
+
     if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
       return 0;
     }
-    
+
     return hours + (minutes / 60);
   } catch (error) {
     console.error("Error al convertir hora a decimal:", error);
@@ -132,7 +130,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
 }) => {
   // Manejo optimizado de cambios de estado
   const handleStatusChange = useCallback((status: AppointmentStatus, checked: boolean) => {
-    updateFilter("statusFilter", 
+    updateFilter("statusFilter",
       checked
         ? [...filters.statusFilter, status]
         : filters.statusFilter.filter((s) => s !== status)
@@ -140,20 +138,20 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
   }, [filters.statusFilter, updateFilter]);
 
   return (
-    <div 
+    <div
       className={`bg-white dark:bg-gray-950 rounded-lg shadow-sm border p-4 mb-4 ${className}`}
-      style={{ 
-        opacity: 1, 
+      style={{
+        opacity: 1,
         transform: 'none',
         transition: 'opacity 200ms ease-in-out, transform 200ms ease-in-out'
       }}
     >
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-medium">Filtros Avanzados</h3>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={onClose} 
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
           aria-label="Cerrar filtros avanzados"
           className="hover:bg-muted transition-colors"
         >
@@ -163,7 +161,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
           <Label htmlFor="dateRangeAdvanced" className="font-medium">Rango de Fechas</Label>
-          <div className="relative"> 
+          <div className="relative">
             <Button
               id="dateRangeAdvanced"
               variant="outline"
@@ -218,9 +216,9 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
                   }}
                   footer={
                     <div className="mt-3 flex justify-end gap-2">
-                      <Button 
+                      <Button
                         type="button"
-                        variant="outline" 
+                        variant="outline"
                         size="sm"
                         onClick={() => {
                           updateFilter("dateRange", undefined);
@@ -229,7 +227,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
                       >
                         Limpiar
                       </Button>
-                      <Button 
+                      <Button
                         type="button"
                         size="sm"
                         onClick={() => updateFilter("showDatePickerAdvanced", false)}
@@ -245,8 +243,8 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
         </div>
         <div className="space-y-2">
           <Label htmlFor="motiveFilterAdvanced" className="font-medium">Motivo de Consulta</Label>
-          <Select 
-            value={filters.motiveFilter} 
+          <Select
+            value={filters.motiveFilter}
             onValueChange={(value) => updateFilter("motiveFilter", value)}
           >
             <SelectTrigger id="motiveFilterAdvanced" className="w-full">
@@ -272,8 +270,8 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
                   checked={filters.statusFilter.includes(status)}
                   onCheckedChange={(checked) => handleStatusChange(status, !!checked)}
                 />
-                <Label 
-                  htmlFor={`status-${status}`} 
+                <Label
+                  htmlFor={`status-${status}`}
                   className="capitalize select-none cursor-pointer font-normal"
                 >
                   {status.replace(/_/g, " ")}
@@ -292,8 +290,8 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
         <div className="space-y-2">
           <Label className="font-medium">Ordenar Por</Label>
           <div className="grid grid-cols-2 gap-2">
-            <Select 
-              value={filters.sortBy} 
+            <Select
+              value={filters.sortBy}
               onValueChange={(value) => updateFilter("sortBy", value as AppointmentSortKey)}
             >
               <SelectTrigger aria-label="Campo para ordenar">
@@ -302,10 +300,10 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
               <SelectContent>
                 {APPOINTMENT_SORT_KEYS.map(key => (
                   <SelectItem key={key} value={key}>
-                    {key === 'fechaConsulta' ? 'Fecha' : 
-                     key === 'horaConsulta' ? 'Hora' : 
-                     key === 'nombre' ? 'Nombre' : 
-                     'Motivo'}
+                    {key === 'fechaConsulta' ? 'Fecha' :
+                      key === 'horaConsulta' ? 'Hora' :
+                        key === 'nombre' ? 'Nombre' :
+                          'Motivo'}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -325,33 +323,22 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = memo(({
           </div>
         </div>
         <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="searchTermAdvanced" className="font-medium">Buscar</Label>
-          <div className="relative">
-            <Input
-              id="searchTermAdvanced"
-              placeholder="Buscar por nombre, motivo o notas..."
-              value={filters.searchTerm}
-              onChange={(e) => updateFilter("searchTerm", e.target.value)}
-              className="w-full pl-9"
-            />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.3-4.3"></path>
-              </svg>
-            </span>
-          </div>
+
+
+
+
+
         </div>
       </div>
       <div className="flex justify-end gap-2 mt-6">
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={resetFilters}
           className="transition-colors hover:bg-muted"
         >
           Restablecer Filtros
         </Button>
-        <Button 
+        <Button
           onClick={onClose}
           className="shadow-sm transition-all hover:shadow-md"
         >
@@ -367,19 +354,23 @@ AdvancedFilters.displayName = "AdvancedFilters";
 /**
  * Componente de Resumen de Filtros Aplicados con animación mejorada.
  */
-export const FilterSummary: React.FC<FilterSummaryProps> = memo(({ 
-  filters, 
+export const FilterSummary: React.FC<FilterSummaryProps> = memo(({
+  filters,
   updateFilter,
   className = ""
 }) => {
   // Calcular filtros activos una sola vez
   const activeFiltersCount = useMemo(() => {
-    return (filters.dateRange ? 1 : 0) +
+    // Se considera que el filtro de estado está activo si no todos los estados están seleccionados.
+    // Si todos los estados están seleccionados, es como no tener filtro de estado.
+    const allStatusesSelected = filters.statusFilter.length === APPOINTMENT_STATUSES.length;
+
+    return (filters.dateRange?.from ? 1 : 0) + // Check if 'from' date exists
       (filters.motiveFilter !== "all" ? 1 : 0) +
-      (filters.statusFilter.length !== APPOINTMENT_STATUSES.length ? 1 : 0) +
+      (!allStatusesSelected && filters.statusFilter.length > 0 ? 1 : 0) + // Count if not all statuses are selected and at least one is
       (filters.searchTerm !== "" ? 1 : 0);
-  }, [filters.dateRange, filters.motiveFilter, filters.statusFilter.length, filters.searchTerm]);
-  
+  }, [filters.dateRange, filters.motiveFilter, filters.statusFilter, filters.searchTerm]);
+
   // Ref para rastrear si se ha montado el componente
   const hasMounted = useRef(false);
   useEffect(() => {
@@ -391,19 +382,20 @@ export const FilterSummary: React.FC<FilterSummaryProps> = memo(({
   // esto evita los parpadeos causados por montar/desmontar
 
   return (
-    <div 
+    <div
       className={`flex flex-wrap gap-2 mb-4 items-center ${className}`}
       style={{
         opacity: 1,
         transform: 'none',
         transition: 'opacity 150ms ease-in-out, transform 150ms ease-in-out',
         height: 'auto',
-        minHeight: activeFiltersCount > 0 ? '36px' : '0',
+        minHeight: activeFiltersCount > 0 ? '36px' : '0', // Ensure space is allocated if filters are active
+        display: activeFiltersCount > 0 ? 'flex' : 'none', // Hide if no active filters
         overflow: 'visible'
       }}
     >
       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filtros aplicados:</span>
-      {filters.dateRange?.from && (
+      {filters.dateRange?.from && ( // Check 'from' to ensure dateRange is actually set
         <Badge variant="secondary" className="flex items-center gap-1 group py-1.5">
           <CalendarIcon className="h-3 w-3" />
           {formatDate(filters.dateRange.from)}
@@ -433,7 +425,7 @@ export const FilterSummary: React.FC<FilterSummaryProps> = memo(({
           </Button>
         </Badge>
       )}
-      {/* Mostrar el filtro de estado solo si no todos los estados están seleccionados */}
+      {/* Mostrar el filtro de estado solo si no todos los estados están seleccionados y hay al menos uno */}
       {filters.statusFilter.length > 0 && filters.statusFilter.length < APPOINTMENT_STATUSES.length && (
         <Badge variant="secondary" className="flex items-center gap-1 capitalize group py-1.5">
           Estados: {filters.statusFilter
@@ -445,7 +437,7 @@ export const FilterSummary: React.FC<FilterSummaryProps> = memo(({
             variant="ghost"
             size="icon"
             className="h-5 w-5 p-0 ml-1 opacity-70 group-hover:opacity-100 transition-opacity"
-            onClick={() => updateFilter("statusFilter", [...APPOINTMENT_STATUSES])}
+            onClick={() => updateFilter("statusFilter", [...APPOINTMENT_STATUSES])} // Reset to all statuses
             aria-label="Restablecer filtros de estado"
           >
             <X className="h-3 w-3" />
@@ -454,8 +446,8 @@ export const FilterSummary: React.FC<FilterSummaryProps> = memo(({
       )}
       {filters.searchTerm && (
         <Badge variant="secondary" className="flex items-center gap-1 group py-1.5">
-          Búsqueda: "{filters.searchTerm.length > 15 
-            ? filters.searchTerm.substring(0, 15) + '...' 
+          Búsqueda: "{filters.searchTerm.length > 15
+            ? filters.searchTerm.substring(0, 15) + '...'
             : filters.searchTerm}"
           <Button
             variant="ghost"
@@ -500,7 +492,9 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
   // Inicializar con valores guardados si existen usando lazy initialization
   const [filters, setFilters] = useState<AppointmentFilters>(() => ({
     ...INITIAL_FILTERS,
-    ...savedFilters
+    ...savedFilters,
+    // Asegurarse de que statusFilter sea un array, incluso si savedFilters lo omite o lo pone como undefined
+    statusFilter: savedFilters?.statusFilter || [...INITIAL_FILTERS.statusFilter],
   }));
   const [isAdvancedFilterOpen, setIsAdvancedFilterOpen] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
@@ -508,17 +502,17 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
   // Detectar dispositivo móvil con debounce para evitar múltiples re-renders
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
-    
+
     const checkMobile = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         setIsMobile(window.innerWidth < 768);
       }, 100);
     };
-    
+
     // Establecer valor inicial inmediatamente para evitar cambios visuales bruscos
     setIsMobile(window.innerWidth < 768);
-    
+
     window.addEventListener('resize', checkMobile);
     return () => {
       window.removeEventListener('resize', checkMobile);
@@ -528,7 +522,7 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
 
   // Funciones memoizadas para evitar recreaciones
   const updateFilter = useCallback(<K extends keyof AppointmentFilters>(
-    key: K, 
+    key: K,
     value: AppointmentFilters[K]
   ) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -546,9 +540,9 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
   const FilterControls = memo<{ uniqueMotives: string[], className?: string }>(
     ({ uniqueMotives, className = "" }) => {
       // Optimización para evitar recálculos
-      const buttonClasses = useMemo(() => 
+      const buttonClasses = useMemo(() =>
         cn(
-          "transition-colors", 
+          "transition-colors",
           isAdvancedFilterOpen && "bg-primary text-primary-foreground hover:bg-primary/90"
         ),
         [isAdvancedFilterOpen]
@@ -559,9 +553,9 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
           <div className={`bg-white dark:bg-gray-950 rounded-lg p-4 mb-4 shadow-sm border ${className}`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={toggleAdvancedFilter}
                   className={buttonClasses}
                   aria-expanded={isAdvancedFilterOpen}
@@ -571,27 +565,11 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
                   {isAdvancedFilterOpen ? "Ocultar Filtros" : "Mostrar Filtros"}
                   {isAdvancedFilterOpen ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />}
                 </Button>
-                
-                {/* Quick Search - visible en todos los dispositivos */}
-                <div className="relative flex-grow">
-                  <Input
-                    placeholder="Buscar..."
-                    value={filters.searchTerm}
-                    onChange={(e) => updateFilter("searchTerm", e.target.value)}
-                    className="pl-8 h-9 w-full transition-all duration-150 ease-in-out"
-                    style={{ minHeight: '36px' }} // Altura fija para evitar saltos
-                  />
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8"></circle>
-                      <path d="m21 21-4.3-4.3"></path>
-                    </svg>
-                  </span>
-                </div>
-                
+
+
                 {/* Selector de rango de fechas personalizado con react-day-picker */}
-                <div 
-                  className="hidden md:flex transition-all duration-300 ease-in-out" 
+                <div
+                  className="hidden md:flex transition-all duration-300 ease-in-out"
                   style={{ height: isMobile ? 0 : 'auto', opacity: isMobile ? 0 : 1 }}
                 >
                   <Popover>
@@ -634,9 +612,9 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
                           }}
                           footer={
                             <div className="mt-3 flex justify-end gap-2">
-                              <Button 
+                              <Button
                                 type="button"
-                                variant="outline" 
+                                variant="outline"
                                 size="sm"
                                 onClick={() => updateFilter("dateRange", undefined)}
                               >
@@ -652,11 +630,11 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
               </div>
             </div>
           </div>
-          
+
           <FilterSummary filters={filters} updateFilter={updateFilter} />
-          
+
           {/* Siempre renderizar el panel pero ocultarlo cuando esté cerrado */}
-          <div 
+          <div
             id="advanced-filters-panel"
             style={{
               opacity: isAdvancedFilterOpen ? 1 : 0,
@@ -665,14 +643,14 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
               transition: 'opacity 200ms ease-in-out, max-height 300ms ease-in-out'
             }}
           >
-              <AdvancedFilters
-                filters={filters}
-                updateFilter={updateFilter}
-                resetFilters={resetFilters}
-                uniqueMotives={uniqueMotives}
-                onClose={toggleAdvancedFilter}
-              />
-            </div>
+            <AdvancedFilters
+              filters={filters}
+              updateFilter={updateFilter}
+              resetFilters={resetFilters}
+              uniqueMotives={uniqueMotives}
+              onClose={toggleAdvancedFilter}
+            />
+          </div>
         </>
       );
     }

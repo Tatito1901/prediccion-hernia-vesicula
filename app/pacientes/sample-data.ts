@@ -1,170 +1,26 @@
-// app/pacientes/additional-patients.ts
+// app/pacientes/sample-data.ts
 
 // --- Definiciones de Tipos Robustas ---
-
-/** Representa una fecha en formato ISO (YYYY-MM-DD) */
-export type ISODateString = string;
-
-/** Representa un número de teléfono */
-export type PhoneNumberString = string;
-
-/** Representa una dirección de correo electrónico */
-export type EmailString = string;
-
-/** Posibles estados de un paciente */
-export type PatientStatus =
-  | "Operado"
-  | "No Operado"
-  | "Pendiente de consulta"
-  | "En consulta"
-  | "Seguimiento"
-  | "Cancelado";
-
-/** Posibles orígenes de un paciente o encuesta */
-export type PatientOrigin =
-  | "Google"
-  | "Recomendación"
-  | "Sitio Web"
-  | "Facebook"
-  | "Instagram"
-  | "Urgencias"
-  | "Referido por Gastroenterólogo";
-
-/** Tipos de diagnóstico principales */
-export type DiagnosisType =
-  | "Hernia Inguinal"
-  | "Vesícula"
-  | "Hernia Umbilical"
-  | "Hernia Incisional"
-  | "Apendicitis" // Añadido desde los datos
-  | "Hernia Hiatal" // Añadido desde los datos
-  | "Lipoma Grande" // Añadido desde los datos
-  | "Hernia Inguinal Recidivante" // Añadido desde los datos
-  | "Quiste Sebáceo Infectado" // Añadido desde los datos
-  | "Eventración Abdominal" // Añadido desde los datos
-  | "Vesícula (Colecistitis Crónica)"; // Añadido desde los datos
-
-/** Severidad de la condición según la encuesta */
-export type SurveyConditionSeverity = "Leve" | "Moderada" | "Severa" | "Crítica";
-
-/** Nivel de afectación diaria según la encuesta */
-export type SurveyDailyAffectation =
-  | "Leve"
-  | "Moderada"
-  | "Severa"
-  | "No tengo limitaciones"
-  | "Crítica";
-
-/** Plazo deseado para la cirugía según la encuesta */
-export type SurveyDesiredTimeline =
-  | "30 días"
-  | "Urgente"
-  | "Sin prisa"
-  | "90 días"
-  | "60 días"
-  | "Inmediato"
-  | "30-60 días"
-  | "90-120 días";
-
-/**
- * Define la estructura de la encuesta del paciente.
- */
-export interface PatientSurvey {
-  nombre: string;
-  apellidos: string;
-  edad: number;
-  telefono: PhoneNumberString;
-  email: EmailString;
-  origen: PatientOrigin;
-  diagnosticoPrevio: boolean;
-  detallesDiagnostico?: string; // Opcional, puede no aplicar si diagnosticoPrevio es false
-  seguroMedico: string; // Podría ser un union type si hay una lista finita de seguros
-  sintomas: string[];
-  duracionSintomas: string;
-  severidadCondicion: SurveyConditionSeverity;
-  estudiosPrecios: boolean;
-  tratamientosPrevios: boolean;
-  /** Intensidad del dolor, usualmente en una escala (e.g., 0-10) */
-  intensidadDolor: number;
-  afectacionDiaria: SurveyDailyAffectation;
-  factoresImportantes: string[];
-  preocupacionesCirugia: string[];
-  plazoDeseado: SurveyDesiredTimeline;
-}
-
-/** Tipos de seguimiento */
-export type FollowUpType = "Consulta" | "Llamada" | "Email"; // Extrapolado, ajustar según necesidad
-
-/** Resultados posibles de un seguimiento */
-export type FollowUpResult = "Interesado" | "Indeciso" | "Decidido" | "No Contactado" | "Rechazado"; // Extrapolado
-
-/** Estados posibles de un seguimiento */
-export type FollowUpStatus = "Programado" | "Realizado" | "Cancelado" | "Pendiente";
-
-/**
- * Define la estructura de un seguimiento de paciente.
- */
-export interface FollowUp {
-  id: number;
-  patientId: number; // Relaciona con PatientData.id
-  fecha: ISODateString;
-  tipo: FollowUpType;
-  notas: string;
-  resultado: FollowUpResult;
-  proximoSeguimiento?: ISODateString; // Opcional
-  estado: FollowUpStatus;
-  asignadoA: string;
-}
-
-/**
- * Define la estructura principal de los datos de un paciente.
- */
-export interface PatientData {
-  id: number;
-  nombre: string;
-  apellidos: string;
-  edad: number;
-  fechaConsulta: ISODateString;
-  fechaRegistro: ISODateString;
-  diagnostico: DiagnosisType;
-  estado: PatientStatus;
-  /** Probabilidad de cirugía, valor entre 0 y 1 */
-  probabilidadCirugia: number;
-  fechaCirugia?: ISODateString; // Opcional, solo si estado es "Operado"
-  doctorAsignado: string;
-  ultimoContacto?: ISODateString; // Opcional
-  proximoContacto?: ISODateString; // Opcional
-  notaClinica: string;
-  encuesta?: PatientSurvey; // La encuesta puede no estar completada
-  recomendacionesSistema: string[];
-  seguimientos?: FollowUp[]; // Un paciente puede tener múltiples seguimientos o ninguno
-  etiquetas: string[];
-}
-
-/**
- * Define la estructura para el conteo de diagnósticos comunes.
- */
-export interface DiagnosisCount {
-  tipo: DiagnosisType;
-  cantidad: number;
-}
-
-/**
- * Define la estructura para las métricas de la clínica.
- */
-export interface ClinicMetrics {
-  totalPacientes: number;
-  pacientesNuevosMes: number;
-  pacientesOperados: number;
-  pacientesNoOperados: number;
-  pacientesSeguimiento: number;
-  /** Tasa de conversión, valor entre 0 y 1 */
-  tasaConversion: number;
-  /** Tiempo promedio para la toma de decisión del paciente, en días */
-  tiempoPromedioDecision: number;
-  fuentePrincipalPacientes: PatientOrigin | string; // Podría ser más genérico si no siempre es un PatientOrigin
-  diagnosticosMasComunes: DiagnosisCount[];
-}
+import type {
+  ISODateString,
+  PhoneString,
+  EmailString,
+  PatientStatus,
+  PatientOrigin,
+  DiagnosisType,
+  InsuranceType,
+  SymptomSeverity,
+  SurgeryTimeframe,
+  FollowUpStatus,
+  PatientSurvey,
+  FollowUp,
+  PatientData,
+  ClinicMetrics,
+  DiagnosticMetric, // Added DiagnosticMetric
+  ImportantFactor,
+  Symptom,
+  SurgeryConcern
+} from '../dashboard/data-model';
 
 // --- Datos de Pacientes Adicionales ---
 export const additionalPatients: PatientData[] = [
@@ -1091,7 +947,7 @@ export const additionalPatients: PatientData[] = [
       afectacionDiaria: "Crítica",
       factoresImportantes: ["Alivio inmediato", "Seguridad"],
       preocupacionesCirugia: ["Complicaciones postoperatorias"],
-      plazoDeseado: "Inmediato"
+      plazoDeseado: "Urgente"
     },
     recomendacionesSistema: [
       "Cirugía de urgencia realizada (100%)",
@@ -1125,7 +981,7 @@ export const additionalPatients: PatientData[] = [
       seguroMedico: "IMSS",
       sintomas: ["Acidez estomacal frecuente", "Regurgitación", "Dolor torácico no cardíaco"],
       duracionSintomas: "Más de 5 años",
-      severidadCondicion: "Moderada", // Ajustado, "Moderada-Severa" no es un valor único
+      severidadCondicion: "Moderada",
       estudiosPrecios: true,
       tratamientosPrevios: true,
       intensidadDolor: 7,
@@ -1169,7 +1025,7 @@ export const additionalPatients: PatientData[] = [
       seguroMedico: "Seguro Privado",
       sintomas: ["Masa palpable", "Molestia al recostarse", "Preocupación estética"],
       duracionSintomas: "2 años, crecimiento reciente",
-      severidadCondicion: "Moderada", // Ajustado "Leve-Moderada"
+      severidadCondicion: "Moderada",
       estudiosPrecios: false,
       tratamientosPrevios: false,
       intensidadDolor: 3,
@@ -1217,7 +1073,7 @@ export const additionalPatients: PatientData[] = [
       afectacionDiaria: "Moderada",
       factoresImportantes: ["Solución definitiva", "Experiencia en recidivas"],
       preocupacionesCirugia: ["Nueva recidiva", "Dolor crónico"],
-      plazoDeseado: "Urgente" // Ajustado "Lo antes posible"
+      plazoDeseado: "Urgente"
     },
     recomendacionesSistema: [
       "Muy alta probabilidad de cirugía (92%)",
@@ -1250,14 +1106,14 @@ export const additionalPatients: PatientData[] = [
       seguroMedico: "Seguro Privado",
       sintomas: ["Bulto doloroso y rojo", "Supuración ocasional", "Fiebre leve"],
       duracionSintomas: "5 días",
-      severidadCondicion: "Moderada", // Ajustado "Moderada-Severa"
+      severidadCondicion: "Moderada",
       estudiosPrecios: false,
       tratamientosPrevios: false,
       intensidadDolor: 8,
       afectacionDiaria: "Moderada",
       factoresImportantes: ["Alivio del dolor", "Evitar recurrencia"],
       preocupacionesCirugia: ["Cicatriz", "Infección persistente"],
-      plazoDeseado: "Inmediato"
+      plazoDeseado: "Urgente"
     },
     recomendacionesSistema: [
       "Intervención realizada (98%)",
@@ -1296,7 +1152,7 @@ export const additionalPatients: PatientData[] = [
       estudiosPrecios: true,
       tratamientosPrevios: false,
       intensidadDolor: 4,
-      afectacionDiaria: "Moderada", // Ajustado "Leve-Moderada"
+      afectacionDiaria: "Moderada",
       factoresImportantes: ["Mejorar calidad de vida", "Evitar complicaciones"],
       preocupacionesCirugia: ["Recuperación prolongada", "Riesgos por edad"],
       plazoDeseado: "90-120 días"
@@ -1530,7 +1386,7 @@ export const clinicMetrics: ClinicMetrics = {
   tasaConversion: 0.65, // Ejemplo, asegurar que sea un número entre 0 y 1
   tiempoPromedioDecision: 15, // Ejemplo, en días
   fuentePrincipalPacientes: "Google", // Ejemplo, debe ser un PatientOrigin o string
-  diagnosticosMasComunes: ((): DiagnosisCount[] => {
+  diagnosticosMasComunes: ((): DiagnosticMetric[] => {
     const counts: { [key in DiagnosisType]?: number } = {};
     additionalPatients.forEach(p => {
       counts[p.diagnostico] = (counts[p.diagnostico] || 0) + 1;
@@ -1538,6 +1394,7 @@ export const clinicMetrics: ClinicMetrics = {
     return (Object.keys(counts) as DiagnosisType[]).map(tipo => ({
       tipo,
       cantidad: counts[tipo]!,
+      porcentaje: 0
     })).sort((a,b) => b.cantidad - a.cantidad).slice(0, 2); // Ejemplo: top 2
   })(),
 };

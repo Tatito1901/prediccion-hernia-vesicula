@@ -51,11 +51,11 @@ import {
   PhoneIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { surgeryPredictionModel } from "@/src/lib/prediction-model"
-import { analyzeSurgeryComments, generatePersuasiveMessages } from "@/src/lib/sentiment-analysis"
+import { surgeryPredictionModel } from "@/lib/prediction-model"
+import { analyzeSurgeryComments, generatePersuasiveMessages } from "@/lib/sentiment-analysis"
 import type { PatientData, FollowUp } from "@/app/dashboard/data-model"
-import { useIsMobile } from "@/src/hooks/use-is-mobile"
-import { useAppContext } from "@/src/lib/context/app-context"
+import { useIsMobile } from "@/hooks/use-breakpoint"
+import { useAppContext } from "@/lib/context/app-context"
 
 // Define the structure for conversion insights
 interface ConversionInsight {
@@ -280,14 +280,14 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
 
     // Calculate benefits based on survey responses
     if (survey.intensidadDolor >= 7) benefits += 0.5
-    if (survey.severidadCondicion === "severa") benefits += 0.5
+    if (survey.severidadCondicion === "Severa") benefits += 0.5
     if (survey.duracionSintomas === "mas_1_anio") benefits += 0.3
-    if (survey.limitacionFuncional === "severa") benefits += 0.4
+    if (survey.afectacionDiaria === "Severa") benefits += 0.4
 
     // Calculate risks based on survey responses
     if (survey.edad > 70) risks += 0.3
-    if (!survey.personaApoyo || survey.personaApoyo === "ninguno") risks += 0.2
-    if (survey.preocupacionesCirugia?.includes("miedo_procedimiento")) risks += 0.1
+    // if (!survey.personaApoyo || survey.personaApoyo === "ninguno") risks += 0.2
+    if (survey.preocupacionesCirugia?.includes("Miedo al procedimiento")) risks += 0.1
 
     // Calculate ratio (benefits / risks)
     return Number.parseFloat((benefits / risks).toFixed(2))
@@ -312,7 +312,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
       })
     }
 
-    if (survey.severidadCondicion === "severa") {
+    if (survey.severidadCondicion === "Severa") {
       points.push({
         id: "prevent-complications",
         title: "Prevención de complicaciones",
@@ -335,7 +335,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
     }
 
     // Quality of life points
-    if (survey.limitacionFuncional === "severa" || survey.limitacionFuncional === "moderada") {
+    if (survey.afectacionDiaria === "Severa" || survey.afectacionDiaria === "Moderada") {
       points.push({
         id: "improved-function",
         title: "Recuperación funcional",
@@ -348,7 +348,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
     }
 
     // Emotional points
-    if (survey.preocupacionesCirugia?.includes("miedo_procedimiento")) {
+    if (survey.preocupacionesCirugia?.includes("Miedo al procedimiento")) {
       points.push({
         id: "peace-of-mind",
         title: "Tranquilidad emocional",
@@ -423,9 +423,9 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
     else if (survey.intensidadDolor >= 3) score += 5
 
     // Factor 3: Symptom duration
-    if (survey.duracionSintomas === "más de 1 año") score += 10
-    else if (survey.duracionSintomas === "6-12 meses") score += 8
-    else if (survey.duracionSintomas === "3-6 meses") score += 5
+    if (survey.duracionSintomas === "mas_1_anio") score += 10
+    else if (survey.duracionSintomas === "6_12_meses") score += 8
+    else if (survey.duracionSintomas === "3_6_meses") score += 5
 
     // Factor 4: Severity
     if (survey.severidadCondicion === "Severa") score += 15
@@ -447,10 +447,10 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
     if (survey.preocupacionesCirugia?.includes("Dudas sobre necesidad real")) score -= 10
 
     // Barrier 2: No support person
-    if (!survey.personaApoyo || survey.personaApoyo === "ninguno") score -= 8
+    // if (!survey.personaApoyo || survey.personaApoyo === "ninguno") score -= 8
 
     // Barrier 3: Indecision
-    if (survey.plazoDecision === "indeciso") score -= 10
+    // if (survey.plazoDeseado === "indeciso") score -= 10
 
     // Ensure score is between 0 and 100
     return Math.max(0, Math.min(100, score))
@@ -508,7 +508,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
     }
 
     // Insight 4: Long symptom duration
-    if (survey.duracionSintomas === "más de 1 año" || survey.duracionSintomas === "6-12 meses") {
+    if (survey.duracionSintomas === "mas_1_anio" || survey.duracionSintomas === "6_12_meses") {
       insights.push({
         id: "chronic-condition",
         title: "Condición crónica",
@@ -522,18 +522,18 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
     }
 
     // Insight 5: No support person
-    if (!survey.personaApoyo || survey.personaApoyo === "ninguno") {
-      insights.push({
-        id: "no-support",
-        title: "Falta de red de apoyo",
-        description: "El paciente no ha identificado una persona de apoyo para su recuperación.",
-        impact: "medium",
-        actionable: true,
-        recommendation:
-          "Ofrecer información sobre servicios de enfermería a domicilio y opciones de recuperación asistida.",
-        icon: User,
-      })
-    }
+    // if (!survey.personaApoyo || survey.personaApoyo === "ninguno") {
+    //   insights.push({
+    //     id: "no-support",
+    //     title: "Falta de red de apoyo",
+    //     description: "El paciente no ha identificado una persona de apoyo para su recuperación.",
+    //     impact: "medium",
+    //     actionable: true,
+    //     recommendation:
+    //       "Ofrecer información sobre servicios de enfermería a domicilio y opciones de recuperación asistida.",
+    //     icon: User,
+    //   })
+    // }
 
     // Insight 6: Doubts about necessity
     if (survey.preocupacionesCirugia?.includes("Dudas sobre necesidad real")) {
@@ -574,7 +574,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
       clinicalRecs.push("Explicar los riesgos de complicaciones si no se trata quirúrgicamente")
     }
 
-    if (survey.duracionSintomas === "más de 1 año" || survey.duracionSintomas === "6-12 meses") {
+    if (survey.duracionSintomas === "mas_1_anio" || survey.duracionSintomas === "6_12_meses") {
       clinicalRecs.push("Destacar que la condición crónica no mejorará sin intervención quirúrgica")
     }
 
@@ -624,9 +624,9 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
       logisticalRecs.push("Ofrecer opciones de programación quirúrgica en fines de semana o periodos vacacionales")
     }
 
-    if (!survey.personaApoyo || survey.personaApoyo === "ninguno") {
-      logisticalRecs.push("Proporcionar información sobre servicios de enfermería a domicilio")
-    }
+    // if (!survey.personaApoyo || survey.personaApoyo === "ninguno") {
+    //   logisticalRecs.push("Proporcionar información sobre servicios de enfermería a domicilio")
+    // }
 
     if (logisticalRecs.length > 0) {
       categories.push({
@@ -780,11 +780,11 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
       {
         subject: "Beneficio a largo plazo",
         A:
-          patientData.encuesta.duracionSintomas === "más de 1 año"
+          patientData.encuesta.duracionSintomas === "mas_1_anio"
             ? 90
-            : patientData.encuesta.duracionSintomas === "6-12 meses"
+            : patientData.encuesta.duracionSintomas === "6_12_meses"
               ? 75
-              : patientData.encuesta.duracionSintomas === "3-6 meses"
+              : patientData.encuesta.duracionSintomas === "3_6_meses"
                 ? 60
                 : 40,
         fullMark: 100,
@@ -939,32 +939,35 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
   return (
     <Card className="w-full">
       <CardHeader>
-        <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
           <div>
-            <CardTitle className="text-xl md:text-2xl">Análisis de Resultados de Encuesta</CardTitle>
-            <CardDescription>
-              Paciente: {patientData.nombre} {patientData.apellidos} | ID: {patientId}
+            <CardTitle className="text-xl sm:text-2xl">Análisis de Resultados de Encuesta</CardTitle>
+            <CardDescription className="mt-1">
+              <span className="inline-block">
+                Paciente: {patientData.nombre} {patientData.apellidos}
+              </span>
+              <span className="inline-block ml-1 text-muted-foreground">ID: {patientId}</span>
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={onGeneratePDF}>
-              <Download className="mr-2 h-4 w-4" />
-              {!isMobile && "Exportar PDF"}
+            <Button variant="outline" size="sm" onClick={onGeneratePDF} className="flex-1 sm:flex-none justify-center">
+              <Download className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Exportar PDF</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={onShare}>
-              <Share2 className="mr-2 h-4 w-4" />
-              {!isMobile && "Compartir"}
+            <Button variant="outline" size="sm" onClick={onShare} className="flex-1 sm:flex-none justify-center">
+              <Share2 className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Compartir</span>
             </Button>
-            <Button variant="outline" size="sm">
-              <Printer className="mr-2 h-4 w-4" />
-              {!isMobile && "Imprimir"}
+            <Button variant="outline" size="sm" className="flex-1 sm:flex-none justify-center">
+              <Printer className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Imprimir</span>
             </Button>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {modelError && (
-          <Alert className="bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800/30">
+          <Alert className="bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Aviso</AlertTitle>
             <AlertDescription>{modelError}</AlertDescription>
@@ -972,7 +975,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
         )}
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Probabilidad de Cirugía</CardTitle>
@@ -1059,16 +1062,42 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-4 mb-4">
-            <TabsTrigger value="overview">Resumen</TabsTrigger>
-            <TabsTrigger value="persuasive">Argumentos</TabsTrigger>
-            <TabsTrigger value="insights">Insights</TabsTrigger>
-            <TabsTrigger value="recommendations">Recomendaciones</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto pb-2">
+            <TabsList className="w-full min-w-max">
+              <TabsTrigger value="overview" className="flex-1">
+                <span className="flex items-center gap-1">
+                  <FileText className="h-4 w-4 sm:mr-1 flex-shrink-0" />
+                  <span className="hidden sm:inline">Resumen</span>
+                  <span className="sm:hidden">Res.</span>
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="persuasive" className="flex-1">
+                <span className="flex items-center gap-1">
+                  <Lightbulb className="h-4 w-4 sm:mr-1 flex-shrink-0" />
+                  <span className="hidden sm:inline">Argumentos</span>
+                  <span className="sm:hidden">Arg.</span>
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="insights" className="flex-1">
+                <span className="flex items-center gap-1">
+                  <Zap className="h-4 w-4 sm:mr-1 flex-shrink-0" />
+                  <span className="hidden sm:inline">Insights</span>
+                  <span className="sm:hidden">Ins.</span>
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="recommendations" className="flex-1">
+                <span className="flex items-center gap-1">
+                  <CheckSquare className="h-4 w-4 sm:mr-1 flex-shrink-0" />
+                  <span className="hidden sm:inline">Recomendaciones</span>
+                  <span className="sm:hidden">Rec.</span>
+                </span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Patient Survey Summary */}
               <Card>
                 <CardHeader>
@@ -1077,7 +1106,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium">Información Clínica</h4>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                       <div>
                         <span className="font-medium">Diagnóstico:</span> {patientData.diagnostico || "No especificado"}
                       </div>
@@ -1097,13 +1126,13 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
 
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium">Preferencias y Expectativas</h4>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                       <div>
                         <span className="font-medium">Plazo deseado:</span> {patientData.encuesta.plazoDeseado}
                       </div>
                       <div>
                         <span className="font-medium">Decisión:</span>{" "}
-                        {patientData.encuesta.plazoDecision || "No especificado"}
+                        {patientData.encuesta.plazoDeseado || "No especificado"}
                       </div>
                     </div>
                     <div className="mt-2">
@@ -1130,7 +1159,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
                   <CardTitle className="text-base">Factores de Decisión</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[250px]">
+                  <div className="h-[200px] sm:h-[250px] lg:h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <RadarChart outerRadius={90} data={decisionFactorsData}>
                         <PolarGrid />
@@ -1151,7 +1180,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
                 <CardTitle className="text-base">Análisis de Sentimientos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
                       <Badge className={getSentimentBadgeColor(sentimentAnalysis?.sentiment.label || "neutral")}>
@@ -1237,7 +1266,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
               </CardHeader>
               <CardContent>
                 {barrierChartData.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className="h-[200px] flex items-center justify-center">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -1331,7 +1360,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
             </Card>
 
             {/* Persuasive Points */}
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {persuasivePoints.map((point, index) => (
                 <Card key={index}>
                   <CardHeader className="pb-2">
@@ -1385,7 +1414,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
                 <CardDescription>Relación: {benefitVsRiskRatio}x a favor de los beneficios</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div>
                     <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
                       <ThumbsUp className="h-4 w-4 text-green-500" />
@@ -1474,7 +1503,7 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
           {/* Insights Tab */}
           <TabsContent value="insights" className="space-y-6">
             {insights.length > 0 ? (
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {insights.map((insight, index) => (
                   <Card key={index}>
                     <CardHeader className="pb-2">
@@ -1583,22 +1612,22 @@ export function SurveyResultsAnalyzer({ patientId, patient, onGeneratePDF, onSha
           </TabsContent>
         </Tabs>
       </CardContent>
-      <CardFooter className="flex justify-between">
-        <Button variant="outline" onClick={() => window.history.back()}>
+      <CardFooter className="flex flex-col sm:flex-row justify-between gap-4">
+        <Button variant="outline" onClick={() => window.history.back()} className="w-full sm:w-auto">
           Volver
         </Button>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           {patientData && patientData.estado !== "Operado" && !patientData.fechaCirugia && (
             <Button
               onClick={() => handleAgendarSeguimientoDesdeFicha(patientData)}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 w-full sm:w-auto"
             >
               <PhoneIcon className="mr-2 h-4 w-4" />
-              Agendar Seguimiento
+              <span className="whitespace-nowrap">Agendar Seguimiento</span>
             </Button>
           )}
-          <Button>
-            Programar consulta
+          <Button className="w-full sm:w-auto">
+            <span className="whitespace-nowrap">Programar consulta</span>
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>

@@ -1,4 +1,3 @@
-"use client"
 
 import type * as React from "react"
 import { LogOutIcon } from "lucide-react"
@@ -27,9 +26,10 @@ interface NavUserProps extends React.HTMLAttributes<HTMLDivElement> {
     email: string
     avatar: string
   }
+  collapsed?: boolean
 }
 
-export function NavUser({ user, className, ...props }: NavUserProps) {
+export function NavUser({ user, className, collapsed, ...props }: NavUserProps) {
   return (
     <SidebarGroup className={className} {...props}>
       <SidebarGroupContent>
@@ -47,7 +47,7 @@ export function NavUser({ user, className, ...props }: NavUserProps) {
                         .join("")}
                     </AvatarFallback>
                   </Avatar>
-                  <span>{user.name}</span>
+                  {!collapsed && <span>{user.name}</span>}
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">

@@ -6,16 +6,6 @@ const config: Config = {
   content: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}", "*.{js,ts,jsx,tsx,mdx}"],
   theme: {
   	extend: {
-  		fontFamily: {
-  			sans: [
-  				'var(--font-geist-sans)',
-                    ...fontFamily.sans
-                ],
-  			mono: [
-  				'var(--font-geist-mono)',
-                    ...fontFamily.mono
-                ]
-  		},
   		colors: {
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',

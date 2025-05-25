@@ -1,13 +1,15 @@
-import React, { useState, useMemo, FC, memo } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import { format, isToday, isAfter, isSameDay } from "date-fns";
-import { es } from "date-fns/locale";
-import { PlusIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+"use client"
+
+import { useState, useMemo, FC, memo } from "react"
+import { useForm, Controller } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import DatePicker from "react-datepicker"
+import "react-datepicker/dist/react-datepicker.css"
+import { format, isToday, isAfter, isBefore, startOfDay, endOfDay, addDays, isSameDay } from "date-fns"
+import { es } from "date-fns/locale"
+import { Plus } from 'lucide-react'
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogTrigger,
@@ -16,7 +18,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog"
 import {
   Form,
   FormField,
@@ -25,15 +27,15 @@ import {
   FormControl,
   FormMessage,
   FormDescription,
-} from "@/components/ui/form";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
-import { useAppContext } from "@/lib/context/app-context";
-import type { DiagnosisType } from "@/app/dashboard/data-model";
-import { useBreakpoint } from "@/hooks/use-breakpoint";
-import { formClasses, spacingClasses, typographyClasses } from "@/lib/tailwind-utils";
+} from "@/components/ui/form"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
+import { useAppContext } from "@/lib/context/app-context"
+import type { DiagnosisType, PatientStatus } from "@/app/dashboard/data-model"
+import { useIsMobile, useIsTablet } from "@/hooks/use-breakpoint"
+import { cn } from "@/lib/utils"
 
 // Mejorar el esquema de validación con mensajes específicos
 const formSchema = z.object({
@@ -43,7 +45,10 @@ const formSchema = z.object({
               .max(100, { message: "Los apellidos no deben exceder 100 caracteres." }),
   edad: z.string()
          .optional()
-         .refine(val => val === '' || /^\d+$/.test(val), {
+         .refine(val => {
+           if (val === undefined || val === '') return true; 
+           return /^\d+$/.test(val);
+         }, {
            message: "La edad debe ser un número entero."
          })
          .transform((val) => (val === "" ? "0" : val)),
@@ -76,10 +81,11 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
   buttonLabel = "Nuevo Paciente" 
 }) => {
   // Utilizar nuestro hook de breakpoint para adaptar el formulario
-  const { isMobile, isTablet } = useBreakpoint();
+  const isMobile = useIsMobile();
+  const isTablet = useIsTablet();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { addPatient, addAppointment } = useAppContext();
+  const { patients, setPatients, addAppointment } = useAppContext();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -106,50 +112,86 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
   const onSubmit = async (values: FormValues) => {
     try {
       setIsSubmitting(true);
-      
-      const edadNum = values.edad ? parseInt(values.edad.toString(), 10) : 0;
-      const fechaObj = values.fechaHoraConsulta!;
-      const fechaISO = fechaObj.toISOString().split("T")[0];
-      const horaStr = format(fechaObj, "HH:mm");
 
-      const patientId = addPatient({
+      const fechaObj = values.fechaHoraConsulta!; // Fecha/hora de la cita
+      const horaStr = format(fechaObj, "HH:mm");
+      const fechaISO = fechaObj.toISOString().split("T")[0]; // Solo fecha para la cita
+
+      // 1. Preparar datos para la tabla 'patients' de Supabase
+      const patientSupabaseData = {
+        full_name: `${values.nombre} ${values.apellidos}`,
+        contact_details: { phone: values.telefono },
+      };
+
+      // 2. Insertar el nuevo paciente en Supabase
+      const { data: newPatient, error: patientInsertError } = await supabase
+        .from('patients')
+        .insert([patientSupabaseData])
+        .select() // Para obtener el registro insertado, incluyendo el 'id' y 'created_at'
+        .single(); // Asumimos que se inserta un solo paciente
+
+      if (patientInsertError) {
+        console.error("Error inserting patient into Supabase:", patientInsertError);
+        toast.error("Error al registrar paciente en BBDD.", {
+          description: patientInsertError.message,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!newPatient) {
+        console.error("No patient data returned from Supabase after insert.");
+        toast.error("Error al registrar paciente.", {
+          description: "No se recibieron datos del nuevo paciente desde la BBDD.",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const newSupabasePatientId = newPatient.id; // ID del paciente desde Supabase (UUID)
+
+      // 3. (Opcional pero recomendado) Actualizar el estado local de pacientes en el contexto
+      const edadNum = values.edad ? parseInt(values.edad.toString(), 10) : undefined;
+      const newPatientForContextList: any = { 
+        id: newSupabasePatientId, // Usar el ID de Supabase
         nombre: values.nombre,
         apellidos: values.apellidos,
         edad: edadNum,
-        fechaConsulta: fechaISO,
-        fechaRegistro: new Date().toISOString().split("T")[0],
-        diagnostico: values.motivoConsulta as DiagnosisType,
-        estado: "Pendiente de consulta",
-        probabilidadCirugia: 0.5,
-        notaClinica: values.notas || "",
-        ultimoContacto: new Date().toISOString().split("T")[0],
-        proximoContacto: fechaISO,
-      });
+        telefono: values.telefono,
+        fechaRegistro: newPatient.created_at, // Usar created_at de Supabase
+        fechaConsulta: fechaISO, // Info de la primera cita
+        diagnostico: values.motivoConsulta as DiagnosisType, // Motivo de la primera cita
+        estado: "Pendiente de consulta" as PatientStatus, // Estado inicial
+      };
+      setPatients([...patients, newPatientForContextList]);
 
+      // 4. Añadir la cita (usando el ID de paciente de Supabase)
       addAppointment({
-        patientId,
+        patientId: newSupabasePatientId,
         nombre: values.nombre,
         apellidos: values.apellidos,
         telefono: values.telefono,
         motivoConsulta: values.motivoConsulta,
-        fechaConsulta: fechaObj,
+        fechaConsulta: fechaObj, // Objeto Date completo para la cita
         horaConsulta: horaStr,
-        notas: values.notas || "",
+        notas: values.notas || "", // Notas específicas de la cita
         estado: "pendiente",
       });
 
-      toast.success("Paciente registrado correctamente", {
-        description: `${values.nombre} ${values.apellidos} ha sido agendado para el ${format(fechaObj, "dd/MM/yyyy")} a las ${horaStr}.`,
-        duration: 4000,
+      toast.success("Paciente registrado en Supabase", {
+        description: `${values.nombre} ${values.apellidos} agendado para el ${format(fechaObj, "dd/MM/yyyy 'a las' HH:mm")}.`,
+        duration: 5000,
       });
-      
+
       setOpen(false);
       form.reset();
-      onSuccess?.();
+      onSuccess?.(); // Llama a handleNewPatientSuccess en PatientAdmission
+
     } catch (error) {
-      console.error("Error al registrar paciente:", error);
+      console.error("Error en el proceso de registro de paciente:", error);
+      const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
       toast.error("Error al registrar paciente", {
-        description: "Por favor inténtelo de nuevo.",
+        description: errorMessage,
       });
     } finally {
       setIsSubmitting(false);
@@ -172,24 +214,27 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
         <Button 
           variant="secondary" 
           size="sm" 
-          className={`flex items-center space-x-2 ${buttonStyle} ${className}`}
+          className={cn("flex items-center space-x-2 transition-all", buttonStyle, className)}
         >
-          <PlusIcon className="h-4 w-4" />
+          <Plus className="h-4 w-4" />
           <span>{buttonLabel}</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className={`sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-4 sm:p-6 ${isMobile ? 'w-[95vw]' : ''}`}>
+      <DialogContent className={cn(
+        "sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-4 sm:p-6",
+        isMobile ? 'w-[95vw]' : ''
+      )}>
         <DialogHeader>
-          <DialogTitle className={isMobile ? typographyClasses.h3 : typographyClasses.h2}>
+          <DialogTitle className={isMobile ? "text-xl" : "text-2xl"}>
             Registrar Nuevo Paciente
           </DialogTitle>
-          <DialogDescription className={isMobile ? typographyClasses.small : ""}>
+          <DialogDescription className={isMobile ? "text-sm" : ""}>
             Completa la información y agenda la consulta (lunes–sábado, 9:00–14:00)
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className={spacingClasses.sectionGap}>
-            <div className={formClasses.grid}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <div className="grid gap-6">
               {/* Nombre / Apellidos */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
@@ -197,14 +242,18 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                   name="nombre"
                   render={({ field, fieldState }) => (
                     <FormItem>
-                      <FormLabel className={typographyClasses.label}>
+                      <FormLabel className="text-sm font-medium">
                         Nombre <span className="text-red-500">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input 
                           placeholder="Ej. Juan" 
                           {...field} 
-                          className={`${isMobile ? 'h-10' : 'h-9'} ${isMobile ? 'text-base' : 'text-sm'} ${fieldState.error ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          className={cn(
+                            isMobile ? 'h-10' : 'h-9',
+                            isMobile ? 'text-base' : 'text-sm',
+                            fieldState.error ? "border-red-500 focus-visible:ring-red-500" : ""
+                          )}
                         />
                       </FormControl>
                       <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -216,14 +265,18 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                   name="apellidos"
                   render={({ field, fieldState }) => (
                     <FormItem>
-                      <FormLabel className={typographyClasses.label}>
+                      <FormLabel className="text-sm font-medium">
                         Apellidos <span className="text-red-500">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input 
                           placeholder="Ej. Pérez" 
                           {...field} 
-                          className={`${isMobile ? 'h-10' : 'h-9'} ${isMobile ? 'text-base' : 'text-sm'} ${fieldState.error ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          className={cn(
+                            isMobile ? 'h-10' : 'h-9',
+                            isMobile ? 'text-base' : 'text-sm',
+                            fieldState.error ? "border-red-500 focus-visible:ring-red-500" : ""
+                          )}
                         />
                       </FormControl>
                       <FormMessage>{fieldState.error?.message}</FormMessage>
@@ -239,13 +292,17 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                   name="edad"
                   render={({ field, fieldState }) => (
                     <FormItem>
-                      <FormLabel className={typographyClasses.label}>Edad</FormLabel>
+                      <FormLabel className="text-sm font-medium">Edad</FormLabel>
                       <FormControl>
                         <Input 
                           type="number" 
                           placeholder="Ej. 35" 
                           {...field} 
-                          className={`${isMobile ? 'h-10' : 'h-9'} ${isMobile ? 'text-base' : 'text-sm'} ${fieldState.error ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          className={cn(
+                            isMobile ? 'h-10' : 'h-9',
+                            isMobile ? 'text-base' : 'text-sm',
+                            fieldState.error ? "border-red-500 focus-visible:ring-red-500" : ""
+                          )}
                           min="0"
                           max="120"
                         />
@@ -259,14 +316,18 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                   name="telefono"
                   render={({ field, fieldState }) => (
                     <FormItem>
-                      <FormLabel className={typographyClasses.label}>
+                      <FormLabel className="text-sm font-medium">
                         Teléfono <span className="text-red-500">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input 
                           placeholder="10 dígitos" 
                           {...field} 
-                          className={`${isMobile ? 'h-10' : 'h-9'} ${isMobile ? 'text-base' : 'text-sm'} ${fieldState.error ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          className={cn(
+                            isMobile ? 'h-10' : 'h-9',
+                            isMobile ? 'text-base' : 'text-sm',
+                            fieldState.error ? "border-red-500 focus-visible:ring-red-500" : ""
+                          )}
                           inputMode="numeric"
                         />
                       </FormControl>
@@ -282,7 +343,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                 name="motivoConsulta"
                 render={({ field, fieldState }) => (
                   <FormItem>
-                    <FormLabel className={typographyClasses.label}>
+                    <FormLabel className="text-sm font-medium">
                       Motivo de consulta <span className="text-red-500">*</span>
                     </FormLabel>
                     <FormControl>
@@ -295,6 +356,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                           <SelectItem value="Hernia Umbilical">Hernia Umbilical</SelectItem>
                           <SelectItem value="Hernia Incisional">Hernia Incisional</SelectItem>
                           <SelectItem value="Vesícula">Vesícula</SelectItem>
+                          <SelectItem value="Colelitiasis">Colelitiasis</SelectItem>
                           <SelectItem value="Otro">Otro</SelectItem>
                         </SelectContent>
                       </Select>
@@ -310,7 +372,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                 control={form.control}
                 render={({ field, fieldState }) => (
                   <FormItem>
-                    <FormLabel className={typographyClasses.label}>
+                    <FormLabel className="text-sm font-medium">
                       Fecha y hora <span className="text-red-500">*</span>
                     </FormLabel>
                     <FormControl>
@@ -330,7 +392,12 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                         }
                         maxTime={timeRanges.maxTime}
                         placeholderText="Selecciona fecha y hora"
-                        className={`w-full rounded-md border ${fieldState.error ? 'border-red-500' : 'border-input'} px-3 py-2 text-sm ${isMobile ? 'h-10 text-base' : ''} focus:ring-2 ${fieldState.error ? 'focus:ring-red-500' : 'focus:ring-primary'}`}
+                        className={cn(
+                          "w-full rounded-md border px-3 py-2 text-sm",
+                          isMobile ? 'h-10 text-base' : '',
+                          fieldState.error ? 'border-red-500 focus:ring-red-500' : 'border-input focus:ring-primary',
+                          "focus:ring-2"
+                        )}
                         calendarClassName="shadow-lg rounded-lg border bg-card text-card-foreground p-2"
                         popperClassName="shadow-xl"
                         popperPlacement="bottom-start"
@@ -353,12 +420,16 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                 name="notas"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className={typographyClasses.label}>Notas</FormLabel>
+                    <FormLabel className="text-sm font-medium">Notas</FormLabel>
                     <FormControl>
                       <Textarea
                         placeholder="Información adicional"
                         {...field}
-                        className={`resize-none ${isMobile ? 'h-32' : 'h-24'} ${isMobile ? 'text-base' : 'text-sm'}`}
+                        className={cn(
+                          "resize-none",
+                          isMobile ? 'h-32' : 'h-24',
+                          isMobile ? 'text-base' : 'text-sm'
+                        )}
                       />
                     </FormControl>
                     <FormDescription>
@@ -369,12 +440,12 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
               />
             </div>
 
-            <DialogFooter className={formClasses.buttons}>
+            <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
               {isMobile && (
                 <Button 
                   type="button" 
                   variant="outline" 
-                  className="flex-1" 
+                  className="w-full" 
                   onClick={() => form.reset()}
                   disabled={isSubmitting}
                 >
@@ -385,7 +456,10 @@ export const NewPatientForm: FC<NewPatientFormProps> = memo(({
                 type="submit" 
                 variant="default" 
                 size={isMobile ? "lg" : "default"}
-                className={`${isMobile ? 'flex-1 py-2.5 text-base w-full bg-blue-800 text-white hover:bg-blue-900' : 'bg-blue-800 text-white hover:bg-blue-900'} shadow-lg hover:shadow-xl transition-all duration-200`}
+                className={cn(
+                  isMobile ? 'w-full py-2.5 text-base' : '',
+                  "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-md transition-all duration-200"
+                )}
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (

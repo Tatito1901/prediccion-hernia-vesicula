@@ -1,43 +1,41 @@
-// Breakpoints estándar para nuestra aplicación
-export const breakpoints = {
-  sm: 640, // Móviles grandes
-  md: 768, // Tablets
-  lg: 1024, // Laptops/Desktops pequeños
-  xl: 1280, // Desktops
-  "2xl": 1536, // Pantallas grandes
-}
+// Placeholder for responsive utility functions
 
-// Clases de Tailwind para contenedores responsivos
-export const containerClasses = {
-  default: "w-full px-4 mx-auto sm:px-6 md:px-8",
-  narrow: "w-full max-w-5xl px-4 mx-auto sm:px-6 md:px-8",
-  wide: "w-full max-w-7xl px-4 mx-auto sm:px-6 md:px-8",
-}
-
-// Clases de grid responsivas para diferentes layouts
+// Placeholder for gridLayouts
+// You'll need to define the actual structure and logic for this
 export const gridLayouts = {
-  // 1 columna en móvil, 2 en tablet, 3 en desktop
-  standard: "grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3",
-  // 1 columna en móvil, 2 en tablet, 4 en desktop grande
-  dashboard: "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4",
-  // 1 columna en móvil, 3 en desktop
-  wide: "grid grid-cols-1 gap-4 lg:grid-cols-3",
-  // Sidebar + contenido principal
-  withSidebar: "grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]",
-}
+  // Example structure - adjust as needed
+  default: {
+    lg: [],
+    md: [],
+    sm: [],
+    xs: [],
+    xxs: [],
+  },
+  // Add other layouts if necessary
+};
 
-// Función para generar clases responsivas para alturas
-export const responsiveHeight = (defaultHeight: string, mdHeight?: string, lgHeight?: string) => {
-  let classes = defaultHeight
-  if (mdHeight) classes += ` md:${mdHeight}`
-  if (lgHeight) classes += ` lg:${lgHeight}`
-  return classes
-}
+// Placeholder for responsiveHeight
+// You'll need to define the actual logic for this function
+export const responsiveHeight = (breakpoint: string, baseHeight: number): number => {
+  // Example logic - adjust as needed
+  console.warn(
+    `responsiveHeight called with breakpoint: ${breakpoint}, baseHeight: ${baseHeight}. Implement actual logic.`
+  );
+  // Return a default or calculated height
+  switch (breakpoint) {
+    case "lg":
+      return baseHeight;
+    case "md":
+      return baseHeight * 0.9;
+    case "sm":
+      return baseHeight * 0.8;
+    case "xs":
+      return baseHeight * 0.7;
+    case "xxs":
+      return baseHeight * 0.6;
+    default:
+      return baseHeight;
+  }
+};
 
-// Función para generar clases responsivas para anchos
-export const responsiveWidth = (defaultWidth: string, mdWidth?: string, lgWidth?: string) => {
-  let classes = defaultWidth
-  if (mdWidth) classes += ` md:${mdWidth}`
-  if (lgWidth) classes += ` lg:${lgWidth}`
-  return classes
-}
+// You can add other responsive utility functions here as needed

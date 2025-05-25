@@ -5,22 +5,9 @@ import { createContext, useContext, useState, useEffect } from "react"
 import { additionalPatients as samplePatients } from "@/app/pacientes/sample-data"
 import { sampleDoctors, clinicMetrics } from "@/app/dashboard/mock-data"
 import { getPendingFollowUps } from "@/app/pacientes/utils"
-import type { PatientData, FollowUp, DoctorData, ClinicMetrics } from "@/app/dashboard/data-model"
+import type { PatientData, FollowUp, DoctorData, ClinicMetrics, AppointmentData } from "@/app/dashboard/data-model"
 
 // Definir tipos para el contexto
-interface Patient {
-  id: number
-  nombre: string
-  apellidos: string
-  edad: number
-  telefono: string
-  email?: string
-  estado?: string
-  encuesta?: any
-  probabilidadCirugia?: number
-  [key: string]: any
-}
-
 type AppContextType = {
   patients: PatientData[]
   setPatients: React.Dispatch<React.SetStateAction<PatientData[]>>
@@ -40,19 +27,6 @@ type AppContextType = {
   getPatientById: (id: number) => PatientData | undefined
 }
 
-export type AppointmentData = {
-  id: number
-  patientId?: number
-  nombre: string
-  apellidos: string
-  telefono: string
-  motivoConsulta: string
-  fechaConsulta: Date
-  horaConsulta: string
-  notas?: string
-  estado: "pendiente" | "completada" | "cancelada" | "presente"
-}
-
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -62,23 +36,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     {
       id: 1,
       patientId: 2,
-      nombre: "María",
-      apellidos: "González López",
+      paciente: "María González López",
       telefono: "5551234567",
       motivoConsulta: "Vesícula",
-      fechaConsulta: new Date("2024-05-20"),
-      horaConsulta: "10:00",
+      fecha: "2024-05-20",
+      hora: "10:00",
+      doctor: "Dr. Martínez",
       estado: "pendiente",
     },
     {
       id: 2,
       patientId: undefined,
-      nombre: "Carlos",
-      apellidos: "Ramírez Soto",
+      paciente: "Carlos Ramírez Soto",
       telefono: "5559876543",
       motivoConsulta: "Hernia Inguinal",
-      fechaConsulta: new Date("2024-05-21"),
-      horaConsulta: "12:30",
+      fecha: "2024-05-21",
+      hora: "12:30",
+      doctor: "Dr. Sánchez",
       estado: "pendiente",
     },
   ])
@@ -114,8 +88,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notaClinica: patient.notaClinica || "",
       // La encuesta estará incompleta por defecto (undefined)
       encuesta: undefined,
+      // Agregar timestamp de registro para poder ordenar por más reciente
+      timestampRegistro: Date.now()
     }
-    setPatients((prev) => [...prev, newPatient])
+    // Colocar el nuevo paciente al PRINCIPIO del array para que aparezca primero
+    setPatients((prev) => [newPatient, ...prev])
     return newId
   }
 
@@ -195,12 +172,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Si la cita es para hoy, añadirla también a las citas de hoy
     const today = new Date()
-    if (
-      appointment.fechaConsulta.getDate() === today.getDate() &&
-      appointment.fechaConsulta.getMonth() === today.getMonth() &&
-      appointment.fechaConsulta.getFullYear() === today.getFullYear()
-    ) {
-      setTodayAppointments((prev) => [...prev, newAppointment])
+    if (appointment.fecha && typeof appointment.fecha === 'string') {
+      const appointmentDate = new Date(appointment.fecha); 
+      if (
+        appointmentDate.getUTCDate() === today.getUTCDate() && 
+        appointmentDate.getUTCMonth() === today.getUTCMonth() &&
+        appointmentDate.getUTCFullYear() === today.getUTCFullYear()
+      ) {
+        setTodayAppointments((prev) => [...prev, newAppointment])
+      }
     }
 
     return newId
@@ -244,7 +224,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (appointment && appointment.patientId) {
         updatePatient(appointment.patientId, {
           estado: "Seguimiento",
-          fechaConsulta: appointment.fechaConsulta.toISOString().split("T")[0],
+          fechaConsulta: appointment.fecha,
           ultimoContacto: new Date().toISOString().split("T")[0],
         })
       }

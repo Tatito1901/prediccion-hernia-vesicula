@@ -3,37 +3,48 @@
 import { useState, useMemo, useCallback } from "react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SearchIcon } from "lucide-react"
+import { SearchIcon, ListFilter, Filter } from "lucide-react"
 import { useAppContext } from "@/lib/context/app-context"
+import type { PatientData } from "@/app/dashboard/data-model";
 import { NewPatientForm } from "@/components/patient-admision/new-patient-form"
 import { generateSurveyId } from "@/lib/form-utils"
 import { useRouter } from "next/navigation"
-import { useIsMobile } from "@/hooks/use-is-mobile"
 import { PatientTable } from "./patient-table"
-import { PatientCardMobile } from "../patient-admision/patient-card-mobile"
+import { PatientCardView } from "./patient-card-view"
 import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { useIsMobile, useIsTablet } from "@/hooks/use-breakpoint";
 
 export function PatientManagement() {
   const { patients } = useAppContext()
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
-  const [selectedPatient, setSelectedPatient] = useState<any>(null)
+  const [selectedPatient, setSelectedPatient] = useState<PatientData | null>(null)
   const [surveyLink, setSurveyLink] = useState("")
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editingPatientId, setEditingPatientId] = useState<number | null>(null)
   const router = useRouter()
-  const isMobile = useIsMobile()
+  const isMobile = useIsMobile();
+  const isTablet = useIsTablet();
 
   // Estados para la paginación
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  // Ajustar elementos por página según tamaño de pantalla
+  const itemsPerPage = useMemo(() => {
+    if (isMobile) return 5;
+    if (isTablet) return 8;
+    return 10; // Desktop
+  }, [isMobile, isTablet]);
 
   // Estados para el modal de encuesta y selección de paciente
   const [showSurveyModal, setShowSurveyModal] = useState(false)
   const [loading, setLoading] = useState(false)
+  
+  // Estado para el panel de filtros en móvil
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   // Memoizar la lista filtrada de pacientes para evitar recálculos innecesarios
   const filteredPatientsRaw = useMemo(() => {
@@ -56,9 +67,11 @@ export function PatientManagement() {
     return filtered
   }, [patients, searchTerm, statusFilter]);
 
-  // Calcular el número total de páginas
+  // Calcular el número total de páginas (mínimo 1 página si hay pacientes)
   const totalPages = useMemo(() => {
-    return Math.ceil(filteredPatientsRaw.length / itemsPerPage);
+    return filteredPatientsRaw.length > 0 
+      ? Math.ceil(filteredPatientsRaw.length / itemsPerPage)
+      : 0;
   }, [filteredPatientsRaw, itemsPerPage]);
 
   // Obtener los pacientes para la página actual
@@ -102,7 +115,7 @@ export function PatientManagement() {
   };
 
   // Función para abrir el diálogo de compartir encuesta
-  const handleShareSurvey = useCallback((patient: any) => {
+  const handleShareSurvey = useCallback((patient: PatientData) => {
     const surveyId = generateSurveyId()
     // Generar enlace para la ruta /survey/[id]
     const link = `${window.location.origin}/survey/${surveyId}?patientId=${patient.id}`
@@ -114,7 +127,7 @@ export function PatientManagement() {
 
   // Función para contestar la encuesta directamente
   const handleAnswerSurvey = useCallback(
-    (patient: any) => {
+    (patient: PatientData) => {
       const surveyId = generateSurveyId()
 
       // Mostrar notificación de redirección
@@ -129,14 +142,14 @@ export function PatientManagement() {
   )
 
   // Función para abrir el diálogo de edición de paciente
-  const handleEditPatient = useCallback((patient: any) => {
+  const handleEditPatient = useCallback((patient: PatientData) => {
     setEditingPatientId(patient.id)
     setEditDialogOpen(true)
   }, [])
 
   // Función para manejar la selección de pacientes
   const handlePatientSelect = useCallback(
-    (patient: any) => {
+    (patient: PatientData) => {
       console.log("Patient selected:", patient)
       setSelectedPatient(patient)
       setLoading(true)
@@ -191,60 +204,95 @@ export function PatientManagement() {
   return (
     <div className="w-full space-y-4">
       <div className="px-4 pt-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex-1">
             <h2 className="text-2xl font-bold tracking-tight mb-1">Gestión de Pacientes</h2>
             <p className="text-muted-foreground">Administre la información de sus pacientes</p>
           </div>
-          <div className="relative w-full sm:w-[280px] lg:w-[320px]">
-            <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar pacientes..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 w-full"
-            />
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            {/* Búsqueda */}
+            <div className="relative flex-1 sm:w-[220px] md:w-[260px] lg:w-[320px]">
+              <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar pacientes..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 w-full"
+              />
+            </div>
+            
+            {/* Filtro para móvil y tablets pequeñas */}
+            {(isMobile || (isTablet && window.innerWidth < 768)) && (
+              <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="icon" className="sm:hidden">
+                    <Filter className="h-4 w-4" />
+                    <span className="sr-only">Filtros</span>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="h-[300px]">
+                  <SheetHeader>
+                    <SheetTitle>Filtros</SheetTitle>
+                    <SheetDescription>Filtra los pacientes por estado</SheetDescription>
+                  </SheetHeader>
+                  <div className="py-6">
+                    <Select value={statusFilter || "todos"} onValueChange={(value) => {
+                      setStatusFilter(value);
+                      setCurrentPage(1); // Resetear a la primera página al cambiar el filtro
+                      setFiltersOpen(false); // Cerrar el panel al seleccionar
+                    }}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Filtrar por estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="Pendiente de consulta">Pendiente</SelectItem>
+                        <SelectItem value="Operado">Operado</SelectItem>
+                        <SelectItem value="No Operado">No Operado</SelectItem>
+                        <SelectItem value="Seguimiento">Seguimiento</SelectItem>
+                        <SelectItem value="Cancelado">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            )}
+            
+            {/* Filtro para tablets grandes y desktop */}
+            {(!isMobile && !(isTablet && window.innerWidth < 768)) && (
+              <Select value={statusFilter || "todos"} onValueChange={(value) => {
+                setStatusFilter(value);
+                setCurrentPage(1); // Resetear a la primera página al cambiar el filtro
+              }}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filtrar por estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="Pendiente de consulta">Pendiente</SelectItem>
+                  <SelectItem value="Operado">Operado</SelectItem>
+                  <SelectItem value="No Operado">No Operado</SelectItem>
+                  <SelectItem value="Seguimiento">Seguimiento</SelectItem>
+                  <SelectItem value="Cancelado">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            
+            <NewPatientForm />
           </div>
-          <NewPatientForm />
         </div>
       </div>
-      <div className="px-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <div className="flex justify-end">
-            <Select value={statusFilter || "todos"} onValueChange={(value) => {
-              setStatusFilter(value);
-              setCurrentPage(1); // Resetear a la primera página al cambiar el filtro
-            }}>
-              <SelectTrigger className="w-[140px] sm:w-[180px]">
-                <SelectValue placeholder="Filtrar por estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="Pendiente de consulta">Pendiente</SelectItem>
-                <SelectItem value="Operado">Operado</SelectItem>
-                <SelectItem value="No Operado">No Operado</SelectItem>
-                <SelectItem value="Seguimiento">Seguimiento</SelectItem>
-                <SelectItem value="Cancelado">Cancelado</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+      <div className="px-4 pt-2">
 
         {/* Contenedor principal para la tabla/tarjetas y paginación */}
-        {isMobile ? (
-          <div className="space-y-4">
-            {paginatedPatients.map((patient) => (
-              <PatientCardMobile
-                key={patient.id}
-                patient={patient}
-                onShare={() => handleShareSurvey(patient)} 
-                onAnswer={() => handleAnswerSurvey(patient)} 
-                onEdit={() => handleEditPatient(patient)} 
-                getStatusColorClass={getStatusColorClass} 
-                onSelectPatient={() => handlePatientSelect(patient)} 
-              />
-            ))}
-          </div>
+        {isMobile || isTablet ? (
+          <PatientCardView
+            patients={paginatedPatients} 
+            onShareSurvey={handleShareSurvey}
+            onAnswerSurvey={handleAnswerSurvey}
+            onEditPatient={handleEditPatient}
+            onSelectPatient={handlePatientSelect}
+          />
         ) : (
           <PatientTable
             patients={paginatedPatients} 
@@ -255,20 +303,40 @@ export function PatientManagement() {
           />
         )}
 
-        {/* Controles de Paginación */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center space-x-4 mt-6 mb-4">
-            <Button onClick={handlePreviousPage} disabled={currentPage === 1} variant="outline">
-              Anterior
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              Página {currentPage} de {totalPages}
-            </span>
-            <Button onClick={handleNextPage} disabled={currentPage === totalPages} variant="outline">
-              Siguiente
-            </Button>
+        {/* Información del total de pacientes - Siempre visible */}
+        <div className="flex flex-col gap-2 mt-4">
+          <div className="text-center text-sm text-muted-foreground">
+            <span className="font-medium">{filteredPatientsRaw.length}</span> pacientes en total
+            {searchTerm || statusFilter ? " (filtrados)" : ""}
           </div>
-        )}
+          
+          {/* Controles de Paginación - Siempre visibles si hay al menos un paciente */}
+          {filteredPatientsRaw.length > 0 && (
+            <div className="flex items-center justify-center space-x-2 sm:space-x-4 mt-2 mb-4 px-2">
+              <Button 
+                onClick={handlePreviousPage} 
+                disabled={currentPage === 1} 
+                variant="outline"
+                size={isMobile ? "sm" : "default"}
+                className="min-w-[80px] sm:min-w-[100px] h-9 sm:h-10"
+              >
+                Anterior
+              </Button>
+              <span className="text-sm font-medium px-1 sm:px-2">
+                {currentPage}/{Math.max(totalPages, 1)}
+              </span>
+              <Button 
+                onClick={handleNextPage} 
+                disabled={currentPage === totalPages || totalPages === 0} 
+                variant="outline"
+                size={isMobile ? "sm" : "default"}
+                className="min-w-[80px] sm:min-w-[100px] h-9 sm:h-10"
+              >
+                Siguiente
+              </Button>
+            </div>
+          )}
+        </div>
 
         {/* Diálogo para compartir encuesta */}
         {selectedPatient && (

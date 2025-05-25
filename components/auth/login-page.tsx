@@ -1,695 +1,1261 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import { LockKeyhole, AtSign, LogIn, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import type React from "react"
+import { useState, useCallback, useMemo, memo, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
+import {
+  LockKeyhole,
+  AtSign,
+  LogIn,
+  Eye,
+  EyeOff,
+  CheckCircle,
+  AlertCircle,
+  Shield,
+  Sparkles,
+  ArrowRight,
+} from "lucide-react"
 
-interface Particle {
-  id: string;
-  initialX: string;
-  initialY: string;
-  targetX: string;
-  targetY: string;
-  scale: number;
-  opacity: number;
-  duration: number;
-  width: string;
-  height: string;
-  delay: number;
+// Interfaces
+interface FormData {
+  email: string
+  password: string
+  rememberMe: boolean
 }
 
-export default function EnhancedLoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loginSuccess, setLoginSuccess] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-  const [activeInput, setActiveInput] = useState<string | null>(null);
-  
-  // Enhanced color palette for better contrast and professionalism
-  const colors = {
-    background: '#020818', // Darker background for better contrast
-    formBg: 'rgba(15, 30, 60, 0.9)', // More opaque form background
-    inputBg: 'rgba(8, 16, 32, 0.9)', // Darker input background for contrast
-    primary: '#4285f4', // Professional blue (Google-inspired)
-    primaryDark: '#3367d6', // Darker shade for hover states
-    primaryLight: 'rgba(66, 133, 244, 0.15)', // Light version for backgrounds
-    accent: '#00C4B4', // Teal medical color for accents
-    accentLight: 'rgba(0, 196, 180, 0.15)',
-    textPrimary: '#ffffff', // White text for maximum contrast on dark backgrounds
-    textSecondary: '#e1e8f5', // Light blue-gray for secondary text
-    textMuted: '#9aa8c7', // Muted blue-gray for less important text
-    border: 'rgba(66, 133, 244, 0.25)', // Subtle blue border
-    borderActive: 'rgba(66, 133, 244, 0.5)', // Brighter border for active states
-    error: '#ff5252', // Bright red for errors
-    success: '#00C48C' // Bright green for success
-  };
+interface FormErrors {
+  email?: string
+  password?: string
+  general?: string
+}
 
-  // Generate particles only on client to avoid hydration mismatch
-  const particles = useMemo(() => {
-    if (!isMounted) return [];
-    // Reduced number of particles for a more professional look
-    return Array.from({ length: 12 }).map((_, i) => ({
-      id: `particle-${i}-${Math.random().toString(36).substring(7)}`,
-      initialX: `${Math.random() * 100}%`,
-      initialY: `${Math.random() * 100}%`,
-      targetX: `${Math.random() * 100}%`,
-      targetY: `${Math.random() * 100}%`,
-      scale: Math.random() * 0.1 + 0.05, // Smaller particles
-      opacity: Math.random() * 0.06 + 0.01, // More subtle opacity
-      duration: Math.random() * 80 + 40,
-      width: `${Math.random() * 3 + 1}px`, // Smaller size
-      height: `${Math.random() * 3 + 1}px`, // Smaller size
-      delay: Math.random() * 5,
-    }));
-  }, [isMounted]);
+interface InputFieldProps {
+  id: string
+  type?: string
+  label: string
+  value: string | number
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onFocus: () => void
+  onBlur: () => void
+  error?: string
+  isActive: boolean
+  icon: React.ElementType
+  inputRef?: React.RefObject<HTMLInputElement>
+  className?: string
+  onToggle?: () => void
+  showPassword?: boolean
+}
 
-  useEffect(() => {
-    setIsMounted(true);
-    document.documentElement.classList.add("dark");
-    
-    return () => {
-      document.documentElement.classList.remove("dark");
-    };
-  }, []);
+interface BackgroundOrbsProps {
+  prefersReducedMotion: boolean
+}
 
-  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-    setIsLoading(true);
-    setTimeout(() => {
-      setLoginSuccess(true);
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 1200);
-    }, 1500);
-  };
+interface FormState {
+  isLoading: boolean
+  loginSuccess: boolean
+  activeInput: string | null
+  showPassword: boolean
+}
 
-  const handleFocus = (inputId: string) => {
-    setActiveInput(inputId);
-  };
+interface LoginSuccessProps {
+  prefersReducedMotion: boolean
+  userName?: string
+}
 
-  const handleBlur = () => {
-    setActiveInput(null);
-  };
+// Theme configuration - Moved outside component to prevent recreation
+const theme = {
+  colors: {
+    bg: {
+      primary: "#000205",
+      gradient: "linear-gradient(135deg, #000205 0%, #0d1f36 100%)",
+      glass: "rgba(13, 25, 42, 0.85)",
+      input: "rgba(15, 23, 42, 0.7)",
+      error: "rgba(239, 68, 68, 0.12)",
+      success: "rgba(16, 185, 129, 0.12)",
+    },
+    border: {
+      default: "rgba(148, 163, 184, 0.2)",
+      focus: "rgba(59, 130, 246, 0.6)",
+      error: "rgba(239, 68, 68, 0.35)",
+      success: "rgba(16, 185, 129, 0.35)",
+    },
+    brand: {
+      primary: "#3b82f6",
+      primaryLight: "#60a5fa",
+      primaryDark: "#2563eb",
+      accent: "#0ea5e9",
+      accentLight: "#38bdf8",
+    },
+    text: {
+      primary: "#f8fafc",
+      secondary: "#e2e8f0",
+      muted: "#94a3b8",
+      dim: "#64748b",
+    },
+    status: {
+      error: "#ef4444",
+      success: "#10b981",
+      warning: "#f59e0b",
+    },
+    glow: {
+      primary: "rgba(59, 130, 246, 0.65)",
+      accent: "rgba(14, 165, 233, 0.55)",
+      success: "rgba(16, 185, 129, 0.55)",
+      error: "rgba(239, 68, 68, 0.55)",
+    },
+    shadow: {
+      primary: "rgba(59, 130, 246, 0.35)",
+      dark: "rgba(0, 0, 0, 0.35)",
+    },
+  },
+  breakpoints: {
+    sm: "640px",
+    md: "768px",
+    lg: "1024px",
+    xl: "1280px",
+  },
+}
 
-  // Animation variants for form elements
-  const formItemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: (custom: number) => ({
+// Validation utilities
+const validators = {
+  email: (email: string): string | null => {
+    if (!email.trim()) return "El correo electrónico es requerido"
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) return "Por favor, ingrese un correo electrónico válido"
+    return null
+  },
+  password: (password: string): string | null => {
+    if (!password) return "La contraseña es requerida"
+    if (password.length < 6) return "La contraseña debe tener al menos 6 caracteres"
+    return null
+  },
+}
+
+// Animation variants factory
+const createAnimationVariants = (prefersReducedMotion: boolean) => ({
+  form: {
+    hidden: {
+      opacity: 0,
+      y: prefersReducedMotion ? 0 : 20,
+    },
+    visible: {
       opacity: 1,
       y: 0,
-      transition: { 
-        duration: 0.4, 
-        delay: custom * 0.08,
-        ease: "easeOut" 
+      transition: {
+        duration: prefersReducedMotion ? 0.1 : 0.5,
+        ease: "easeOut",
+      },
+    },
+  },
+  inputFocus: {
+    focus: {
+      scale: prefersReducedMotion ? 1 : 1.01,
+      boxShadow: `0 0 20px ${theme.colors.glow.primary}`,
+      transition: {
+        duration: prefersReducedMotion ? 0 : 0.3,
+        ease: "easeOut",
+      },
+    },
+    blur: {
+      scale: 1,
+      boxShadow: "none",
+      transition: {
+        duration: prefersReducedMotion ? 0 : 0.5,
+        ease: "easeOut",
+      },
+    },
+  },
+  fadeInOut: {
+    hidden: { opacity: 0, y: prefersReducedMotion ? 0 : -10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
+    exit: { opacity: 0, y: prefersReducedMotion ? 0 : -10, transition: { duration: 0.3, ease: "easeIn" } },
+  },
+  staggerContainer: {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: prefersReducedMotion ? 0 : 0.15,
+        delayChildren: 0.1,
+      },
+    },
+  },
+  staggerItem: {
+    hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 15 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
+  },
+  // Success animation variants
+  successContainer: {
+    hidden: { opacity: 0, scale: 0.8 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      transition: {
+        duration: 0.5,
+        ease: [0.16, 1, 0.3, 1],
+        staggerChildren: 0.1,
+        delayChildren: 0.2,
+      },
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.95,
+      transition: { duration: 0.3 },
+    },
+  },
+  successItem: {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.5,
+        ease: [0.16, 1, 0.3, 1],
+      },
+    },
+  },
+  iconContainer: {
+    hidden: { scale: 0, rotate: -180 },
+    visible: {
+      scale: 1,
+      rotate: 0,
+      transition: {
+        type: "spring",
+        stiffness: 200,
+        damping: 15,
+        delay: 0.1,
+      },
+    },
+  },
+  checkmark: {
+    hidden: { pathLength: 0, opacity: 0 },
+    visible: {
+      pathLength: 1,
+      opacity: 1,
+      transition: {
+        pathLength: { duration: 0.6, ease: "easeOut", delay: 0.3 },
+        opacity: { duration: 0.1, delay: 0.3 },
+      },
+    },
+  },
+  sparkle: {
+    hidden: { scale: 0, opacity: 0 },
+    visible: (i: number) => ({
+      scale: [0, 1.2, 0],
+      opacity: [0, 1, 0],
+      transition: {
+        duration: 1.5,
+        delay: 0.5 + i * 0.1,
+        ease: "easeOut",
+        repeat: Number.POSITIVE_INFINITY,
+        repeatDelay: 2,
+      },
+    }),
+  },
+  progressBar: {
+    hidden: { scaleX: 0 },
+    visible: {
+      scaleX: 1,
+      transition: {
+        duration: 2,
+        ease: "easeInOut",
+        delay: 0.8,
+      },
+    },
+  },
+})
+
+// Pre-defined styles
+const styles = {
+  containerStyles: {
+    background: theme.colors.bg.gradient,
+  },
+  cardStyles: {
+    background: theme.colors.bg.glass,
+    backdropFilter: "blur(16px) saturate(180%)",
+    WebkitBackdropFilter: "blur(16px) saturate(180%)",
+    boxShadow: `0 10px 30px ${theme.colors.shadow.dark}, 0 0 30px ${theme.colors.shadow.primary}20, inset 0 1px 0 rgba(255, 255, 255, 0.05)`,
+  },
+  headingGradient: {
+    background: `linear-gradient(135deg, ${theme.colors.text.primary} 0%, ${theme.colors.brand.primaryLight} 100%)`,
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+    backgroundClip: "text",
+  },
+  buttonGradient: {
+    background: `linear-gradient(135deg, #2a3f5f 0%, #3a6ea5 50%, #1e3a5f 100%)`,
+    backgroundSize: "200% 100%",
+    boxShadow: `0 4px 12px rgba(42, 63, 95, 0.5), 0 0 0 1px rgba(58, 110, 165, 0.2)`,
+  },
+  successCardStyles: {
+    background: `linear-gradient(135deg, ${theme.colors.bg.glass} 0%, rgba(13, 25, 42, 0.95) 100%)`,
+    backdropFilter: "blur(20px) saturate(180%)",
+    WebkitBackdropFilter: "blur(20px) saturate(180%)",
+    border: `1px solid ${theme.colors.border.success}`,
+    boxShadow: `
+      0 20px 40px -10px ${theme.colors.shadow.dark},
+      0 0 60px ${theme.colors.glow.success}30,
+      inset 0 1px 0 rgba(255, 255, 255, 0.1)
+    `,
+  },
+  errorIconColor: theme.colors.status.error,
+}
+
+// Optimized Input component
+const InputField = memo(
+  ({
+    id,
+    type = "text",
+    label,
+    value,
+    onChange,
+    onFocus,
+    onBlur,
+    error,
+    isActive,
+    icon: IconComponent,
+    inputRef,
+    className = "",
+    onToggle,
+    showPassword,
+  }: InputFieldProps) => {
+    const prefersReducedMotionHook = useReducedMotion()
+    const { inputFocus: inputAnimationVariants, fadeInOut: errorAnimationVariants } = useMemo(
+      () => createAnimationVariants(prefersReducedMotionHook ?? false),
+      [prefersReducedMotionHook],
+    )
+
+    const inputStyles = useMemo(
+      () => ({
+        backgroundColor: theme.colors.bg.input,
+        border: `1px solid ${error ? theme.colors.border.error : isActive ? theme.colors.border.focus : theme.colors.border.default}`,
+        color: theme.colors.text.primary,
+        outline: "none",
+        boxShadow: isActive
+          ? `0 0 0 1px ${theme.colors.brand.primary}40, 0 0 20px ${theme.colors.glow.primary}`
+          : error
+            ? `0 0 0 1px ${theme.colors.status.error}40, 0 0 15px ${theme.colors.glow.error}`
+            : "none",
+      }),
+      [isActive, error],
+    )
+
+    const iconColor = useMemo(
+      () => (error ? theme.colors.status.error : isActive ? theme.colors.brand.primary : theme.colors.text.dim),
+      [isActive, error],
+    )
+
+    const inputRefLocal = useRef<HTMLInputElement>(null)
+
+    useEffect(() => {
+      if (isActive && inputRefLocal.current) {
+        inputRefLocal.current.focus()
       }
-    })
-  };
+    }, [isActive])
+
+    return (
+      <div className="space-y-1.5">
+        <label htmlFor={id} className="block text-sm font-medium" style={{ color: theme.colors.text.secondary }}>
+          {label}
+        </label>
+        <motion.div
+          className="relative"
+          variants={inputAnimationVariants}
+          animate={isActive ? "focus" : "blur"}
+          whileHover={{
+            scale: !error && !isActive && !className.includes("disabled") ? 1.005 : 1,
+            boxShadow: !error && !isActive && !className.includes("disabled") ? `0 0 15px ${theme.colors.glow.primary}30` : "none",
+            transition: {
+              scale: { duration: 0.3, ease: "easeOut" },
+              boxShadow: { duration: 0.3, ease: "easeOut" },
+            },
+          }}
+          style={{ willChange: "transform, box-shadow" }}
+        >
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+            <IconComponent className="h-5 w-5 transition-colors duration-300" style={{ color: iconColor }} />
+          </div>
+          <input
+            ref={inputRef ?? inputRefLocal}
+            id={id}
+            name={id}
+            type={showPassword ? (onToggle ? (showPassword ? "text" : "password") : type) : type}
+            autoComplete={id === "email" ? "email" : "current-password"}
+            required
+            value={value}
+            onChange={onChange}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            className={`w-full pl-11 ${showPassword ? "pr-12" : "pr-4"} py-2.5 rounded-lg transition-all duration-300 hover:shadow-lg focus:outline-none ${className}`}
+            placeholder={label}
+            aria-invalid={!!error}
+            aria-describedby={error ? `${id}-error` : undefined}
+          />
+
+          {showPassword && onToggle && (
+            <motion.button
+              type="button"
+              onClick={onToggle}
+              className="absolute inset-y-0 right-0 pr-3.5 flex items-center transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-glass"
+              whileHover={!prefersReducedMotionHook ? { scale: 1.1, color: theme.colors.brand.primary } : {}}
+              whileTap={!prefersReducedMotionHook ? { scale: 0.95 } : {}}
+              style={{ color: iconColor }}
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </motion.button>
+          )}
+
+          {isActive && !error && (
+            <motion.div
+              className="absolute bottom-0 left-0 h-0.5 w-full rounded-full"
+              initial={{ scaleX: 0, opacity: 0 }}
+              animate={{ scaleX: 1, opacity: 1 }}
+              exit={{ scaleX: 0, opacity: 0 }}
+              style={{
+                background: `linear-gradient(to right, ${theme.colors.brand.primary}, ${theme.colors.brand.accent})`,
+                transformOrigin: "left",
+                willChange: "transform, opacity",
+              }}
+              transition={{ duration: 0.3 }}
+            />
+          )}
+        </motion.div>
+
+        <AnimatePresence>
+          {error && (
+            <motion.p
+              id={`${id}-error`}
+              className="text-sm flex items-center space-x-1"
+              style={{ color: theme.colors.status.error }}
+              variants={errorAnimationVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              role="alert"
+              aria-live="polite"
+            >
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
+            </motion.p>
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  },
+  (prevProps, nextProps) => {
+    return (
+      prevProps.value === nextProps.value &&
+      prevProps.isActive === nextProps.isActive &&
+      prevProps.error === nextProps.error &&
+      prevProps.disabled === nextProps.disabled &&
+      prevProps.showPassword === nextProps.showPassword
+    )
+  },
+)
+
+InputField.displayName = "InputField"
+
+// Background Orbs component
+const BackgroundOrbs = memo(({ prefersReducedMotion }: BackgroundOrbsProps) => {
+  const orbAnimations = [
+    {
+      size: "clamp(300px, 50vw, 800px)",
+      color: `${theme.colors.brand.primaryLight}0A`,
+      params: {
+        x: ["-20%", "0%", "20%", "0%", "-20%"],
+        y: ["-20%", "20%", "-10%", "10%", "-20%"],
+        scale: [1, 1.2, 1, 0.8, 1],
+        opacity: [0.7, 0.9, 0.8, 1, 0.7],
+      },
+    },
+    {
+      size: "clamp(250px, 40vw, 700px)",
+      color: `${theme.colors.brand.accentLight}0A`,
+      params: {
+        x: ["30%", "0%", "-20%", "10%", "30%"],
+        y: ["40%", "-10%", "30%", "-20%", "40%"],
+        scale: [1.1, 0.9, 1.2, 1, 1.1],
+        opacity: [0.8, 1, 0.7, 0.9, 0.8],
+      },
+    },
+  ]
+
+  const backgroundOrbVariants = {
+    animate: (custom: { x: string[]; y: string[]; scale: number[]; opacity: number[] }) => ({
+      x: custom.x,
+      y: custom.y,
+      scale: custom.scale,
+      opacity: custom.opacity,
+      transition: {
+        duration: prefersReducedMotion ? 0 : 60,
+        repeat: Number.POSITIVE_INFINITY,
+        repeatType: "mirror" as const,
+        ease: "easeInOut",
+      },
+    }),
+  }
 
   return (
-    // Main background - using a gradient for more depth
-    <div 
-      className="min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 transition-colors duration-700 overflow-hidden relative"
-      style={{
-        background: `linear-gradient(135deg, ${colors.background} 0%, #051230 100%)`,
-        color: colors.textPrimary
-      }}
-    >
-      {/* Background decorative elements - very subtle */}
-      {isMounted && (
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {/* More subtle particles with better distribution */}
-          <div className="absolute inset-0 opacity-30">
-            {particles.map((particle) => (
+    <>
+      {orbAnimations.map((orb, index) => (
+        <motion.div
+          key={`orb-${index}`}
+          className="absolute rounded-full"
+          style={{
+            width: orb.size,
+            height: orb.size,
+            background: `radial-gradient(circle, ${orb.color}0A 0%, transparent 60%)`,
+            filter: "blur(80px)",
+            willChange: "transform, opacity",
+          }}
+          variants={backgroundOrbVariants}
+          custom={orb.params}
+          animate="animate"
+        />
+      ))}
+    </>
+  )
+})
+
+BackgroundOrbs.displayName = "BackgroundOrbs"
+
+// Success component
+const LoginSuccess = memo(
+  ({ prefersReducedMotion, userName = "Usuario" }: LoginSuccessProps) => {
+    // Sparkle positions for decorative elements
+    const sparklePositions = [
+      { top: "10%", left: "15%", size: 4 },
+      { top: "20%", right: "20%", size: 6 },
+      { bottom: "25%", left: "10%", size: 5 },
+      { bottom: "15%", right: "15%", size: 4 },
+      { top: "50%", left: "5%", size: 3 },
+      { top: "50%", right: "5%", size: 3 },
+    ]
+
+    const successVariants = useMemo(
+      () => ({
+        container: {
+          hidden: { opacity: 0, scale: 0.8 },
+          visible: {
+            opacity: 1,
+            scale: 1,
+            transition: {
+              duration: 0.5,
+              ease: [0.16, 1, 0.3, 1],
+              staggerChildren: 0.1,
+              delayChildren: 0.2,
+            },
+          },
+          exit: {
+            opacity: 0,
+            scale: 0.95,
+            transition: { duration: 0.3 },
+          },
+        },
+        item: {
+          hidden: { opacity: 0, y: 20 },
+          visible: {
+            opacity: 1,
+            y: 0,
+            transition: {
+              duration: 0.5,
+              ease: [0.16, 1, 0.3, 1],
+            },
+          },
+        },
+        iconContainer: {
+          hidden: { scale: 0, rotate: -180 },
+          visible: {
+            scale: 1,
+            rotate: 0,
+            transition: {
+              type: "spring",
+              stiffness: 200,
+              damping: 15,
+              delay: 0.1,
+            },
+          },
+        },
+        checkmark: {
+          hidden: { pathLength: 0, opacity: 0 },
+          visible: {
+            pathLength: 1,
+            opacity: 1,
+            transition: {
+              pathLength: { duration: 0.6, ease: "easeOut", delay: 0.3 },
+              opacity: { duration: 0.1, delay: 0.3 },
+            },
+          },
+        },
+        sparkle: {
+          hidden: { scale: 0, opacity: 0 },
+          visible: (i: number) => ({
+            scale: [0, 1.2, 0],
+            opacity: [0, 1, 0],
+            transition: {
+              duration: 1.5,
+              delay: 0.5 + i * 0.1,
+              ease: "easeOut",
+              repeat: Number.POSITIVE_INFINITY,
+              repeatDelay: 2,
+            },
+          }),
+        },
+        progressBar: {
+          hidden: { scaleX: 0 },
+          visible: {
+            scaleX: 1,
+            transition: {
+              duration: 2,
+              ease: "easeInOut",
+              delay: 0.8,
+            },
+          },
+        },
+      }),
+      [],
+    )
+
+    return (
+      <motion.div
+        className="relative w-full max-w-sm mx-auto"
+        variants={successVariants.container}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+      >
+        {/* Glass morphism card */}
+        <div className="relative rounded-2xl overflow-hidden" style={styles.successCardStyles}>
+          {/* Gradient overlay */}
+          <div
+            className="absolute inset-0 opacity-30"
+            style={{
+              background: `radial-gradient(circle at 50% 0%, ${theme.colors.status.success}20 0%, transparent 70%)`,
+            }}
+          />
+
+          {/* Content */}
+          <div className="relative z-10 px-8 py-10 text-center">
+            {/* Success icon with animation */}
+            <motion.div
+              className="relative inline-flex items-center justify-center mb-6"
+              variants={successVariants.iconContainer}
+            >
+              {/* Glow effect */}
               <motion.div
-                key={particle.id}
-                className="absolute rounded-full"
-                style={{
-                  width: particle.width,
-                  height: particle.height,
-                  background: `rgba(255, 255, 255, 0.6)`,
-                  boxShadow: `0 0 4px rgba(255, 255, 255, 0.3)`
-                }}
-                initial={{
-                  x: particle.initialX,
-                  y: particle.initialY,
-                  scale: particle.scale,
-                  opacity: 0,
-                }}
+                className="absolute inset-0 rounded-full"
                 animate={{
-                  x: particle.targetX,
-                  y: particle.targetY,
-                  opacity: particle.opacity,
-                  transition: {
-                    duration: particle.duration,
-                    repeat: Infinity,
-                    repeatType: "mirror",
-                    ease: "easeInOut",
-                    delay: particle.delay,
-                  },
+                  scale: [1, 1.2, 1],
+                  opacity: [0.5, 0.8, 0.5],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Number.POSITIVE_INFINITY,
+                  ease: "easeInOut",
+                }}
+                style={{
+                  background: `radial-gradient(circle, ${theme.colors.status.success}40 0%, transparent 70%)`,
+                  filter: "blur(20px)",
                 }}
               />
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Main form container with improved contrast and professional appearance */}
-      <motion.main
-        className="w-full max-w-md rounded-lg z-10 relative overflow-hidden"
-        style={{
-          boxShadow: `0 10px 40px rgba(0, 0, 0, 0.5)`,
-        }}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-      >
-        {/* Enhanced border with better contrast */}
-        <motion.div
-          className="absolute inset-0 rounded-lg z-0"
-          style={{
-            border: `1px solid ${colors.border}`,
-            boxShadow: `0 0 15px 1px rgba(66, 133, 244, 0.15)`,
-            pointerEvents: 'none'
-          }}
-          animate={{
-            boxShadow: [
-              `0 0 10px 1px rgba(66, 133, 244, 0.1)`,
-              `0 0 20px 2px rgba(66, 133, 244, 0.2)`,
-              `0 0 10px 1px rgba(66, 133, 244, 0.1)`
-            ]
-          }}
-          transition={{
-            duration: 4,
-            ease: "easeInOut",
-            times: [0, 0.5, 1],
-            repeat: Infinity,
-            repeatType: "reverse"
-          }}
-        />
-        
-        {/* Background with improved opacity for better contrast */}
-        <div 
-          className="absolute inset-0 rounded-lg"
-          style={{
-            background: colors.formBg,
-            backdropFilter: 'blur(10px)',
-            border: `1px solid rgba(255, 255, 255, 0.05)`
-          }}
-        ></div>
-        
-        {/* Subtle blue accent in top-right corner */}
-        <motion.div 
-          className="absolute w-56 h-56 -top-20 -right-20 rounded-full"
-          style={{
-            background: `radial-gradient(circle, rgba(66, 133, 244, 0.12) 0%, rgba(66, 133, 244, 0.05) 40%, transparent 75%)`,
-            filter: 'blur(20px)'
-          }}
-          animate={{
-            opacity: [0.6, 0.9, 0.6],
-            scale: [0.95, 1.05, 0.95]
-          }}
-          transition={{
-            duration: 10,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        />
-        
-        {/* Subtle teal accent in bottom-left corner */}
-        <motion.div 
-          className="absolute w-56 h-56 -bottom-20 -left-20 rounded-full"
-          style={{
-            background: `radial-gradient(circle, rgba(0, 196, 180, 0.12) 0%, rgba(0, 196, 180, 0.05) 40%, transparent 75%)`,
-            filter: 'blur(20px)'
-          }}
-          animate={{
-            opacity: [0.6, 0.9, 0.6],
-            scale: [0.95, 1.05, 0.95]
-          }}
-          transition={{
-            duration: 10,
-            delay: 3,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        />
-        
-        {/* Form content */}
-        <div className="relative z-10 p-6 sm:p-8">
-          <AnimatePresence mode="wait">
-            {loginSuccess ? (
-              <motion.div
-                key="success"
-                className="text-center py-10"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
+              {/* Icon background */}
+              <div
+                className="relative w-24 h-24 rounded-full flex items-center justify-center"
+                style={{
+                  background: `linear-gradient(135deg, ${theme.colors.status.success}15 0%, ${theme.colors.status.success}25 100%)`,
+                  border: `2px solid ${theme.colors.status.success}30`,
+                }}
               >
-                <motion.div 
-                  className="flex justify-center mb-6"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1, rotate: 360 }}
-                  transition={{ type: "spring", damping: 12, stiffness: 100, delay: 0.1 }}
+                {/* Custom checkmark SVG */}
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 48 48"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="relative z-10"
                 >
-                  <div 
-                    className="rounded-full p-4"
-                    style={{
-                      background: `radial-gradient(circle, ${colors.accentLight}, transparent)`,
-                      border: `1px solid ${colors.accent}30`,
-                      boxShadow: `0 0 15px ${colors.accent}40`
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke={colors.success} strokeWidth="2">
-                      <motion.path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        d="M5 13l4 4L19 7"
-                        initial={{ pathLength: 0, opacity: 0 }}
-                        animate={{ pathLength: 1, opacity: 1 }}
-                        transition={{ duration: 0.6, ease: "easeOut", delay: 0.3 }}
+                  <motion.path
+                    d="M14 24L20 30L34 16"
+                    stroke={theme.colors.status.success}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    variants={successVariants.checkmark}
+                    initial="hidden"
+                    animate="visible"
+                  />
+                </svg>
+
+                {/* Sparkles around icon */}
+                {!prefersReducedMotion &&
+                  sparklePositions.map((pos, i) => (
+                    <motion.div
+                      key={i}
+                      className="absolute"
+                      style={{
+                        ...pos,
+                        width: `${pos.size}px`,
+                        height: `${pos.size}px`,
+                      }}
+                      custom={i}
+                      variants={successVariants.sparkle}
+                      initial="hidden"
+                      animate="visible"
+                    >
+                      <Sparkles
+                        className="w-full h-full"
+                        style={{
+                          color: theme.colors.status.success,
+                          filter: `drop-shadow(0 0 3px ${theme.colors.status.success})`,
+                        }}
                       />
-                    </svg>
-                  </div>
-                </motion.div>
-                <h2 
-                  className="text-2xl font-semibold mb-3"
-                  style={{ 
-                    color: colors.textPrimary,
+                    </motion.div>
+                  ))}
+              </div>
+            </motion.div>
+
+            {/* Success message */}
+            <motion.div variants={successVariants.item} className="space-y-3">
+              <h2
+                className="text-3xl font-bold tracking-tight"
+                style={{
+                  background: `linear-gradient(135deg, ${theme.colors.text.primary} 0%, ${theme.colors.status.success} 100%)`,
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                ¡Bienvenido!
+              </h2>
+
+              <p className="text-lg font-medium" style={{ color: theme.colors.text.primary }}>
+                {userName}
+              </p>
+
+              <p className="text-sm" style={{ color: theme.colors.text.muted }}>
+                Acceso autorizado correctamente
+              </p>
+            </motion.div>
+
+            {/* Progress bar */}
+            <motion.div variants={successVariants.item} className="mt-8 mb-4">
+              <div
+                className="relative h-1 rounded-full overflow-hidden"
+                style={{
+                  background: `${theme.colors.border.default}`,
+                }}
+              >
+                <motion.div
+                  className="absolute inset-y-0 left-0 rounded-full"
+                  variants={successVariants.progressBar}
+                  style={{
+                    background: `linear-gradient(90deg, ${theme.colors.status.success} 0%, ${theme.colors.brand.primary} 100%)`,
+                    boxShadow: `0 0 10px ${theme.colors.glow.success}`,
                   }}
-                >
-                  ¡Acceso Concedido!
-                </h2>
-                <p style={{ color: colors.textSecondary }}>Será redirigido en un momento...</p>
-              </motion.div>
-            ) : (
+                />
+              </div>
+            </motion.div>
+
+            {/* Redirect message */}
+            <motion.div
+              variants={successVariants.item}
+              className="flex items-center justify-center space-x-2 text-sm"
+              style={{ color: theme.colors.text.secondary }}
+            >
+              <span>Redirigiendo al panel</span>
               <motion.div
-                key="login-form"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="px-0 sm:px-2"
+                animate={{
+                  x: [0, 5, 0],
+                }}
+                transition={{
+                  duration: 1.5,
+                  repeat: Number.POSITIVE_INFINITY,
+                  ease: "easeInOut",
+                }}
               >
-                <div className="text-center mb-8">
-                  {/* Clinic badge with improved contrast and professionalism */}
-                  <motion.div 
-                    className="inline-flex items-center justify-center p-3 rounded-full mb-4"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.5 }}
-                    whileHover={{ scale: 1.05 }}
-                    style={{
-                      background: `radial-gradient(circle, ${colors.primaryLight} 0%, rgba(20, 50, 120, 0.1) 100%)`,
-                      border: `1px solid ${colors.border}`,
-                      boxShadow: `0 0 15px ${colors.border}`
-                    }}
-                  >
-                    <ShieldCheck 
-                      className="h-10 w-10" 
-                      style={{
-                        color: colors.primary,
-                        filter: `drop-shadow(0 0 4px ${colors.primary}70)`
-                      }}
-                    />
-                  </motion.div>
-                  
-                  {/* Title with better contrast and professionalism */}
-                  <motion.h1 
-                    className="text-2xl sm:text-3xl font-bold tracking-tight mb-2"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    style={{ 
-                      color: colors.primary,
-                      textShadow: `0 0 10px ${colors.primary}40`
-                    }}
-                  >
-                    Clínica de Hernia y Vesícula
-                  </motion.h1>
-                  
-                  <motion.p 
-                    className="mt-2 text-sm"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    style={{ color: colors.textSecondary }}
-                  >
-                    Portal de Acceso para Personal Autorizado
-                  </motion.p>
-                </div>
-
-                <form onSubmit={handleLogin} className="space-y-5">
-                  {/* Email field - with improved contrast and professionalism */}
-                  <motion.div
-                    variants={formItemVariants}
-                    initial="hidden"
-                    animate="visible"
-                    custom={4}
-                  >
-                    <label
-                      htmlFor="email"
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Correo Electrónico
-                    </label>
-                    <div className="relative group transition-all duration-300 rounded-lg">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-                        <AtSign 
-                          className="h-5 w-5 transition-colors duration-300" 
-                          style={{
-                            color: activeInput === 'email' 
-                              ? colors.primary 
-                              : colors.textMuted
-                          }}
-                        />
-                      </div>
-                      <input
-                        id="email"
-                        name="email"
-                        type="email"
-                        autoComplete="email"
-                        required
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        onFocus={() => handleFocus('email')}
-                        onBlur={handleBlur}
-                        className="form-input block w-full rounded-lg border py-2.5 pl-10 pr-4 focus:ring-2 transition-all duration-300 ease-in-out"
-                        placeholder="usuario@clinica.com"
-                        disabled={isLoading}
-                        style={{
-                          backgroundColor: colors.inputBg,
-                          borderColor: activeInput === 'email' 
-                            ? colors.borderActive 
-                            : 'rgba(255, 255, 255, 0.1)',
-                          color: colors.textPrimary,
-                          boxShadow: activeInput === 'email' 
-                            ? `0 0 10px -2px ${colors.primary}40` 
-                            : 'none'
-                        }}
-                      />
-                      {/* Improved focus indication with better contrast */}
-                      <AnimatePresence>
-                        {activeInput === 'email' && (
-                          <motion.div
-                            initial={{ opacity: 0, scaleX: 0 }}
-                            animate={{ opacity: 1, scaleX: 1 }}
-                            exit={{ opacity: 0, scaleX: 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="absolute bottom-0 left-0 h-0.5 w-full origin-left"
-                            style={{ 
-                              background: `linear-gradient(to right, ${colors.primary}80, ${colors.primary}, ${colors.primary}80)`,
-                              boxShadow: `0 0 6px ${colors.primary}`
-                            }}
-                          />
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </motion.div>
-
-                  {/* Password field - with improved contrast and professionalism */}
-                  <motion.div
-                    variants={formItemVariants}
-                    initial="hidden"
-                    animate="visible"
-                    custom={5}
-                  >
-                    <label
-                      htmlFor="password"
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: colors.textSecondary }}
-                    >
-                      Contraseña
-                    </label>
-                    <div className="relative group transition-all duration-300 rounded-lg">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-                        <LockKeyhole 
-                          className="h-5 w-5 transition-colors duration-300" 
-                          style={{
-                            color: activeInput === 'password' 
-                              ? colors.primary
-                              : colors.textMuted
-                          }}
-                        />
-                      </div>
-                      <input
-                        id="password"
-                        name="password"
-                        type={showPassword ? "text" : "password"}
-                        autoComplete="current-password"
-                        required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onFocus={() => handleFocus('password')}
-                        onBlur={handleBlur}
-                        className="form-input block w-full rounded-lg border py-2.5 pl-10 pr-10 focus:ring-2 transition-all duration-300 ease-in-out"
-                        placeholder="••••••••"
-                        disabled={isLoading}
-                        style={{
-                          backgroundColor: colors.inputBg,
-                          borderColor: activeInput === 'password' 
-                            ? colors.borderActive
-                            : 'rgba(255, 255, 255, 0.1)',
-                          color: colors.textPrimary,
-                          boxShadow: activeInput === 'password' 
-                            ? `0 0 10px -2px ${colors.primary}40` 
-                            : 'none'
-                        }}
-                      />
-                      <motion.button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 flex items-center pr-3.5 focus:outline-none transition-colors duration-300"
-                        aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.95 }}
-                        style={{
-                          color: activeInput === 'password' 
-                            ? colors.primary
-                            : colors.textMuted
-                        }}
-                      >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </motion.button>
-                      {/* Improved focus indication with better contrast */}
-                      <AnimatePresence>
-                        {activeInput === 'password' && (
-                          <motion.div
-                            initial={{ opacity: 0, scaleX: 0 }}
-                            animate={{ opacity: 1, scaleX: 1 }}
-                            exit={{ opacity: 0, scaleX: 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="absolute bottom-0 left-0 h-0.5 w-full origin-left"
-                            style={{ 
-                              background: `linear-gradient(to right, ${colors.primary}80, ${colors.primary}, ${colors.primary}80)`,
-                              boxShadow: `0 0 6px ${colors.primary}`
-                            }}
-                          />
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </motion.div>
-
-                  {/* Error message with improved contrast */}
-                  <AnimatePresence>
-                    {error && (
-                      <motion.div 
-                        className="flex items-center space-x-2 text-sm p-3 rounded-md border"
-                        initial={{ opacity: 0, y: -5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -5, transition: { duration: 0.2 } }}
-                        role="alert"
-                        style={{
-                          backgroundColor: 'rgba(255, 82, 82, 0.1)',
-                          borderColor: 'rgba(255, 82, 82, 0.2)',
-                          color: 'rgba(255, 180, 180, 1)'
-                        }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
-                        <span>{error}</span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Remember session & forgot password with improved contrast */}
-                  <motion.div 
-                    className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs sm:text-sm space-y-2 sm:space-y-0"
-                    variants={formItemVariants}
-                    initial="hidden"
-                    animate="visible"
-                    custom={6}
-                  >
-                    <div className="flex items-center">
-                      <input
-                        id="remember-me"
-                        name="remember-me"
-                        type="checkbox"
-                        className="h-4 w-4 rounded border focus:ring-2 transition-colors duration-200"
-                        style={{
-                          backgroundColor: colors.inputBg,
-                          borderColor: 'rgba(255, 255, 255, 0.2)',
-                          color: colors.primary,
-                        }}
-                      />
-                      <label
-                        htmlFor="remember-me"
-                        className="ml-2 block hover:text-white transition-colors cursor-pointer"
-                        style={{ color: colors.textSecondary }}
-                      >
-                        Recordar sesión
-                      </label>
-                    </div>
-                    <motion.a
-                      href="#"
-                      className="font-medium hover:underline transition-colors"
-                      whileHover={{ scale: 1.02, x: 3 }}
-                      style={{ 
-                        color: colors.primary,
-                      }}
-                    >
-                      ¿Olvidó su contraseña?
-                    </motion.a>
-                  </motion.div>
-
-                  {/* Security note to enhance trust */}
-                  <motion.div
-                    variants={formItemVariants}
-                    initial="hidden"
-                    animate="visible"
-                    custom={6.5}
-                    className="flex items-center gap-1.5 mt-1 mb-3"
-                  >
-                    <div className="flex-shrink-0">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke={colors.accent} className="w-4 h-4">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <p className="text-xs" style={{ color: colors.textMuted }}>
-                      Conexión segura. Sus datos están protegidos
-                    </p>
-                  </motion.div>
-
-                  {/* Submit button with improved contrast and professionalism */}
-                  <motion.div
-                    variants={formItemVariants}
-                    initial="hidden"
-                    animate="visible"
-                    custom={7}
-                    className="pt-2"
-                  >
-                    <motion.button
-                      type="submit"
-                      disabled={isLoading}
-                      className="w-full flex items-center justify-center py-3 px-5 text-sm font-semibold rounded-lg shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transform active:shadow-inner transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed group"
-                      whileHover={{ 
-                        boxShadow: `0 6px 15px -3px ${colors.primary}50`,
-                        y: -2
-                      }}
-                      whileTap={{ scale: 0.98, y: 0 }}
-                      style={{
-                        background: colors.primary,
-                        boxShadow: `0 4px 10px -3px ${colors.primary}40`,
-                        color: 'white',
-                        border: `1px solid ${colors.primary}90`,
-                      }}
-                    >
-                      {isLoading ? (
-                        <>
-                          <svg
-                            className="animate-spin -ml-1 mr-2.5 h-5 w-5 text-white"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Autenticando...
-                        </>
-                      ) : (
-                        <>
-                          <LogIn className="mr-2 h-5 w-5 group-hover:scale-110 transition-transform duration-300" />
-                          Acceder al Sistema
-                        </>
-                      )}
-                      
-                      {/* Button glow effect - more subtle for professionalism */}
-                      <motion.div
-                        className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                        style={{ 
-                          boxShadow: `0 0 15px 2px ${colors.primary}40`,
-                          background: 'transparent'
-                        }}
-                        animate={{
-                          opacity: [0, 0.15, 0]
-                        }}
-                        transition={{
-                          duration: 2,
-                          repeat: Infinity,
-                          repeatType: "mirror"
-                        }}
-                      />
-                    </motion.button>
-                  </motion.div>
-                </form>
-
-                {/* Brand trust indicators */}
-                <motion.div
-                  variants={formItemVariants}
-                  initial="hidden"
-                  animate="visible"
-                  custom={7.5}
-                  className="mt-8 flex justify-center space-x-4 items-center"
-                >
-                  <div className="text-xs px-2 py-1 rounded border flex items-center gap-1" 
-                    style={{
-                      borderColor: 'rgba(255, 255, 255, 0.1)',
-                      color: colors.textMuted,
-                      background: 'rgba(255, 255, 255, 0.03)'
-                    }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    SSL Seguro
-                  </div>
-                  <div className="text-xs px-2 py-1 rounded border flex items-center gap-1" 
-                    style={{
-                      borderColor: 'rgba(255, 255, 255, 0.1)',
-                      color: colors.textMuted,
-                      background: 'rgba(255, 255, 255, 0.03)'
-                    }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                    HIPAA
-                  </div>
-                </motion.div>
-
-                {/* Footer copyright with improved clarity */}
-                <motion.div
-                  variants={formItemVariants}
-                  initial="hidden"
-                  animate="visible"
-                  custom={8}
-                >
-                  <p className="mt-4 text-center text-xs" style={{ color: colors.textMuted }}>
-                    &copy; {new Date().getFullYear()} Clínica Especializada en Hernia y Vesícula.
-                    <br />
-                    Cuidado experto y tecnología de vanguardia. Ciudad de México.
-                  </p>
-                </motion.div>
+                <ArrowRight className="w-4 h-4" />
               </motion.div>
-            )}
-          </AnimatePresence>
+            </motion.div>
+
+            {/* Loading dots */}
+            <motion.div variants={successVariants.item} className="flex justify-center space-x-1 mt-4">
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: theme.colors.brand.primary }}
+                  animate={{
+                    scale: [1, 1.5, 1],
+                    opacity: [0.5, 1, 0.5],
+                  }}
+                  transition={{
+                    duration: 1.5,
+                    repeat: Number.POSITIVE_INFINITY,
+                    delay: i * 0.2,
+                    ease: "easeInOut",
+                  }}
+                />
+              ))}
+            </motion.div>
+          </div>
+
+          {/* Bottom gradient decoration */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-1"
+            style={{
+              background: `linear-gradient(90deg, 
+              ${theme.colors.brand.primary} 0%, 
+              ${theme.colors.status.success} 50%, 
+              ${theme.colors.brand.primary} 100%)`,
+              backgroundSize: "200% 100%",
+              animation: "shimmer 3s linear infinite",
+            }}
+          />
         </div>
+
+        {/* Add shimmer animation */}
+        <style jsx>{`
+        @keyframes shimmer {
+          0% {
+            background-position: -200% 0;
+          }
+          100% {
+            background-position: 200% 0;
+          }
+        }
+      `}</style>
+    </motion.div>
+  )
+}
+)
+
+LoginSuccess.displayName = "LoginSuccess"
+
+// Main component
+export default function EnhancedLoginPage() {
+  const router = useRouter()
+  const prefersReducedMotion = useReducedMotion()
+
+  const [formData, setFormData] = useState<FormData>({
+    email: "",
+    password: "",
+    rememberMe: false,
+  })
+
+  const [formState, setFormState] = useState<FormState>({
+    isLoading: false,
+    loginSuccess: false,
+    activeInput: null,
+    showPassword: false,
+  })
+
+  const [errors, setErrors] = useState<FormErrors>({})
+
+  // Extract user name from email for personalized success message
+  const userName = useMemo(() => {
+    if (formData.email) {
+      const name = formData.email.split("@")[0]
+      return name.charAt(0).toUpperCase() + name.slice(1)
+    }
+    return "Usuario"
+  }, [formData.email])
+
+  const animationVariants = useMemo(() => createAnimationVariants(prefersReducedMotion), [prefersReducedMotion])
+
+  const handleInputChange = useCallback(
+    (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = field === "rememberMe" ? e.target.checked : e.target.value
+      setFormData((prev) => ({ ...prev, [field]: value }))
+      if (errors[field as keyof FormErrors]) {
+        setErrors((prev) => ({ ...prev, [field]: undefined }))
+      }
+    },
+    [errors],
+  )
+
+  const handleFocus = useCallback(
+    (field: string) => () => {
+      setFormState((prev) => ({ ...prev, activeInput: field }))
+    },
+    [],
+  )
+
+  const handleBlur = useCallback(() => {
+    setFormState((prev) => ({ ...prev, activeInput: null }))
+  }, [])
+
+  const togglePasswordVisibility = useCallback(() => {
+    setFormState((prev) => ({ ...prev, showPassword: !prev.showPassword }))
+  }, [])
+
+  const validateForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {}
+    const emailError = validators.email(formData.email)
+    if (emailError) newErrors.email = emailError
+    const passwordError = validators.password(formData.password)
+    if (passwordError) newErrors.password = passwordError
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }, [formData])
+
+  const handleLogin = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+
+      if (!validateForm()) {
+        setFormState((prev) => ({ ...prev, isLoading: false }))
+        return
+      }
+
+      setFormState((prev) => ({ ...prev, isLoading: true, loginSuccess: false }))
+      setErrors({})
+
+      try {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 1500)
+        })
+
+        setFormState((prev) => ({ ...prev, isLoading: false, loginSuccess: true }))
+
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            router.push("/dashboard")
+          }, 2500) // Increased delay to show the improved success animation
+        })
+      } catch (error) {
+        setErrors({
+          general: error instanceof Error ? error.message : "Error de conexión. Por favor, intente más tarde.",
+        })
+        setFormState((prev) => ({ ...prev, isLoading: false, loginSuccess: false }))
+      }
+    },
+    [formData, validateForm, router],
+  )
+
+  return (
+    <div
+      className="min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 overflow-hidden relative antialiased"
+      style={styles.containerStyles}
+    >
+      {/* Background orbs */}
+      <div className="absolute inset-0 overflow-hidden -z-10" aria-hidden="true">
+        {!prefersReducedMotion && <BackgroundOrbs prefersReducedMotion={prefersReducedMotion ?? false} />}
+      </div>
+
+      <motion.main
+        className="w-full max-w-md sm:px-4 lg:px-6 z-10 relative mx-auto"
+        variants={animationVariants.form}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.div
+          className="relative"
+          initial={{ filter: `drop-shadow(0 0 24px ${theme.colors.glow.primary})` }}
+          whileHover={{ filter: `drop-shadow(0 0 48px ${theme.colors.glow.primary})` }}
+          transition={{
+            filter: {
+              duration: 0.7,
+              ease: [0.19, 1, 0.22, 1],
+            },
+            when: "beforeChildren",
+          }}
+        >
+          {!prefersReducedMotion && (
+            <motion.div
+              className="absolute -inset-px rounded-xl p-[1px] overflow-hidden"
+              initial={{
+                background: `linear-gradient(135deg, ${theme.colors.brand.primary}30 0%, ${theme.colors.brand.accent}30 50%, ${theme.colors.brand.primary}30 100%)`,
+                opacity: 0.5,
+              }}
+              whileHover={{
+                opacity: 0.85,
+              }}
+              transition={{
+                opacity: {
+                  duration: 0.7,
+                  ease: [0.19, 1, 0.22, 1],
+                },
+              }}
+              style={{ willChange: "opacity" }}
+            />
+          )}
+
+          <div className="relative rounded-xl overflow-hidden m-[1px]" style={styles.cardStyles}>
+            <div className="relative z-10 p-6 sm:p-8">
+              <AnimatePresence mode="wait">
+                {formState.loginSuccess ? (
+                  <LoginSuccess prefersReducedMotion={prefersReducedMotion} userName={userName} />
+                ) : (
+                  <motion.div
+                    key="login-form"
+                    variants={animationVariants.fadeInOut}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                  >
+                    <div className="text-center mb-8">
+                      <motion.div
+                        className="inline-flex items-center justify-center p-3 rounded-full mb-4"
+                        whileHover={!prefersReducedMotion ? { scale: 1.1, rotate: 5 } : {}}
+                        transition={{ type: "spring", stiffness: 300, damping: 10 }}
+                        style={{
+                          background: `radial-gradient(circle, ${theme.colors.brand.primaryLight}1A 0%, transparent 70%)`,
+                          border: `1px solid ${theme.colors.brand.primary}30`,
+                        }}
+                      >
+                        <Shield className="w-8 h-8" style={{ color: theme.colors.brand.primary }} />
+                      </motion.div>
+
+                      <h1 className="text-2xl sm:text-3xl font-bold mb-1 text-balance" style={styles.headingGradient}>
+                        Plataforma Médica
+                      </h1>
+
+                      <p className="text-base mb-2" style={{ color: theme.colors.text.secondary }}>
+                        Clínica de Hernia y Vesícula
+                      </p>
+
+                      <motion.div
+                        className="inline-flex items-center space-x-1.5 text-xs px-2.5 py-1 rounded-full"
+                        style={{
+                          background: theme.colors.bg.success,
+                          border: `1px solid ${theme.colors.border.success}`,
+                          color: theme.colors.status.success,
+                        }}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: prefersReducedMotion ? 0 : 0.3, duration: 0.4 }}
+                      >
+                        <CheckCircle className="w-3 h-3" />
+                        <span>Conexión Segura</span>
+                      </motion.div>
+                    </div>
+
+                    <motion.form
+                      onSubmit={handleLogin}
+                      className="space-y-5"
+                      noValidate
+                      variants={animationVariants.staggerContainer}
+                      initial="hidden"
+                      animate="visible"
+                    >
+                      <motion.div variants={animationVariants.staggerItem}>
+                        <InputField
+                          id="email"
+                          type="email"
+                          label="Correo Electrónico"
+                          value={formData.email}
+                          onChange={handleInputChange("email")}
+                          onFocus={handleFocus("email")}
+                          onBlur={handleBlur}
+                          icon={AtSign}
+                          isActive={formState.activeInput === "email"}
+                          error={errors.email}
+                          disabled={formState.isLoading}
+                        />
+                      </motion.div>
+
+                      <motion.div variants={animationVariants.staggerItem}>
+                        <InputField
+                          id="password"
+                          label="Contraseña"
+                          value={formData.password}
+                          onChange={handleInputChange("password")}
+                          onFocus={handleFocus("password")}
+                          onBlur={handleBlur}
+                          icon={LockKeyhole}
+                          isActive={formState.activeInput === "password"}
+                          error={errors.password}
+                          disabled={formState.isLoading}
+                          showToggle
+                          onToggle={togglePasswordVisibility}
+                          showPassword={formState.showPassword}
+                        />
+                      </motion.div>
+
+                      <AnimatePresence>
+                        {errors.general && (
+                          <motion.div
+                            className="flex items-center space-x-2 text-sm p-3 rounded-lg"
+                            variants={animationVariants.fadeInOut}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            style={{
+                              backgroundColor: theme.colors.bg.error,
+                              border: `1px solid ${theme.colors.border.error}`,
+                              color: theme.colors.status.error,
+                            }}
+                            role="alert"
+                            aria-live="assertive"
+                          >
+                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <span>{errors.general}</span>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      <motion.div variants={animationVariants.staggerItem}>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <motion.label
+                            className="flex items-center cursor-pointer group"
+                            whileHover={!prefersReducedMotion ? { x: 2 } : {}}
+                          >
+                            <input
+                              id="remember-me"
+                              name="remember-me"
+                              type="checkbox"
+                              checked={formData.rememberMe}
+                              onChange={handleInputChange("rememberMe")}
+                              className="h-4 w-4 rounded transition-colors duration-200 focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-glass"
+                              style={{
+                                color: theme.colors.brand.primary,
+                                backgroundColor: formData.rememberMe
+                                  ? theme.colors.brand.primary
+                                  : theme.colors.bg.input,
+                                borderColor: formData.rememberMe
+                                  ? theme.colors.brand.primaryDark
+                                  : theme.colors.border.default,
+                              }}
+                            />
+                            <span
+                              className="ml-2 text-sm transition-colors duration-200 group-hover:text-white"
+                              style={{ color: theme.colors.text.secondary }}
+                            >
+                              Recordar sesión
+                            </span>
+                          </motion.label>
+
+                          <motion.a
+                            href="#"
+                            className="text-sm font-medium relative group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary rounded"
+                            whileHover={!prefersReducedMotion ? { color: theme.colors.brand.primaryLight } : {}}
+                            style={{ color: theme.colors.brand.primary }}
+                          >
+                            ¿Olvidó su contraseña?
+                            {!prefersReducedMotion && (
+                              <motion.span
+                                className="absolute bottom-0 left-0 h-px w-full"
+                                style={{ backgroundColor: theme.colors.brand.primaryLight }}
+                                initial={{ scaleX: 0 }}
+                                whileHover={{ scaleX: 1 }}
+                                transition={{ duration: 0.3, ease: "easeOut" }}
+                              />
+                            )}
+                          </motion.a>
+                        </div>
+                      </motion.div>
+
+                      <motion.button
+                        type="submit"
+                        disabled={formState.isLoading}
+                        className="w-full relative py-3.5 px-6 font-semibold text-white rounded-lg overflow-hidden transition-all duration-300 mt-6 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-glass focus-visible:ring-indigo-700"
+                        whileHover={
+                          !formState.isLoading && !prefersReducedMotion
+                            ? {
+                                boxShadow: `0 8px 25px rgba(42, 63, 95, 0.6)`,
+                                y: -2,
+                              }
+                            : {}
+                        }
+                        whileTap={
+                          !formState.isLoading && !prefersReducedMotion
+                            ? {
+                                boxShadow: `0 3px 10px rgba(42, 63, 95, 0.4)`,
+                                y: 1,
+                              }
+                            : {}
+                        }
+                        style={{
+                          ...styles.buttonGradient,
+                          borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+                          borderTop: "1px solid rgba(255, 255, 255, 0.25)",
+                        }}
+                        animate={
+                          !formState.isLoading && !prefersReducedMotion
+                            ? {
+                                backgroundPosition: ["0% 0%", "100% 0%"],
+                                boxShadow: [
+                                  `0 6px 15px rgba(42, 63, 95, 0.4), 0 0 0 1px rgba(58, 110, 165, 0.2)`,
+                                  `0 8px 20px rgba(42, 63, 95, 0.5), 0 0 0 1px rgba(58, 110, 165, 0.3)`,
+                                  `0 6px 15px rgba(42, 63, 95, 0.4), 0 0 0 1px rgba(58, 110, 165, 0.2)`,
+                                ],
+                              }
+                            : {}
+                        }
+                        transition={
+                          !formState.isLoading && !prefersReducedMotion
+                            ? {
+                                backgroundPosition: {
+                                  duration: 4,
+                                  ease: "easeInOut",
+                                  repeat: Number.POSITIVE_INFINITY,
+                                  repeatType: "reverse",
+                                },
+                                boxShadow: {
+                                  duration: 0.4,
+                                  ease: "easeOut",
+                                },
+                                y: {
+                                  type: "spring",
+                                  stiffness: 400,
+                                  damping: 15
+                                }
+                              }
+                            : {}
+                        }
+                      >
+                        <span className="relative flex items-center justify-center space-x-2 z-10">
+                          {formState.isLoading ? (
+                            <>
+                              <svg
+                                className="animate-spin h-5 w-5"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                              >
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                />
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                />
+                              </svg>
+                              <span>Autenticando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <LogIn className="h-5 w-5" />
+                              <span>Acceder al Sistema</span>
+                            </>
+                          )}
+                        </span>
+                      </motion.button>
+                    </motion.form>
+
+                    <div className="mt-8 text-center">
+                      <p className="text-xs" style={{ color: theme.colors.text.dim }}>
+                        {new Date().getFullYear()} Clínica de Hernia y Vesícula
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </motion.div>
       </motion.main>
     </div>
-  );
+  )
 }

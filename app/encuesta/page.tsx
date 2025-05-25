@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tablet, Smartphone, ArrowLeft } from "lucide-react"
-import { useAppContext } from "@/src/lib/context/app-context"
+import { useAppContext } from "@/lib/context/app-context"
 import MedicalSurveyAnalysis from "@/components/surveys/medical-survey-analysis"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"
 import { toast } from "sonner"
