@@ -1,272 +1,638 @@
-"use client"
+// lib/context/app-context-supabase.tsx
+"use client";
 
-import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
-import { additionalPatients as samplePatients } from "@/app/pacientes/sample-data"
-import { sampleDoctors, clinicMetrics } from "@/app/dashboard/mock-data"
-import { getPendingFollowUps } from "@/app/pacientes/utils"
-import type { PatientData, FollowUp, DoctorData, ClinicMetrics, AppointmentData } from "@/app/dashboard/data-model"
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { toast } from "sonner";
+import { format, isValid, parseISO } from "date-fns";
+import type { 
+  PatientData, 
+  AppointmentData, 
+  FollowUp, 
+  DoctorData, 
+  ClinicMetrics, 
+  PatientStatus, 
+  AppointmentStatus, 
+  DiagnosisType 
+} from "@/app/dashboard/data-model";
 
-// Definir tipos para el contexto
-type AppContextType = {
-  patients: PatientData[]
-  setPatients: React.Dispatch<React.SetStateAction<PatientData[]>>
-  doctors: DoctorData[]
-  metrics: ClinicMetrics
-  pendingFollowUps: FollowUp[]
-  pendingAppointments: AppointmentData[]
-  setPendingAppointments: React.Dispatch<React.SetStateAction<AppointmentData[]>>
-  todayAppointments: AppointmentData[]
-  setTodayAppointments: React.Dispatch<React.SetStateAction<AppointmentData[]>>
-  addPatient: (patient: Omit<PatientData, "id">) => number
-  updatePatient: (id: number, patient: Partial<PatientData>) => void
-  addFollowUp: (followUp: Omit<FollowUp, "id">) => void
-  updateFollowUp: (id: number, followUp: Partial<FollowUp>) => void
-  addAppointment: (appointment: Omit<AppointmentData, "id">) => void
-  updateAppointment: (id: number, appointment: Partial<AppointmentData>) => void
-  getPatientById: (id: number) => PatientData | undefined
+// Definición de la URL base de tu API
+const API_BASE_URL = "/api";
+
+// ID de usuario por defecto hasta implementar auth
+const DEFAULT_USER_ID = "5e4d29a2-5eec-49ee-ac0f-8d349d5660ed";
+
+// Funciones auxiliares robustas
+const isValidDate = (date: any): boolean => {
+  if (!date) return false;
+  const dateObj = date instanceof Date ? date : new Date(date);
+  return isValid(dateObj) && !isNaN(dateObj.getTime());
+};
+
+const safeFormatDate = (date: any, formatString: string, fallback: string = ""): string => {
+  try {
+    if (!date) return fallback;
+    const dateObj = typeof date === "string" ? parseISO(date) : date;
+    if (!isValidDate(dateObj)) return fallback;
+    return format(dateObj, formatString);
+  } catch (error) {
+    console.error("[safeFormatDate] Error:", error);
+    return fallback;
+  }
+};
+
+const normalizeId = (id: any): string => {
+  if (id === null || id === undefined || id === "") return "";
+  return String(id).trim();
+};
+
+// Función para realizar peticiones con reintentos
+const fetchWithRetry = async (url: string, options: RequestInit, retries = 3): Promise<Response> => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok || response.status < 500) {
+        return response;
+      }
+      if (i === retries - 1) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+    }
+  }
+  throw new Error("Failed after retries");
+};
+
+interface AppContextType {
+  patients: PatientData[];
+  appointments: AppointmentData[];
+  doctors: DoctorData[];
+  metrics: ClinicMetrics;
+  
+  isLoadingPatients: boolean;
+  isLoadingAppointments: boolean;
+  errorPatients: string | null;
+  errorAppointments: string | null;
+
+  fetchPatients: () => Promise<void>;
+  fetchAppointments: (filters?: Record<string, string>) => Promise<void>;
+
+  addPatient: (patientData: Omit<PatientData, "id" | "fechaRegistro" | "probabilidadCirugia" | "estado" | "timestampRegistro" | "ultimoContacto" | "proximoContacto" | "etiquetas" | "fechaCirugia" | "doctorAsignado" | "citas" | "seguimientos" | "encuesta" | "recomendacionesSistema" | "creado_por_id"> & { 
+    creado_por_id?: string, 
+    doctor_asignado_id?: string, 
+    estado_paciente?: PatientStatus, 
+    diagnostico_principal?: DiagnosisType, 
+    comentarios_registro?: string, 
+    origen_paciente?: string,
+    fecha_registro?: string 
+  }) => Promise<PatientData | number | null>;
+  
+  updatePatient: (patientId: string, patientUpdate: Partial<PatientData>) => Promise<PatientData | null>;
+  getPatientById: (id: string) => PatientData | undefined;
+
+  addAppointment: (appointmentData: Omit<AppointmentData, "id" | "paciente" | "telefono" | "doctor"> & { 
+    patient_id: string, 
+    doctor_id?: string,
+    fecha_hora_cita?: string 
+  }) => Promise<AppointmentData | null>;
+  
+  updateAppointment: (appointmentId: string, appointmentUpdate: Partial<AppointmentData>) => Promise<AppointmentData | null>;
 }
 
-const AppContext = createContext<AppContextType | undefined>(undefined)
+const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [patients, setPatients] = useState<PatientData[]>(samplePatients)
-  const [pendingFollowUps, setPendingFollowUps] = useState<FollowUp[]>(getPendingFollowUps())
-  const [pendingAppointments, setPendingAppointments] = useState<AppointmentData[]>([
-    {
-      id: 1,
-      patientId: 2,
-      paciente: "María González López",
-      telefono: "5551234567",
-      motivoConsulta: "Vesícula",
-      fecha: "2024-05-20",
-      hora: "10:00",
-      doctor: "Dr. Martínez",
-      estado: "pendiente",
-    },
-    {
-      id: 2,
-      patientId: undefined,
-      paciente: "Carlos Ramírez Soto",
-      telefono: "5559876543",
-      motivoConsulta: "Hernia Inguinal",
-      fecha: "2024-05-21",
-      hora: "12:30",
-      doctor: "Dr. Sánchez",
-      estado: "pendiente",
-    },
-  ])
-  const [todayAppointments, setTodayAppointments] = useState<AppointmentData[]>([])
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [patients, setPatients] = useState<PatientData[]>([]);
+  const [appointments, setAppointments] = useState<AppointmentData[]>([]);
+  const [doctors, setDoctors] = useState<DoctorData[]>([]);
+  const [metrics, setMetrics] = useState<ClinicMetrics>({} as ClinicMetrics);
 
-  // Actualizar seguimientos pendientes cuando cambian los pacientes
+  const [isLoadingPatients, setIsLoadingPatients] = useState(true);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
+  const [errorPatients, setErrorPatients] = useState<string | null>(null);
+  const [errorAppointments, setErrorAppointments] = useState<string | null>(null);
+
+  // --- Fetching Data ---
+  const fetchPatients = useCallback(async () => {
+    setIsLoadingPatients(true);
+    setErrorPatients(null);
+    try {
+      console.log("[fetchPatients] Iniciando carga...");
+      const response = await fetchWithRetry(`${API_BASE_URL}/patients`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      const data: PatientData[] = await response.json();
+      console.log("[fetchPatients] Pacientes cargados:", data.length);
+      
+      // Normalizar IDs y validar datos
+      const normalizedPatients = data.map(p => ({
+        ...p,
+        id: normalizeId(p.id),
+        telefono: p.telefono || "Sin teléfono",
+        estado: p.estado || p.estado_paciente || "PENDIENTE DE CONSULTA",
+      }));
+      
+      setPatients(normalizedPatients);
+      setErrorPatients(null);
+    } catch (err: any) {
+      console.error("[fetchPatients] Error:", err);
+      const errorMessage = err.message || "No se pudieron cargar los pacientes.";
+      setErrorPatients(errorMessage);
+      toast.error("Error al cargar pacientes", { 
+        description: errorMessage,
+        duration: 5000,
+      });
+    } finally {
+      setIsLoadingPatients(false);
+    }
+  }, []);
+
+  const fetchAppointments = useCallback(async (filters?: Record<string, string>) => {
+    setIsLoadingAppointments(true);
+    setErrorAppointments(null);
+    try {
+      const queryParams = filters ? new URLSearchParams(filters).toString() : "";
+      const url = `${API_BASE_URL}/appointments${queryParams ? `?${queryParams}` : ''}`;
+      console.log("[fetchAppointments] URL:", url);
+      
+      const response = await fetchWithRetry(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      const data: any[] = await response.json();
+      console.log("[fetchAppointments] Citas cargadas:", data.length);
+      
+      // Mapear y normalizar datos
+      const formattedAppointments = data.map(app => {
+        try {
+          // Validar y parsear fecha
+          let fechaConsulta: Date;
+          let horaConsulta: string;
+          
+          if (app.fecha_hora_cita) {
+            const fecha = parseISO(app.fecha_hora_cita);
+            if (isValidDate(fecha)) {
+              fechaConsulta = fecha;
+              horaConsulta = safeFormatDate(fecha, "HH:mm", "00:00");
+            } else {
+              console.warn("[fetchAppointments] Fecha inválida:", app.fecha_hora_cita);
+              fechaConsulta = new Date();
+              horaConsulta = "00:00";
+            }
+          } else {
+            fechaConsulta = new Date();
+            horaConsulta = "00:00";
+          }
+          
+          return {
+            id: normalizeId(app.id),
+            patientId: app.patient_id ? normalizeId(app.patient_id) : undefined,
+            paciente: app.patients ? `${app.patients.nombre} ${app.patients.apellidos}`.trim() : "Paciente desconocido",
+            telefono: app.patients?.telefono || "Sin teléfono",
+            doctor: app.doctor?.full_name || app.profiles?.full_name || "No asignado",
+            fechaConsulta,
+            horaConsulta,
+            motivoConsulta: app.motivo_cita || "Sin especificar",
+            estado: (app.estado_cita || "pendiente").toLowerCase() as AppointmentStatus,
+            es_primera_vez: app.es_primera_vez,
+            notas_cita_seguimiento: app.notas_cita_seguimiento,
+          } as AppointmentData;
+        } catch (error) {
+          console.error("[fetchAppointments] Error procesando cita:", error, app);
+          // Retornar cita con valores por defecto en caso de error
+          return {
+            id: normalizeId(app.id || `error-${Date.now()}`),
+            paciente: "Error al cargar",
+            telefono: "N/A",
+            fechaConsulta: new Date(),
+            horaConsulta: "00:00",
+            motivoConsulta: "Error",
+            estado: "pendiente" as AppointmentStatus,
+            doctor: "No asignado",
+          } as AppointmentData;
+        }
+      });
+      
+      setAppointments(formattedAppointments);
+      setErrorAppointments(null);
+    } catch (err: any) {
+      console.error("[fetchAppointments] Error:", err);
+      const errorMessage = err.message || "No se pudieron cargar las citas.";
+      setErrorAppointments(errorMessage);
+      toast.error("Error al cargar citas", { 
+        description: errorMessage,
+        duration: 5000,
+      });
+    } finally {
+      setIsLoadingAppointments(false);
+    }
+  }, []);
+
+  // Cargar datos iniciales
   useEffect(() => {
-    const updatedFollowUps: FollowUp[] = []
-    patients.forEach((patient) => {
-      if (patient.seguimientos) {
-        patient.seguimientos.forEach((followUp) => {
-          if (followUp.estado === "Programado") {
-            updatedFollowUps.push({
-              ...followUp,
-              patientId: patient.id,
-            })
-          }
-        })
+    Promise.all([
+      fetchPatients(),
+      fetchAppointments()
+    ]).catch(err => {
+      console.error("[AppProvider] Error en carga inicial:", err);
+    });
+  }, [fetchPatients, fetchAppointments]);
+
+  // --- Patient Management ---
+  const addPatient = useCallback(async (patientData: any): Promise<PatientData | number | null> => {
+    try {
+      console.log("[addPatient] Iniciando...");
+      
+      // Validar datos requeridos
+      if (!patientData.nombre || !patientData.apellidos || !patientData.telefono) {
+        throw new Error("Faltan datos requeridos del paciente");
       }
-    })
-    setPendingFollowUps(updatedFollowUps)
-  }, [patients])
-
-  // Asegurarnos de que addPatient devuelva el ID del paciente y maneje correctamente todos los campos
-  const addPatient = (patient: Omit<PatientData, "id">) => {
-    const newId = Math.max(...patients.map((p) => p.id), 0) + 1
-    const newPatient = {
-      id: newId,
-      ...patient,
-      // Asegurarnos de que estos campos siempre estén presentes
-      estado: patient.estado || "Pendiente de consulta",
-      probabilidadCirugia: patient.probabilidadCirugia || 0.5,
-      notaClinica: patient.notaClinica || "",
-      // La encuesta estará incompleta por defecto (undefined)
-      encuesta: undefined,
-      // Agregar timestamp de registro para poder ordenar por más reciente
-      timestampRegistro: Date.now()
-    }
-    // Colocar el nuevo paciente al PRINCIPIO del array para que aparezca primero
-    setPatients((prev) => [newPatient, ...prev])
-    return newId
-  }
-
-  // Mejorar la función updatePatient para manejar mejor las actualizaciones
-  const updatePatient = (id: number, patientUpdate: Partial<PatientData>) => {
-    setPatients((prev) =>
-      prev.map((patient) =>
-        patient.id === id
-          ? {
-              ...patient,
-              ...patientUpdate,
-              // Si se actualiza el estado, actualizar también la fecha de último contacto
-              ultimoContacto: patientUpdate.estado ? new Date().toISOString().split("T")[0] : patient.ultimoContacto,
-            }
-          : patient,
-      ),
-    )
-  }
-
-  // Función para añadir un nuevo seguimiento
-  const addFollowUp = (followUp: Omit<FollowUp, "id">) => {
-    const patientId = followUp.patientId
-    const patient = patients.find((p) => p.id === patientId)
-
-    if (patient) {
-      const newFollowUpId = patient.seguimientos ? Math.max(...patient.seguimientos.map((f) => f.id), 0) + 1 : 1
-
-      const newFollowUp = {
-        id: newFollowUpId,
-        ...followUp,
+      
+      // Asegurar que se use el ID de usuario por defecto si no se proporciona
+      const payload = {
+        ...patientData,
+        creado_por_id: patientData.creado_por_id || DEFAULT_USER_ID,
+        fecha_registro: patientData.fecha_registro || new Date().toISOString().split('T')[0],
+      };
+      
+      console.log("[addPatient] Enviando payload:", payload);
+      
+      const response = await fetchWithRetry(`${API_BASE_URL}/patients`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(errorData.message || `Error ${response.status}`);
       }
-
-      // Actualizar el paciente con el nuevo seguimiento
-      updatePatient(patientId, {
-        seguimientos: [...(patient.seguimientos || []), newFollowUp],
-        ultimoContacto: new Date().toISOString().split("T")[0],
-        proximoContacto: followUp.proximoSeguimiento,
-      })
-    }
-  }
-
-  // Función para actualizar un seguimiento existente
-  const updateFollowUp = (id: number, followUpUpdate: Partial<FollowUp>) => {
-    setPatients((prev) =>
-      prev.map((patient) => {
-        if (patient.seguimientos) {
-          const followUpIndex = patient.seguimientos.findIndex((f) => f.id === id)
-          if (followUpIndex >= 0) {
-            const updatedFollowUps = [...patient.seguimientos]
-            updatedFollowUps[followUpIndex] = {
-              ...updatedFollowUps[followUpIndex],
-              ...followUpUpdate,
-            }
-            return {
-              ...patient,
-              seguimientos: updatedFollowUps,
-              ultimoContacto:
-                followUpUpdate.estado === "Completado"
-                  ? new Date().toISOString().split("T")[0]
-                  : patient.ultimoContacto,
-            }
+      
+      // Manejar diferentes tipos de respuesta
+      const contentType = response.headers.get("content-type");
+      const responseText = await response.text();
+      console.log("[addPatient] Respuesta recibida:", responseText);
+      
+      let result: PatientData | number;
+      
+      if (contentType?.includes("application/json")) {
+        try {
+          result = JSON.parse(responseText);
+        } catch {
+          // Si falla el parse pero es un número
+          if (/^\d+$/.test(responseText.trim())) {
+            result = parseInt(responseText.trim(), 10);
+          } else {
+            throw new Error("Respuesta inválida del servidor");
           }
         }
-        return patient
-      }),
-    )
-  }
-
-  // Función para añadir una nueva cita
-  const addAppointment = (appointment: Omit<AppointmentData, "id">) => {
-    const newId = Math.max(...pendingAppointments.map((a) => a.id), 0) + 1
-    const newAppointment = {
-      id: newId,
-      ...appointment,
-    }
-    setPendingAppointments((prev) => [...prev, newAppointment])
-
-    // Si la cita es para hoy, añadirla también a las citas de hoy
-    const today = new Date()
-    if (appointment.fecha && typeof appointment.fecha === 'string') {
-      const appointmentDate = new Date(appointment.fecha); 
-      if (
-        appointmentDate.getUTCDate() === today.getUTCDate() && 
-        appointmentDate.getUTCMonth() === today.getUTCMonth() &&
-        appointmentDate.getUTCFullYear() === today.getUTCFullYear()
-      ) {
-        setTodayAppointments((prev) => [...prev, newAppointment])
+      } else if (/^\d+$/.test(responseText.trim())) {
+        result = parseInt(responseText.trim(), 10);
+      } else {
+        throw new Error("Formato de respuesta no reconocido");
       }
-    }
-
-    return newId
-  }
-
-  // Función para actualizar una cita existente
-  const updateAppointment = (id: number, appointmentUpdate: Partial<AppointmentData>) => {
-    // Actualizar en pendingAppointments
-    setPendingAppointments((prev) =>
-      prev.map((appointment) => (appointment.id === id ? { ...appointment, ...appointmentUpdate } : appointment)),
-    )
-
-    // Actualizar en todayAppointments si existe
-    setTodayAppointments((prev) => {
-      const appointmentIndex = prev.findIndex((a) => a.id === id)
-      if (appointmentIndex >= 0) {
-        const updated = [...prev]
-        updated[appointmentIndex] = { ...updated[appointmentIndex], ...appointmentUpdate }
-        return updated
+      
+      // Construir objeto completo si solo recibimos ID
+      if (typeof result === 'number') {
+        const newPatient: PatientData = {
+          id: normalizeId(result),
+          ...payload,
+          estado: payload.estado_paciente || "PENDIENTE DE CONSULTA",
+          probabilidadCirugia: 0,
+          timestampRegistro: new Date().toISOString(),
+          ultimoContacto: payload.fecha_registro,
+        } as PatientData;
+        
+        setPatients(prev => [newPatient, ...prev]);
+        toast.success("Paciente registrado con éxito");
+        return newPatient;
+      } else {
+        // Normalizar el objeto recibido
+        const normalizedPatient = {
+          ...result,
+          id: normalizeId(result.id),
+        } as PatientData;
+        
+        setPatients(prev => [normalizedPatient, ...prev]);
+        toast.success("Paciente registrado con éxito");
+        return normalizedPatient;
       }
-      return prev
-    })
+    } catch (err: any) {
+      console.error("[addPatient] Error:", err);
+      const errorMessage = err.message || "Error al añadir paciente";
+      toast.error("Error al registrar paciente", { 
+        description: errorMessage,
+        duration: 5000,
+      });
+      return null;
+    }
+  }, []);
 
-    // Si el estado cambia a "presente", actualizar el paciente si existe o crear uno nuevo
-    if (appointmentUpdate.estado === "presente") {
-      const appointment = pendingAppointments.find((a) => a.id === id)
-      if (appointment) {
-        if (appointment.patientId) {
-          // Si el paciente ya existe, actualizar su estado
-          updatePatient(appointment.patientId, {
-            estado: "Pendiente de consulta",
-            ultimoContacto: new Date().toISOString().split("T")[0],
-          })
+  const updatePatient = useCallback(async (patientId: string, patientUpdate: Partial<PatientData>): Promise<PatientData | null> => {
+    try {
+      console.log("[updatePatient] Actualizando paciente:", patientId);
+      
+      if (!patientId) {
+        throw new Error("ID de paciente requerido");
+      }
+      
+      // Limpiar datos que no deben enviarse
+      const { id, created_at, ...updateData } = patientUpdate as any;
+      
+      const response = await fetchWithRetry(`${API_BASE_URL}/patients/${patientId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(errorData.message || `Error ${response.status}`);
+      }
+      
+      // Procesar respuesta
+      const responseText = await response.text();
+      let updatedPatient: PatientData;
+      
+      if (/^\d+$/.test(responseText.trim())) {
+        // Si la respuesta es solo un ID, usar los datos actuales
+        const currentPatient = patients.find(p => normalizeId(p.id) === patientId);
+        if (!currentPatient) {
+          throw new Error("Paciente no encontrado en el estado");
+        }
+        
+        updatedPatient = {
+          ...currentPatient,
+          ...updateData,
+          id: patientId,
+        } as PatientData;
+      } else {
+        try {
+          updatedPatient = JSON.parse(responseText);
+          updatedPatient.id = normalizeId(updatedPatient.id);
+        } catch {
+          throw new Error("Respuesta inválida del servidor");
         }
       }
+      
+      setPatients(prev => prev.map(p => 
+        normalizeId(p.id) === patientId ? updatedPatient : p
+      ));
+      
+      toast.success("Paciente actualizado con éxito");
+      return updatedPatient;
+    } catch (err: any) {
+      console.error("[updatePatient] Error:", err);
+      const errorMessage = err.message || "Error al actualizar paciente";
+      toast.error("Error al actualizar", { 
+        description: errorMessage,
+        duration: 5000,
+      });
+      return null;
     }
+  }, [patients]);
 
-    // Si el estado cambia a "completada", actualizar el paciente si existe
-    if (appointmentUpdate.estado === "completada") {
-      const appointment = pendingAppointments.find((a) => a.id === id)
-      if (appointment && appointment.patientId) {
-        updatePatient(appointment.patientId, {
-          estado: "Seguimiento",
-          fechaConsulta: appointment.fecha,
-          ultimoContacto: new Date().toISOString().split("T")[0],
-        })
+  const getPatientById = useCallback((id: string): PatientData | undefined => {
+    if (!id) return undefined;
+    return patients.find(p => normalizeId(p.id) === normalizeId(id));
+  }, [patients]);
+
+  // --- Appointment Management ---
+  const addAppointment = useCallback(async (appointmentData: any): Promise<AppointmentData | null> => {
+    try {
+      console.log("[addAppointment] Iniciando...");
+      
+      // Validar datos requeridos
+      if (!appointmentData.patient_id || !appointmentData.motivo_cita) {
+        throw new Error("Faltan datos requeridos de la cita");
       }
+      
+      // Preparar payload
+      const payload = {
+        ...appointmentData,
+        patient_id: normalizeId(appointmentData.patient_id),
+        estado_cita: appointmentData.estado_cita || "PROGRAMADA",
+        es_primera_vez: appointmentData.es_primera_vez !== undefined ? appointmentData.es_primera_vez : true,
+      };
+      
+      // Asegurar formato correcto de fecha
+      if (!payload.fecha_hora_cita && appointmentData.fechaConsulta) {
+        const fecha = appointmentData.fechaConsulta;
+        const fechaObj = fecha instanceof Date ? fecha : parseISO(fecha);
+        if (isValidDate(fechaObj)) {
+          payload.fecha_hora_cita = fechaObj.toISOString();
+        } else {
+          throw new Error("Fecha de cita inválida");
+        }
+      }
+      
+      // Limpiar campos que no van a la BD
+      delete payload.fechaConsulta;
+      delete payload.horaConsulta;
+      
+      console.log("[addAppointment] Enviando payload:", payload);
+      
+      const response = await fetchWithRetry(`${API_BASE_URL}/appointments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(errorData.message || `Error ${response.status}`);
+      }
+      
+      // Procesar respuesta
+      const responseText = await response.text();
+      let newAppointmentData: any;
+      
+      if (/^\d+$/.test(responseText.trim())) {
+        // Si la respuesta es solo un ID
+        const appointmentId = parseInt(responseText.trim(), 10);
+        newAppointmentData = {
+          id: appointmentId,
+          ...payload,
+        };
+      } else {
+        try {
+          newAppointmentData = JSON.parse(responseText);
+        } catch {
+          throw new Error("Respuesta inválida del servidor");
+        }
+      }
+      
+      // Buscar datos del paciente para completar la información
+      const patient = patients.find(p => normalizeId(p.id) === normalizeId(payload.patient_id));
+      const fechaHoraCita = parseISO(newAppointmentData.fecha_hora_cita || payload.fecha_hora_cita);
+      
+      const newAppointment: AppointmentData = {
+        ...newAppointmentData,
+        id: normalizeId(newAppointmentData.id),
+        patientId: normalizeId(payload.patient_id),
+        paciente: patient ? `${patient.nombre} ${patient.apellidos}`.trim() : "Paciente desconocido",
+        telefono: patient?.telefono || "Sin teléfono",
+        doctor: "No asignado", // TODO: Buscar doctor si hay doctor_id
+        fechaConsulta: fechaHoraCita,
+        horaConsulta: safeFormatDate(fechaHoraCita, "HH:mm", "00:00"),
+        motivoConsulta: payload.motivo_cita,
+        estado: (payload.estado_cita || "PROGRAMADA").toLowerCase() as AppointmentStatus,
+      };
+      
+      setAppointments(prev => [newAppointment, ...prev].sort((a, b) => 
+        b.fechaConsulta.getTime() - a.fechaConsulta.getTime()
+      ));
+      
+      toast.success("Cita agendada con éxito");
+      return newAppointment;
+    } catch (err: any) {
+      console.error("[addAppointment] Error:", err);
+      const errorMessage = err.message || "Error al agendar cita";
+      toast.error("Error al agendar", { 
+        description: errorMessage,
+        duration: 5000,
+      });
+      return null;
     }
-  }
+  }, [patients]);
 
-  // Función para obtener un paciente por ID
-  const getPatientById = (id: number) => {
-    return patients.find((p) => p.id === id)
-  }
+  const updateAppointment = useCallback(async (appointmentId: string, appointmentUpdate: Partial<AppointmentData>): Promise<AppointmentData | null> => {
+    try {
+      console.log("[updateAppointment] Actualizando cita:", appointmentId);
+      
+      if (!appointmentId) {
+        throw new Error("ID de cita requerido");
+      }
+      
+      // Preparar payload
+      const payload: any = { ...appointmentUpdate };
+      
+      // Mapear campos del frontend a la BD
+      if (payload.estado) {
+        payload.estado_cita = payload.estado.toUpperCase();
+        delete payload.estado;
+      }
+      
+      if (payload.fechaConsulta) {
+        const fecha = payload.fechaConsulta;
+        const fechaObj = fecha instanceof Date ? fecha : parseISO(fecha);
+        if (isValidDate(fechaObj)) {
+          const hora = payload.horaConsulta || appointments.find(a => normalizeId(a.id) === appointmentId)?.horaConsulta || "00:00";
+          payload.fecha_hora_cita = `${safeFormatDate(fechaObj, "yyyy-MM-dd")}T${hora}:00`;
+        }
+        delete payload.fechaConsulta;
+        delete payload.horaConsulta;
+      }
+      
+      // Limpiar campos que no deben enviarse
+      delete payload.id;
+      delete payload.paciente;
+      delete payload.telefono;
+      delete payload.doctor;
+      
+      const response = await fetchWithRetry(`${API_BASE_URL}/appointments/${appointmentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(errorData.message || `Error ${response.status}`);
+      }
+      
+      // Procesar respuesta
+      const responseText = await response.text();
+      let updatedAppointmentData: any;
+      
+      if (/^\d+$/.test(responseText.trim())) {
+        // Si la respuesta es solo un ID, usar datos actuales
+        const currentAppointment = appointments.find(a => normalizeId(a.id) === appointmentId);
+        if (!currentAppointment) {
+          throw new Error("Cita no encontrada en el estado");
+        }
+        
+        updatedAppointmentData = {
+          ...currentAppointment,
+          ...payload,
+          id: appointmentId,
+        };
+      } else {
+        try {
+          updatedAppointmentData = JSON.parse(responseText);
+        } catch {
+          throw new Error("Respuesta inválida del servidor");
+        }
+      }
+      
+      // Completar información de la cita
+      const currentAppointment = appointments.find(a => normalizeId(a.id) === appointmentId);
+      const fechaHoraCita = updatedAppointmentData.fecha_hora_cita 
+        ? parseISO(updatedAppointmentData.fecha_hora_cita)
+        : currentAppointment?.fechaConsulta || new Date();
+      
+      const updatedAppointment: AppointmentData = {
+        ...currentAppointment,
+        ...updatedAppointmentData,
+        id: normalizeId(appointmentId),
+        fechaConsulta: fechaHoraCita,
+        horaConsulta: safeFormatDate(fechaHoraCita, "HH:mm", "00:00"),
+        estado: (updatedAppointmentData.estado_cita || payload.estado_cita || currentAppointment?.estado || "pendiente").toLowerCase() as AppointmentStatus,
+      };
+      
+      setAppointments(prev => prev.map(app => 
+        normalizeId(app.id) === appointmentId ? updatedAppointment : app
+      ));
+      
+      toast.success("Cita actualizada con éxito");
+      return updatedAppointment;
+    } catch (err: any) {
+      console.error("[updateAppointment] Error:", err);
+      const errorMessage = err.message || "Error al actualizar cita";
+      toast.error("Error al actualizar", { 
+        description: errorMessage,
+        duration: 5000,
+      });
+      return null;
+    }
+  }, [appointments]);
 
-  return (
-    <AppContext.Provider
-      value={{
-        patients,
-        setPatients,
-        doctors: sampleDoctors,
-        metrics: clinicMetrics,
-        pendingFollowUps,
-        pendingAppointments,
-        setPendingAppointments,
-        todayAppointments,
-        setTodayAppointments,
-        addPatient,
-        updatePatient,
-        addFollowUp,
-        updateFollowUp,
-        addAppointment,
-        updateAppointment,
-        getPatientById,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
-  )
+  const contextValue: AppContextType = {
+    patients,
+    appointments,
+    doctors,
+    metrics,
+    isLoadingPatients,
+    isLoadingAppointments,
+    errorPatients,
+    errorAppointments,
+    fetchPatients,
+    fetchAppointments,
+    addPatient,
+    updatePatient,
+    getPatientById,
+    addAppointment,
+    updateAppointment,
+  };
+
+  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
 }
 
-// Hook personalizado para usar el contexto
 export function useAppContext(): AppContextType {
-  const context = useContext(AppContext)
+  const context = useContext(AppContext);
   if (!context) {
-    throw new Error("useAppContext must be used within AppProvider")
+    throw new Error("useAppContext debe ser usado dentro de AppProvider");
   }
-  return context
+  return context;
 }

@@ -20,6 +20,7 @@ import {
   CalendarCheck,
   CalendarX,
   ChevronRight,
+  RefreshCcw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -33,7 +34,7 @@ import { generateSurveyId } from "@/lib/form-utils"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { format, isToday as dateIsToday, isBefore, isAfter, startOfDay, addDays } from "date-fns"
+import { format, isToday as dateIsToday, isBefore, isAfter, startOfDay, addDays, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import {
   AlertDialog,
@@ -53,13 +54,35 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "framer-motion"
-import type { DiagnosisType } from "@/app/dashboard/data-model"
+import type { DiagnosisType, AppointmentStatus as ModelAppointmentStatus } from "@/app/dashboard/data-model"
 import { useIsMobile } from "@/hooks/use-mobile"
+
+// Funciones de utilidad para manejo seguro de fechas
+const isValidDate = (date: any): boolean => {
+  return date instanceof Date && !isNaN(date.getTime());
+};
+
+const safeFormatDate = (date: any, formatString: string, options?: any, fallback: string = ""): string => {
+  try {
+    if (!date) return fallback;
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    if (!isValidDate(dateObj)) return fallback;
+    return format(dateObj, formatString, options);
+  } catch (error) {
+    console.error("[safeFormatDate] Error al formatear fecha:", error, "Fecha:", date);
+    return fallback;
+  }
+};
+
+// Función para normalizar IDs como strings
+const normalizeId = (id: any): string => {
+  if (id === null || id === undefined) return "";
+  return String(id);
+};
 
 // Types for the component
 export type AppointmentStatus = "pendiente" | "presente" | "completada" | "cancelada" | "reagendada" | "noAsistio"
@@ -75,7 +98,7 @@ export type SortField = "nombre" | "fecha" | "hora" | "motivo" | null
 export type SortDirection = "asc" | "desc"
 
 export interface Appointment {
-  id: number
+  id: string | number
   nombre: string
   apellidos: string
   telefono: string
@@ -83,11 +106,11 @@ export interface Appointment {
   horaConsulta: string
   motivoConsulta: string
   estado: AppointmentStatus
-  patientId?: number
+  patientId?: string | number
 }
 
 export interface Patient {
-  id: number
+  id: string | number
   nombre: string
   apellidos: string
   edad?: number
@@ -103,7 +126,7 @@ export interface Patient {
 
 export interface SurveyDialogState {
   isOpen: boolean
-  patientId: number
+  patientId: string | number
   patientName: string
   patientLastName: string
   patientPhone: string
@@ -114,7 +137,7 @@ export interface SurveyDialogState {
 export interface ConfirmDialogState {
   isOpen: boolean
   action: ConfirmAction
-  appointmentId: number | null
+  appointmentId: string | number | null
   appointmentData?: Appointment | null
 }
 
@@ -172,7 +195,7 @@ const RescheduleDatePicker: FC<{
               )}
             >
               <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
-              {date ? format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es }) : "Seleccionar fecha"}
+              {date ? safeFormatDate(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es }, "Fecha inválida") : "Seleccionar fecha"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
@@ -243,7 +266,7 @@ const RescheduleDatePicker: FC<{
           <p className="text-sm text-slate-600 dark:text-slate-400">
             La cita será reagendada para el{" "}
             <span className="font-medium text-slate-900 dark:text-slate-200">
-              {format(date, "EEEE, d 'de' MMMM", { locale: es })}
+              {safeFormatDate(date, "EEEE, d 'de' MMMM", { locale: es }, "Fecha inválida")}
             </span>{" "}
             a las <span className="font-medium text-slate-900 dark:text-slate-200">{time}</span>.
           </p>
@@ -328,14 +351,20 @@ AppointmentStatusBadge.displayName = "AppointmentStatusBadge"
 const AppointmentCard: FC<{
   appointment: Appointment
   isPast?: boolean
-  onAction: (action: ConfirmAction, id: number, appointment: Appointment) => void
+  onAction: (action: ConfirmAction, id: string | number, appointment: Appointment) => void
   onStartSurvey: (appointment: Appointment) => void
 }> = memo(({ appointment, isPast = false, onAction, onStartSurvey }) => {
   // Functions to format date
   const formatDate = useCallback((date: string | Date): string => {
     if (!date) return ""
-    const dateObj = typeof date === "string" ? new Date(date) : date
-    return format(dateObj, "EEEE, d 'de' MMMM", { locale: es })
+    try {
+      const dateObj = typeof date === "string" ? new Date(date) : date
+      if (!isValidDate(dateObj)) return "Fecha inválida"
+      return format(dateObj, "EEEE, d 'de' MMMM", { locale: es })
+    } catch (error) {
+      console.error("Error formateando fecha:", error, date)
+      return "Fecha inválida"
+    }
   }, [])
 
   const showNoShow = isPast && appointment.estado === "pendiente"
@@ -490,7 +519,7 @@ const AppointmentTable: FC<{
   appointments: Appointment[]
   isLoading: boolean
   showPastStatus?: boolean
-  onAction: (action: ConfirmAction, id: number, appointment: Appointment) => void
+  onAction: (action: ConfirmAction, id: string | number, appointment: Appointment) => void
   onStartSurvey: (appointment: Appointment) => void
   onSort: (field: SortField) => void
   sortConfig: { field: SortField; direction: SortDirection }
@@ -545,6 +574,19 @@ const AppointmentTable: FC<{
     )
   }
 
+  // Función segura para formatear fechas
+  const safeFormat = (date: any, formatString: string, options?: any): string => {
+    try {
+      if (!date) return "Fecha inválida";
+      const dateObj = typeof date === "string" ? new Date(date) : date;
+      if (!isValidDate(dateObj)) return "Fecha inválida";
+      return format(dateObj, formatString, options);
+    } catch (error) {
+      console.error("Error al formatear fecha en tabla:", error, date);
+      return "Fecha inválida";
+    }
+  };
+
   return (
     <div className="rounded-md border overflow-hidden shadow-sm">
       <table className="w-full">
@@ -560,11 +602,23 @@ const AppointmentTable: FC<{
         </thead>
         <tbody>
           {appointments.map((appointment) => {
+            // Diagnóstico de posibles datos problemáticos
+            console.log(`[AppointmentTable] Renderizando cita ID: ${appointment.id}, fecha: ${appointment.fechaConsulta}, tipo: ${typeof appointment.fechaConsulta}`);
+            
             const showNoShow =
               showPastStatus &&
               appointment.estado === "pendiente" &&
-              isBefore(new Date(appointment.fechaConsulta), startOfDay(new Date())) &&
-              !dateIsToday(new Date(appointment.fechaConsulta))
+              isBefore(
+                typeof appointment.fechaConsulta === 'string' 
+                  ? new Date(appointment.fechaConsulta) 
+                  : appointment.fechaConsulta, 
+                startOfDay(new Date())
+              ) &&
+              !dateIsToday(
+                typeof appointment.fechaConsulta === 'string' 
+                  ? new Date(appointment.fechaConsulta) 
+                  : appointment.fechaConsulta
+              );
 
             return (
               <motion.tr
@@ -597,7 +651,7 @@ const AppointmentTable: FC<{
                 <td className="p-3">
                   <div className="flex items-center gap-1.5">
                     <CalendarIcon className="h-3.5 w-3.5 text-primary" />
-                    {format(new Date(appointment.fechaConsulta), "dd/MM/yyyy")}
+                    {safeFormat(appointment.fechaConsulta, "dd/MM/yyyy")}
                   </div>
                 </td>
                 <td className="p-3">
@@ -705,7 +759,8 @@ const FilterControls: FC<{
   filters: FilterState
   onUpdateFilters: (newFilters: Partial<FilterState>) => void
   onClearFilters: () => void
-}> = memo(({ filters, onUpdateFilters, onClearFilters }) => {
+  onRefresh: () => void
+}> = memo(({ filters, onUpdateFilters, onClearFilters, onRefresh }) => {
   return (
     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
       <div className="relative w-full sm:w-[280px]">
@@ -733,7 +788,16 @@ const FilterControls: FC<{
             <SelectItem value="reagendada">Reagendada</SelectItem>
           </SelectContent>
         </Select>
-
+        
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="border-primary/20 text-primary hover:bg-primary/10"
+          onClick={onRefresh}
+        >
+          <RefreshCcw className="h-4 w-4 mr-1" />
+          <span className="hidden sm:inline">Actualizar</span>
+        </Button>
       </div>
     </div>
   )
@@ -776,23 +840,47 @@ export function PatientAdmission() {
 
   // Context and router
   const {
-    pendingAppointments,
-    todayAppointments,
+    appointments,
+    fetchAppointments: fetchAppointmentsFromContext,
     updateAppointment,
-    patients,
-    setPatients,
-    addPatient,
     updatePatient,
+    addPatient,
     addAppointment,
   } = useAppContext()
   const router = useRouter()
 
+  // Ensure fetchAppointments is always a function
+  const fetchAppointments = useCallback(async (filters?: Record<string, string>) => {
+    if (typeof fetchAppointmentsFromContext === 'function') {
+      return fetchAppointmentsFromContext(filters);
+    } else {
+      console.error('fetchAppointments is not available from context');
+      // Provide a fallback or show toast error
+      toast.error('Error al cargar citas', { description: 'El servicio de citas no está disponible' });
+      return Promise.resolve();
+    }
+  }, [fetchAppointmentsFromContext])
+
   // Improved initialization and data loading
   const [isInitialMount, setIsInitialMount] = useState(true)
 
+  // Efecto para cargar las citas al montar el componente
   useEffect(() => {
-    // Check if we have real data first
-    if (pendingAppointments && pendingAppointments.length > 0) {
+    console.log("[PatientAdmission] Componente montado, cargando citas...");
+    fetchAppointments().catch(err => {
+      console.error("[PatientAdmission] Error al cargar citas:", err);
+    });
+  }, [fetchAppointments]);
+
+  // Efecto para verificar si tenemos datos
+  useEffect(() => {
+    console.log("[PatientAdmission] Estado de citas actualizado:", { 
+      totalCitas: appointments?.length, 
+      tieneData: !!appointments && appointments.length > 0 
+    });
+    
+    // Check if we have real data
+    if (appointments && appointments.length > 0) {
       // Wait a moment to ensure child components are ready
       const timer = setTimeout(() => {
         setIsLoading(false)
@@ -807,19 +895,22 @@ export function PatientAdmission() {
       }, 600)
       return () => clearTimeout(timer)
     }
-  }, [pendingAppointments])
+  }, [appointments])
 
   // Utility functions for dates (memoized)
   const dateUtils = useMemo(
     () => ({
       isToday: (date: Date): boolean => {
+        if (!isValidDate(date)) return false;
         return dateIsToday(date)
       },
       isPast: (date: Date): boolean => {
+        if (!isValidDate(date)) return false;
         const today = startOfDay(new Date())
         return isBefore(date, today)
       },
       isFuture: (date: Date): boolean => {
+        if (!isValidDate(date)) return false;
         const today = startOfDay(new Date())
         return isAfter(date, today)
       },
@@ -827,37 +918,113 @@ export function PatientAdmission() {
     [],
   )
 
-  // Classification of appointments by date
+  // Classification of appointments by date - with better error handling
   const classifiedAppointments = useMemo(() => {
-    if (!pendingAppointments || !Array.isArray(pendingAppointments)) return { past: [], today: [], future: [] }
+    if (!appointments || !Array.isArray(appointments)) {
+      console.log("[PatientAdmission] No hay citas para clasificar");
+      return { past: [], today: [], future: [] };
+    }
 
+    console.log("[PatientAdmission] Clasificando citas, total:", appointments.length);
+    
     const past: Appointment[] = []
     const today: Appointment[] = []
     const future: Appointment[] = []
 
-    pendingAppointments.forEach((appointment: Appointment) => {
-      const appointmentDate = new Date(appointment.fechaConsulta)
+    appointments.forEach((appointment: any) => {
+      try {
+        // Normalizar el formato de la cita
+        const normalizedAppointment: Appointment = {
+          id: normalizeId(appointment.id),
+          nombre: appointment.paciente?.split(' ')[0] || appointment.nombre || "Sin nombre",
+          apellidos: appointment.paciente?.split(' ').slice(1).join(' ') || appointment.apellidos || "",
+          telefono: appointment.telefono || "Sin teléfono",
+          fechaConsulta: appointment.fechaConsulta || new Date(),
+          horaConsulta: appointment.horaConsulta || "00:00",
+          motivoConsulta: appointment.motivo_cita || appointment.motivoConsulta || "Sin motivo",
+          estado: (appointment.estado_cita || appointment.estado || "pendiente") as AppointmentStatus,
+          patientId: appointment.patientId ? normalizeId(appointment.patientId) : undefined
+        };
 
-      if (dateUtils.isToday(appointmentDate)) {
-        today.push(appointment)
-      } else if (dateUtils.isPast(appointmentDate)) {
-        past.push(appointment)
-      } else if (dateUtils.isFuture(appointmentDate)) {
-        future.push(appointment)
+        // Convertir fechaConsulta a objeto Date si es string
+        const appointmentDate = typeof normalizedAppointment.fechaConsulta === 'string' 
+          ? new Date(normalizedAppointment.fechaConsulta) 
+          : normalizedAppointment.fechaConsulta;
+
+        if (!isValidDate(appointmentDate)) {
+          console.warn("[PatientAdmission] Fecha inválida en cita:", appointment.id, appointment.fechaConsulta);
+          // Si la fecha es inválida, considerarla como futura para mostrarla
+          future.push(normalizedAppointment);
+          return;
+        }
+
+        // Clasificar según la fecha
+        if (dateUtils.isToday(appointmentDate)) {
+          console.log("[PatientAdmission] Cita para HOY:", normalizedAppointment.id, safeFormatDate(appointmentDate, "yyyy-MM-dd"));
+          today.push(normalizedAppointment);
+        } else if (dateUtils.isPast(appointmentDate)) {
+          console.log("[PatientAdmission] Cita PASADA:", normalizedAppointment.id, safeFormatDate(appointmentDate, "yyyy-MM-dd"));
+          past.push(normalizedAppointment);
+        } else if (dateUtils.isFuture(appointmentDate)) {
+          console.log("[PatientAdmission] Cita FUTURA:", normalizedAppointment.id, safeFormatDate(appointmentDate, "yyyy-MM-dd"));
+          future.push(normalizedAppointment);
+        }
+      } catch (error) {
+        console.error("[PatientAdmission] Error al clasificar cita:", error, appointment);
       }
-    })
+    });
 
-    // Sort appointments
-    past.sort((a, b) => new Date(b.fechaConsulta).getTime() - new Date(a.fechaConsulta).getTime())
-    future.sort((a, b) => new Date(a.fechaConsulta).getTime() - new Date(b.fechaConsulta).getTime())
-    today.sort((a, b) => a.horaConsulta.localeCompare(b.horaConsulta))
+    // Sort appointments safely
+    const safeSortDate = (a: any, b: any) => {
+      try {
+        const dateA = new Date(a.fechaConsulta);
+        const dateB = new Date(b.fechaConsulta);
+        if (isValidDate(dateA) && isValidDate(dateB)) {
+          return dateB.getTime() - dateA.getTime();
+        }
+        return 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    const safeSortAscDate = (a: any, b: any) => {
+      try {
+        const dateA = new Date(a.fechaConsulta);
+        const dateB = new Date(b.fechaConsulta);
+        if (isValidDate(dateA) && isValidDate(dateB)) {
+          return dateA.getTime() - dateB.getTime();
+        }
+        return 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    const safeSortHora = (a: any, b: any) => {
+      try {
+        return a.horaConsulta.localeCompare(b.horaConsulta);
+      } catch {
+        return 0;
+      }
+    };
+
+    past.sort(safeSortDate);
+    future.sort(safeSortAscDate);
+    today.sort(safeSortHora);
+
+    console.log("[PatientAdmission] Citas clasificadas:", {
+      hoy: today.length,
+      pasadas: past.length,
+      futuras: future.length
+    });
 
     return {
       past,
       today,
       future,
     }
-  }, [pendingAppointments, dateUtils])
+  }, [appointments, dateUtils])
 
   // Function to filter appointments (memoized)
   const getFilteredAppointments = useCallback(
@@ -870,15 +1037,20 @@ export function PatientAdmission() {
 
       // Apply filters
       const filtered = appointments.filter((appointment) => {
-        const matchesSearch =
-          searchTerm === "" ||
-          `${appointment.nombre} ${appointment.apellidos}`.toLowerCase().includes(searchTermLower) ||
-          appointment.motivoConsulta.toLowerCase().includes(searchTermLower) ||
-          appointment.telefono.includes(searchTerm)
-
-        const matchesStatus = statusFilter === "all" || appointment.estado === statusFilter
-
-        return matchesSearch && matchesStatus
+        try {
+          const matchesSearch =
+            searchTerm === "" ||
+            `${appointment.nombre} ${appointment.apellidos}`.toLowerCase().includes(searchTermLower) ||
+            (appointment.motivoConsulta && appointment.motivoConsulta.toLowerCase().includes(searchTermLower)) ||
+            (appointment.telefono && appointment.telefono.includes(searchTerm))
+  
+          const matchesStatus = statusFilter === "all" || appointment.estado === statusFilter
+  
+          return matchesSearch && matchesStatus
+        } catch (error) {
+          console.error("[PatientAdmission] Error al filtrar cita:", error, appointment);
+          return false;
+        }
       })
 
       // Apply sorting if a field is selected
@@ -886,19 +1058,28 @@ export function PatientAdmission() {
         filtered.sort((a, b) => {
           let comparison = 0
 
-          switch (sortField) {
-            case "nombre":
-              comparison = `${a.nombre} ${a.apellidos}`.localeCompare(`${b.nombre} ${b.apellidos}`)
-              break
-            case "fecha":
-              comparison = new Date(a.fechaConsulta).getTime() - new Date(b.fechaConsulta).getTime()
-              break
-            case "hora":
-              comparison = a.horaConsulta.localeCompare(b.horaConsulta)
-              break
-            case "motivo":
-              comparison = a.motivoConsulta.localeCompare(b.motivoConsulta)
-              break
+          try {
+            switch (sortField) {
+              case "nombre":
+                comparison = `${a.nombre || ""} ${a.apellidos || ""}`.localeCompare(`${b.nombre || ""} ${b.apellidos || ""}`)
+                break
+              case "fecha":
+                const dateA = new Date(a.fechaConsulta);
+                const dateB = new Date(b.fechaConsulta);
+                comparison = isValidDate(dateA) && isValidDate(dateB) 
+                  ? dateA.getTime() - dateB.getTime()
+                  : 0;
+                break
+              case "hora":
+                comparison = (a.horaConsulta || "").localeCompare(b.horaConsulta || "")
+                break
+              case "motivo":
+                comparison = (a.motivoConsulta || "").localeCompare(b.motivoConsulta || "")
+                break
+            }
+          } catch (error) {
+            console.error("[PatientAdmission] Error al ordenar citas:", error);
+            comparison = 0;
           }
 
           return sortDirection === "asc" ? comparison : -comparison
@@ -935,6 +1116,24 @@ export function PatientAdmission() {
     })
   }, [])
 
+  // Función para actualizar manualmente los datos
+  const handleRefresh = useCallback(() => {
+    console.log("[PatientAdmission] Actualizando datos manualmente");
+    setIsLoading(true);
+    fetchAppointments()
+      .then(() => {
+        console.log("[PatientAdmission] Datos actualizados con éxito");
+        toast.success("Datos actualizados correctamente");
+      })
+      .catch(err => {
+        console.error("[PatientAdmission] Error al actualizar datos:", err);
+        toast.error("Error al actualizar datos");
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [fetchAppointments]);
+
   const handleSort = useCallback((field: SortField) => {
     setFilterState((prev) => {
       // If we click on the same field, toggle the direction
@@ -955,146 +1154,242 @@ export function PatientAdmission() {
 
   // Functions to handle actions on appointments
   const handleCheckIn = useCallback(
-    (id: number, appointment: Appointment) => {
-      updateAppointment(id, { estado: "presente" })
-
-      // Update or create patient
-      if (appointment.patientId) {
-        updatePatient(appointment.patientId, {
-          estado: "Pendiente de consulta",
-          ultimoContacto: new Date().toISOString().split("T")[0],
+    (id: string | number, appointment: Appointment) => {
+      console.log("[PatientAdmission] Registrando llegada de paciente:", id);
+      
+      // Convertir ID a string si es necesario
+      const appointmentId = normalizeId(id);
+      
+      updateAppointment(appointmentId, { estado: "presente" as ModelAppointmentStatus })
+        .then(result => {
+          console.log("[PatientAdmission] Resultado de updateAppointment:", result);
+          
+          // Update or create patient
+          if (appointment.patientId) {
+            const patientId = normalizeId(appointment.patientId);
+            console.log("[PatientAdmission] Actualizando paciente existente:", patientId);
+            
+            return updatePatient(patientId, {
+              estado: "Pendiente de consulta",
+              ultimoContacto: new Date().toISOString().split("T")[0],
+            });
+          } else {
+            console.log("[PatientAdmission] Creando nuevo paciente para:", appointment.nombre);
+            
+            return addPatient({
+              nombre: appointment.nombre,
+              apellidos: appointment.apellidos,
+              edad: 0,
+              fechaConsulta:
+                typeof appointment.fechaConsulta === "string"
+                  ? appointment.fechaConsulta
+                  : safeFormatDate(appointment.fechaConsulta, "yyyy-MM-dd"),
+              fecha_registro: new Date().toISOString().split("T")[0],
+              diagnostico_principal: appointment.motivoConsulta as DiagnosisType,
+              estado_paciente: "PENDIENTE DE CONSULTA",
+              telefono: appointment.telefono,
+            });
+          }
         })
-
-        toast.success(`${appointment.nombre} registrado como presente`, {
-          description: "El paciente ha sido movido a la lista de consulta",
-          icon: <CheckCircle className="h-4 w-4 text-primary" />,
+        .then(patientResult => {
+          console.log("[PatientAdmission] Resultado de operación de paciente:", patientResult);
+          
+          if (patientResult && !appointment.patientId) {
+            // Si se creó un nuevo paciente, actualizar la cita con el ID del paciente
+            const newPatientId = typeof patientResult === 'object' ? normalizeId(patientResult.id) : normalizeId(patientResult);
+            console.log("[PatientAdmission] Vinculando cita con nuevo paciente:", newPatientId);
+            
+            return updateAppointment(appointmentId, { patientId: newPatientId });
+          }
         })
-      } else {
-        const newPatientId = addPatient({
-          nombre: appointment.nombre,
-          apellidos: appointment.apellidos,
-          edad: 0,
-          fechaConsulta:
-            typeof appointment.fechaConsulta === "string"
-              ? appointment.fechaConsulta
-              : appointment.fechaConsulta.toISOString().split("T")[0],
-          fechaRegistro: new Date().toISOString().split("T")[0],
-          diagnostico: appointment.motivoConsulta as DiagnosisType,
-          estado: "Pendiente de consulta",
-          probabilidadCirugia: 0.5,
-          ultimoContacto: new Date().toISOString().split("T")[0],
-          telefono: appointment.telefono,
+        .then(() => {
+          toast.success(`${appointment.nombre} registrado como presente`, {
+            description: "El paciente ha sido movido a la lista de consulta",
+            icon: <CheckCircle className="h-4 w-4 text-primary" />,
+          });
+          
+          // Refrescar datos
+          return fetchAppointments();
         })
-
-        updateAppointment(id, { patientId: newPatientId })
-
-        toast.success(`Nuevo paciente registrado: ${appointment.nombre}`, {
-          description: "Se ha creado una ficha de paciente",
-          icon: <UserPlus className="h-4 w-4 text-primary" />,
+        .catch(error => {
+          console.error("[PatientAdmission] Error en flujo de check-in:", error);
+          toast.error("Error al registrar llegada del paciente");
         })
-      }
-
-      setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null })
+        .finally(() => {
+          setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null });
+        });
     },
-    [updateAppointment, updatePatient, addPatient],
+    [updateAppointment, updatePatient, addPatient, fetchAppointments],
   )
 
   const handleCancel = useCallback(
-    (id: number, appointment: Appointment) => {
-      updateAppointment(id, { estado: "cancelada" })
-
-      toast.info(`Cita cancelada: ${appointment.nombre}`, {
-        description: format(new Date(appointment.fechaConsulta), "dd/MM/yyyy") + " - " + appointment.horaConsulta,
-        icon: <XCircle className="h-4 w-4 text-rose-500" />,
-      })
-
-      setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null })
+    (id: string | number, appointment: Appointment) => {
+      const appointmentId = normalizeId(id);
+      console.log("[PatientAdmission] Cancelando cita:", appointmentId);
+      
+      updateAppointment(appointmentId, { estado: "cancelada" as ModelAppointmentStatus })
+        .then(() => {
+          toast.info(`Cita cancelada: ${appointment.nombre}`, {
+            description: safeFormatDate(appointment.fechaConsulta, "dd/MM/yyyy") + " - " + appointment.horaConsulta,
+            icon: <XCircle className="h-4 w-4 text-rose-500" />,
+          });
+          
+          // Refrescar datos
+          return fetchAppointments();
+        })
+        .catch(error => {
+          console.error("[PatientAdmission] Error al cancelar cita:", error);
+          toast.error("Error al cancelar la cita");
+        })
+        .finally(() => {
+          setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null });
+        });
     },
-    [updateAppointment],
+    [updateAppointment, fetchAppointments],
   )
 
   const handleNoShow = useCallback(
-    (id: number, appointment: Appointment) => {
-      updateAppointment(id, { estado: "noAsistio" })
-
-      if (appointment.patientId) {
-        updatePatient(appointment.patientId, {
-          estado: "No Asistió",
-          ultimoContacto: new Date().toISOString().split("T")[0],
+    (id: string | number, appointment: Appointment) => {
+      const appointmentId = normalizeId(id);
+      console.log("[PatientAdmission] Marcando no-show para cita:", appointmentId);
+      
+      updateAppointment(appointmentId, { estado: "noAsistio" as ModelAppointmentStatus })
+        .then(() => {
+          if (appointment.patientId) {
+            const patientId = normalizeId(appointment.patientId);
+            console.log("[PatientAdmission] Actualizando estado de paciente (no asistió):", patientId);
+            
+            return updatePatient(patientId, {
+              estado: "No Asistió",
+              ultimoContacto: new Date().toISOString().split("T")[0],
+            });
+          }
         })
-      }
-
-      toast.info(`Paciente no asistió: ${appointment.nombre}`, {
-        description: format(new Date(appointment.fechaConsulta), "dd/MM/yyyy") + " - " + appointment.horaConsulta,
-        icon: <AlertCircle className="h-4 w-4 text-amber-500" />,
-      })
-
-      setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null })
+        .then(() => {
+          toast.info(`Paciente no asistió: ${appointment.nombre}`, {
+            description: safeFormatDate(appointment.fechaConsulta, "dd/MM/yyyy") + " - " + appointment.horaConsulta,
+            icon: <AlertCircle className="h-4 w-4 text-amber-500" />,
+          });
+          
+          // Refrescar datos
+          return fetchAppointments();
+        })
+        .catch(error => {
+          console.error("[PatientAdmission] Error al marcar no-show:", error);
+          toast.error("Error al registrar no asistencia");
+        })
+        .finally(() => {
+          setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null });
+        });
     },
-    [updateAppointment, updatePatient],
+    [updateAppointment, updatePatient, fetchAppointments],
   )
 
   const handleReschedule = useCallback(
-    (id: number, appointment: Appointment, newDate: Date, newTime: string) => {
+    (id: string | number, appointment: Appointment, newDate: Date, newTime: string) => {
+      if (!isValidDate(newDate)) {
+        console.error("[PatientAdmission] Fecha de reagendamiento inválida:", newDate);
+        toast.error("La fecha seleccionada es inválida");
+        return;
+      }
+      
+      const appointmentId = normalizeId(id);
+      console.log("[PatientAdmission] Reagendando cita:", appointmentId, "para:", safeFormatDate(newDate, "yyyy-MM-dd"), newTime);
+      
       // Keep reference to original appointment
-      const originalDate = new Date(appointment.fechaConsulta)
+      const originalDate = typeof appointment.fechaConsulta === 'string' 
+        ? new Date(appointment.fechaConsulta) 
+        : appointment.fechaConsulta;
 
       // Update current appointment as rescheduled
-      updateAppointment(id, { estado: "reagendada" })
-
-      // Create a new appointment with the same data but new date/time
-      const newAppointmentId = addAppointment({
-        ...appointment,
-        id: Math.floor(Math.random() * 10000) + 1000, // Generate new ID
-        fechaConsulta: newDate,
-        horaConsulta: newTime,
-        estado: "pendiente",
-      })
-
-      toast.success(`Cita reagendada: ${appointment.nombre}`, {
-        description: `De: ${format(originalDate, "dd/MM/yyyy")} ${appointment.horaConsulta} a: ${format(newDate, "dd/MM/yyyy")} ${newTime}`,
-        icon: <CalendarIcon className="h-4 w-4 text-primary" />,
-      })
-
-      setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null })
-      setRescheduleDate(null)
-      setRescheduleTime(null)
-
-      // Switch to future appointments tab
-      setActiveTab("future")
+      updateAppointment(appointmentId, { estado: "reagendada" as ModelAppointmentStatus })
+        .then(() => {
+          console.log("[PatientAdmission] Cita marcada como reagendada, creando nueva cita");
+          
+          // Create a new appointment with the same data but new date/time
+          // Normalizar datos para crear la nueva cita
+          return addAppointment({
+            patient_id: normalizeId(appointment.patientId || ""),
+            fechaConsulta: newDate,
+            motivo_cita: appointment.motivoConsulta,
+            estado_cita: "pendiente" as ModelAppointmentStatus,
+            es_primera_vez: false,
+            notas_cita_seguimiento: `Reagendada desde cita del ${safeFormatDate(originalDate, "dd/MM/yyyy")}`
+          });
+        })
+        .then(newAppointment => {
+          console.log("[PatientAdmission] Nueva cita creada:", newAppointment);
+          
+          toast.success(`Cita reagendada: ${appointment.nombre}`, {
+            description: `De: ${safeFormatDate(originalDate, "dd/MM/yyyy")} ${appointment.horaConsulta} a: ${safeFormatDate(newDate, "dd/MM/yyyy")} ${newTime}`,
+            icon: <CalendarIcon className="h-4 w-4 text-primary" />,
+          });
+          
+          // Refrescar datos
+          return fetchAppointments();
+        })
+        .then(() => {
+          // Switch to future appointments tab
+          setActiveTab("future");
+        })
+        .catch(error => {
+          console.error("[PatientAdmission] Error al reagendar cita:", error);
+          toast.error("Error al reagendar la cita");
+        })
+        .finally(() => {
+          setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null });
+          setRescheduleDate(null);
+          setRescheduleTime(null);
+        });
     },
-    [updateAppointment, addAppointment],
+    [updateAppointment, addAppointment, fetchAppointments],
   )
 
   const handleComplete = useCallback(
-    (id: number, appointment: Appointment) => {
-      updateAppointment(id, { estado: "completada" })
-
-      if (appointment.patientId) {
-        updatePatient(appointment.patientId, {
-          estado: "Seguimiento",
-          fechaConsulta:
-            typeof appointment.fechaConsulta === "string"
-              ? appointment.fechaConsulta
-              : appointment.fechaConsulta.toISOString().split("T")[0],
-          ultimoContacto: new Date().toISOString().split("T")[0],
+    (id: string | number, appointment: Appointment) => {
+      const appointmentId = normalizeId(id);
+      console.log("[PatientAdmission] Completando cita:", appointmentId);
+      
+      updateAppointment(appointmentId, { estado: "completada" as ModelAppointmentStatus })
+        .then(() => {
+          if (appointment.patientId) {
+            const patientId = normalizeId(appointment.patientId);
+            console.log("[PatientAdmission] Actualizando estado de paciente (completado):", patientId);
+            
+            return updatePatient(patientId, {
+              estado: "Seguimiento",
+              fechaConsulta:
+                typeof appointment.fechaConsulta === "string"
+                  ? appointment.fechaConsulta
+                  : safeFormatDate(appointment.fechaConsulta, "yyyy-MM-dd"),
+              ultimoContacto: new Date().toISOString().split("T")[0],
+            });
+          }
         })
-      }
-
-      toast.success(`Consulta completada: ${appointment.nombre}`, {
-        description: "El paciente ha pasado a estado de seguimiento",
-        icon: <ClipboardCheck className="h-4 w-4 text-sky-500" />,
-      })
-
-      setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null })
+        .then(() => {
+          toast.success(`Consulta completada: ${appointment.nombre}`, {
+            description: "El paciente ha pasado a estado de seguimiento",
+            icon: <ClipboardCheck className="h-4 w-4 text-sky-500" />,
+          });
+          
+          // Refrescar datos
+          return fetchAppointments();
+        })
+        .catch(error => {
+          console.error("[PatientAdmission] Error al completar cita:", error);
+          toast.error("Error al completar la consulta");
+        })
+        .finally(() => {
+          setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null });
+        });
     },
-    [updateAppointment, updatePatient],
+    [updateAppointment, updatePatient, fetchAppointments],
   )
 
   // Functions for dialogs
   const handleStartSurvey = useCallback((appointment: Appointment) => {
     const surveyId = generateSurveyId()
-    const surveyLink = `${window.location.origin}/survey/${surveyId}?patientId=${appointment.patientId || 0}`
+    const surveyLink = `${window.location.origin}/survey/${surveyId}?patientId=${normalizeId(appointment.patientId || 0)}`
 
     setSurveyDialogState({
       isOpen: true,
@@ -1121,25 +1416,50 @@ export function PatientAdmission() {
     setSurveyDialogState((prev) => ({ ...prev, isOpen: false }))
   }, [])
 
-  const handleNewPatientSuccess = useCallback(() => {
-    setActiveTab("future")
-    toast.success("Paciente añadido correctamente", {
-      description: "El paciente ha sido agendado para una cita futura",
-    })
-  }, [])
+  const handleNewPatientSuccess = useCallback((newPatient: any, newAppointment: any) => {
+    console.log("[PatientAdmission] Nuevo paciente registrado:", newPatient?.id, "Cita:", newAppointment?.id);
+    
+    // Refrescar datos automáticamente
+    fetchAppointments().then(() => {
+      console.log("[PatientAdmission] Datos actualizados después de añadir paciente");
+      setActiveTab("future");
+      toast.success("Paciente añadido correctamente", {
+        description: "El paciente ha sido agendado para una cita futura",
+      });
+    }).catch(error => {
+      console.error("[PatientAdmission] Error al refrescar datos:", error);
+    });
+  }, [fetchAppointments])
 
   // Open confirmation dialog
-  const openConfirmDialog = useCallback((action: ConfirmAction, id: number, appointment: Appointment) => {
+  const openConfirmDialog = useCallback((action: ConfirmAction, id: string | number, appointment: Appointment) => {
+    console.log("[PatientAdmission] Abriendo diálogo de confirmación:", action, "para ID:", id);
+    
     // If rescheduling, set a default date (7 days later)
     if (action === "reschedule") {
-      const currentDate = new Date(appointment.fechaConsulta)
-      // If the appointment is in the past, use current date + 7 days, otherwise use current date + 1 day
-      const defaultDate = isBefore(currentDate, startOfDay(new Date()))
-        ? addDays(new Date(), 7)
-        : addDays(currentDate, 1)
-
-      setRescheduleDate(defaultDate)
-      setRescheduleTime(appointment.horaConsulta)
+      try {
+        const currentDate = typeof appointment.fechaConsulta === 'string' 
+          ? new Date(appointment.fechaConsulta) 
+          : appointment.fechaConsulta;
+          
+        if (!isValidDate(currentDate)) {
+          console.warn("[PatientAdmission] Fecha inválida para reagendamiento:", appointment.fechaConsulta);
+          setRescheduleDate(addDays(new Date(), 7));
+        } else {
+          // If the appointment is in the past, use current date + 7 days, otherwise use current date + 1 day
+          const defaultDate = isBefore(currentDate, startOfDay(new Date()))
+            ? addDays(new Date(), 7)
+            : addDays(currentDate, 1);
+  
+          setRescheduleDate(defaultDate);
+        }
+        
+        setRescheduleTime(appointment.horaConsulta);
+      } catch (error) {
+        console.error("[PatientAdmission] Error al configurar fecha de reagendamiento:", error);
+        setRescheduleDate(addDays(new Date(), 7));
+        setRescheduleTime("10:00");
+      }
     }
 
     setConfirmDialog({
@@ -1152,7 +1472,12 @@ export function PatientAdmission() {
 
   // Execute confirmed action
   const handleConfirmAction = useCallback(() => {
-    if (!confirmDialog.action || confirmDialog.appointmentId === null || !confirmDialog.appointmentData) return
+    if (!confirmDialog.action || confirmDialog.appointmentId === null || !confirmDialog.appointmentData) {
+      console.warn("[PatientAdmission] Intento de confirmar acción sin datos completos:", confirmDialog);
+      return;
+    }
+
+    console.log("[PatientAdmission] Ejecutando acción confirmada:", confirmDialog.action);
 
     switch (confirmDialog.action) {
       case "checkIn":
@@ -1317,6 +1642,7 @@ export function PatientAdmission() {
                 filters={filterState}
                 onUpdateFilters={handleUpdateFilters}
                 onClearFilters={handleClearFilters}
+                onRefresh={handleRefresh}
               />
             </div>
 
@@ -1400,7 +1726,7 @@ export function PatientAdmission() {
                       <div className="flex items-center gap-2">
                         <CalendarIcon className="h-4 w-4 text-primary" />
                         <span>
-                          {format(new Date(confirmDialog.appointmentData.fechaConsulta), "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
+                          {safeFormatDate(confirmDialog.appointmentData.fechaConsulta, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es }, "Fecha inválida")}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
