@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation" // Import useRouter hook for navigation
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -579,6 +580,7 @@ export default function PatientSurveyForm({
   onSubmitSuccess,
   initialData,
 }: PatientSurveyFormProps) {
+  const router = useRouter() // Initialize the router
   const { updatePatient } = useAppContext()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -832,9 +834,8 @@ export default function PatientSurveyForm({
       if (onSubmitSuccess) onSubmitSuccess(data)
       if (onComplete) onComplete(data) // Call onComplete if provided
 
-      // Potentially navigate to a success page or show a success message
-      // For now, we are already in the review step which becomes the "completed" view
-      // Or, if not standalone, the parent component might handle navigation.
+      // Redirect to the gracias page after successful submission
+      router.push('/survey/gracias')
 
     } catch (error) {
       console.error("Error al enviar la encuesta:", error)

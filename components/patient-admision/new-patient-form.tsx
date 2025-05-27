@@ -1,4 +1,3 @@
-// components/patient-admision/new-patient-form-supabase.tsx
 "use client";
 
 import React, { useState, useMemo, FC, useEffect } from "react";
@@ -9,7 +8,7 @@ import DatePicker, { registerLocale } from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { format, addDays, isValid } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, CalendarIcon as DatePickerCalendarIcon } from "lucide-react";
+import { Plus, CalendarIcon } from 'lucide-react';
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -20,27 +19,23 @@ import {
   Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription,
 } from "@/components/ui/form";
 import {
-  Select as UiSelect,
-  SelectTrigger as UiSelectTrigger,
-  SelectValue as UiSelectValue,
-  SelectContent as UiSelectContent,
-  SelectItem as UiSelectItem,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select";
-import { Input as UiInput } from "@/components/ui/input";
-import { Textarea as UiTextarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 import { useAppContext } from "@/lib/context/app-context";
 import type { PatientData, AppointmentData, PatientStatus, AppointmentStatus, TimeString, DiagnosisType } from "@/app/dashboard/data-model";
-import { useIsMobile as useIsMobileHook } from "@/hooks/use-breakpoint";
+import { useIsMobile } from "@/hooks/use-breakpoint";
 import { cn } from "@/lib/utils";
 
 registerLocale("es", es);
 
-// ID de usuario por defecto hasta implementar auth
+// Default user ID until auth is implemented
 const DEFAULT_USER_ID = "5e4d29a2-5eec-49ee-ac0f-8d349d5660ed";
 
-// Funciones auxiliares mejoradas
+// Helper functions
 const isValidDate = (date: any): boolean => {
   return date instanceof Date && !isNaN(date.getTime()) && isValid(date);
 };
@@ -52,7 +47,7 @@ const safeFormatDate = (date: any, formatString: string, options?: any): string 
     if (!isValidDate(dateObj)) return "";
     return format(dateObj, formatString, options);
   } catch (error) {
-    console.error("[safeFormatDate] Error al formatear fecha:", error);
+    console.error("[safeFormatDate] Error formatting date:", error);
     return "";
   }
 };
@@ -62,7 +57,7 @@ const normalizeId = (id: any): string => {
   return String(id);
 };
 
-// Schema de validación mejorado
+// Validation schema
 const newPatientFormSchema = z.object({
   nombre: z.string()
     .min(2, "Nombre debe tener al menos 2 caracteres.")
@@ -107,17 +102,15 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
   buttonVariant = "secondary",
   buttonLabel = "Nuevo Paciente",
 }) => {
-  console.log("[NewPatientForm] Componente montado");
-
-  const isMobile = useIsMobileHook();
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { addPatient, addAppointment, doctors } = useAppContext();
+  const { addPatient, addAppointment } = useAppContext();
 
-  // Verificar que las funciones del contexto estén disponibles
+  // Check if context functions are available
   useEffect(() => {
     if (!addPatient || !addAppointment) {
-      console.error("[NewPatientForm] Funciones del contexto no disponibles");
+      console.error("[NewPatientForm] Context functions not available");
       toast.error("Error de configuración", { 
         description: "Las funciones necesarias no están disponibles. Por favor, recarga la página." 
       });
@@ -146,9 +139,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
   }, []);
 
   const onSubmit = async (values: NewPatientFormValues) => {
-    console.log("[NewPatientForm] onSubmit - Iniciando envío");
-    
-    // Validación de funciones disponibles
+    // Validate context functions
     if (!addPatient || !addAppointment) {
       toast.error("Error de configuración", { 
         description: "Las funciones necesarias no están disponibles." 
@@ -159,16 +150,15 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
     setIsSubmitting(true);
 
     try {
-      // Usar el ID de usuario por defecto
+      // Use default user ID
       const currentUserId = DEFAULT_USER_ID;
-      console.log("[NewPatientForm] Usando ID de usuario:", currentUserId);
 
-      // Validar fecha antes de procesar
+      // Validate date
       if (!isValidDate(values.fechaHoraConsulta)) {
         throw new Error("La fecha seleccionada no es válida");
       }
 
-      // Formatear fecha correctamente
+      // Format date correctly
       const fechaRegistro = new Date().toISOString().split('T')[0];
       const fechaConsulta = safeFormatDate(values.fechaHoraConsulta, 'yyyy-MM-dd');
       const horaConsulta = safeFormatDate(values.fechaHoraConsulta, 'HH:mm');
@@ -177,7 +167,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
         throw new Error("Error al procesar la fecha y hora de la consulta");
       }
 
-      // Construir payload para paciente
+      // Build patient payload
       const patientPayload = {
         nombre: values.nombre.trim(),
         apellidos: values.apellidos.trim(),
@@ -188,26 +178,26 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
         diagnostico_principal: values.motivoConsulta,
         comentarios_registro: values.comentarios_registro?.trim(),
         creado_por_id: currentUserId,
-        origen_paciente: values.origen_paciente,
+        origen_paciente: values.origen_paciente as "Google" | "Facebook" | "Instagram" | "Recomendación de Médico" | "Recomendación Familiar/Amigo" | "Seguro Médico" | "Sitio Web" | "Urgencias" | "Referido por Gastroenterólogo" | "Otro",
         fecha_registro: fechaRegistro,
       };
 
-      console.log("[NewPatientForm] Creando paciente...");
+      // Create patient
       const newPatientResponse = await addPatient(patientPayload);
 
       if (!newPatientResponse) {
         throw new Error("No se pudo crear el paciente");
       }
 
-      // Extraer el ID del paciente de la respuesta
+      // Extract patient ID from response
       let patientId: string;
       let newPatient: PatientData;
 
       if (typeof newPatientResponse === 'number' || typeof newPatientResponse === 'string') {
-        // La respuesta es solo un ID
+        // Response is just an ID
         patientId = normalizeId(newPatientResponse);
         
-        // Construir objeto de paciente completo
+        // Build complete patient object
         newPatient = {
           id: patientId,
           ...patientPayload,
@@ -217,34 +207,26 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
           ultimoContacto: fechaRegistro,
         } as PatientData;
       } else if (typeof newPatientResponse === 'object' && newPatientResponse.id) {
-        // La respuesta es un objeto completo
+        // Response is a complete object
         patientId = normalizeId(newPatientResponse.id);
         newPatient = newPatientResponse as PatientData;
       } else {
         throw new Error("Respuesta inesperada al crear paciente");
       }
 
-      console.log("[NewPatientForm] Paciente creado con ID:", patientId);
-
-      // Construir fecha y hora para la cita en formato ISO
-      const fechaHoraCita = `${fechaConsulta}T${horaConsulta}:00`;
-
-      // Construir payload para la cita
+      // Build appointment payload
       const appointmentPayload = {
-        patient_id: patientId,
-        fechaConsulta: values.fechaHoraConsulta,
-        motivo_cita: values.motivoConsulta,
-        estado_cita: "PROGRAMADA" as AppointmentStatus,
-        es_primera_vez: true,
-        notas_cita_seguimiento: "Primera consulta agendada desde admisión.",
-        fecha_hora_cita: fechaHoraCita,
+        patient_id: normalizeId(newPatient.id),
+        estado: "PROGRAMADA" as AppointmentStatus,
+        horaConsulta: format(values.fechaHoraConsulta, 'HH:mm'),
+        fecha_hora_cita: format(values.fechaHoraConsulta, "yyyy-MM-dd'T'HH:mm:ss") 
       };
 
-      console.log("[NewPatientForm] Creando cita...");
+      // Create appointment
       const newAppointmentResponse = await addAppointment(appointmentPayload);
 
       if (!newAppointmentResponse) {
-        // Si falla la cita, aún tenemos el paciente creado
+        // If appointment creation fails, we still have the patient created
         console.warn("[NewPatientForm] No se pudo crear la cita, pero el paciente fue creado");
         toast.warning("Paciente creado", {
           description: "El paciente fue registrado pero no se pudo agendar la cita. Por favor, agenda la cita manualmente.",
@@ -253,9 +235,9 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
         setOpen(false);
         form.reset();
         
-        // Llamar onSuccess solo con el paciente
+        // Call onSuccess with just the patient
         if (onSuccess) {
-          // Crear una cita vacía para mantener la compatibilidad
+          // Create an empty appointment for compatibility
           const emptyAppointment = {
             id: "temp-" + Date.now(),
             paciente: `${newPatient.nombre} ${newPatient.apellidos}`,
@@ -272,9 +254,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
         return;
       }
 
-      // Éxito completo
-      console.log("[NewPatientForm] Paciente y cita creados exitosamente");
-      
+      // Complete success
       const successMessage = `${values.nombre} ${values.apellidos} agendado para el ${safeFormatDate(
         values.fechaHoraConsulta, 
         "dd/MM/yyyy 'a las' HH:mm", 
@@ -295,7 +275,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
     } catch (error: any) {
       console.error("[NewPatientForm] Error completo:", error);
       
-      // Manejo de errores mejorado
+      // Improved error handling
       let errorMessage = "Ocurrió un problema al registrar.";
       
       if (error.message) {
@@ -320,9 +300,8 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
     "EVENTRACION ABDOMINAL", "VESICULA (COLECISTITIS CRONICA)", "OTRO"
   ];
 
-  // Reseteo del formulario al abrir
+  // Reset form when opening dialog
   const handleOpenDialog = () => {
-    console.log("[NewPatientForm] Abriendo diálogo, reseteando formulario");
     form.reset({
       nombre: "",
       apellidos: "",
@@ -347,8 +326,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
         <Button
           variant={buttonVariant || "secondary"}
           size="sm"
-          className={cn("flex items-center space-x-2 transition-all", className)}
-          onClick={handleOpenDialog}
+          className={cn("flex items-center gap-2", className)}
         >
           <Plus className="h-4 w-4" />
           <span>{buttonLabel}</span>
@@ -376,7 +354,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
                   <FormItem>
                     <FormLabel>Nombre(s) <span className="text-red-500">*</span></FormLabel>
                     <FormControl>
-                      <UiInput 
+                      <Input 
                         placeholder="Ej. Juan Alberto" 
                         {...field} 
                         autoComplete="given-name"
@@ -393,7 +371,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
                   <FormItem>
                     <FormLabel>Apellidos <span className="text-red-500">*</span></FormLabel>
                     <FormControl>
-                      <UiInput 
+                      <Input 
                         placeholder="Ej. Pérez García" 
                         {...field} 
                         autoComplete="family-name"
@@ -412,7 +390,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
                   <FormItem>
                     <FormLabel>Edad</FormLabel>
                     <FormControl>
-                      <UiInput 
+                      <Input 
                         type="number" 
                         placeholder="Ej. 35" 
                         {...field} 
@@ -436,7 +414,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
                   <FormItem>
                     <FormLabel>Teléfono <span className="text-red-500">*</span></FormLabel>
                     <FormControl>
-                      <UiInput 
+                      <Input 
                         type="tel" 
                         placeholder="10 dígitos" 
                         {...field} 
@@ -455,7 +433,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
                 <FormItem>
                   <FormLabel>Email (Opcional)</FormLabel>
                   <FormControl>
-                    <UiInput 
+                    <Input 
                       type="email" 
                       placeholder="ejemplo@correo.com" 
                       {...field} 
@@ -473,21 +451,21 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Motivo de consulta / Diagnóstico inicial <span className="text-red-500">*</span></FormLabel>
-                  <UiSelect 
+                  <Select 
                     onValueChange={field.onChange} 
                     value={field.value}
                   >
                     <FormControl>
-                      <UiSelectTrigger>
-                        <UiSelectValue placeholder="Selecciona motivo" />
-                      </UiSelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona motivo" />
+                      </SelectTrigger>
                     </FormControl>
-                    <UiSelectContent>
+                    <SelectContent>
                       {motivosConsultaOptions.map(motivo => (
-                        <UiSelectItem key={motivo} value={motivo}>{motivo}</UiSelectItem>
+                        <SelectItem key={motivo} value={motivo}>{motivo}</SelectItem>
                       ))}
-                    </UiSelectContent>
-                  </UiSelect>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -514,7 +492,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
                           ) : (
                             <span>Selecciona fecha y hora</span>
                           )}
-                          <DatePickerCalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
                       </FormControl>
                     </PopoverTrigger>
@@ -531,7 +509,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
                         dateFormat="dd/MM/yyyy HH:mm"
                         locale="es"
                         minDate={new Date()}
-                        filterDate={(date: Date) => date.getDay() !== 0} // No domingos
+                        filterDate={(date: Date) => date.getDay() !== 0} // No Sundays
                         minTime={timeRanges.minTime}
                         maxTime={timeRanges.maxTime}
                         inline
@@ -551,7 +529,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
                 <FormItem>
                   <FormLabel>Comentarios de Registro (Opcional)</FormLabel>
                   <FormControl>
-                    <UiTextarea 
+                    <Textarea 
                       placeholder="Ej. Referido por Dr. X, llamó preguntando por costos..." 
                       {...field} 
                       rows={3}
@@ -567,20 +545,20 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Origen del Paciente</FormLabel>
-                  <UiSelect onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <UiSelectTrigger>
-                        <UiSelectValue placeholder="¿Cómo nos conoció?" />
-                      </UiSelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue placeholder="¿Cómo nos conoció?" />
+                      </SelectTrigger>
                     </FormControl>
-                    <UiSelectContent>
-                      <UiSelectItem value="Recomendación">Recomendación</UiSelectItem>
-                      <UiSelectItem value="Redes Sociales">Redes Sociales</UiSelectItem>
-                      <UiSelectItem value="Google">Google</UiSelectItem>
-                      <UiSelectItem value="Página Web">Página Web</UiSelectItem>
-                      <UiSelectItem value="Otro">Otro</UiSelectItem>
-                    </UiSelectContent>
-                  </UiSelect>
+                    <SelectContent>
+                      <SelectItem value="Recomendación">Recomendación</SelectItem>
+                      <SelectItem value="Redes Sociales">Redes Sociales</SelectItem>
+                      <SelectItem value="Google">Google</SelectItem>
+                      <SelectItem value="Página Web">Página Web</SelectItem>
+                      <SelectItem value="Otro">Otro</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -599,8 +577,7 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
               </Button>
               <Button 
                 type="submit" 
-                disabled={isSubmitting || !addPatient || !addAppointment} 
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                disabled={isSubmitting || !addPatient || !addAppointment}
               >
                 {isSubmitting && (
                   <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
@@ -614,5 +591,3 @@ export const NewPatientForm: FC<NewPatientFormProps> = ({
     </Dialog>
   );
 };
-
-NewPatientForm.displayName = "NewPatientForm";

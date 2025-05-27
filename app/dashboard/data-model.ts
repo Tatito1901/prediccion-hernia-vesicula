@@ -199,8 +199,10 @@ export interface PatientData {
   nombre: string;
   apellidos: string;
   edad?: Optional<number>; // int4
-  telefono?: Optional<PhoneString>; // text
-  email?: Optional<EmailString>; // text, podría ser UNIQUE
+  fecha_nacimiento?: Optional<DateString>; // date
+  estado?: Optional<PatientStatus>; // Added to align with app-context usage
+  telefono?: Optional<PhoneString>; // varchar
+  email?: Optional<EmailString>; // varchar
   fecha_registro: DateString; // date, NOT NULL
   estado_paciente: PatientStatus; // patient_status_enum
   diagnostico_principal?: Optional<DiagnosisType>; // diagnosis_enum

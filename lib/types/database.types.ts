@@ -1,0 +1,383 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  public: {
+    Tables: {
+      appointments: {
+        Row: {
+          created_at: string | null
+          doctor_id: string | null
+          es_primera_vez: boolean | null
+          estado_cita: string
+          fecha_hora_cita: string
+          id: string
+          motivo_cita: string
+          notas_cita_seguimiento: string | null
+          patient_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          doctor_id?: string | null
+          es_primera_vez?: boolean | null
+          estado_cita?: string
+          fecha_hora_cita: string
+          id?: string
+          motivo_cita: string
+          notas_cita_seguimiento?: string | null
+          patient_id: string
+        }
+        Update: {
+          created_at?: string | null
+          doctor_id?: string | null
+          es_primera_vez?: boolean | null
+          estado_cita?: string
+          fecha_hora_cita?: string
+          id?: string
+          motivo_cita?: string
+          notas_cita_seguimiento?: string | null
+          patient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patients: {
+        Row: {
+          apellidos: string
+          comentarios_registro: string | null
+          creado_por_id: string | null
+          created_at: string | null
+          diagnostico_principal:
+            | Database["public"]["Enums"]["diagnosis_enum"]
+            | null
+          diagnostico_principal_detalle: string | null
+          doctor_asignado_id: string | null
+          edad: number | null
+          email: string | null
+          estado_paciente:
+            | Database["public"]["Enums"]["patient_status_enum"]
+            | null
+          etiquetas: string[] | null
+          fecha_cirugia_programada: string | null
+          fecha_primera_consulta: string | null
+          fecha_registro: string
+          id: string
+          id_legacy: number | null
+          nombre: string
+          origen_paciente: string | null
+          probabilidad_cirugia: number | null
+          proximo_contacto: string | null
+          telefono: string | null
+          ultimo_contacto: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          apellidos: string
+          comentarios_registro?: string | null
+          creado_por_id?: string | null
+          created_at?: string | null
+          diagnostico_principal?:
+            | Database["public"]["Enums"]["diagnosis_enum"]
+            | null
+          diagnostico_principal_detalle?: string | null
+          doctor_asignado_id?: string | null
+          edad?: number | null
+          email?: string | null
+          estado_paciente?:
+            | Database["public"]["Enums"]["patient_status_enum"]
+            | null
+          etiquetas?: string[] | null
+          fecha_cirugia_programada?: string | null
+          fecha_primera_consulta?: string | null
+          fecha_registro?: string
+          id?: string
+          id_legacy?: number | null
+          nombre: string
+          origen_paciente?: string | null
+          probabilidad_cirugia?: number | null
+          proximo_contacto?: string | null
+          telefono?: string | null
+          ultimo_contacto?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          apellidos?: string
+          comentarios_registro?: string | null
+          creado_por_id?: string | null
+          created_at?: string | null
+          diagnostico_principal?:
+            | Database["public"]["Enums"]["diagnosis_enum"]
+            | null
+          diagnostico_principal_detalle?: string | null
+          doctor_asignado_id?: string | null
+          edad?: number | null
+          email?: string | null
+          estado_paciente?:
+            | Database["public"]["Enums"]["patient_status_enum"]
+            | null
+          etiquetas?: string[] | null
+          fecha_cirugia_programada?: string | null
+          fecha_primera_consulta?: string | null
+          fecha_registro?: string
+          id?: string
+          id_legacy?: number | null
+          nombre?: string
+          origen_paciente?: string | null
+          probabilidad_cirugia?: number | null
+          proximo_contacto?: string | null
+          telefono?: string | null
+          ultimo_contacto?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patients_creado_por_id_fkey"
+            columns: ["creado_por_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patients_doctor_asignado_id_fkey"
+            columns: ["doctor_asignado_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          full_name: string | null
+          id: string
+          role: string | null
+          updated_at: string | null
+          username: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          full_name?: string | null
+          id: string
+          role?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          role?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      appointment_status_enum:
+        | "PROGRAMADA"
+        | "CONFIRMADA"
+        | "CANCELADA"
+        | "COMPLETADA"
+        | "NO ASISTIO"
+        | "PRESENTE"
+        | "REAGENDADA"
+      diagnosis_enum:
+        | "HERNIA INGUINAL"
+        | "HERNIA UMBILICAL"
+        | "COLECISTITIS"
+        | "COLEDOCOLITIASIS"
+        | "COLANGITIS"
+        | "APENDICITIS"
+        | "HERNIA HIATAL"
+        | "LIPOMA GRANDE"
+        | "HERNIA INGUINAL RECIDIVANTE"
+        | "QUISTE SEBACEO INFECTADO"
+        | "EVENTRACION ABDOMINAL"
+        | "VESICULA (COLECISTITIS CRONICA)"
+        | "OTRO"
+      patient_status_enum:
+        | "PENDIENTE DE CONSULTA"
+        | "CONSULTADO"
+        | "EN SEGUIMIENTO"
+        | "OPERADO"
+        | "NO OPERADO"
+        | "INDECISO"
+      user_role_enum: "doctor" | "admin" | "recepcion"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DefaultSchema = Database[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof Database },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
+  ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof Database },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
+  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof Database },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
+  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof Database },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends { schema: keyof Database }
+  ? Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof Database },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      appointment_status_enum: [
+        "PROGRAMADA",
+        "CONFIRMADA",
+        "CANCELADA",
+        "COMPLETADA",
+        "NO ASISTIO",
+        "PRESENTE",
+        "REAGENDADA",
+      ],
+      diagnosis_enum: [
+        "HERNIA INGUINAL",
+        "HERNIA UMBILICAL",
+        "COLECISTITIS",
+        "COLEDOCOLITIASIS",
+        "COLANGITIS",
+        "APENDICITIS",
+        "HERNIA HIATAL",
+        "LIPOMA GRANDE",
+        "HERNIA INGUINAL RECIDIVANTE",
+        "QUISTE SEBACEO INFECTADO",
+        "EVENTRACION ABDOMINAL",
+        "VESICULA (COLECISTITIS CRONICA)",
+        "OTRO",
+      ],
+      patient_status_enum: [
+        "PENDIENTE DE CONSULTA",
+        "CONSULTADO",
+        "EN SEGUIMIENTO",
+        "OPERADO",
+        "NO OPERADO",
+        "INDECISO",
+      ],
+      user_role_enum: ["doctor", "admin", "recepcion"],
+    },
+  },
+} as const

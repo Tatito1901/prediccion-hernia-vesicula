@@ -3,7 +3,9 @@ import { Suspense } from "react"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"; // Sin llaves {}
 import { LoadingSpinner } from "@/components/ui/loading-state"
 
-export default function SurveyPage({ params }: { params: { id: string } }) {
+export default async function SurveyPage({ params }: { params: Promise<{ id: string }> }) {
+  // Await the params object to resolve it before accessing properties
+  const resolvedParams = await params;
   return (
     <div className="container mx-auto py-8 px-4">
       <h1 className="text-2xl font-bold text-center mb-6">
@@ -20,7 +22,7 @@ export default function SurveyPage({ params }: { params: { id: string } }) {
           </div>
         }
       >
-        <PatientSurveyForm surveyId={params.id} standalone={true} />
+        <PatientSurveyForm surveyId={resolvedParams.id} standalone={true} />
       </Suspense>
     </div>
   )

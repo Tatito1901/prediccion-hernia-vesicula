@@ -63,22 +63,22 @@ interface LoginSuccessProps {
   userName?: string
 }
 
-// Theme configuration - Moved outside component to prevent recreation
+// Theme configuration - Refined color palette for better contrast and elegance
 const theme = {
   colors: {
     bg: {
-      primary: "#000205",
-      gradient: "linear-gradient(135deg, #000205 0%, #0d1f36 100%)",
-      glass: "rgba(13, 25, 42, 0.85)",
-      input: "rgba(15, 23, 42, 0.7)",
-      error: "rgba(239, 68, 68, 0.12)",
-      success: "rgba(16, 185, 129, 0.12)",
+      primary: "#0a1628", // Slightly lighter for better contrast
+      gradient: "linear-gradient(135deg, #0a1628 0%, #1a3a5f 100%)", // More vibrant gradient
+      glass: "rgba(26, 45, 66, 0.92)", // Higher opacity for better contrast
+      input: "rgba(15, 23, 42, 0.8)", // Higher opacity for better contrast
+      error: "rgba(239, 68, 68, 0.15)",
+      success: "rgba(16, 185, 129, 0.15)",
     },
     border: {
-      default: "rgba(148, 163, 184, 0.2)",
-      focus: "rgba(59, 130, 246, 0.6)",
-      error: "rgba(239, 68, 68, 0.35)",
-      success: "rgba(16, 185, 129, 0.35)",
+      default: "rgba(148, 163, 184, 0.25)", // Slightly more visible
+      focus: "rgba(59, 130, 246, 0.7)", // More vibrant
+      error: "rgba(239, 68, 68, 0.4)", // More visible
+      success: "rgba(16, 185, 129, 0.4)", // More visible
     },
     brand: {
       primary: "#3b82f6",
@@ -88,10 +88,10 @@ const theme = {
       accentLight: "#38bdf8",
     },
     text: {
-      primary: "#f8fafc",
-      secondary: "#e2e8f0",
-      muted: "#94a3b8",
-      dim: "#64748b",
+      primary: "#ffffff", // Pure white for maximum contrast
+      secondary: "#f1f5f9", // Lighter for better readability
+      muted: "#cbd5e1", // Lighter for better readability
+      dim: "#94a3b8", // Lighter for better readability
     },
     status: {
       error: "#ef4444",
@@ -99,14 +99,14 @@ const theme = {
       warning: "#f59e0b",
     },
     glow: {
-      primary: "rgba(59, 130, 246, 0.65)",
-      accent: "rgba(14, 165, 233, 0.55)",
-      success: "rgba(16, 185, 129, 0.55)",
-      error: "rgba(239, 68, 68, 0.55)",
+      primary: "rgba(59, 130, 246, 0.7)", // More vibrant glow
+      accent: "rgba(14, 165, 233, 0.6)", // More vibrant glow
+      success: "rgba(16, 185, 129, 0.6)", // More vibrant glow
+      error: "rgba(239, 68, 68, 0.6)", // More vibrant glow
     },
     shadow: {
-      primary: "rgba(59, 130, 246, 0.35)",
-      dark: "rgba(0, 0, 0, 0.35)",
+      primary: "rgba(59, 130, 246, 0.4)", // More pronounced shadow
+      dark: "rgba(0, 0, 0, 0.4)", // More pronounced shadow
     },
   },
   breakpoints: {
@@ -266,16 +266,21 @@ const createAnimationVariants = (prefersReducedMotion: boolean) => ({
   },
 })
 
-// Pre-defined styles
+// Pre-defined styles - Enhanced for better contrast and elegance
 const styles = {
   containerStyles: {
     background: theme.colors.bg.gradient,
   },
   cardStyles: {
     background: theme.colors.bg.glass,
-    backdropFilter: "blur(16px) saturate(180%)",
-    WebkitBackdropFilter: "blur(16px) saturate(180%)",
-    boxShadow: `0 10px 30px ${theme.colors.shadow.dark}, 0 0 30px ${theme.colors.shadow.primary}20, inset 0 1px 0 rgba(255, 255, 255, 0.05)`,
+    backdropFilter: "blur(20px) saturate(180%)", // Increased blur for more elegance
+    WebkitBackdropFilter: "blur(20px) saturate(180%)",
+    boxShadow: `
+      0 15px 35px ${theme.colors.shadow.dark}, 
+      0 0 40px ${theme.colors.shadow.primary}30, 
+      inset 0 1px 1px rgba(255, 255, 255, 0.1)
+    `, // Enhanced shadow for depth
+    border: `1px solid rgba(255, 255, 255, 0.08)`, // Subtle border for elegance
   },
   headingGradient: {
     background: `linear-gradient(135deg, ${theme.colors.text.primary} 0%, ${theme.colors.brand.primaryLight} 100%)`,
@@ -284,20 +289,20 @@ const styles = {
     backgroundClip: "text",
   },
   buttonGradient: {
-    background: `linear-gradient(135deg, #2a3f5f 0%, #3a6ea5 50%, #1e3a5f 100%)`,
+    background: `linear-gradient(135deg, #2a4a7f 0%, #3a6ea5 50%, #1e3a5f 100%)`, // Richer blue gradient
     backgroundSize: "200% 100%",
-    boxShadow: `0 4px 12px rgba(42, 63, 95, 0.5), 0 0 0 1px rgba(58, 110, 165, 0.2)`,
+    boxShadow: `0 4px 12px rgba(42, 74, 127, 0.5), 0 0 0 1px rgba(58, 110, 165, 0.3)`,
   },
   successCardStyles: {
-    background: `linear-gradient(135deg, ${theme.colors.bg.glass} 0%, rgba(13, 25, 42, 0.95) 100%)`,
+    background: `linear-gradient(135deg, ${theme.colors.bg.glass} 0%, rgba(20, 40, 65, 0.95) 100%)`, // Richer gradient
     backdropFilter: "blur(20px) saturate(180%)",
     WebkitBackdropFilter: "blur(20px) saturate(180%)",
     border: `1px solid ${theme.colors.border.success}`,
     boxShadow: `
       0 20px 40px -10px ${theme.colors.shadow.dark},
-      0 0 60px ${theme.colors.glow.success}30,
-      inset 0 1px 0 rgba(255, 255, 255, 0.1)
-    `,
+      0 0 60px ${theme.colors.glow.success}40,
+      inset 0 1px 1px rgba(255, 255, 255, 0.1)
+    `, // Enhanced glow
   },
   errorIconColor: theme.colors.status.error,
 }
@@ -365,7 +370,10 @@ const InputField = memo(
           animate={isActive ? "focus" : "blur"}
           whileHover={{
             scale: !error && !isActive && !className.includes("disabled") ? 1.005 : 1,
-            boxShadow: !error && !isActive && !className.includes("disabled") ? `0 0 15px ${theme.colors.glow.primary}30` : "none",
+            boxShadow:
+              !error && !isActive && !className.includes("disabled")
+                ? `0 0 15px ${theme.colors.glow.primary}30`
+                : "none",
             transition: {
               scale: { duration: 0.3, ease: "easeOut" },
               boxShadow: { duration: 0.3, ease: "easeOut" },
@@ -387,10 +395,11 @@ const InputField = memo(
             onChange={onChange}
             onFocus={onFocus}
             onBlur={onBlur}
-            className={`w-full pl-11 ${showPassword ? "pr-12" : "pr-4"} py-2.5 rounded-lg transition-all duration-300 hover:shadow-lg focus:outline-none ${className}`}
+            className={`w-full pl-11 ${showPassword ? "pr-12" : "pr-4"} py-3 rounded-lg transition-all duration-300 hover:shadow-lg focus:outline-none ${className}`}
             placeholder={label}
             aria-invalid={!!error}
             aria-describedby={error ? `${id}-error` : undefined}
+            style={inputStyles}
           />
 
           {showPassword && onToggle && (
@@ -457,12 +466,12 @@ const InputField = memo(
 
 InputField.displayName = "InputField"
 
-// Background Orbs component
+// Background Orbs component - Enhanced for more elegant visual effect
 const BackgroundOrbs = memo(({ prefersReducedMotion }: BackgroundOrbsProps) => {
   const orbAnimations = [
     {
       size: "clamp(300px, 50vw, 800px)",
-      color: `${theme.colors.brand.primaryLight}0A`,
+      color: `${theme.colors.brand.primaryLight}15`, // More visible
       params: {
         x: ["-20%", "0%", "20%", "0%", "-20%"],
         y: ["-20%", "20%", "-10%", "10%", "-20%"],
@@ -472,12 +481,23 @@ const BackgroundOrbs = memo(({ prefersReducedMotion }: BackgroundOrbsProps) => {
     },
     {
       size: "clamp(250px, 40vw, 700px)",
-      color: `${theme.colors.brand.accentLight}0A`,
+      color: `${theme.colors.brand.accentLight}15`, // More visible
       params: {
         x: ["30%", "0%", "-20%", "10%", "30%"],
         y: ["40%", "-10%", "30%", "-20%", "40%"],
         scale: [1.1, 0.9, 1.2, 1, 1.1],
         opacity: [0.8, 1, 0.7, 0.9, 0.8],
+      },
+    },
+    // Added a third orb for more visual interest
+    {
+      size: "clamp(200px, 30vw, 600px)",
+      color: `${theme.colors.status.success}10`, // Subtle green accent
+      params: {
+        x: ["-30%", "10%", "-10%", "30%", "-30%"],
+        y: ["10%", "40%", "0%", "-30%", "10%"],
+        scale: [0.9, 1.1, 1.3, 0.8, 0.9],
+        opacity: [0.6, 0.8, 1, 0.7, 0.6],
       },
     },
   ]
@@ -506,7 +526,7 @@ const BackgroundOrbs = memo(({ prefersReducedMotion }: BackgroundOrbsProps) => {
           style={{
             width: orb.size,
             height: orb.size,
-            background: `radial-gradient(circle, ${orb.color}0A 0%, transparent 60%)`,
+            background: `radial-gradient(circle, ${orb.color} 0%, transparent 70%)`,
             filter: "blur(80px)",
             willChange: "transform, opacity",
           }}
@@ -515,310 +535,317 @@ const BackgroundOrbs = memo(({ prefersReducedMotion }: BackgroundOrbsProps) => {
           animate="animate"
         />
       ))}
+      {/* Added subtle light effect at the top */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[30vh] opacity-20"
+        style={{
+          background: `linear-gradient(to bottom, rgba(255,255,255,0.1) 0%, transparent 100%)`,
+        }}
+      />
     </>
   )
 })
 
 BackgroundOrbs.displayName = "BackgroundOrbs"
 
-// Success component
-const LoginSuccess = memo(
-  ({ prefersReducedMotion, userName = "Usuario" }: LoginSuccessProps) => {
-    // Sparkle positions for decorative elements
-    const sparklePositions = [
-      { top: "10%", left: "15%", size: 4 },
-      { top: "20%", right: "20%", size: 6 },
-      { bottom: "25%", left: "10%", size: 5 },
-      { bottom: "15%", right: "15%", size: 4 },
-      { top: "50%", left: "5%", size: 3 },
-      { top: "50%", right: "5%", size: 3 },
-    ]
+// Success component - Enhanced for more professional look
+const LoginSuccess = memo(({ prefersReducedMotion, userName = "Usuario" }: LoginSuccessProps) => {
+  // Sparkle positions for decorative elements
+  const sparklePositions = [
+    { top: "10%", left: "15%", size: 4 },
+    { top: "20%", right: "20%", size: 6 },
+    { bottom: "25%", left: "10%", size: 5 },
+    { bottom: "15%", right: "15%", size: 4 },
+    { top: "50%", left: "5%", size: 3 },
+    { top: "50%", right: "5%", size: 3 },
+  ]
 
-    const successVariants = useMemo(
-      () => ({
-        container: {
-          hidden: { opacity: 0, scale: 0.8 },
-          visible: {
-            opacity: 1,
-            scale: 1,
-            transition: {
-              duration: 0.5,
-              ease: [0.16, 1, 0.3, 1],
-              staggerChildren: 0.1,
-              delayChildren: 0.2,
-            },
-          },
-          exit: {
-            opacity: 0,
-            scale: 0.95,
-            transition: { duration: 0.3 },
+  const successVariants = useMemo(
+    () => ({
+      container: {
+        hidden: { opacity: 0, scale: 0.8 },
+        visible: {
+          opacity: 1,
+          scale: 1,
+          transition: {
+            duration: 0.5,
+            ease: [0.16, 1, 0.3, 1],
+            staggerChildren: 0.1,
+            delayChildren: 0.2,
           },
         },
-        item: {
-          hidden: { opacity: 0, y: 20 },
-          visible: {
-            opacity: 1,
-            y: 0,
-            transition: {
-              duration: 0.5,
-              ease: [0.16, 1, 0.3, 1],
-            },
+        exit: {
+          opacity: 0,
+          scale: 0.95,
+          transition: { duration: 0.3 },
+        },
+      },
+      item: {
+        hidden: { opacity: 0, y: 20 },
+        visible: {
+          opacity: 1,
+          y: 0,
+          transition: {
+            duration: 0.5,
+            ease: [0.16, 1, 0.3, 1],
           },
         },
-        iconContainer: {
-          hidden: { scale: 0, rotate: -180 },
-          visible: {
-            scale: 1,
-            rotate: 0,
-            transition: {
-              type: "spring",
-              stiffness: 200,
-              damping: 15,
-              delay: 0.1,
-            },
+      },
+      iconContainer: {
+        hidden: { scale: 0, rotate: -180 },
+        visible: {
+          scale: 1,
+          rotate: 0,
+          transition: {
+            type: "spring",
+            stiffness: 200,
+            damping: 15,
+            delay: 0.1,
           },
         },
-        checkmark: {
-          hidden: { pathLength: 0, opacity: 0 },
-          visible: {
-            pathLength: 1,
-            opacity: 1,
-            transition: {
-              pathLength: { duration: 0.6, ease: "easeOut", delay: 0.3 },
-              opacity: { duration: 0.1, delay: 0.3 },
-            },
+      },
+      checkmark: {
+        hidden: { pathLength: 0, opacity: 0 },
+        visible: {
+          pathLength: 1,
+          opacity: 1,
+          transition: {
+            pathLength: { duration: 0.6, ease: "easeOut", delay: 0.3 },
+            opacity: { duration: 0.1, delay: 0.3 },
           },
         },
-        sparkle: {
-          hidden: { scale: 0, opacity: 0 },
-          visible: (i: number) => ({
-            scale: [0, 1.2, 0],
-            opacity: [0, 1, 0],
-            transition: {
-              duration: 1.5,
-              delay: 0.5 + i * 0.1,
-              ease: "easeOut",
-              repeat: Number.POSITIVE_INFINITY,
-              repeatDelay: 2,
-            },
-          }),
-        },
-        progressBar: {
-          hidden: { scaleX: 0 },
-          visible: {
-            scaleX: 1,
-            transition: {
-              duration: 2,
-              ease: "easeInOut",
-              delay: 0.8,
-            },
+      },
+      sparkle: {
+        hidden: { scale: 0, opacity: 0 },
+        visible: (i: number) => ({
+          scale: [0, 1.2, 0],
+          opacity: [0, 1, 0],
+          transition: {
+            duration: 1.5,
+            delay: 0.5 + i * 0.1,
+            ease: "easeOut",
+            repeat: Number.POSITIVE_INFINITY,
+            repeatDelay: 2,
+          },
+        }),
+      },
+      progressBar: {
+        hidden: { scaleX: 0 },
+        visible: {
+          scaleX: 1,
+          transition: {
+            duration: 2,
+            ease: "easeInOut",
+            delay: 0.8,
           },
         },
-      }),
-      [],
-    )
+      },
+    }),
+    [],
+  )
 
-    return (
-      <motion.div
-        className="relative w-full max-w-sm mx-auto"
-        variants={successVariants.container}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-      >
-        {/* Glass morphism card */}
-        <div className="relative rounded-2xl overflow-hidden" style={styles.successCardStyles}>
-          {/* Gradient overlay */}
-          <div
-            className="absolute inset-0 opacity-30"
-            style={{
-              background: `radial-gradient(circle at 50% 0%, ${theme.colors.status.success}20 0%, transparent 70%)`,
-            }}
-          />
+  return (
+    <motion.div
+      className="relative w-full max-w-sm mx-auto"
+      variants={successVariants.container}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+    >
+      {/* Glass morphism card */}
+      <div className="relative rounded-2xl overflow-hidden" style={styles.successCardStyles}>
+        {/* Gradient overlay */}
+        <div
+          className="absolute inset-0 opacity-40" // Increased opacity
+          style={{
+            background: `radial-gradient(circle at 50% 0%, ${theme.colors.status.success}30 0%, transparent 70%)`,
+          }}
+        />
 
-          {/* Content */}
-          <div className="relative z-10 px-8 py-10 text-center">
-            {/* Success icon with animation */}
+        {/* Content */}
+        <div className="relative z-10 px-8 py-10 text-center">
+          {/* Success icon with animation */}
+          <motion.div
+            className="relative inline-flex items-center justify-center mb-6"
+            variants={successVariants.iconContainer}
+          >
+            {/* Glow effect */}
             <motion.div
-              className="relative inline-flex items-center justify-center mb-6"
-              variants={successVariants.iconContainer}
-            >
-              {/* Glow effect */}
-              <motion.div
-                className="absolute inset-0 rounded-full"
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.5, 0.8, 0.5],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Number.POSITIVE_INFINITY,
-                  ease: "easeInOut",
-                }}
-                style={{
-                  background: `radial-gradient(circle, ${theme.colors.status.success}40 0%, transparent 70%)`,
-                  filter: "blur(20px)",
-                }}
-              />
+              className="absolute inset-0 rounded-full"
+              animate={{
+                scale: [1, 1.2, 1],
+                opacity: [0.5, 0.8, 0.5],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Number.POSITIVE_INFINITY,
+                ease: "easeInOut",
+              }}
+              style={{
+                background: `radial-gradient(circle, ${theme.colors.status.success}50 0%, transparent 70%)`, // Brighter glow
+                filter: "blur(20px)",
+              }}
+            />
 
-              {/* Icon background */}
-              <div
-                className="relative w-24 h-24 rounded-full flex items-center justify-center"
-                style={{
-                  background: `linear-gradient(135deg, ${theme.colors.status.success}15 0%, ${theme.colors.status.success}25 100%)`,
-                  border: `2px solid ${theme.colors.status.success}30`,
-                }}
+            {/* Icon background */}
+            <div
+              className="relative w-24 h-24 rounded-full flex items-center justify-center"
+              style={{
+                background: `linear-gradient(135deg, ${theme.colors.status.success}20 0%, ${theme.colors.status.success}30 100%)`,
+                border: `2px solid ${theme.colors.status.success}40`, // More visible border
+                boxShadow: `0 0 20px ${theme.colors.glow.success}`, // Added glow
+              }}
+            >
+              {/* Custom checkmark SVG */}
+              <svg
+                width="48"
+                height="48"
+                viewBox="0 0 48 48"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="relative z-10"
               >
-                {/* Custom checkmark SVG */}
-                <svg
-                  width="48"
-                  height="48"
-                  viewBox="0 0 48 48"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="relative z-10"
-                >
-                  <motion.path
-                    d="M14 24L20 30L34 16"
-                    stroke={theme.colors.status.success}
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    variants={successVariants.checkmark}
+                <motion.path
+                  d="M14 24L20 30L34 16"
+                  stroke={theme.colors.status.success}
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  variants={successVariants.checkmark}
+                  initial="hidden"
+                  animate="visible"
+                />
+              </svg>
+
+              {/* Sparkles around icon */}
+              {!prefersReducedMotion &&
+                sparklePositions.map((pos, i) => (
+                  <motion.div
+                    key={i}
+                    className="absolute"
+                    style={{
+                      ...pos,
+                      width: `${pos.size}px`,
+                      height: `${pos.size}px`,
+                    }}
+                    custom={i}
+                    variants={successVariants.sparkle}
                     initial="hidden"
                     animate="visible"
-                  />
-                </svg>
-
-                {/* Sparkles around icon */}
-                {!prefersReducedMotion &&
-                  sparklePositions.map((pos, i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute"
+                  >
+                    <Sparkles
+                      className="w-full h-full"
                       style={{
-                        ...pos,
-                        width: `${pos.size}px`,
-                        height: `${pos.size}px`,
+                        color: theme.colors.status.success,
+                        filter: `drop-shadow(0 0 3px ${theme.colors.status.success})`,
                       }}
-                      custom={i}
-                      variants={successVariants.sparkle}
-                      initial="hidden"
-                      animate="visible"
-                    >
-                      <Sparkles
-                        className="w-full h-full"
-                        style={{
-                          color: theme.colors.status.success,
-                          filter: `drop-shadow(0 0 3px ${theme.colors.status.success})`,
-                        }}
-                      />
-                    </motion.div>
-                  ))}
-              </div>
-            </motion.div>
+                    />
+                  </motion.div>
+                ))}
+            </div>
+          </motion.div>
 
-            {/* Success message */}
-            <motion.div variants={successVariants.item} className="space-y-3">
-              <h2
-                className="text-3xl font-bold tracking-tight"
-                style={{
-                  background: `linear-gradient(135deg, ${theme.colors.text.primary} 0%, ${theme.colors.status.success} 100%)`,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                ¡Bienvenido!
-              </h2>
-
-              <p className="text-lg font-medium" style={{ color: theme.colors.text.primary }}>
-                {userName}
-              </p>
-
-              <p className="text-sm" style={{ color: theme.colors.text.muted }}>
-                Acceso autorizado correctamente
-              </p>
-            </motion.div>
-
-            {/* Progress bar */}
-            <motion.div variants={successVariants.item} className="mt-8 mb-4">
-              <div
-                className="relative h-1 rounded-full overflow-hidden"
-                style={{
-                  background: `${theme.colors.border.default}`,
-                }}
-              >
-                <motion.div
-                  className="absolute inset-y-0 left-0 rounded-full"
-                  variants={successVariants.progressBar}
-                  style={{
-                    background: `linear-gradient(90deg, ${theme.colors.status.success} 0%, ${theme.colors.brand.primary} 100%)`,
-                    boxShadow: `0 0 10px ${theme.colors.glow.success}`,
-                  }}
-                />
-              </div>
-            </motion.div>
-
-            {/* Redirect message */}
-            <motion.div
-              variants={successVariants.item}
-              className="flex items-center justify-center space-x-2 text-sm"
-              style={{ color: theme.colors.text.secondary }}
+          {/* Success message */}
+          <motion.div variants={successVariants.item} className="space-y-3">
+            <h2
+              className="text-3xl font-bold tracking-tight"
+              style={{
+                background: `linear-gradient(135deg, ${theme.colors.text.primary} 0%, ${theme.colors.status.success} 100%)`,
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+              }}
             >
-              <span>Redirigiendo al panel</span>
+              ¡Bienvenido!
+            </h2>
+
+            <p className="text-lg font-medium" style={{ color: theme.colors.text.primary }}>
+              {userName}
+            </p>
+
+            <p className="text-sm" style={{ color: theme.colors.text.muted }}>
+              Acceso autorizado correctamente
+            </p>
+          </motion.div>
+
+          {/* Progress bar */}
+          <motion.div variants={successVariants.item} className="mt-8 mb-4">
+            <div
+              className="relative h-1.5 rounded-full overflow-hidden" // Taller progress bar
+              style={{
+                background: `${theme.colors.border.default}`,
+              }}
+            >
               <motion.div
+                className="absolute inset-y-0 left-0 rounded-full"
+                variants={successVariants.progressBar}
+                style={{
+                  background: `linear-gradient(90deg, ${theme.colors.status.success} 0%, ${theme.colors.brand.primary} 100%)`,
+                  boxShadow: `0 0 10px ${theme.colors.glow.success}`,
+                }}
+              />
+            </div>
+          </motion.div>
+
+          {/* Redirect message */}
+          <motion.div
+            variants={successVariants.item}
+            className="flex items-center justify-center space-x-2 text-sm"
+            style={{ color: theme.colors.text.secondary }}
+          >
+            <span>Redirigiendo al panel</span>
+            <motion.div
+              animate={{
+                x: [0, 5, 0],
+              }}
+              transition={{
+                duration: 1.5,
+                repeat: Number.POSITIVE_INFINITY,
+                ease: "easeInOut",
+              }}
+            >
+              <ArrowRight className="w-4 h-4" />
+            </motion.div>
+          </motion.div>
+
+          {/* Loading dots */}
+          <motion.div variants={successVariants.item} className="flex justify-center space-x-1 mt-4">
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                className="w-2 h-2 rounded-full"
+                style={{ background: theme.colors.brand.primary }}
                 animate={{
-                  x: [0, 5, 0],
+                  scale: [1, 1.5, 1],
+                  opacity: [0.5, 1, 0.5],
                 }}
                 transition={{
                   duration: 1.5,
                   repeat: Number.POSITIVE_INFINITY,
+                  delay: i * 0.2,
                   ease: "easeInOut",
                 }}
-              >
-                <ArrowRight className="w-4 h-4" />
-              </motion.div>
-            </motion.div>
+              />
+            ))}
+          </motion.div>
+        </div>
 
-            {/* Loading dots */}
-            <motion.div variants={successVariants.item} className="flex justify-center space-x-1 mt-4">
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: theme.colors.brand.primary }}
-                  animate={{
-                    scale: [1, 1.5, 1],
-                    opacity: [0.5, 1, 0.5],
-                  }}
-                  transition={{
-                    duration: 1.5,
-                    repeat: Number.POSITIVE_INFINITY,
-                    delay: i * 0.2,
-                    ease: "easeInOut",
-                  }}
-                />
-              ))}
-            </motion.div>
-          </div>
-
-          {/* Bottom gradient decoration */}
-          <div
-            className="absolute bottom-0 left-0 right-0 h-1"
-            style={{
-              background: `linear-gradient(90deg, 
+        {/* Bottom gradient decoration */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-1.5" // Taller decoration
+          style={{
+            background: `linear-gradient(90deg, 
               ${theme.colors.brand.primary} 0%, 
               ${theme.colors.status.success} 50%, 
               ${theme.colors.brand.primary} 100%)`,
-              backgroundSize: "200% 100%",
-              animation: "shimmer 3s linear infinite",
-            }}
-          />
-        </div>
+            backgroundSize: "200% 100%",
+            animation: "shimmer 3s linear infinite",
+          }}
+        />
+      </div>
 
-        {/* Add shimmer animation */}
-        <style jsx>{`
+      {/* Add shimmer animation */}
+      <style jsx>{`
         @keyframes shimmer {
           0% {
             background-position: -200% 0;
@@ -830,8 +857,7 @@ const LoginSuccess = memo(
       `}</style>
     </motion.div>
   )
-}
-)
+})
 
 LoginSuccess.displayName = "LoginSuccess"
 
@@ -968,11 +994,11 @@ export default function EnhancedLoginPage() {
             <motion.div
               className="absolute -inset-px rounded-xl p-[1px] overflow-hidden"
               initial={{
-                background: `linear-gradient(135deg, ${theme.colors.brand.primary}30 0%, ${theme.colors.brand.accent}30 50%, ${theme.colors.brand.primary}30 100%)`,
-                opacity: 0.5,
+                background: `linear-gradient(135deg, ${theme.colors.brand.primary}40 0%, ${theme.colors.brand.accent}40 50%, ${theme.colors.brand.primary}40 100%)`,
+                opacity: 0.6,
               }}
               whileHover={{
-                opacity: 0.85,
+                opacity: 0.9,
               }}
               transition={{
                 opacity: {
@@ -1003,8 +1029,9 @@ export default function EnhancedLoginPage() {
                         whileHover={!prefersReducedMotion ? { scale: 1.1, rotate: 5 } : {}}
                         transition={{ type: "spring", stiffness: 300, damping: 10 }}
                         style={{
-                          background: `radial-gradient(circle, ${theme.colors.brand.primaryLight}1A 0%, transparent 70%)`,
-                          border: `1px solid ${theme.colors.brand.primary}30`,
+                          background: `radial-gradient(circle, ${theme.colors.brand.primaryLight}25 0%, transparent 70%)`, // More visible gradient
+                          border: `1px solid ${theme.colors.brand.primary}40`, // More visible border
+                          boxShadow: `0 0 15px ${theme.colors.glow.primary}30`, // Added subtle glow
                         }}
                       >
                         <Shield className="w-8 h-8" style={{ color: theme.colors.brand.primary }} />
@@ -1156,7 +1183,7 @@ export default function EnhancedLoginPage() {
                         whileHover={
                           !formState.isLoading && !prefersReducedMotion
                             ? {
-                                boxShadow: `0 8px 25px rgba(42, 63, 95, 0.6)`,
+                                boxShadow: `0 8px 25px rgba(42, 74, 127, 0.6)`,
                                 y: -2,
                               }
                             : {}
@@ -1164,7 +1191,7 @@ export default function EnhancedLoginPage() {
                         whileTap={
                           !formState.isLoading && !prefersReducedMotion
                             ? {
-                                boxShadow: `0 3px 10px rgba(42, 63, 95, 0.4)`,
+                                boxShadow: `0 3px 10px rgba(42, 74, 127, 0.4)`,
                                 y: 1,
                               }
                             : {}
@@ -1179,9 +1206,9 @@ export default function EnhancedLoginPage() {
                             ? {
                                 backgroundPosition: ["0% 0%", "100% 0%"],
                                 boxShadow: [
-                                  `0 6px 15px rgba(42, 63, 95, 0.4), 0 0 0 1px rgba(58, 110, 165, 0.2)`,
-                                  `0 8px 20px rgba(42, 63, 95, 0.5), 0 0 0 1px rgba(58, 110, 165, 0.3)`,
-                                  `0 6px 15px rgba(42, 63, 95, 0.4), 0 0 0 1px rgba(58, 110, 165, 0.2)`,
+                                  `0 6px 15px rgba(42, 74, 127, 0.4), 0 0 0 1px rgba(58, 110, 165, 0.2)`,
+                                  `0 8px 20px rgba(42, 74, 127, 0.5), 0 0 0 1px rgba(58, 110, 165, 0.3)`,
+                                  `0 6px 15px rgba(42, 74, 127, 0.4), 0 0 0 1px rgba(58, 110, 165, 0.2)`,
                                 ],
                               }
                             : {}
@@ -1202,8 +1229,8 @@ export default function EnhancedLoginPage() {
                                 y: {
                                   type: "spring",
                                   stiffness: 400,
-                                  damping: 15
-                                }
+                                  damping: 15,
+                                },
                               }
                             : {}
                         }
