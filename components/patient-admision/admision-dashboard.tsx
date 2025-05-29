@@ -1,38 +1,99 @@
 "use client"
 
 import type React from "react"
-import { useMemo } from "react"
-import { format } from "date-fns"
+import { useMemo, memo } from "react"
+import { format, isValid, parseISO } from "date-fns"
+import { AlertCircle } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 
+// Tipos mejorados con validación estricta
 interface Patient {
-  id: string
-  nombre: string
-  apellido: string
-  fechaNacimiento: string
-  genero: string
-  telefono: string
-  direccion: string
-  estado: string
+  readonly id: string
+  readonly nombre: string
+  readonly apellido: string
+  readonly fechaNacimiento: string
+  readonly genero: "M" | "F" | "Otro"
+  readonly telefono: string
+  readonly direccion: string
+  readonly estado: "Activo" | "Inactivo" | "Pendiente de consulta"
 }
 
 interface Appointment {
-  id: string
-  pacienteId: string
-  fechaConsulta: string
-  horaConsulta: string
-  motivoConsulta: string
-  estado: string
+  readonly id: string
+  readonly pacienteId: string
+  readonly fechaConsulta: string // ISO 8601 format
+  readonly horaConsulta: string // HH:mm format
+  readonly motivoConsulta: string
+  readonly estado: "pendiente" | "completada" | "cancelada"
 }
 
 interface AdmissionDashboardProps {
-  patients: Patient[] | undefined
-  appointments: Appointment[] | undefined
-  isLoading: boolean
+  readonly patients?: readonly Patient[]
+  readonly appointments?: readonly Appointment[]
+  readonly isLoading: boolean
 }
 
-const AdmissionDashboard: React.FC<AdmissionDashboardProps> = ({ patients, appointments, isLoading }) => {
-  const quickMetrics = useMemo(() => {
-    const defaultMetrics = {
+interface QuickMetrics {
+  readonly todayAppointments: number
+  readonly pendingPatients: number
+  readonly completedToday: number
+  readonly totalPatients: number
+  readonly monthlyGrowth: number
+  readonly weeklyTrend: number
+}
+
+// Componente de métrica individual memoizado
+const MetricCard = memo<{
+  title: string
+  value: number | string
+  suffix?: string
+  loading?: boolean
+}>(({ title, value, suffix = "", loading = false }) => {
+  if (loading) {
+    return (
+      <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+        <Skeleton className="h-4 w-24 mb-2" />
+        <Skeleton className="h-8 w-16" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm transition-all hover:shadow-md">
+      <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">{title}</p>
+      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        {value}{suffix}
+      </p>
+    </div>
+  )
+})
+MetricCard.displayName = "MetricCard"
+
+// Función auxiliar para parsear fechas con validación
+const safeParseDate = (dateStr: string): Date | null => {
+  try {
+    const date = parseISO(dateStr)
+    return isValid(date) ? date : null
+  } catch {
+    return null
+  }
+}
+
+// Función auxiliar para comparar fechas del mismo día
+const isSameDay = (date1: Date, date2: Date): boolean => {
+  return format(date1, "yyyy-MM-dd") === format(date2, "yyyy-MM-dd")
+}
+
+const AdmissionDashboard: React.FC<AdmissionDashboardProps> = memo(({ 
+  patients = [], 
+  appointments = [], 
+  isLoading 
+}) => {
+  // Cálculo optimizado de métricas con memoización profunda
+  const quickMetrics = useMemo<QuickMetrics>(() => {
+    const defaultMetrics: QuickMetrics = {
       todayAppointments: 0,
       pendingPatients: 0,
       completedToday: 0,
@@ -41,99 +102,124 @@ const AdmissionDashboard: React.FC<AdmissionDashboardProps> = ({ patients, appoi
       weeklyTrend: 0,
     }
 
-    // Si estamos cargando o no hay datos, usar valores por defecto
-    if (isLoading || !patients || !appointments || !Array.isArray(patients) || !Array.isArray(appointments)) {
+    // Validación temprana
+    if (!Array.isArray(patients) || !Array.isArray(appointments)) {
+      console.warn("[AdmissionDashboard] Datos inválidos recibidos")
       return defaultMetrics
     }
 
     try {
-      // Validar que los datos existan y sean arrays
-      if (!Array.isArray(patients) || !Array.isArray(appointments)) {
-        console.warn("[AdmissionDashboard] patients o appointments no son arrays:", {
-          patientsType: typeof patients,
-          appointmentsType: typeof appointments,
-        })
-        return defaultMetrics
-      }
-
-      // Filtrar entradas nulas o indefinidas
-      const validPatients = patients.filter((p) => p != null)
-      const validAppointments = appointments.filter((a) => a != null)
-
-      // Obtener la fecha actual
       const today = new Date()
       const todayStr = format(today, "yyyy-MM-dd")
 
-      return {
-        // Citas programadas para hoy
-        todayAppointments: validAppointments.filter((app) => {
-          try {
-            // Intentar diferentes formatos de fecha
-            const appDate =
-              typeof app.fechaConsulta === "string"
-                ? app.fechaConsulta.split("T")[0] // Formato ISO
-                : format(new Date(app.fechaConsulta), "yyyy-MM-dd")
+      // Procesamiento eficiente con un solo paso
+      const metrics = appointments.reduce((acc, appointment) => {
+        if (!appointment?.fechaConsulta || !appointment?.estado) return acc
 
-            return appDate === todayStr && app.estado === "pendiente"
-          } catch (error) {
-            console.error("[AdmissionDashboard] Error filtrando citas de hoy:", error, app)
-            return false
+        const appointmentDate = safeParseDate(appointment.fechaConsulta)
+        if (!appointmentDate) return acc
+
+        const appointmentDateStr = format(appointmentDate, "yyyy-MM-dd")
+        const isToday = appointmentDateStr === todayStr
+
+        if (isToday) {
+          if (appointment.estado === "pendiente") {
+            acc.todayAppointments++
+          } else if (appointment.estado === "completada") {
+            acc.completedToday++
           }
-        }).length,
+        }
 
-        // Pacientes pendientes de consulta
-        pendingPatients: validPatients.filter((pat) => {
-          try {
-            return pat.estado === "Pendiente de consulta"
-          } catch (error) {
-            console.error("[AdmissionDashboard] Error filtrando pacientes pendientes:", error, pat)
-            return false
-          }
-        }).length,
+        return acc
+      }, { ...defaultMetrics })
 
-        // Citas completadas hoy
-        completedToday: validAppointments.filter((app) => {
-          try {
-            const appDate =
-              typeof app.fechaConsulta === "string"
-                ? app.fechaConsulta.split("T")[0]
-                : format(new Date(app.fechaConsulta), "yyyy-MM-dd")
+      // Calcular pacientes pendientes
+      metrics.pendingPatients = patients.filter(
+        patient => patient?.estado === "Pendiente de consulta"
+      ).length
 
-            return appDate === todayStr && app.estado === "completada"
-          } catch (error) {
-            console.error("[AdmissionDashboard] Error filtrando citas completadas:", error, app)
-            return false
-          }
-        }).length,
+      metrics.totalPatients = patients.length
+      metrics.monthlyGrowth = 12.5 // Simulado
+      metrics.weeklyTrend = 5.2 // Simulado
 
-        // Total de pacientes
-        totalPatients: validPatients.length,
-
-        // Crecimiento mensual (simulado por ahora)
-        monthlyGrowth: 12.5,
-
-        // Tendencia semanal (simulado por ahora)
-        weeklyTrend: 5.2,
-      }
+      return metrics
     } catch (error) {
-      console.error("[AdmissionDashboard] Error calculando métricas rápidas:", error)
+      console.error("[AdmissionDashboard] Error calculando métricas:", error)
       return defaultMetrics
     }
-  }, [isLoading, patients, appointments])
+  }, [patients, appointments])
+
+  // Renderizado con loading states mejorados
+  if (isLoading) {
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <Skeleton className="h-8 w-48" />
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <MetricCard key={i} title="" value={0} loading />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Validación de datos
+  if (!patients.length && !appointments.length) {
+    return (
+      <Alert className="m-4">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          No hay datos disponibles para mostrar en el panel de admisión.
+        </AlertDescription>
+      </Alert>
+    )
+  }
 
   return (
-    <div>
-      <h1>Panel de Admisión</h1>
-      <div>
-        <p>Citas de hoy: {quickMetrics.todayAppointments}</p>
-        <p>Pacientes pendientes: {quickMetrics.pendingPatients}</p>
-        <p>Citas completadas hoy: {quickMetrics.completedToday}</p>
-        <p>Total de pacientes: {quickMetrics.totalPatients}</p>
-        <p>Crecimiento mensual: {quickMetrics.monthlyGrowth}%</p>
-        <p>Tendencia semanal: {quickMetrics.weeklyTrend}%</p>
-      </div>
-    </div>
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="text-xl lg:text-2xl font-bold">
+          Panel de Admisión
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <MetricCard 
+            title="Citas de hoy" 
+            value={quickMetrics.todayAppointments} 
+          />
+          <MetricCard 
+            title="Pacientes pendientes" 
+            value={quickMetrics.pendingPatients} 
+          />
+          <MetricCard 
+            title="Completadas hoy" 
+            value={quickMetrics.completedToday} 
+          />
+          <MetricCard 
+            title="Total pacientes" 
+            value={quickMetrics.totalPatients} 
+          />
+          <MetricCard 
+            title="Crecimiento mensual" 
+            value={quickMetrics.monthlyGrowth} 
+            suffix="%" 
+          />
+          <MetricCard 
+            title="Tendencia semanal" 
+            value={quickMetrics.weeklyTrend} 
+            suffix="%" 
+          />
+        </div>
+      </CardContent>
+    </Card>
   )
-}
+})
+
+AdmissionDashboard.displayName = "AdmissionDashboard"
 
 export default AdmissionDashboard

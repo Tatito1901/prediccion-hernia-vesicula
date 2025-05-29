@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchIcon, ListFilter, Filter } from "lucide-react"
 import { useAppContext } from "@/lib/context/app-context"
 import type { PatientData } from "@/app/dashboard/data-model";
-import { NewPatientForm } from "@/components/patient-admision/new-patient-form"
+import { UnifiedPatientRegistrationForm } from "@/components/patient-admision/new-patient-form";
 import { generateSurveyId } from "@/lib/form-utils"
 import { useRouter } from "next/navigation"
 import { PatientTable } from "./patient-table"
@@ -25,7 +25,7 @@ export function PatientManagement() {
   const [selectedPatient, setSelectedPatient] = useState<PatientData | null>(null)
   const [surveyLink, setSurveyLink] = useState("")
   const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [editingPatientId, setEditingPatientId] = useState<number | null>(null)
+  const [editingPatientId, setEditingPatientId] = useState<string | null>(null)
   const router = useRouter()
   const isMobile = useIsMobile();
   const isTablet = useIsTablet();
@@ -55,7 +55,7 @@ export function PatientManagement() {
       filtered = filtered.filter(
         (patient) =>
           `${patient.nombre} ${patient.apellidos}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (patient.diagnostico && patient.diagnostico.toLowerCase().includes(searchTerm.toLowerCase())),
+          (patient.diagnostico_principal && patient.diagnostico_principal.toLowerCase().includes(searchTerm.toLowerCase())),
       )
     }
 
@@ -156,31 +156,32 @@ export function PatientManagement() {
 
       // Visual feedback
       toast.info(`Seleccionado: ${patient.nombre} ${patient.apellidos}`, {
-        description: `ID: ${patient.id} - ${patient.diagnostico || "Sin diagnóstico"} - ${patient.estado || "Pendiente"}`,
+        description: `ID: ${patient.id} - ${patient.diagnostico_principal || "Sin diagnóstico"} - ${patient.estado_paciente || "Pendiente"}`,
       })
-
-      // Check if survey is completed
-      if (!patient.encuesta) {
-        setLoading(false)
-        // Mostrar opciones para pacientes sin encuesta
-        setShowSurveyModal(true)
-      } else {
-        // Survey is completed, navigate to results with a slight delay for visual feedback
-        setTimeout(() => {
-          try {
+      
+      // Simular una operación asíncrona breve para mejor UX
+      setTimeout(() => {
+        try {
+          // Check if survey is completed
+          if (!patient.encuesta) {
+            // Mostrar opciones para pacientes sin encuesta
+            setShowSurveyModal(true)
+          } else {
+            // Survey is completed, navigate to results
             router.push(`/survey-results/${patient.id}`)
-          } catch (error) {
-            console.error("Navigation error:", error)
-            toast.error("Error al navegar a los resultados", {
-              description: "Intente nuevamente o contacte al soporte técnico",
-            })
-          } finally {
-            setLoading(false)
           }
-        }, 300)
-      }
+        } catch (error) {
+          console.error("Navigation error:", error)
+          toast.error("Error al navegar a los resultados", {
+            description: "Intente nuevamente o contacte al soporte técnico",
+          })
+        } finally {
+          // Desactivar el loading en todos los casos
+          setLoading(false)
+        }
+      }, 300)
     },
-    [router],
+    [router, toast],
   )
 
   // Función para iniciar la encuesta internamente desde el diálogo de compartir
@@ -278,7 +279,16 @@ export function PatientManagement() {
               </Select>
             )}
             
-            <NewPatientForm />
+            <UnifiedPatientRegistrationForm 
+              mode="registerAndSchedule" 
+              buttonLabel="Nuevo Paciente"
+              onSuccess={({ patient, appointment }) => {
+                // Potentially refresh data or navigate, similar to how NewPatientForm's onSuccess might have worked.
+                // For now, just log, as the original onSuccess behavior is not fully visible.
+                console.log("New patient and appointment created:", patient, appointment);
+                // Example: refetch patients or add to local state if needed
+              }}
+            />
           </div>
         </div>
       </div>
@@ -287,7 +297,8 @@ export function PatientManagement() {
         {/* Contenedor principal para la tabla/tarjetas y paginación */}
         {isMobile || isTablet ? (
           <PatientCardView
-            patients={paginatedPatients} 
+            patients={paginatedPatients}
+            loading={loading}
             onShareSurvey={handleShareSurvey}
             onAnswerSurvey={handleAnswerSurvey}
             onEditPatient={handleEditPatient}
@@ -295,7 +306,8 @@ export function PatientManagement() {
           />
         ) : (
           <PatientTable
-            patients={paginatedPatients} 
+            patients={paginatedPatients}
+            loading={loading} 
             onShareSurvey={handleShareSurvey}
             onAnswerSurvey={handleAnswerSurvey}
             onEditPatient={handleEditPatient}

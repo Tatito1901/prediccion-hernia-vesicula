@@ -1,4 +1,4 @@
-"use client";
+
 
 import React, { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { format, subDays, isValid, isAfter, isBefore, parseISO, startOfDay, endOfDay, addDays, isSameDay } from "date-fns";
@@ -30,10 +30,32 @@ import {
 
 // Icons
 import {
-  CalendarIcon, Filter, X, ChevronDown, ChevronUp, Search, ArrowUpDown,
-  CheckCircle, XCircle, Clock, Calendar, ClipboardCheck, AlertCircle,
-  CalendarDays, CalendarClock, CalendarCheck, CalendarX, ChevronRight,
-  RefreshCcw, UserCog, Info as InfoIcon, MoreVertical, FileBarChart
+  AlertCircle,
+  AlertTriangle,
+  Calendar,
+  CalendarClock,
+  CalendarDays,
+  CalendarIcon,
+  CalendarX,
+  Check,
+  CheckCircle,
+  ChevronDown, 
+  ChevronRight,
+  ChevronUp, 
+  Clock, 
+  ClipboardCheck, 
+  FileBarChart,
+  Filter,
+  InfoIcon,
+  MoreVertical, 
+  RefreshCcw, 
+  Search, 
+  Trash,
+  User, 
+  UserCog,
+  X,
+  XCircle,
+  ArrowUpDown
 } from "lucide-react";
 
 // Context and utilities
@@ -50,7 +72,7 @@ import { motion, AnimatePresence } from "framer-motion";
  * Estados posibles de una cita médica
  */
 export const APPOINTMENT_STATUSES = [
-  'completada', 'cancelada', 'pendiente', 'presente', 'reprogramada', 'no_asistio'
+  'COMPLETADA', 'CANCELADA', 'PROGRAMADA', 'CONFIRMADA', 'PRESENTE', 'REAGENDADA', 'NO ASISTIO'
 ] as const;
 
 export type AppointmentStatus = typeof APPOINTMENT_STATUSES[number];
@@ -109,12 +131,13 @@ export interface AppointmentFilters {
  * Colores asociados a cada estado de cita
  */
 const STATUS_COLORS: Record<AppointmentStatus, string> = {
-  completada: "#10b981", // Verde
-  cancelada: "#ef4444", // Rojo
-  pendiente: "#f59e0b", // Naranja
-  presente: "#3b82f6", // Azul
-  reprogramada: "#8b5cf6", // Púrpura
-  no_asistio: "#6b7280", // Gris
+  COMPLETADA: "#10b981", // Verde
+  CANCELADA: "#ef4444", // Rojo
+  PROGRAMADA: "#f59e0b", // Naranja
+  CONFIRMADA: "#0ea5e9", // Celeste
+  PRESENTE: "#3b82f6", // Azul
+  REAGENDADA: "#8b5cf6", // Púrpura
+  "NO ASISTIO": "#6b7280", // Gris
 };
 
 // ===============================
@@ -470,7 +493,7 @@ const FilterSummary: React.FC<FilterSummaryProps> = memo(({
   return (
     <div className={`flex flex-wrap gap-2 mb-4 items-center ${className}`}>
       <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
-        <Filter className="h-4 w-4" />
+        <FilterIcon className="h-4 w-4" />
         Filtros aplicados:
       </span>
       
@@ -487,7 +510,7 @@ const FilterSummary: React.FC<FilterSummaryProps> = memo(({
             onClick={() => updateFilter("dateRange", undefined)}
             aria-label="Eliminar filtro de rango de fechas"
           >
-            <X className="h-3 w-3" />
+            <XIcon className="h-3 w-3" />
           </Button>
         </Badge>
       )}
@@ -503,7 +526,7 @@ const FilterSummary: React.FC<FilterSummaryProps> = memo(({
             onClick={() => updateFilter("motiveFilter", "all")}
             aria-label={`Eliminar filtro de motivo: ${filters.motiveFilter}`}
           >
-            <X className="h-3 w-3" />
+            <XIcon className="h-3 w-3" />
           </Button>
         </Badge>
       )}
@@ -523,7 +546,7 @@ const FilterSummary: React.FC<FilterSummaryProps> = memo(({
             onClick={() => updateFilter("statusFilter", [...APPOINTMENT_STATUSES])}
             aria-label="Restablecer filtros de estado"
           >
-            <X className="h-3 w-3" />
+            <XIcon className="h-3 w-3" />
           </Button>
         </Badge>
       )}
@@ -541,7 +564,7 @@ const FilterSummary: React.FC<FilterSummaryProps> = memo(({
             onClick={() => updateFilter("searchTerm", "")}
             aria-label={`Eliminar término de búsqueda: ${filters.searchTerm}`}
           >
-            <X className="h-3 w-3" />
+            <XIcon className="h-3 w-3" />
           </Button>
         </Badge>
       )}
@@ -652,7 +675,7 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
         <>
           <div className={`bg-white dark:bg-gray-950 rounded-lg p-4 mb-4 shadow-sm border ${className}`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <div className="flex-grow">
                 <Button
                   variant="outline"
                   size="sm"
@@ -661,9 +684,9 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
                   aria-expanded={isAdvancedFilterOpen}
                   aria-controls="advanced-filters-panel"
                 >
-                  <Filter className="h-4 w-4 mr-2" />
+                  <FilterIcon className="h-4 w-4 mr-2" />
                   {isAdvancedFilterOpen ? "Ocultar Filtros" : "Mostrar Filtros"}
-                  {isAdvancedFilterOpen ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />}
+                  {isAdvancedFilterOpen ? <ChevronUpIcon className="ml-1 h-3 w-3" /> : <ChevronDownIcon className="ml-1 h-3 w-3" />}
                 </Button>
 
                 {/* Selector de rango de fechas rápido (solo en desktop) */}
@@ -730,7 +753,7 @@ export const useAppointmentFilters = (savedFilters?: Partial<AppointmentFilters>
 
               {/* Barra de búsqueda */}
               <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   type="search"
                   placeholder="Buscar paciente..."
@@ -814,19 +837,20 @@ const AppointmentCard: React.FC<AppointmentCardProps> = memo(({
     }
   }, []);
 
-  const currentStatus = showNoShowOverride ? "no_asistio" : appointment.estado;
+  const currentStatus = showNoShowOverride ? "NO ASISTIO" : appointment.estado;
   
   /**
    * Obtiene el color asociado al estado de la cita
    */
   const getStatusColorClass = (status: AppointmentStatus): string => {
     const colorMap: Record<AppointmentStatus, string> = {
-      presente: "bg-teal-100 text-teal-800 dark:bg-teal-800/20 dark:text-teal-400 border-teal-200",
-      cancelada: "bg-rose-100 text-rose-800 dark:bg-rose-800/20 dark:text-rose-400 border-rose-200",
-      completada: "bg-sky-100 text-sky-800 dark:bg-sky-800/20 dark:text-sky-400 border-sky-200",
-      pendiente: "bg-amber-100 text-amber-800 dark:bg-amber-800/20 dark:text-amber-400 border-amber-200",
-      no_asistio: "bg-slate-100 text-slate-800 dark:bg-slate-800/20 dark:text-slate-400 border-slate-200",
-      reprogramada: "bg-violet-100 text-violet-800 dark:bg-violet-800/20 dark:text-violet-400 border-violet-200",
+      PRESENTE: "bg-teal-100 text-teal-800 dark:bg-teal-800/20 dark:text-teal-400 border-teal-200",
+      CANCELADA: "bg-rose-100 text-rose-800 dark:bg-rose-800/20 dark:text-rose-400 border-rose-200",
+      COMPLETADA: "bg-sky-100 text-sky-800 dark:bg-sky-800/20 dark:text-sky-400 border-sky-200",
+      PROGRAMADA: "bg-amber-100 text-amber-800 dark:bg-amber-800/20 dark:text-amber-400 border-amber-200",
+      CONFIRMADA: "bg-blue-100 text-blue-800 dark:bg-blue-800/20 dark:text-blue-400 border-blue-200",
+      "NO ASISTIO": "bg-slate-100 text-slate-800 dark:bg-slate-800/20 dark:text-slate-400 border-slate-200",
+      REAGENDADA: "bg-violet-100 text-violet-800 dark:bg-violet-800/20 dark:text-violet-400 border-violet-200",
     };
     return colorMap[status] || "bg-gray-100 text-gray-800 border-gray-200";
   };
@@ -836,12 +860,13 @@ const AppointmentCard: React.FC<AppointmentCardProps> = memo(({
    */
   const getStatusIcon = (status: AppointmentStatus) => {
     const iconMap: Record<AppointmentStatus, React.ReactNode> = {
-      presente: <CheckCircle className="h-3 w-3" />,
-      cancelada: <XCircle className="h-3 w-3" />,
-      completada: <ClipboardCheck className="h-3 w-3" />,
-      pendiente: <Clock className="h-3 w-3" />,
-      no_asistio: <AlertCircle className="h-3 w-3" />,
-      reprogramada: <Calendar className="h-3 w-3" />,
+      PRESENTE: <CheckCircleIcon className="h-3 w-3" />,
+      CANCELADA: <XCircleIcon className="h-3 w-3" />,
+      COMPLETADA: <ClipboardCheckIcon className="h-3 w-3" />,
+      PROGRAMADA: <ClockIcon className="h-3 w-3" />,
+      CONFIRMADA: <CheckIcon className="h-3 w-3" />,
+      "NO ASISTIO": <AlertCircleIcon className="h-3 w-3" />,
+      REAGENDADA: <CalendarIcon className="h-3 w-3" />,
     };
     return iconMap[status];
   };
@@ -851,18 +876,19 @@ const AppointmentCard: React.FC<AppointmentCardProps> = memo(({
    */
   const getStatusLabel = (status: AppointmentStatus): string => {
     const labelMap: Record<AppointmentStatus, string> = {
-      presente: "Presente",
-      cancelada: "Cancelada",
-      completada: "Completada", 
-      pendiente: "Pendiente",
-      no_asistio: "No Asistió",
-      reprogramada: "Reprogramada",
+      PRESENTE: "Presente",
+      CANCELADA: "Cancelada",
+      COMPLETADA: "Completada", 
+      PROGRAMADA: "Programada",
+      CONFIRMADA: "Confirmada",
+      "NO ASISTIO": "No Asistió",
+      REAGENDADA: "Reagendada",
     };
-    return labelMap[status];
+    return labelMap[status] || status;
   };
 
-  const isActionable = !["completada", "cancelada"].includes(currentStatus) &&
-                       !(currentStatus === "no_asistio" && showNoShowOverride);
+  const isActionable = !["COMPLETADA", "CANCELADA"].includes(currentStatus) &&
+                       !(currentStatus === "NO ASISTIO" && showNoShowOverride);
 
   return (
     <motion.div
@@ -894,11 +920,11 @@ const AppointmentCard: React.FC<AppointmentCardProps> = memo(({
           </div>
           <div className="mt-2 flex items-center text-xs text-slate-600 dark:text-slate-400 space-x-3">
             <div className="flex items-center">
-              <CalendarDays className="h-3.5 w-3.5 mr-1 text-primary/80" />
+              <CalendarDaysIcon className="h-3.5 w-3.5 mr-1 text-primary/80" />
               <span>{formatDate(appointment.fechaConsulta, "EEEE, d 'de' MMMM", { locale: es })}</span>
             </div>
             <div className="flex items-center">
-              <Clock className="h-3.5 w-3.5 mr-1 text-primary/80" />
+              <ClockIcon className="h-3.5 w-3.5 mr-1 text-primary/80" />
               <span>{formatTime(appointment.horaConsulta)}</span>
             </div>
           </div>
@@ -918,25 +944,25 @@ const AppointmentCard: React.FC<AppointmentCardProps> = memo(({
             {/* Botones de acción */}
             {isActionable && (
               <div className="flex gap-1">
-                {currentStatus === "pendiente" && (
+                {currentStatus === "PROGRAMADA" && (
                   <Button
                     size="sm" 
                     variant="ghost"
                     className="text-green-600 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-900/50 px-2 py-1"
                     onClick={() => onAction("checkIn", appointment.id, appointment)}
                   >
-                    <CheckCircle className="mr-1 h-3.5 w-3.5" /> 
+                    <CheckCircleIcon className="mr-1 h-3.5 w-3.5" /> 
                     Presente
                   </Button>
                 )}
-                {currentStatus === "presente" && (
+                {currentStatus === "PRESENTE" && (
                   <Button
                     size="sm" 
                     variant="ghost"
                     className="text-blue-600 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-900/50 px-2 py-1"
                     onClick={() => onAction("complete", appointment.id, appointment)}
                   >
-                    <ClipboardCheck className="mr-1 h-3.5 w-3.5" /> 
+                    <ClipboardCheckIcon className="mr-1 h-3.5 w-3.5" /> 
                     Completar
                   </Button>
                 )}
@@ -949,31 +975,34 @@ const AppointmentCard: React.FC<AppointmentCardProps> = memo(({
                       variant="outline" 
                       className="border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 px-2 py-1"
                     >
-                      <MoreVertical className="h-4 w-4" />
+                      <MoreVerticalIcon className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {currentStatus !== "reprogramada" && (
+                    {![
+                      "COMPLETADA",
+                      "CANCELADA"
+                    ].includes(currentStatus) && (
                       <DropdownMenuItem
                         onClick={() => onAction("reschedule", appointment.id, appointment)}
                       >
-                        <CalendarClock className="mr-2 h-4 w-4 text-yellow-600" /> 
+                        <CalendarClockIcon className="mr-2 h-4 w-4 text-yellow-600" /> 
                         Reagendar
                       </DropdownMenuItem>
                     )}
-                    {currentStatus !== "cancelada" && (
+                    {currentStatus !== "CANCELADA" && (
                       <DropdownMenuItem
                         onClick={() => onAction("cancel", appointment.id, appointment)}
                       >
-                        <CalendarX className="mr-2 h-4 w-4 text-red-600" /> 
+                        <CalendarXIcon className="mr-2 h-4 w-4 text-red-600" /> 
                         Cancelar
                       </DropdownMenuItem>
                     )}
-                    {!["no_asistio", "completada", "cancelada"].includes(currentStatus) && (
+                    {!["NO ASISTIO", "COMPLETADA", "CANCELADA"].includes(currentStatus) && (
                       <DropdownMenuItem
                         onClick={() => onAction("noShow", appointment.id, appointment)}
                       >
-                        <UserCog className="mr-2 h-4 w-4 text-slate-500" /> 
+                        <UserCogIcon className="mr-2 h-4 w-4 text-slate-500" /> 
                         No Asistió
                       </DropdownMenuItem>
                     )}
@@ -1030,7 +1059,7 @@ export const AppointmentManagement: React.FC = () => {
           fechaConsulta: "2024-12-20",
           horaConsulta: "10:30",
           motivoConsulta: "Hernia Inguinal",
-          estado: "pendiente",
+          estado: "PROGRAMADA",
           notas: "Primera consulta",
           telefono: "555-1234"
         },
@@ -1041,7 +1070,7 @@ export const AppointmentManagement: React.FC = () => {
           fechaConsulta: "2024-12-20",
           horaConsulta: "11:00",
           motivoConsulta: "Colecistitis",
-          estado: "presente",
+          estado: "PRESENTE",
           notas: "Seguimiento",
           telefono: "555-5678"
         }

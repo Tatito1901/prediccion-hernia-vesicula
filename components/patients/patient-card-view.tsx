@@ -10,6 +10,7 @@ import type { PatientData } from "@/app/dashboard/data-model"
 
 interface PatientCardViewProps {
   patients: PatientData[]
+  loading?: boolean
   onSelectPatient: (patient: PatientData) => void
   onShareSurvey?: (patient: PatientData) => void
   onAnswerSurvey?: (patient: PatientData) => void
@@ -18,6 +19,7 @@ interface PatientCardViewProps {
 
 export function PatientCardView({
   patients,
+  loading = false,
   onSelectPatient,
   onShareSurvey,
   onAnswerSurvey,
@@ -29,17 +31,19 @@ export function PatientCardView({
   const [showTotal, setShowTotal] = useState(true);
 
   // Obtener el color de estado
-  const getStatusColorClass = (status: string) => {
+  const getStatusColorClass = (status?: string) => {
+    if (!status) return "bg-blue-100 text-blue-800 dark:bg-blue-800/20 dark:text-blue-400";
+    
     switch (status) {
-      case "Operado":
+      case "OPERADO":
         return "bg-green-100 text-green-800 dark:bg-green-800/20 dark:text-green-400"
-      case "No Operado":
+      case "NO OPERADO":
         return "bg-red-100 text-red-800 dark:bg-red-800/20 dark:text-red-400"
-      case "Pendiente de consulta":
+      case "PENDIENTE DE CONSULTA":
         return "bg-yellow-100 text-yellow-800 dark:bg-yellow-800/20 dark:text-yellow-400"
-      case "Seguimiento":
+      case "EN SEGUIMIENTO":
         return "bg-purple-100 text-purple-800 dark:bg-purple-800/20 dark:text-purple-400"
-      case "Cancelado":
+      case "INDECISO":
         return "bg-gray-100 text-gray-800 dark:bg-gray-800/20 dark:text-gray-400"
       default:
         return "bg-blue-100 text-blue-800 dark:bg-blue-800/20 dark:text-blue-400"
@@ -78,13 +82,32 @@ export function PatientCardView({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {patients.map((patient) => (
-            <Card 
-              key={patient.id} 
-              className="relative overflow-hidden shadow-sm hover:shadow transition-shadow" 
-              onTouchStart={() => handleTouchStart(patient)}
-              onTouchEnd={handleTouchEnd}
-              onTouchMove={handleTouchEnd} // Cancelar si el usuario desliza
+          {loading ? (
+            // Estado de carga
+            Array(6).fill(0).map((_, index) => (
+              <Card key={`skeleton-${index}`} className="opacity-70">
+                <CardContent className="p-6">
+                  <div className="space-y-4">
+                    <div className="h-6 bg-muted rounded animate-pulse" />
+                    <div className="h-4 bg-muted rounded w-3/4 animate-pulse" />
+                    <div className="flex gap-2">
+                      <div className="h-6 w-24 bg-muted rounded animate-pulse" />
+                      <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+                    </div>
+                    <div className="h-4 bg-muted rounded w-full animate-pulse" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            // Datos reales
+            patients.map((patient) => (
+              <Card 
+                key={patient.id} 
+                className="relative overflow-hidden shadow-sm hover:shadow transition-shadow" 
+                onTouchStart={() => handleTouchStart(patient)}
+                onTouchEnd={handleTouchEnd}
+                onTouchMove={handleTouchEnd} // Cancelar si el usuario desliza
             >
               <div 
                 className="absolute right-2 top-2 z-10"
@@ -144,15 +167,15 @@ export function PatientCardView({
                       {patient.nombre} {patient.apellidos}
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      {patient.fechaConsulta 
-                        ? new Date(patient.fechaConsulta).toLocaleDateString('es-ES') 
+                      {patient.fecha_primera_consulta 
+                        ? new Date(patient.fecha_primera_consulta).toLocaleDateString('es-ES') 
                         : "Sin fecha"} · {patient.edad || "-"} años
                     </p>
                   </div>
                   
                   <div className="flex flex-wrap gap-2">
-                    <Badge className={getStatusColorClass(patient.estado)}>
-                      {patient.estado || "Pendiente"}
+                    <Badge className={getStatusColorClass(patient.estado_paciente)}>
+                      {patient.estado_paciente || "Pendiente"}
                     </Badge>
                     
                     <Badge className={patient.encuesta 
@@ -164,7 +187,7 @@ export function PatientCardView({
                   </div>
                   
                   <p className="text-sm line-clamp-2">
-                    <span className="font-medium">Diagnóstico:</span> {patient.diagnostico || "Sin diagnóstico"}
+                    <span className="font-medium">Diagnóstico:</span> {patient.diagnostico_principal || "Sin diagnóstico"}
                   </p>
                 </div>
               </CardContent>

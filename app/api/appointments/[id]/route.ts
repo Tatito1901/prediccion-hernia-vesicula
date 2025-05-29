@@ -22,7 +22,7 @@ export async function PUT(
     // Ensure appointmentId exists in the database before trying to update
     const { data: existingAppointment, error: fetchError } = await supabase
       .from('appointments')
-      .select('id')
+      .select('id, estado_cita, fecha_hora_cita')
       .eq('id', appointmentId)
       .single();
       
@@ -67,6 +67,31 @@ export async function PUT(
     if (error) {
       console.error('Supabase update error:', error);
       throw error;
+    }
+    
+    // Log history entry
+    try {
+      const historyEntry: any = {
+        appointment_id: appointmentId,
+        estado_cita_anterior: existingAppointment?.estado_cita,
+        estado_cita_nuevo: updateData.estado_cita ?? existingAppointment?.estado_cita,
+        fecha_cambio: new Date().toISOString(),
+        fecha_cita_anterior: existingAppointment?.fecha_hora_cita,
+        fecha_cita_nueva: rawUpdateData.fecha_hora_cita || existingAppointment?.fecha_hora_cita,
+        modificado_por_id: body.actor_id || "5e4d29a2-5eec-49ee-ac0f-8d349d5660ed", // ID de usuario por defecto hasta implementar auth
+        notas: rawUpdateData.notas ?? null,
+        motivo_cambio: rawUpdateData.motivo_cambio ?? null,
+        ip_address: request.headers.get('x-forwarded-for') || 
+                   request.headers.get('x-real-ip') || 
+                   'unknown',
+        user_agent: request.headers.get('user-agent') || 'unknown',
+      };
+      const { error: historyError } = await supabase
+        .from('appointment_history')
+        .insert([historyEntry]);
+      if (historyError) console.error('Error logging appointment history:', historyError);
+    } catch (hErr) {
+      console.error('Unexpected error logging history:', hErr);
     }
     
     return NextResponse.json(updatedAppointment);

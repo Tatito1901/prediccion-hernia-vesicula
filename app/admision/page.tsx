@@ -1,34 +1,24 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PatientAdmission } from "@/components/patient-admision/patient-admission"
-import { AppointmentStatistics } from "@/components/patient-admision/appointment-statistics"
+import  PatientAdmission  from "@/components/patient-admision/patient-admission"
+import { AppointmentStatistics } from "@/components/appointments/appointment-statistics"
 import { ChartDiagnostic } from "@/components/patient-admision/chart-diagnostic"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { PieChartIcon, CalendarIcon, FileBarChartIcon, PanelTopIcon, RefreshCw } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { useAppContext } from "@/lib/context/app-context"
 
 export default function AdmisionPage() {
   const [activeTab, setActiveTab] = useState("admision")
   const { pendingAppointments, todayAppointments } = useAppContext()
-  const [isLoading, setIsLoading] = useState(false)
 
   // Contador para notificaciones
   const notificationCounts = {
     admision: pendingAppointments?.filter(app => app.estado === "pendiente" && new Date(app.fecha).toDateString() === new Date().toDateString()).length || 0,
     statistics: 0,
     diagnostic: 0
-  }
-
-  // Función para refrescar datos
-  const handleRefresh = () => {
-    setIsLoading(true)
-    setTimeout(() => {
-      setIsLoading(false)
-    }, 1000)
   }
 
   return (
@@ -38,21 +28,6 @@ export default function AdmisionPage() {
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-center sm:text-left">
           Centro de Gestión Clínica
         </h1>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleRefresh}
-          className="gap-1.5 w-full sm:w-auto"
-          disabled={isLoading}
-        >
-          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          <span className="hidden xs:inline">
-            {isLoading ? 'Actualizando...' : 'Actualizar datos'}
-          </span>
-          <span className="xs:hidden">
-            {isLoading ? 'Actualizando...' : 'Actualizar'}
-          </span>
-        </Button>
       </div>
 
       <Card className="border shadow-sm">

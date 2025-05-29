@@ -48,7 +48,7 @@ export enum AppointmentStatusEnum {
   PRESENTE = "PRESENTE",
   REAGENDADA = "REAGENDADA"
 }
-export type AppointmentStatus = `${AppointmentStatusEnum}`;
+export type AppointmentStatus = 'COMPLETADA' | 'CANCELADA' | 'PROGRAMADA' | 'CONFIRMADA' | 'PRESENTE' | 'REAGENDADA' | 'NO ASISTIO';
 
 // --- ENUMS Específicos de la Encuesta (como los tenías) ---
 export enum InsuranceTypeEnum {

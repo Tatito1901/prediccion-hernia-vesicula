@@ -1,8 +1,7 @@
-"use client"
 
 import type React from "react"
+
 import { useRef, useState, useCallback, useMemo, memo } from "react"
-import { motion } from "framer-motion"
 import {
   BarChart,
   Bar,
@@ -57,179 +56,110 @@ import { cn } from "@/lib/utils"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-// --- Tipos mejorados ---
-
-/** Tipos específicos en lugar de strings */
+// --- Types ---
 export type ChartType = "pie" | "bar" | "line" | "area" | "radar" | "scatter" | "radial"
 export type ColorScheme = "categorical" | "sequential" | "divergent"
 export type Orientation = "vertical" | "horizontal"
 export type AppointmentStatus = "completada" | "cancelada" | "pendiente" | "presente" | "reprogramada" | "no_asistio"
 
-/** Configuración de un gráfico */
 export interface ChartConfig {
-  /** Tipo de gráfico */
   type: ChartType
-  /** Mostrar leyenda */
   showLegend: boolean
-  /** Mostrar tooltips */
   showTooltip: boolean
-  /** Mostrar cuadrícula */
   showGrid: boolean
-  /** Habilitar animaciones */
   animation: boolean
-  /** Apilar datos */
   stacked: boolean
-  /** Modo oscuro */
   darkMode?: boolean
-  /** Mostrar etiquetas de datos */
   showLabels?: boolean
-  /** Color primario */
   primaryColor?: string
-  /** Paleta de colores */
   colorScheme?: ColorScheme
-  /** Orientación */
   orientation?: Orientation
-  /** Intervalo para actualización automática (ms) */
   refreshInterval?: number | null
 }
 
-/** Mapa de colores por estado */
 export type StatusColorMap = Record<AppointmentStatus, string>
 
-/** Props para tarjetas de estadísticas */
 export interface StatCardProps {
-  /** Título de la tarjeta */
   title: string
-  /** Valor principal */
   value: string | number
-  /** Ícono */
   icon: React.ReactNode
-  /** Descripción */
   description: string
-  /** Color de fondo personalizado */
   color?: string
-  /** Retraso para animación de entrada */
   animationDelay?: number
-  /** Cambio porcentual respecto a periodo anterior */
   changePercent?: number
-  /** Valor del periodo anterior */
   previousValue?: string | number
-  /** Etiqueta de tendencia */
   trendLabel?: string
-  /** Habilitar animaciones */
   animated?: boolean
-  /** Acción al hacer clic */
   onClick?: () => void
-  /** Clase CSS personalizada */
   className?: string
 }
 
-/** Estadísticas generales */
 export interface GeneralStats {
-  /** Total de citas */
   total: number
-  /** Tasa de asistencia (%) */
   attendance: number
-  /** Tasa de cancelación (%) */
   cancellation: number
-  /** Porcentaje de citas pendientes */
   pending: number
-  /** Porcentaje de citas presentes */
   present: number
-  /** Número de citas completadas */
   completed: number
-  /** Número de citas canceladas */
   cancelled: number
-  /** Número de citas pendientes */
   pendingCount: number
-  /** Número de citas presentes */
   presentCount: number
-  /** Cambio porcentual respecto al período anterior */
   changeFromPrevious?: number
-  /** Periodo de tiempo analizado */
   period?: string
 }
 
-/** Estructura de datos para gráfico circular de estados */
 export interface StatusChartData {
   name: AppointmentStatus
-  /** Cantidad de citas */
   value: number
-  /** Color asociado */
   color: string
 }
 
-/** Estructura de datos para gráfico de barras de motivos */
 export interface MotiveChartData {
-  /** Motivo de consulta */
   motive: string
-  /** Cantidad de citas */
   count: number
 }
 
-/** Estructura de datos para gráfico de tendencia temporal */
 export interface TrendChartData extends Record<AppointmentStatus, number> {
-  /** Fecha en formato YYYY-MM-DD */
   date: string
-  /** Fecha formateada para visualización */
   formattedDate: string
 }
 
-/** Estructura de datos para gráfico por día de la semana */
 export interface WeekdayChartData {
-  /** Nombre del día */
   name: string
-  /** Total de citas */
   total: number
-  /** Citas con asistencia */
   attended: number
-  /** Tasa de asistencia (%) */
   rate: number
 }
 
-/** Punto para gráfico de dispersión */
 export interface ScatterPoint {
-  /** Día de la semana (0-6) */
   day: number
-  /** Hora del día (0-23) */
   hour: number
-  /** Cantidad de citas */
   count: number
-  /** Nombre del día */
   dayName: string
 }
 
-/** Estructura de datos para gráfico de dispersión */
 export type ScatterData = Record<AppointmentStatus, ScatterPoint[]>
 
-/** Props para panel de configuración de gráficos */
 export interface ChartConfigPanelProps {
-  /** Configuración actual */
   chartConfig: ChartConfig
-  /** Función para actualizar configuración */
   updateChartConfig: <K extends keyof ChartConfig>(key: K, value: ChartConfig[K]) => void
-  /** Opciones disponibles */
   options?: {
-    /** Permitir cambio de tipo de gráfico */
     allowTypeChange?: boolean
-    /** Tipos de gráficos disponibles */
     availableTypes?: ChartType[]
-    /** Esquemas de color disponibles */
     availableColorSchemes?: ColorScheme[]
   }
-  /** Clase CSS personalizada */
   className?: string
 }
 
-// Constantes de estilos y configuración mejoradas - definidas fuera de los componentes para evitar recreaciones
-// Paletas de colores - predefinidas una sola vez
+// --- Constants ---
+// Define color palettes once to avoid recreations
 const chartPalette = {
   categorical: ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#6b7280", "#ec4899", "#06b6d4"],
   sequential: ["#0ea5e9", "#0284c7", "#0369a1", "#075985", "#0c4a6e", "#082f49", "#172554", "#0f172a"],
   divergent: ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6"],
 }
 
-// Estilos de gráficos predefinidos
+// Predefined chart styles
 const chartStyles = {
   animation: {
     duration: 800,
@@ -257,31 +187,29 @@ const chartStyles = {
   },
 }
 
-// Función para obtener un conjunto de colores según el esquema - optimizada para evitar recrear arrays
+// Get color set based on scheme - memoized to avoid recreations
 const getChartColorSet = (scheme: ColorScheme = "categorical"): readonly string[] => {
   return chartPalette[scheme] || chartPalette.categorical
 }
 
-// Conjunto de colores para gráficos - definido como constante
 export const COLORS = chartPalette.categorical
 
-// Definir una paleta de colores mejorada para estados - como objeto inmutable
+// Status colors as immutable object
 export const STATUS_COLORS: Readonly<StatusColorMap> = {
-  completada: "#10b981", // Verde más vibrante
-  cancelada: "#ef4444", // Rojo más vibrante
-  pendiente: "#f59e0b", // Naranja más vibrante
-  presente: "#3b82f6", // Azul más vibrante
-  reprogramada: "#8b5cf6", // Púrpura más vibrante
-  no_asistio: "#6b7280", // Gris más vibrante
+  completada: "#10b981",
+  cancelada: "#ef4444",
+  pendiente: "#f59e0b",
+  presente: "#3b82f6",
+  reprogramada: "#8b5cf6",
+  no_asistio: "#6b7280",
 }
 
-// Constantes de día de la semana - predefinidas como inmutables
+// Weekday constants as frozen objects to prevent modifications
 export const WEEKDAYS = Object.freeze(["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"])
 export const WEEKDAYS_SHORT = Object.freeze(["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"])
 
-// Tema de gráficos común para mantener consistencia visual - definido fuera para evitar recreaciones
+// Chart theme as frozen object
 export const CHART_THEME = Object.freeze({
-  // Colores base
   colors: {
     primary: "#3b82f6",
     secondary: "#10b981",
@@ -289,19 +217,16 @@ export const CHART_THEME = Object.freeze({
     danger: "#ef4444",
     neutral: "#6b7280",
   },
-  // Estilos del gráfico
   chart: {
     fontFamily: "inherit",
     backgroundColor: "transparent",
     textColor: "#6b7280",
     fontSize: 12,
   },
-  // Estilos de la cuadrícula
   grid: {
     stroke: "#e5e7eb",
     strokeDasharray: "3 3",
   },
-  // Estilos para tooltip
   tooltip: {
     backgroundColor: "white",
     borderRadius: 6,
@@ -311,7 +236,7 @@ export const CHART_THEME = Object.freeze({
   },
 })
 
-// Función helper para determinar colores por tipo de tarjeta - Extraída para evitar recreaciones
+// Helper function for card styles - extracted to avoid recreations
 const getCardStyles = (title: string, changePercent?: number) => {
   let bgColor = "bg-blue-50 dark:bg-blue-950/20"
   let iconColor = "text-blue-600 dark:text-blue-400"
@@ -347,12 +272,9 @@ const getCardStyles = (title: string, changePercent?: number) => {
   return { bgColor, iconColor, borderColor, ringColor, trendColor }
 }
 
-/**
- * Función helper para formatear valores de tooltip
- * Proporciona un formateador consistente para diferentes tipos de datos
- */
+// Helper function for tooltip formatting
 const formatTooltipValue = (value: number | string, name: string, unit?: string): [string, string] => {
-  // Formateo de valor
+  // Format value
   const formattedValue =
     typeof value === "number"
       ? name === "rate" || name.includes("porcentaje")
@@ -360,7 +282,7 @@ const formatTooltipValue = (value: number | string, name: string, unit?: string)
         : String(value)
       : String(value)
 
-  // Formateo de nombre
+  // Format name
   const formattedName =
     name === "total"
       ? "Total"
@@ -383,10 +305,7 @@ const formatTooltipValue = (value: number | string, name: string, unit?: string)
   return [`${formattedValue}${unit ? ` ${unit}` : ""}`, formattedName]
 }
 
-/**
- * Componente de Tarjeta de Estadística - versión mejorada y optimizada
- * Muestra un indicador estadístico con animación y diseño mejorado
- */
+// Stat Card Component - Memoized to prevent unnecessary re-renders
 export const StatCard = memo<StatCardProps>(
   ({
     title,
@@ -402,10 +321,10 @@ export const StatCard = memo<StatCardProps>(
     onClick,
     className = "",
   }) => {
-    // Determinar los colores de fondo y texto según el título - memoizado
+    // Memoize card styles to prevent recalculation
     const cardStyles = useMemo(() => getCardStyles(title, changePercent), [title, changePercent])
 
-    // Icono de tendencia - memoizado
+    // Memoize trend icon to prevent recreation
     const trendIcon = useMemo(() => {
       if (changePercent === undefined) return null
       return changePercent > 0 ? (
@@ -415,7 +334,7 @@ export const StatCard = memo<StatCardProps>(
       ) : null
     }, [changePercent])
 
-    // Definir props de animación solo si es necesario
+    // Only define animation props if needed
     const animationProps = animated
       ? {
           initial: { opacity: 0, y: 20 },
@@ -423,15 +342,14 @@ export const StatCard = memo<StatCardProps>(
           transition: {
             duration: 0.3,
             delay: animationDelay * 0.1,
-            ease: [0.23, 1, 0.32, 1], // Ease-out cubic
+            ease: [0.23, 1, 0.32, 1],
           },
           whileHover: { y: -2, boxShadow: "0 4px 12px rgba(0,0,0,0.05)" },
         }
       : {}
 
     return (
-      <motion.div
-        {...animationProps}
+      <div
         onClick={onClick}
         className={cn(
           "transition-all",
@@ -489,27 +407,23 @@ export const StatCard = memo<StatCardProps>(
             <CardDescription>{description}</CardDescription>
           </CardContent>
         </Card>
-      </motion.div>
+      </div>
     )
   },
 )
 
 StatCard.displayName = "StatCard"
 
-/**
- * Componente de Panel de Configuración de Gráficos - versión mejorada
- * Permite personalizar aspectos visuales y técnicos de gráficos
- */
+// Chart Config Panel Component - Memoized to prevent unnecessary re-renders
 export const ChartConfigPanel = memo<ChartConfigPanelProps>(
   ({ chartConfig, updateChartConfig, options = {}, className = "" }) => {
-    // Opciones disponibles - valores predeterminados tipo seguro
     const {
       allowTypeChange = true,
       availableTypes = ["pie", "bar", "line", "area", "radar", "scatter"],
       availableColorSchemes = ["categorical", "sequential", "divergent"],
     } = options
 
-    // Etiquetas amigables para esquemas de color - predefinidas
+    // Predefined color scheme labels
     const colorSchemeLabels: Record<ColorScheme, string> = {
       categorical: "Categórica",
       sequential: "Secuencial",
@@ -527,7 +441,7 @@ export const ChartConfigPanel = memo<ChartConfigPanelProps>(
 
         <ScrollArea className="pr-4 max-h-[calc(100vh-300px)]">
           <div className="space-y-4">
-            {/* Sección de opciones visuales */}
+            {/* Visual Options Section */}
             <div className="space-y-2.5">
               <h4 className="text-xs uppercase text-muted-foreground font-medium tracking-wide mb-2">
                 Opciones Visuales
@@ -631,7 +545,7 @@ export const ChartConfigPanel = memo<ChartConfigPanelProps>(
               </div>
             </div>
 
-            {/* Sección de comportamiento */}
+            {/* Behavior Section */}
             <div className="space-y-2.5">
               <h4 className="text-xs uppercase text-muted-foreground font-medium tracking-wide mb-2">Comportamiento</h4>
 
@@ -683,7 +597,7 @@ export const ChartConfigPanel = memo<ChartConfigPanelProps>(
                 />
               </div>
 
-              {/* Selector de esquema de color */}
+              {/* Color Scheme Selector */}
               <div className="space-y-1.5">
                 <Label className="text-xs">Esquema de Color</Label>
                 <Tabs
@@ -701,7 +615,7 @@ export const ChartConfigPanel = memo<ChartConfigPanelProps>(
                 </Tabs>
               </div>
 
-              {/* Selector de orientación para gráficos compatibles */}
+              {/* Orientation Selector for compatible charts */}
               {(chartConfig.type === "bar" || chartConfig.type === "line") && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Orientación</Label>
@@ -731,10 +645,7 @@ export const ChartConfigPanel = memo<ChartConfigPanelProps>(
 
 ChartConfigPanel.displayName = "ChartConfigPanel"
 
-/**
- * Componente de Tooltip personalizado para gráficos - mejora la apariencia y accesibilidad
- * Optimizado con memoización y tipos correctos
- */
+// Custom Tooltip Component - Memoized to prevent unnecessary re-renders
 const CustomTooltip = memo<TooltipProps<number, string>>(({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null
 
@@ -761,13 +672,9 @@ const CustomTooltip = memo<TooltipProps<number, string>>(({ active, payload, lab
 
 CustomTooltip.displayName = "CustomTooltip"
 
-/**
- * Hook personalizado para la gestión de configuración de gráficos
- * Proporciona estado, funciones y componentes para configurar gráficos
- * Versión optimizada con mejor memoización y tipado
- */
+// Main hook for chart configuration
 export function useChartConfig() {
-  // Estado para la configuración de gráficos - con tipo preciso
+  // Chart configuration state
   const [chartConfig, setChartConfig] = useState<ChartConfig>({
     type: "pie",
     showLegend: true,
@@ -783,21 +690,18 @@ export function useChartConfig() {
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false)
   const chartRef = useRef<HTMLDivElement>(null)
 
-  // Función para actualizar configuración de gráficos - memoizada
+  // Memoized function to update chart configuration
   const updateChartConfig = useCallback(<K extends keyof ChartConfig>(key: K, value: ChartConfig[K]): void => {
     setChartConfig((prev) => ({ ...prev, [key]: value }))
   }, [])
 
-  // Función para obtener el conjunto de colores actual según configuración - memoizada
+  // Memoized current color set based on configuration
   const getCurrentColorSet = useMemo(
     (): readonly string[] => getChartColorSet(chartConfig.colorScheme as ColorScheme),
     [chartConfig.colorScheme],
   )
 
-  /**
-   * Componente de Control de Configuración de Gráficos
-   * Permite acceder al panel de configuración
-   */
+  // Chart Configuration Control Component
   const ChartConfigControl = useCallback(() => {
     return (
       <Sheet>
@@ -832,7 +736,7 @@ export function useChartConfig() {
     )
   }, [chartConfig, updateChartConfig])
 
-  // Utilidad para manejar estados de carga y datos vacíos de manera consistente
+  // Utility for handling loading and empty states consistently
   const withLoadingState = useCallback(
     <T,>(
       renderFn: (data: T) => React.ReactNode,
@@ -864,10 +768,7 @@ export function useChartConfig() {
     [],
   )
 
-  /**
-   * Renderiza un gráfico circular o de anillo según la configuración
-   * Versión optimizada con mejor memoización y accesibilidad
-   */
+  // Render Pie Chart
   const renderPieChart = useCallback(
     (statusChartData: StatusChartData[], generalStats: GeneralStats, isLoading: boolean): React.ReactNode => {
       return withLoadingState(
@@ -1027,15 +928,12 @@ export function useChartConfig() {
     [chartConfig, updateChartConfig, withLoadingState],
   )
 
-  /**
-   * Renderiza un gráfico de barras para mostrar motivos de consulta
-   * Versión optimizada con mejor memoización y accesibilidad
-   */
+  // Render Bar Chart
   const renderBarChart = useCallback(
     (motiveChartData: MotiveChartData[], isLoading: boolean): React.ReactNode => {
       return withLoadingState(
         (data) => {
-          // Determinar si el gráfico es horizontal
+          // Determine if chart is horizontal
           const isHorizontal = chartConfig.orientation === "horizontal"
 
           return (
@@ -1161,10 +1059,7 @@ export function useChartConfig() {
     [chartConfig, updateChartConfig, getCurrentColorSet, withLoadingState],
   )
 
-  /**
-   * Renderiza un gráfico de línea o área según la configuración
-   * Versión optimizada con mejor memoización y accesibilidad
-   */
+  // Render Line Chart
   const renderLineChart = useCallback(
     (trendChartData: TrendChartData[], isLoading: boolean): React.ReactNode => {
       return withLoadingState(
@@ -1252,7 +1147,7 @@ export function useChartConfig() {
                     />
                   )}
 
-                  {/* Usando un Array de definiciones en lugar de repetir componentes similares */}
+                  {/* Using an array of definitions instead of repeating similar components */}
                   {[
                     {
                       key: "total",
@@ -1348,7 +1243,7 @@ export function useChartConfig() {
                     />
                   )}
 
-                  {/* Usando un Array de definiciones en lugar de repetir componentes similares */}
+                  {/* Using an array of definitions instead of repeating similar components */}
                   {[
                     { key: "total", color: CHART_THEME.colors.primary, delay: 0 },
                     { key: "completada", color: STATUS_COLORS.completada, delay: 200 },
@@ -1393,10 +1288,7 @@ export function useChartConfig() {
     [chartConfig, updateChartConfig, withLoadingState],
   )
 
-  /**
-   * Renderiza un gráfico de barras o radar para días de la semana
-   * Versión optimizada con mejor memoización y accesibilidad
-   */
+  // Render Weekday Chart
   const renderWeekdayChart = useCallback(
     (weekdayChartData: WeekdayChartData[], isLoading: boolean): React.ReactNode => {
       return withLoadingState(
@@ -1637,10 +1529,7 @@ export function useChartConfig() {
     [chartConfig, updateChartConfig, withLoadingState],
   )
 
-  /**
-   * Renderiza un gráfico de dispersión para análisis de correlación
-   * Versión optimizada con mejor memoización y accesibilidad
-   */
+  // Render Scatter Chart
   const renderScatterChart = useCallback(
     (scatterData: ScatterData, timeRange: [number, number], isLoading: boolean): React.ReactNode => {
       return withLoadingState(
@@ -1718,7 +1607,7 @@ export function useChartConfig() {
                   />
                 )}
 
-                {/* Usando un Array de definiciones para mejorar mantenibilidad */}
+                {/* Using an array of definitions to improve maintainability */}
                 {[
                   { key: "completada", label: "Completadas", color: STATUS_COLORS.completada, delay: 0 },
                   { key: "cancelada", label: "Canceladas", color: STATUS_COLORS.cancelada, delay: 200 },
@@ -1761,7 +1650,7 @@ export function useChartConfig() {
         scatterData,
         isLoading,
         (data) => Object.values(data).every((arr) => arr.length === 0),
-        350, // Altura específica para este gráfico
+        350, // Specific height for this chart
       )
     },
     [chartConfig, updateChartConfig, withLoadingState],

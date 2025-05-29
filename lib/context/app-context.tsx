@@ -7,7 +7,6 @@ import { format, isValid, parseISO } from "date-fns";
 import type { 
   PatientData, 
   AppointmentData, 
-  FollowUp, 
   DoctorData, 
   ClinicMetrics, 
   PatientStatus, 
@@ -101,6 +100,15 @@ interface AppContextType {
   }) => Promise<AppointmentData | null>;
   
   updateAppointment: (appointmentId: string, appointmentUpdate: Partial<AppointmentData>) => Promise<AppointmentData | null>;
+  
+  // Nuevas funciones para historial de citas
+  getAppointmentHistory: (appointmentId: string) => Promise<any[]>;
+  updateAppointmentStatus: (
+    appointmentId: string,
+    newStatus: AppointmentStatus,
+    motivo?: string,
+    nuevaFecha?: string
+  ) => Promise<AppointmentData | null>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -115,7 +123,129 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
   const [errorPatients, setErrorPatients] = useState<string | null>(null);
   const [errorAppointments, setErrorAppointments] = useState<string | null>(null);
+  
+  // Función para obtener el historial de una cita
+  const getAppointmentHistory = useCallback(async (appointmentId: string) => {
+    try {
+      const response = await fetchWithRetry(`${API_BASE_URL}/appointments/${appointmentId}/history`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(`Error ${response.status}: ${errorData.message || response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (err: any) {
+      console.error('Error fetching appointment history:', err);
+      toast.error('Error al obtener historial', { description: err.message || 'No se pudo cargar el historial de la cita' });
+      return [];
+    }
+  }, []);
 
+  // Función para actualizar estado + registrar historial
+  const updateAppointmentStatus = useCallback(async (
+    appointmentId: string,
+    newStatus: AppointmentStatus,
+    motivo?: string,
+    nuevaFecha?: string
+  ) => {
+    try {
+      // Buscar la cita actual para tener sus datos
+      const currentAppointment = appointments.find(a => normalizeId(a.id) === normalizeId(appointmentId));
+      
+      if (!currentAppointment) {
+        throw new Error(`No se encontró la cita con ID: ${appointmentId}`);
+      }
+
+      const updateData: any = {
+        estado_cita: newStatus,
+        actor_id: DEFAULT_USER_ID,
+        motivo_cambio: motivo || `Cambio a estado ${newStatus}`
+      };
+      
+      // Si se proporciona una nueva fecha
+      if (nuevaFecha) {
+        updateData.fecha_hora_cita = nuevaFecha;
+      }
+      
+      const response = await fetchWithRetry(`${API_BASE_URL}/appointments/${appointmentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(`Error ${response.status}: ${errorData.message || response.statusText}`);
+      }
+      
+      // Intentar parsear la respuesta como JSON
+      let updatedAppointmentData;
+      try {
+        const responseText = await response.text();
+        updatedAppointmentData = JSON.parse(responseText);
+      } catch (e) {
+        // Si la respuesta no es JSON válido, usar los datos actuales + la actualización
+        updatedAppointmentData = {
+          ...currentAppointment,
+          estado_cita: newStatus,
+        };
+      }
+      
+      const fechaHoraCita = updatedAppointmentData.fecha_hora_cita 
+        ? parseISO(updatedAppointmentData.fecha_hora_cita)
+        : (nuevaFecha ? parseISO(nuevaFecha) : currentAppointment.fechaConsulta);
+      
+      // Crear la versión actualizada para la memoria
+      const updatedAppointment: AppointmentData = {
+        ...currentAppointment,
+        id: normalizeId(appointmentId),
+        estado: newStatus,
+        fechaConsulta: fechaHoraCita,
+        horaConsulta: safeFormatDate(fechaHoraCita, "HH:mm", "00:00"),
+        notas: updatedAppointmentData.notas_cita_seguimiento || currentAppointment.notas || "",
+      };
+      
+      // Actualizar en memoria
+      setAppointments(prev => prev.map(app => 
+        normalizeId(app.id) === normalizeId(appointmentId) ? updatedAppointment : app
+      ));
+      
+      let successMessage = '';
+      switch(newStatus) {
+        case 'COMPLETADA':
+          successMessage = 'Cita marcada como completada';
+          break;
+        case 'CANCELADA':
+          successMessage = 'Cita cancelada';
+          break;
+        case 'REAGENDADA':
+          successMessage = nuevaFecha ? 'Cita reagendada con éxito' : 'Cita marcada como reagendada';
+          break;
+        case 'NO ASISTIO':
+          successMessage = 'Paciente marcado como inasistente';
+          break;
+        default:
+          successMessage = `Estado actualizado: ${newStatus}`;
+      }
+      
+      toast.success(successMessage, {
+        description: motivo || `La cita ha sido actualizada exitosamente`,
+      });
+      
+      return updatedAppointment;
+    } catch (err: any) {
+      console.error(`Error updating appointment status to ${newStatus}:`, err);
+      toast.error(`Error al actualizar la cita`, { 
+        description: err.message || 'No se pudo actualizar el estado de la cita'
+      });
+      return null;
+    }
+  }, [setAppointments]);
+  
   // --- Fetching Data ---
   const fetchPatients = useCallback(async () => {
     setIsLoadingPatients(true);
@@ -632,7 +762,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getPatientById,
     addAppointment,
     updateAppointment,
+    getAppointmentHistory,
+    updateAppointmentStatus
   };
+
+
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
 }
