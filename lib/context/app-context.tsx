@@ -1,780 +1,404 @@
-// lib/context/app-context-supabase.tsx
-"use client";
+// lib/context/app-context.tsx
+'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
-import { toast } from "sonner";
-import { format, isValid, parseISO } from "date-fns";
-import type { 
-  PatientData, 
-  AppointmentData, 
-  DoctorData, 
-  ClinicMetrics, 
-  PatientStatus, 
-  AppointmentStatus, 
-  DiagnosisType 
-} from "@/app/dashboard/data-model";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useMemo,
+} from 'react';
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { parseISO, isValid, format } from 'date-fns';
+import type {
+  PatientData,
+  AppointmentData,
+  DoctorData,
+  ClinicMetrics,
+  PatientStatus,
+  AppointmentStatus,
+} from '@/app/dashboard/data-model';
 
-// Definición de la URL base de tu API
-const API_BASE_URL = "/api";
+export type {
+  PatientData,
+  AppointmentData,
+  DoctorData,
+  ClinicMetrics,
+  PatientStatus,
+  AppointmentStatus,
+} from '@/app/dashboard/data-model';
 
-// ID de usuario por defecto hasta implementar auth
-const DEFAULT_USER_ID = "5e4d29a2-5eec-49ee-ac0f-8d349d5660ed";
+const API_BASE_URL = '/api';
+const DEFAULT_USER_ID = '5e4d29a2-5eec-49ee-ac0f-8d349d5660ed';
 
-// Funciones auxiliares robustas
-const isValidDate = (date: any): boolean => {
-  if (!date) return false;
-  const dateObj = date instanceof Date ? date : new Date(date);
-  return isValid(dateObj) && !isNaN(dateObj.getTime());
+// Helpers (definidos fuera para no recrearlos)
+const normalizeId = (id: any): string =>
+  id == null || id === '' ? '' : String(id).trim();
+
+const safeParseDate = (s: string): Date | null => {
+  const d = parseISO(s);
+  return isValid(d) ? d : null;
 };
 
-const safeFormatDate = (date: any, formatString: string, fallback: string = ""): string => {
-  try {
-    if (!date) return fallback;
-    const dateObj = typeof date === "string" ? parseISO(date) : date;
-    if (!isValidDate(dateObj)) return fallback;
-    return format(dateObj, formatString);
-  } catch (error) {
-    // En un entorno de producción, podrías enviar este error a un servicio de logging
-    // Sentry, LogRocket, etc. en lugar de console.error
-    return fallback;
-  }
-};
-
-const normalizeId = (id: any): string => {
-  if (id === null || id === undefined || id === "") return "";
-  return String(id).trim();
-};
-
-// Función para realizar peticiones con reintentos
-const fetchWithRetry = async (url: string, options: RequestInit, retries = 3): Promise<Response> => {
+const fetchWithRetry = async (
+  input: RequestInfo,
+  init: RequestInit,
+  retries = 3
+): Promise<Response> => {
   for (let i = 0; i < retries; i++) {
     try {
-      const response = await fetch(url, options);
-      if (response.ok || response.status < 500) { // No reintentar en errores 4xx
-        return response;
-      }
-      // Solo reintentar en errores de servidor (5xx)
-      if (response.status >= 500 && i === retries - 1) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText} after ${retries} retries`);
-      }
-      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
-    } catch (error) {
-      if (i === retries - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-    }
+      const res = await fetch(input, init);
+      if (res.ok || res.status < 500) return res;
+    } catch {}
+    if (i === retries - 1) break;
+    await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
   }
-  throw new Error("Failed after retries"); // Esto no debería alcanzarse si la lógica anterior es correcta
+  throw new Error('Network error');
 };
 
+// Define lo que vas a exponer en tu contexto
 interface AppContextType {
   patients: PatientData[];
-  appointments: AppointmentData[];
-  doctors: DoctorData[];
-  metrics: ClinicMetrics;
-  
   isLoadingPatients: boolean;
-  isLoadingAppointments: boolean;
   errorPatients: string | null;
+
+  appointments: AppointmentData[];
+  isLoadingAppointments: boolean;
   errorAppointments: string | null;
 
-  fetchPatients: () => Promise<void>;
-  fetchAppointments: (filters?: Record<string, string>) => Promise<void>;
+  doctors: DoctorData[];
+  metrics: ClinicMetrics;
 
-  addPatient: (patientData: Omit<PatientData, "id" | "fechaRegistro" | "probabilidadCirugia" | "estado" | "timestampRegistro" | "ultimoContacto" | "proximoContacto" | "etiquetas" | "fechaCirugia" | "doctorAsignado" | "citas" | "seguimientos" | "encuesta" | "recomendacionesSistema" | "creado_por_id"> & { 
-    creado_por_id?: string, 
-    doctor_asignado_id?: string, 
-    estado_paciente?: PatientStatus, 
-    diagnostico_principal?: DiagnosisType, 
-    comentarios_registro?: string, 
-    origen_paciente?: string,
-    fecha_registro?: string 
-  }) => Promise<PatientData | number | null>;
-  
-  updatePatient: (patientId: string, patientUpdate: Partial<PatientData>) => Promise<PatientData | null>;
-  getPatientById: (id: string) => PatientData | undefined;
+  refetchPatients: () => void;
+  addPatient: (data: Omit<PatientData, 'id'>) => Promise<PatientData>;
+  updatePatient: (
+    id: string,
+    update: Partial<PatientData>
+  ) => Promise<PatientData>;
 
-  addAppointment: (appointmentData: Omit<AppointmentData, "id" | "paciente" | "telefono" | "doctor"> & { 
-    patient_id: string, 
-    doctor_id?: string,
-    fecha_hora_cita?: string 
-  }) => Promise<AppointmentData | null>;
-  
-  updateAppointment: (appointmentId: string, appointmentUpdate: Partial<AppointmentData>) => Promise<AppointmentData | null>;
-  
-  // Nuevas funciones para historial de citas
-  getAppointmentHistory: (appointmentId: string) => Promise<any[]>;
+  refetchAppointments: () => void;
+  addAppointment: (
+    data: Omit<AppointmentData, 'id'>
+  ) => Promise<AppointmentData>;
+  updateAppointment: (
+    id: string,
+    update: Partial<AppointmentData>
+  ) => Promise<AppointmentData>;
+
+  getAppointmentHistory: (id: string) => Promise<any[]>;
   updateAppointmentStatus: (
-    appointmentId: string,
+    id: string,
     newStatus: AppointmentStatus,
     motivo?: string,
     nuevaFecha?: string
-  ) => Promise<AppointmentData | null>;
+  ) => Promise<AppointmentData>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// Este es el único provider que exportarás
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [patients, setPatients] = useState<PatientData[]>([]);
-  const [appointments, setAppointments] = useState<AppointmentData[]>([]);
-  const [doctors, setDoctors] = useState<DoctorData[]>([]); // Asumiendo que se llenará en algún momento
-  const [metrics, setMetrics] = useState<ClinicMetrics>({} as ClinicMetrics); // Asumiendo que se llenará
+  // 1) Crea el QueryClient **solo una vez** en cliente
+  const [queryClient] = useState(() => new QueryClient());
 
-  const [isLoadingPatients, setIsLoadingPatients] = useState(true);
-  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
-  const [errorPatients, setErrorPatients] = useState<string | null>(null);
-  const [errorAppointments, setErrorAppointments] = useState<string | null>(null);
-  
-  // Función para obtener el historial de una cita
-  const getAppointmentHistory = useCallback(async (appointmentId: string) => {
-    try {
-      const response = await fetchWithRetry(`${API_BASE_URL}/appointments/${appointmentId}/history`, {
+  return (
+    // 2) Envuelve a todo con React Query
+    <QueryClientProvider client={queryClient}>
+      {/* 3) Este componente interno sí ve el QueryClient */}
+      <AppProviderInner>{children}</AppProviderInner>
+    </QueryClientProvider>
+  );
+}
+
+// Aquí va toda tu lógica de queries/mutations y armado de contexto
+function AppProviderInner({ children }: { children: ReactNode }) {
+  const qc = useQueryClient();
+
+  // — Patients
+  const {
+    data: patients = [],
+    isLoading: isLoadingPatients,
+    error: errorPatientsObj,
+    refetch: refetchPatients,
+  } = useQuery<PatientData[], Error>({
+    queryKey: ['patients'],
+    queryFn: async () => {
+      const res = await fetchWithRetry(`${API_BASE_URL}/patients`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(`Error ${response.status}: ${errorData.message || response.statusText}`);
-      }
-      
-      return await response.json();
+      if (!res.ok) throw new Error(res.statusText);
+      const list = (await res.json()) as PatientData[];
+      return list.map((p) => ({
+        ...p,
+        id: normalizeId(p.id),
+        telefono: p.telefono || 'Sin teléfono',
+        estado: p.estado as PatientStatus,
+      }));
+    },
+    staleTime: 300_000,
+  });
+  const errorPatients = errorPatientsObj?.message ?? null;
+
+  const addPatientMutation = useMutation({
+    mutationFn: async (payload: Omit<PatientData, 'id'>) => {
+      const res = await fetchWithRetry(`${API_BASE_URL}/patients`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, creado_por_id: DEFAULT_USER_ID }),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const json = await res.json();
+      return { ...json, id: normalizeId(json.id) } as PatientData;
+    },
+    onSuccess: (newP) => {
+      qc.setQueryData(['patients'], (old: PatientData[] = []) => [
+        newP,
+        ...old,
+      ]);
+      toast.success('Paciente registrado');
+    },
+    onError: (err: Error) => {
+      toast.error('Error al registrar paciente', { description: err.message });
+    },
+  });
+
+  const updatePatientMutation = useMutation({
+    mutationFn: async ({
+      id,
+      update,
+    }: {
+      id: string;
+      update: Partial<PatientData>;
+    }) => {
+      const res = await fetchWithRetry(`${API_BASE_URL}/patients/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(update),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const json = await res.json();
+      return { ...json, id } as PatientData;
+    },
+    onSuccess: (upd) => {
+      qc.setQueryData(['patients'], (old: PatientData[] = []) =>
+        old.map((p) => (p.id === upd.id ? upd : p))
+      );
+      toast.success('Paciente actualizado');
+    },
+    onError: (err: Error) => {
+      toast.error('Error al actualizar paciente', { description: err.message });
+    },
+  });
+
+  // — Appointments
+  const {
+    data: appointments = [],
+    isLoading: isLoadingAppointments,
+    error: errorAppointmentsObj,
+    refetch: refetchAppointments,
+  } = useQuery<AppointmentData[], Error>({
+    queryKey: ['appointments'],
+    queryFn: async () => {
+      const res = await fetchWithRetry(`${API_BASE_URL}/appointments`, {
+        method: 'GET',
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const raw = (await res.json()) as any[];
+      return raw.map((app) => {
+        const fecha = safeParseDate(app.fecha_hora_cita);
+        return {
+          id: normalizeId(app.id),
+          paciente: `${app.patients?.nombre} ${app.patients?.apellidos}`.trim(),
+          telefono: app.patients?.telefono || 'Sin teléfono',
+          doctor: app.doctor?.full_name || 'No asignado',
+          fechaConsulta: fecha || new Date(),
+          horaConsulta: fecha ? format(fecha, 'HH:mm') : '00:00',
+          motivoConsulta: app.motivo_cita,
+          estado: (app.estado_cita || 'pendiente').toLowerCase() as AppointmentStatus,
+          notas: app.notas_cita_seguimiento || '',
+        } as AppointmentData;
+      });
+    },
+    staleTime: 300_000,
+  });
+  const errorAppointments = errorAppointmentsObj?.message ?? null;
+
+  const addAppointmentMutation = useMutation({
+    mutationFn: async (payload: Omit<AppointmentData, 'id'>) => {
+      const res = await fetchWithRetry(`${API_BASE_URL}/appointments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const json = await res.json();
+      const fecha = safeParseDate(json.fecha_hora_cita) || new Date();
+      return {
+        ...json,
+        id: normalizeId(json.id),
+        fechaConsulta: fecha,
+        horaConsulta: format(fecha, 'HH:mm'),
+      } as AppointmentData;
+    },
+    onSuccess: (newA) => {
+      qc.setQueryData(['appointments'], (old: AppointmentData[] = []) => [
+        newA,
+        ...old,
+      ]);
+      toast.success('Cita agendada');
+    },
+    onError: (err: Error) => {
+      toast.error('Error al agendar cita', { description: err.message });
+    },
+  });
+
+  const updateAppointmentMutation = useMutation({
+    mutationFn: async ({
+      id,
+      update,
+    }: {
+      id: string;
+      update: Partial<AppointmentData>;
+    }) => {
+      const res = await fetchWithRetry(`${API_BASE_URL}/appointments/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(update),
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const json = await res.json();
+      const fecha = safeParseDate(json.fecha_hora_cita) || new Date();
+      return {
+        ...json,
+        id,
+        fechaConsulta: fecha,
+        horaConsulta: format(fecha, 'HH:mm'),
+      } as AppointmentData;
+    },
+    onSuccess: (upd) => {
+      qc.setQueryData(['appointments'], (old: AppointmentData[] = []) =>
+        old.map((a) => (a.id === upd.id ? upd : a))
+      );
+      toast.success('Cita actualizada');
+    },
+    onError: (err: Error) => {
+      toast.error('Error al actualizar cita', { description: err.message });
+    },
+  });
+
+  const getAppointmentHistory = async (id: string) => {
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/appointments/${id}/history`, {
+        method: 'GET',
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.json();
     } catch (err: any) {
-      console.error('Error fetching appointment history:', err);
-      toast.error('Error al obtener historial', { description: err.message || 'No se pudo cargar el historial de la cita' });
+      toast.error('Error al cargar historial', { description: err.message });
       return [];
     }
-  }, []);
+  };
 
-  // Función para actualizar estado + registrar historial
-  const updateAppointmentStatus = useCallback(async (
-    appointmentId: string,
+  const updateAppointmentStatus = async (
+    id: string,
     newStatus: AppointmentStatus,
     motivo?: string,
     nuevaFecha?: string
   ) => {
-    try {
-      // Buscar la cita actual para tener sus datos
-      const currentAppointment = appointments.find(a => normalizeId(a.id) === normalizeId(appointmentId));
-      
-      if (!currentAppointment) {
-        throw new Error(`No se encontró la cita con ID: ${appointmentId}`);
-      }
+    const payload: any = { estado_cita: newStatus, actor_id: DEFAULT_USER_ID, motivo_cambio: motivo };
+    if (nuevaFecha) payload.fecha_hora_cita = nuevaFecha;
 
-      const updateData: any = {
-        estado_cita: newStatus,
-        actor_id: DEFAULT_USER_ID,
-        motivo_cambio: motivo || `Cambio a estado ${newStatus}`
-      };
-      
-      // Si se proporciona una nueva fecha
-      if (nuevaFecha) {
-        updateData.fecha_hora_cita = nuevaFecha;
-      }
-      
-      const response = await fetchWithRetry(`${API_BASE_URL}/appointments/${appointmentId}`, {
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/appointments/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(`Error ${response.status}: ${errorData.message || response.statusText}`);
-      }
-      
-      // Intentar parsear la respuesta como JSON
-      let updatedAppointmentData;
-      try {
-        const responseText = await response.text();
-        updatedAppointmentData = JSON.parse(responseText);
-      } catch (e) {
-        // Si la respuesta no es JSON válido, usar los datos actuales + la actualización
-        updatedAppointmentData = {
-          ...currentAppointment,
-          estado_cita: newStatus,
-        };
-      }
-      
-      const fechaHoraCita = updatedAppointmentData.fecha_hora_cita 
-        ? parseISO(updatedAppointmentData.fecha_hora_cita)
-        : (nuevaFecha ? parseISO(nuevaFecha) : currentAppointment.fechaConsulta);
-      
-      // Crear la versión actualizada para la memoria
-      const updatedAppointment: AppointmentData = {
-        ...currentAppointment,
-        id: normalizeId(appointmentId),
-        estado: newStatus,
-        fechaConsulta: fechaHoraCita,
-        horaConsulta: safeFormatDate(fechaHoraCita, "HH:mm", "00:00"),
-        notas: updatedAppointmentData.notas_cita_seguimiento || currentAppointment.notas || "",
-      };
-      
-      // Actualizar en memoria
-      setAppointments(prev => prev.map(app => 
-        normalizeId(app.id) === normalizeId(appointmentId) ? updatedAppointment : app
-      ));
-      
-      let successMessage = '';
-      switch(newStatus) {
-        case 'COMPLETADA':
-          successMessage = 'Cita marcada como completada';
-          break;
-        case 'CANCELADA':
-          successMessage = 'Cita cancelada';
-          break;
-        case 'REAGENDADA':
-          successMessage = nuevaFecha ? 'Cita reagendada con éxito' : 'Cita marcada como reagendada';
-          break;
-        case 'NO ASISTIO':
-          successMessage = 'Paciente marcado como inasistente';
-          break;
-        default:
-          successMessage = `Estado actualizado: ${newStatus}`;
-      }
-      
-      toast.success(successMessage, {
-        description: motivo || `La cita ha sido actualizada exitosamente`,
-      });
-      
-      return updatedAppointment;
-    } catch (err: any) {
-      console.error(`Error updating appointment status to ${newStatus}:`, err);
-      toast.error(`Error al actualizar la cita`, { 
-        description: err.message || 'No se pudo actualizar el estado de la cita'
-      });
-      return null;
-    }
-  }, [setAppointments]);
-  
-  // --- Fetching Data ---
-  const fetchPatients = useCallback(async () => {
-    setIsLoadingPatients(true);
-    setErrorPatients(null);
-    try {
-      const response = await fetchWithRetry(`${API_BASE_URL}/patients`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(`Error ${response.status}: ${errorData.message || response.statusText}`);
-      }
-      
-      const data: PatientData[] = await response.json();
-      
-      const normalizedPatients = data.map(p => ({
-        ...p,
-        id: normalizeId(p.id),
-        telefono: p.telefono || "Sin teléfono",
-        estado: p.estado || p.estado_paciente || "PENDIENTE DE CONSULTA",
-      }));
-      
-      setPatients(normalizedPatients);
-      setErrorPatients(null);
-    } catch (err: any) {
-      const errorMessage = err.message || "No se pudieron cargar los pacientes.";
-      setErrorPatients(errorMessage);
-      toast.error("Error al cargar pacientes", { 
-        description: errorMessage,
-        duration: 5000,
-      });
-    } finally {
-      setIsLoadingPatients(false);
-    }
-  }, []);
-
-  const fetchAppointments = useCallback(async (filters?: Record<string, string>) => {
-    setIsLoadingAppointments(true);
-    setErrorAppointments(null);
-    try {
-      const queryParams = filters ? new URLSearchParams(filters).toString() : "";
-      const url = `${API_BASE_URL}/appointments${queryParams ? `?${queryParams}` : ''}`;
-      
-      const response = await fetchWithRetry(url, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(`Error ${response.status}: ${errorData.message || response.statusText}`);
-      }
-      
-      const data: any[] = await response.json();
-      
-      const formattedAppointments = data.map(app => {
-        try {
-          let fechaConsulta: Date;
-          let horaConsulta: string;
-          
-          if (app.fecha_hora_cita) {
-            const fecha = parseISO(app.fecha_hora_cita);
-            if (isValidDate(fecha)) {
-              fechaConsulta = fecha;
-              horaConsulta = safeFormatDate(fecha, "HH:mm", "00:00");
-            } else {
-              // Considerar un log a servicio externo si es necesario
-              fechaConsulta = new Date(); // Fallback
-              horaConsulta = "00:00";
-            }
-          } else {
-            fechaConsulta = new Date(); // Fallback
-            horaConsulta = "00:00";
-          }
-          
-          return {
-            id: normalizeId(app.id),
-            patientId: app.patient_id ? normalizeId(app.patient_id) : undefined,
-            paciente: app.patients ? `${app.patients.nombre} ${app.patients.apellidos}`.trim() : "Paciente desconocido",
-            telefono: app.patients?.telefono || "Sin teléfono",
-            doctor: app.doctor?.full_name || app.profiles?.full_name || "No asignado",
-            fechaConsulta,
-            horaConsulta,
-            motivoConsulta: app.motivo_cita || "Sin especificar",
-            estado: (app.estado_cita || "pendiente").toLowerCase() as AppointmentStatus,
-            es_primera_vez: app.es_primera_vez,
-            notas_cita_seguimiento: app.notas_cita_seguimiento,
-          } as AppointmentData;
-        } catch (errorProcessing) {
-          // Log a servicio externo
-          return {
-            id: normalizeId(app.id || `error-${Date.now()}`),
-            paciente: "Error al cargar datos de cita",
-            telefono: "N/A",
-            fechaConsulta: new Date(),
-            horaConsulta: "00:00",
-            motivoConsulta: "Error",
-            estado: "pendiente" as AppointmentStatus,
-            doctor: "No asignado",
-          } as AppointmentData;
-        }
-      });
-      
-      setAppointments(formattedAppointments);
-      setErrorAppointments(null);
-    } catch (err: any) {
-      const errorMessage = err.message || "No se pudieron cargar las citas.";
-      setErrorAppointments(errorMessage);
-      toast.error("Error al cargar citas", { 
-        description: errorMessage,
-        duration: 5000,
-      });
-    } finally {
-      setIsLoadingAppointments(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    Promise.all([
-      fetchPatients(),
-      fetchAppointments()
-    ]).catch(err => {
-      // Este error podría ser más general, indicando un fallo en la carga inicial.
-      // Se podría mostrar un toast genérico o loguear a un servicio externo.
-      toast.error("Error en la carga inicial de datos", {
-        description: "Algunos datos no pudieron cargarse. Intente recargar la página.",
-        duration: 7000,
-      });
-    });
-  }, [fetchPatients, fetchAppointments]);
-
-  const addPatient = useCallback(async (patientData: any): Promise<PatientData | number | null> => {
-    try {
-      if (!patientData.nombre || !patientData.apellidos || !patientData.telefono) {
-        toast.error("Datos incompletos", { description: "Nombre, apellidos y teléfono son requeridos." });
-        throw new Error("Faltan datos requeridos del paciente");
-      }
-      
-      const payload = {
-        ...patientData,
-        creado_por_id: patientData.creado_por_id || DEFAULT_USER_ID,
-        fecha_registro: patientData.fecha_registro || new Date().toISOString().split('T')[0],
-      };
-      
-      const response = await fetchWithRetry(`${API_BASE_URL}/patients`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        let errorDetail = response.statusText;
-        try {
-            const errorJson = JSON.parse(responseText);
-            errorDetail = errorJson.message || errorDetail;
-        } catch { /* No es JSON, usar statusText */ }
-        throw new Error(`Error ${response.status}: ${errorDetail}`);
-      }
-      
-      const contentType = response.headers.get("content-type");
-      let result: PatientData | number;
-      
-      if (contentType?.includes("application/json")) {
-        try {
-          result = JSON.parse(responseText);
-        } catch {
-          if (/^\d+$/.test(responseText.trim())) {
-            result = parseInt(responseText.trim(), 10);
-          } else {
-            throw new Error("Respuesta JSON inválida del servidor");
-          }
-        }
-      } else if (/^\d+$/.test(responseText.trim())) {
-        result = parseInt(responseText.trim(), 10);
-      } else {
-        // Si la respuesta no es JSON y no es un número, pero fue OK (ej. 201 Created sin cuerpo o con texto plano)
-        // Podríamos considerar esto un éxito si la API a veces responde así.
-        // Por ahora, lo trataremos como una respuesta no esperada si no es un ID.
-        // Si la API puede devolver un 201 sin cuerpo o con un mensaje de texto plano de éxito,
-        // esta lógica necesitaría ajustarse.
-         throw new Error("Formato de respuesta no reconocido del servidor tras POST exitoso.");
-      }
-      
-      let newPatientObject: PatientData;
-
-      if (typeof result === 'number') {
-        newPatientObject = {
-          id: normalizeId(result),
-          ...payload, // Usar el payload enviado ya que la API solo devolvió un ID
-          estado: payload.estado_paciente || "PENDIENTE DE CONSULTA",
-          probabilidadCirugia: 0, // Valor por defecto
-          timestampRegistro: new Date().toISOString(),
-          ultimoContacto: payload.fecha_registro,
-          // Asegurar que todos los campos de PatientData estén presentes con valores por defecto si es necesario
-          nombre: payload.nombre,
-          apellidos: payload.apellidos,
-          telefono: payload.telefono,
-          email: payload.email || "",
-          fechaNacimiento: payload.fechaNacimiento || "",
-          // ...otros campos con valores por defecto
-        } as PatientData;
-      } else {
-        newPatientObject = {
-          ...result, // La API devolvió el objeto completo
-          id: normalizeId(result.id),
-        } as PatientData;
-      }
-      
-      setPatients(prev => [newPatientObject, ...prev]);
-      toast.success("Paciente registrado con éxito");
-      return newPatientObject;
-
-    } catch (err: any) {
-      const errorMessage = err.message || "Error al añadir paciente";
-      toast.error("Error al registrar paciente", { 
-        description: errorMessage,
-        duration: 5000,
-      });
-      return null;
-    }
-  }, []);
-
-  const updatePatient = useCallback(async (patientId: string, patientUpdate: Partial<PatientData>): Promise<PatientData | null> => {
-    try {
-      if (!patientId) {
-        toast.error("Error de datos", { description: "ID de paciente no proporcionado."});
-        throw new Error("ID de paciente requerido");
-      }
-      
-      const { id, created_at, ...updateData } = patientUpdate as any; // Campos a excluir
-      
-      const response = await fetchWithRetry(`${API_BASE_URL}/patients/${patientId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updateData),
-      });
-      
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        let errorDetail = response.statusText;
-        try {
-            const errorJson = JSON.parse(responseText);
-            errorDetail = errorJson.message || errorDetail;
-        } catch { /* No es JSON, usar statusText */ }
-        throw new Error(`Error ${response.status}: ${errorDetail}`);
-      }
-      
-      let updatedPatientResult: PatientData;
-      
-      if (/^\d+$/.test(responseText.trim())) {
-        const currentPatient = patients.find(p => normalizeId(p.id) === patientId);
-        if (!currentPatient) {
-          throw new Error("Paciente no encontrado en el estado local para actualizar tras recibir ID.");
-        }
-        updatedPatientResult = {
-          ...currentPatient,
-          ...updateData, // Aplicar los cambios enviados
-          id: patientId, // Asegurar que el ID es el correcto
-        } as PatientData;
-      } else {
-        try {
-          const parsedResponse = JSON.parse(responseText);
-          updatedPatientResult = {
-            ...parsedResponse,
-            id: normalizeId(parsedResponse.id || patientId), // Asegurar que el ID es el correcto
-          } as PatientData;
-        } catch {
-          throw new Error("Respuesta JSON inválida del servidor al actualizar paciente.");
-        }
-      }
-      
-      setPatients(prev => prev.map(p => 
-        normalizeId(p.id) === patientId ? updatedPatientResult : p
-      ));
-      
-      toast.success("Paciente actualizado con éxito");
-      return updatedPatientResult;
-
-    } catch (err: any) {
-      const errorMessage = err.message || "Error al actualizar paciente";
-      toast.error("Error al actualizar paciente", { 
-        description: errorMessage,
-        duration: 5000,
-      });
-      return null;
-    }
-  }, [patients]);
-
-  const getPatientById = useCallback((id: string): PatientData | undefined => {
-    if (!id) return undefined;
-    return patients.find(p => normalizeId(p.id) === normalizeId(id));
-  }, [patients]);
-
-  const addAppointment = useCallback(async (appointmentData: any): Promise<AppointmentData | null> => {
-    try {
-      if (!appointmentData.patient_id || !appointmentData.motivo_cita || (!appointmentData.fecha_hora_cita && !appointmentData.fechaConsulta)) {
-         toast.error("Datos incompletos", { description: "Faltan datos requeridos para la cita (paciente, motivo o fecha)." });
-        throw new Error("Faltan datos requeridos para la cita");
-      }
-      
-      const payload: any = {
-        patient_id: normalizeId(appointmentData.patient_id),
-        motivo_cita: appointmentData.motivo_cita,
-        estado_cita: appointmentData.estado_cita || "PROGRAMADA",
-        es_primera_vez: appointmentData.es_primera_vez !== undefined ? appointmentData.es_primera_vez : true,
-        notas_cita_seguimiento: appointmentData.notas_cita_seguimiento || "",
-        fecha_hora_cita: "", 
+      if (!res.ok) throw new Error(res.statusText);
+      const json = await res.json();
+      const fecha = safeParseDate(json.fecha_hora_cita) || new Date();
+      const updated: AppointmentData = {
+        ...json,
+        id,
+        fechaConsulta: fecha,
+        horaConsulta: format(fecha, 'HH:mm'),
       };
-      
-      if (appointmentData.fecha_hora_cita) {
-        payload.fecha_hora_cita = appointmentData.fecha_hora_cita;
-      } else if (appointmentData.fechaConsulta) {
-        const fecha = appointmentData.fechaConsulta;
-        const fechaObj = fecha instanceof Date ? fecha : parseISO(fecha);
-        if (isValidDate(fechaObj)) {
-          payload.fecha_hora_cita = fechaObj.toISOString();
-        } else {
-          toast.error("Fecha inválida", { description: `La fecha de cita proporcionada no es válida: ${JSON.stringify(fecha)}`});
-          throw new Error(`Fecha de cita inválida: ${JSON.stringify(fecha)}`);
-        }
-      }
-      
-      const response = await fetchWithRetry(`${API_BASE_URL}/appointments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        let errorDetail = response.statusText;
-        try {
-            const errorJson = JSON.parse(responseText);
-            errorDetail = errorJson.message || errorDetail;
-        } catch { /* No es JSON, usar statusText */ }
-        throw new Error(`Error ${response.status}: ${errorDetail}`);
-      }
-      
-      let newAppointmentResponseData: any;
-      if (/^\d+$/.test(responseText.trim())) {
-        newAppointmentResponseData = {
-          id: parseInt(responseText.trim(), 10),
-          ...payload, // Usar payload ya que la API solo devolvió ID
-        };
-      } else {
-        try {
-          newAppointmentResponseData = JSON.parse(responseText);
-        } catch (jsonError) {
-          throw new Error("Respuesta JSON inválida del servidor al añadir cita: " + responseText.substring(0, 100));
-        }
-      }
-      
-      const patient = patients.find(p => normalizeId(p.id) === normalizeId(payload.patient_id));
-      const fechaHoraCita = parseISO(newAppointmentResponseData.fecha_hora_cita || payload.fecha_hora_cita);
-      
-      const newAppointment: AppointmentData = {
-        ...newAppointmentResponseData, // Contiene el ID de la API y otros campos devueltos
-        id: normalizeId(newAppointmentResponseData.id),
-        patientId: normalizeId(payload.patient_id), // Asegurar que es el ID normalizado
-        paciente: patient ? `${patient.nombre} ${patient.apellidos}`.trim() : "Paciente no encontrado",
-        telefono: patient?.telefono || "Sin teléfono",
-        doctor: "No asignado", // TODO: Implementar lógica de asignación de doctor si es necesario
-        fechaConsulta: fechaHoraCita,
-        horaConsulta: safeFormatDate(fechaHoraCita, "HH:mm", "00:00"),
-        motivoConsulta: payload.motivo_cita, // Usar el motivo del payload
-        estado: (newAppointmentResponseData.estado_cita || payload.estado_cita || "PROGRAMADA").toLowerCase() as AppointmentStatus,
-        es_primera_vez: newAppointmentResponseData.es_primera_vez !== undefined ? newAppointmentResponseData.es_primera_vez : payload.es_primera_vez,
-        notas_cita_seguimiento: newAppointmentResponseData.notas_cita_seguimiento || payload.notas_cita_seguimiento,
-      };
-      
-      setAppointments(prev => [newAppointment, ...prev].sort((a, b) => 
-        b.fechaConsulta.getTime() - a.fechaConsulta.getTime()
-      ));
-      
-      toast.success("Cita agendada con éxito");
-      return newAppointment;
-
+      qc.setQueryData(['appointments'], (old: AppointmentData[] = []) =>
+        old.map((a) => (a.id === id ? updated : a))
+      );
+      toast.success('Estado de cita actualizado');
+      return updated;
     } catch (err: any) {
-      // No relanzar el error aquí si ya se manejó con toast
-      const errorMessage = err.message || "Error al agendar la cita";
-      toast.error("Error al agendar cita", { 
-        description: errorMessage,
-        duration: 5000,
-      });
-      return null;
+      toast.error('Error al actualizar estado', { description: err.message });
+      throw err;
     }
-  }, [patients]);
-
-  const updateAppointment = useCallback(async (appointmentId: string, appointmentUpdate: Partial<AppointmentData>): Promise<AppointmentData | null> => {
-    try {
-      if (!appointmentId) {
-        toast.error("Error de datos", { description: "ID de cita no proporcionado."});
-        throw new Error("ID de cita requerido");
-      }
-      
-      const payload: any = { ...appointmentUpdate };
-      
-      if (payload.estado) {
-        payload.estado_cita = payload.estado.toUpperCase();
-        delete payload.estado;
-      }
-      
-      if (payload.fechaConsulta) {
-        const fecha = payload.fechaConsulta;
-        const fechaObj = fecha instanceof Date ? fecha : parseISO(fecha);
-        if (isValidDate(fechaObj)) {
-          const currentAppointment = appointments.find(a => normalizeId(a.id) === appointmentId);
-          const hora = payload.horaConsulta || currentAppointment?.horaConsulta || "00:00";
-          payload.fecha_hora_cita = `${safeFormatDate(fechaObj, "yyyy-MM-dd")}T${hora}:00`; // Asumir segundos :00
-        } else {
-            toast.error("Fecha inválida", { description: `La fecha de cita proporcionada no es válida: ${JSON.stringify(fecha)}`});
-            throw new Error(`Fecha de cita inválida para actualizar: ${JSON.stringify(fecha)}`);
-        }
-        delete payload.fechaConsulta;
-        delete payload.horaConsulta;
-      }
-      
-      delete payload.id;
-      delete payload.paciente;
-      delete payload.telefono;
-      delete payload.doctor;
-      
-      const response = await fetchWithRetry(`${API_BASE_URL}/appointments/${appointmentId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        let errorDetail = response.statusText;
-        try {
-            const errorJson = JSON.parse(responseText);
-            errorDetail = errorJson.message || errorDetail;
-        } catch { /* No es JSON, usar statusText */ }
-        throw new Error(`Error ${response.status}: ${errorDetail}`);
-      }
-      
-      let updatedAppointmentResponseData: any;
-      const currentAppointmentForUpdate = appointments.find(a => normalizeId(a.id) === appointmentId);
-      if (!currentAppointmentForUpdate) {
-        throw new Error("Cita no encontrada en el estado local para actualizar.");
-      }
-
-      if (/^\d+$/.test(responseText.trim())) {
-        updatedAppointmentResponseData = {
-          ...currentAppointmentForUpdate, // Usar datos actuales
-          ...payload, // Aplicar los cambios enviados que estaban en el payload
-          id: appointmentId, // Asegurar que el ID es el correcto
-        };
-      } else {
-        try {
-          const parsedResponse = JSON.parse(responseText);
-          updatedAppointmentResponseData = {
-            ...currentAppointmentForUpdate, // Mantener datos base
-            ...parsedResponse, // Sobrescribir con lo que devuelva la API
-            id: normalizeId(parsedResponse.id || appointmentId), // Asegurar ID
-          };
-        } catch {
-          throw new Error("Respuesta JSON inválida del servidor al actualizar cita.");
-        }
-      }
-      
-      const fechaHoraCita = updatedAppointmentResponseData.fecha_hora_cita 
-        ? parseISO(updatedAppointmentResponseData.fecha_hora_cita)
-        : currentAppointmentForUpdate.fechaConsulta;
-      
-      const finalUpdatedAppointment: AppointmentData = {
-        ...currentAppointmentForUpdate, // Empezar con el estado actual
-        ...updatedAppointmentResponseData, // Aplicar lo que vino de la API o se construyó
-        id: normalizeId(appointmentId), // Asegurar el ID original
-        fechaConsulta: fechaHoraCita,
-        horaConsulta: safeFormatDate(fechaHoraCita, "HH:mm", "00:00"),
-        estado: (updatedAppointmentResponseData.estado_cita || payload.estado_cita || currentAppointmentForUpdate.estado).toLowerCase() as AppointmentStatus,
-      };
-      
-      setAppointments(prev => prev.map(app => 
-        normalizeId(app.id) === appointmentId ? finalUpdatedAppointment : app
-      ));
-      
-      toast.success("Cita actualizada con éxito");
-      return finalUpdatedAppointment;
-
-    } catch (err: any) {
-      const errorMessage = err.message || "Error al actualizar cita";
-      toast.error("Error al actualizar cita", { 
-        description: errorMessage,
-        duration: 5000,
-      });
-      return null;
-    }
-  }, [appointments]);
-
-  const contextValue: AppContextType = {
-    patients,
-    appointments,
-    doctors,
-    metrics,
-    isLoadingPatients,
-    isLoadingAppointments,
-    errorPatients,
-    errorAppointments,
-    fetchPatients,
-    fetchAppointments,
-    addPatient,
-    updatePatient,
-    getPatientById,
-    addAppointment,
-    updateAppointment,
-    getAppointmentHistory,
-    updateAppointmentStatus
   };
 
+  // Derivar métricas (placeholder)
+  const metrics = useMemo<ClinicMetrics>(() => ({} as ClinicMetrics), [
+    patients,
+    appointments,
+  ]);
 
+  // Context value
+  const value = useMemo<AppContextType>(
+    () => ({
+      patients,
+      isLoadingPatients,
+      errorPatients,
 
-  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
+      appointments,
+      isLoadingAppointments,
+      errorAppointments,
+
+      doctors: [], // implementar si necesitas
+      metrics,
+
+      refetchPatients,
+      addPatient: addPatientMutation.mutateAsync,
+      updatePatient: (id: string, update: Partial<PatientData>) =>
+        updatePatientMutation.mutateAsync({ id, update }),
+
+      refetchAppointments,
+      addAppointment: addAppointmentMutation.mutateAsync,
+      updateAppointment: (id: string, update: Partial<AppointmentData>) =>
+        updateAppointmentMutation.mutateAsync({ id, update }),
+
+      getAppointmentHistory,
+      updateAppointmentStatus,
+    }),
+    [
+      patients,
+      isLoadingPatients,
+      errorPatients,
+      appointments,
+      isLoadingAppointments,
+      errorAppointments,
+      metrics,
+      addPatientMutation,
+      updatePatientMutation,
+      addAppointmentMutation,
+      updateAppointmentMutation,
+      getAppointmentHistory,
+      updateAppointmentStatus,
+      refetchPatients,
+      refetchAppointments,
+    ]
+  );
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
+// Hook para usar contexto
 export function useAppContext(): AppContextType {
-  const context = useContext(AppContext);
-  if (!context) {
-    throw new Error("useAppContext debe ser usado dentro de AppProvider");
-  }
-  return context;
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useAppContext debe usarse dentro de AppProvider');
+  return ctx;
 }

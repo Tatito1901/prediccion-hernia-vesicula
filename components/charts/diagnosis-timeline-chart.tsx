@@ -1,510 +1,418 @@
 
-import { useState, useMemo } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts"
-import { Button } from "@/components/ui/button"
-import { Info, HelpCircle, BarChart2, TrendingUp, Activity } from "lucide-react"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogClose,
-} from "@/components/ui/dialog"
-import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Badge } from "@/components/ui/badge"
-import type { PatientData } from "@/app/dashboard/data-model"
-import { chartStyles as baseChartStyles } from "@/lib/chart-theme"
-import { cn } from "@/lib/utils"
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RTooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Activity, HelpCircle, TrendingUp, BarChart2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTheme } from 'next-themes';
+import { useMemo, useState } from 'react';
+import type { PatientData } from '@/app/dashboard/data-model';
+import { CHART_STYLES, getChartColors } from '@/lib/chart-theme';
+import { cn } from '@/lib/utils';
 
-// Diagnósticos principales que monitoreamos
+/* -------------------------------------------------------------------------- */
+/*  CONFIGURACIÓN                                                             */
+/* -------------------------------------------------------------------------- */
+
 const MAIN_DIAGNOSES = [
-  "Hernia Inguinal",
-  "Hernia Umbilical", 
-  "Hernia Incisional",
-  "Vesícula",
-  "Colelitiasis",
-  "Apendicitis",
-  "Otro"
-];
+  'Hernia Inguinal',
+  'Hernia Umbilical',
+  'Hernia Incisional',
+  'Vesícula',
+  'Colelitiasis',
+  'Apendicitis',
+] as const;
 
-// Interfaz simplificada para configuración del gráfico
+type MainDiagnosis = (typeof MAIN_DIAGNOSES)[number] | 'Otro';
+
+type ChartView = 'line' | 'bar';
+type ChartPeriod = 'monthly' | 'quarterly';
+
 interface ChartConfig {
-  viewType: 'line' | 'bar';
-  timeFrame: 'monthly' | 'quarterly';
+  view: ChartView;
+  period: ChartPeriod;
   showTrend: boolean;
+  topN: number;
 }
 
-interface DiagnosisTimelineChartProps {
+interface Props {
   patients: PatientData[];
   className?: string;
 }
 
-export function DiagnosisTimelineChart({ patients, className }: DiagnosisTimelineChartProps) {
-  const { theme, resolvedTheme } = useTheme(); // Get theme
-  const currentTheme = resolvedTheme || theme;
+/* -------------------------------------------------------------------------- */
+/*  HELPERS – puros e independientes                                          */
+/* -------------------------------------------------------------------------- */
 
-  // Theme-aware colors from globals.css
-  const foregroundColor = currentTheme === 'dark' ? 'hsl(var(--foreground))' : 'hsl(var(--foreground))';
-  const mutedForegroundColor = currentTheme === 'dark' ? 'hsl(var(--muted-foreground))' : 'hsl(var(--muted-foreground))';
-  const popoverBgColor = currentTheme === 'dark' ? 'hsl(var(--popover))' : 'hsl(var(--popover))';
-  const popoverFgColor = currentTheme === 'dark' ? 'hsl(var(--popover-foreground))' : 'hsl(var(--popover-foreground))';
-  const borderColor = currentTheme === 'dark' ? 'hsl(var(--border))' : 'hsl(var(--border))';
-  const primaryColor = currentTheme === 'dark' ? 'hsl(var(--primary))' : 'hsl(var(--primary))';
-  const secondaryColor = currentTheme === 'dark' ? 'hsl(var(--secondary))' : 'hsl(var(--secondary))';
-  const accentColor = currentTheme === 'dark' ? 'hsl(var(--accent))' : 'hsl(var(--accent))';
-  const destructiveColor = currentTheme === 'dark' ? 'hsl(var(--destructive))' : 'hsl(var(--destructive))';
-  const infoColor = currentTheme === 'dark' ? 'hsl(var(--info))' : 'hsl(var(--info))'; // Assuming 'info' exists in globals.css
-  const successColor = currentTheme === 'dark' ? 'hsl(var(--success))' : 'hsl(var(--success))'; // Assuming 'success' exists
-  const warningColor = currentTheme === 'dark' ? 'hsl(var(--warning))' : 'hsl(var(--warning))'; // Assuming 'warning' exists
+/**
+ * Genera un identificador de trimestre en formato 'YYYY-QN'
+ */
+const getQuarter = (d: Date): string => `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
 
-  const DIAGNOSIS_COLORS = useMemo(() => ({
-    "Hernia Inguinal": primaryColor,
-    "Hernia Umbilical": secondaryColor,
-    "Hernia Incisional": accentColor,
-    "Vesícula": warningColor, 
-    "Colelitiasis": destructiveColor, 
-    "Apendicitis": destructiveColor, // Could use a different shade or another specific color
-    "Otro": mutedForegroundColor
-  }), [currentTheme, primaryColor, secondaryColor, accentColor, warningColor, destructiveColor, mutedForegroundColor]);
+/**
+ * Genera un identificador de mes en formato 'YYYY-MM'
+ */
+const getMonthKey = (d: Date): string => `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}`;
 
-  // Estado simplificado para la configuración
-  const [chartConfig, setChartConfig] = useState<ChartConfig>({
-    viewType: 'line',
-    timeFrame: 'monthly',
-    showTrend: false
-  });
-  
-  // Estado para el modal de ayuda
-  const [isHelpOpen, setIsHelpOpen] = useState(false);
-  
-  // Procesar los datos para el gráfico con memoización para mejor rendimiento
-  const { chartData, totalsByDiagnosis } = useMemo(() => {
-    // Función para obtener trimestre
-    const getQuarter = (date: Date) => {
-      const quarter = Math.floor(date.getMonth() / 3) + 1;
-      return `${date.getFullYear()}-Q${quarter}`;
-    };
-    
-    // Obtener período (mes o trimestre) según configuración
-    const getPeriod = (date: Date) => {
-      if (chartConfig.timeFrame === 'quarterly') {
-        return getQuarter(date);
-      } else {
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-      }
-    };
-    
-    // Inicializar contadores para totales por diagnóstico
-    const diagnosisCounts: Record<string, number> = {};
-    MAIN_DIAGNOSES.forEach(diag => { diagnosisCounts[diag] = 0; });
-    
-    // Agrupar pacientes por período
-    const timelineData = patients.reduce((acc, patient) => {
-      if (!patient.fechaConsulta || !patient.diagnostico) return acc;
-      
-      const date = new Date(patient.fechaConsulta);
-      const period = getPeriod(date);
-      
-      // Asegurarse de que el diagnóstico está en nuestra lista principal
-      // Si no, asignarlo a "Otro"
-      const diagnosis = MAIN_DIAGNOSES.includes(patient.diagnostico) 
-                      ? patient.diagnostico 
-                      : "Otro";
-      
-      // Incrementar contador total por diagnóstico
-      diagnosisCounts[diagnosis] = (diagnosisCounts[diagnosis] || 0) + 1;
-      
-      // Inicializar el período si no existe
-      if (!acc[period]) {
-        acc[period] = {
-          period,
-          periodLabel: formatPeriod(period, chartConfig.timeFrame),
-          total: 0
-        };
-        
-        // Inicializar contadores para cada diagnóstico
-        MAIN_DIAGNOSES.forEach(diag => {
-          acc[period][diag] = 0;
-        });
-      }
-      
-      // Incrementar contador del diagnóstico
-      acc[period][diagnosis] = (acc[period][diagnosis] || 0) + 1;
-      
-      // Incrementar el total del período
-      acc[period].total += 1;
-      
-      return acc;
-    }, {} as Record<string, any>);
-    
-    // Convertir a array y ordenar por fecha
-    const sortedData = Object.values(timelineData).sort((a, b) => a.period.localeCompare(b.period));
-    
-    // Obtener diagnósticos ordenados por frecuencia para mostrar primero los más comunes
-    const sortedDiagnoses = Object.entries(diagnosisCounts)
-      .sort(([, countA], [, countB]) => (countB as number) - (countA as number))
-      .map(([diagnosis]) => diagnosis);
-    
-    return {
-      chartData: sortedData,
-      totalsByDiagnosis: diagnosisCounts,
-      sortedDiagnoses
-    };
-  }, [patients, chartConfig.timeFrame]);
-  
-  // Formatear etiquetas de períodos
-  function formatPeriod(period: string, timeFrame: 'monthly' | 'quarterly') {
-    if (timeFrame === 'quarterly') {
-      const [year, quarter] = period.split('-');
-      return `${quarter} ${year.slice(2)}`;
-    } else {
-      const [year, monthNum] = period.split("-");
-      const date = new Date(Number.parseInt(year), Number.parseInt(monthNum) - 1, 1);
-      return date.toLocaleDateString("es-MX", { month: "short", year: "2-digit" });
-    }
-  }
-  
-  // Calcular promedio móvil para línea de tendencia
-  const calculateTrendData = (data: any[]) => {
-    if (!data || data.length < 2) return [];
-    
-    const trendData = [...data].map((item, index, array) => {
-      // Promedio de 3 períodos (o menos si estamos al principio)
-      const startIdx = Math.max(0, index - 1);
-      const endIdx = Math.min(array.length - 1, index + 1);
-      const totalItems = endIdx - startIdx + 1;
-      
-      let sum = 0;
-      for (let i = startIdx; i <= endIdx; i++) {
-        sum += array[i].total;
-      }
-      
-      return {
-        ...item,
-        trend: Math.round(sum / totalItems)
-      };
-    });
-    
-    return trendData;
-  };
-  
-  // Obtener el valor máximo para escalar el gráfico correctamente
-  const maxValue = useMemo(() => {
-    if (!chartData || chartData.length === 0) return 10;
-    return Math.max(...chartData.map(item => item.total)) * 1.2; // 20% de margen
-  }, [chartData]);
-  
-  // Obtener los 3 diagnósticos más comunes
-  const topDiagnoses = useMemo(() => {
-    return Object.entries(totalsByDiagnosis || {})
-      .sort(([, countA], [, countB]) => (countB as number) - (countA as number))
-      .slice(0, 3)
-      .map(([diagnosis, count]) => ({
-        diagnosis,
-        count,
-        percentage: patients.length ? Math.round((count as number) / patients.length * 100) : 0
-      }));
-  }, [totalsByDiagnosis, patients.length]);
-  
-  // Componente de ayuda para modales
-  const HelpContent = () => (
-    <div className="space-y-4 mt-2">
-      <div className="bg-muted/40 p-4 rounded-lg">
-        <h4 className="font-medium text-primary mb-2">Cómo interpretar este gráfico</h4>
-        <p>Este gráfico muestra la evolución temporal de diagnósticos en su clínica, permitiéndole visualizar tendencias y planificar recursos de manera más efectiva.</p>
-      </div>
-      
-      <div className="space-y-2">
-        <h4 className="font-medium">Consejos para su uso:</h4>
-        <ul className="list-disc pl-5 space-y-1.5">
-          <li><strong>Vista de línea:</strong> Ideal para ver tendencias y evolución en el tiempo</li>
-          <li><strong>Vista de barras:</strong> Mejor para comparar volúmenes de diferentes diagnósticos</li>
-          <li><strong>Vista trimestral:</strong> Útil para planificación estratégica</li>
-          <li><strong>Vista mensual:</strong> Para análisis más detallado</li>
-          <li><strong>Línea de tendencia:</strong> Muestra el patrón general, filtrando fluctuaciones temporales</li>
-        </ul>
-      </div>
-      
-      <div className="bg-muted/40 p-4 rounded-lg">
-        <h4 className="font-medium text-primary mb-2">Aplicaciones prácticas</h4>
-        <ul className="list-disc pl-5 space-y-1.5">
-          <li><strong>Gestión de inventario:</strong> Anticipar necesidades de materiales según el aumento de ciertos diagnósticos</li>
-          <li><strong>Planificación de personal:</strong> Prepararse para períodos de mayor demanda</li>
-          <li><strong>Estrategia de la clínica:</strong> Identificar áreas de especialización o crecimiento</li>
-          <li><strong>Campañas preventivas:</strong> Enfocar esfuerzos en condiciones con tendencia creciente</li>
-        </ul>
-      </div>
-    </div>
+/**
+ * Formatea una clave de período para mostrarla en la UI
+ */
+const formatPeriodLabel = (key: string, period: ChartPeriod): string =>
+  period === 'quarterly'
+    ? key.split('-').reverse().join(' ')
+    : new Date(key + '-01').toLocaleDateString('es-MX', { month: 'short', year: '2-digit' });
+
+/* -------------------------------------------------------------------------- */
+/*  COMPONENTE                                                                */
+/* -------------------------------------------------------------------------- */
+export default function DiagnosisTimelineChart({ patients, className }: Props) {
+  /* --------------------------- Tema & colores ---------------------------- */
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
+  const baseColors = useMemo(
+    () => getChartColors('diagnosis', MAIN_DIAGNOSES.length),
+    []
   );
 
-  const chartStyles = {
-    ...baseChartStyles, // Spread base styles
-    tooltip: {
-      ...baseChartStyles.tooltip,
-      backgroundColor: popoverBgColor,
-      color: popoverFgColor,
-      borderColor: borderColor,
-    },
-    legend: {
-      ...baseChartStyles.legend,
-      color: foregroundColor,
-    },
-    axis: {
-      ...baseChartStyles.axis,
-      tickColor: borderColor,
-      lineColor: borderColor,
-      labelColor: mutedForegroundColor,
-    },
-    grid: {
-      ...baseChartStyles.grid,
-      stroke: borderColor,
-    }
+  const DIAG_COLORS: Record<MainDiagnosis, string> = useMemo(() => {
+    const obj = MAIN_DIAGNOSES.reduce(
+      (acc, diag, idx) => ({ ...acc, [diag]: baseColors[idx] }),
+      {} as Record<MainDiagnosis, string>
+    );
+    obj.Otro = isDark ? '#8897B8' : '#5E6C8F';
+    return obj;
+  }, [baseColors, isDark]);
+
+  /* ------------------------ Configuración de vista ----------------------- */
+  const [config, setConfig] = useState<ChartConfig>({
+    view: 'line',
+    period: 'monthly',
+    showTrend: false,
+    topN: 6,
+  });
+  const [showHelp, setShowHelp] = useState(false);
+
+  /**
+   * Tipo para los datos procesados por período que se muestran en el gráfico
+   */
+  type DiagnosisPeriodData = {
+    periodLabel: string;
+    total: number;
+  } & Record<MainDiagnosis, number>;
+
+  /**
+   * Tipo para los datos de retorno del useMemo
+   */
+  type ProcessedChartData = {
+    chartData: DiagnosisPeriodData[];
+    topDiagnoses: MainDiagnosis[];
+    maxY: number;
   };
 
-  // Renderizar el contenido del gráfico
-  const renderChart = () => {
-    const trendData = chartConfig.showTrend ? calculateTrendData(chartData) : chartData;
-    
-    if (chartConfig.viewType === 'line') {
-      return (
-        <LineChart
-          data={trendData}
-          margin={{ top: 20, right: 30, left: 10, bottom: 10 }}
-        >
-          <CartesianGrid strokeDasharray={chartStyles.grid.strokeDasharray} stroke={chartStyles.grid.stroke} vertical={chartStyles.grid.vertical} />
-          <XAxis 
-            dataKey="periodLabel" 
-            tickLine={false} 
-            axisLine={{ stroke: chartStyles.axis.lineColor }} 
-            tick={{ fill: chartStyles.axis.labelColor, fontSize: chartStyles.axis.labelFontSize }} 
-          />
-          <YAxis 
-            tickLine={false} 
-            axisLine={{ stroke: chartStyles.axis.lineColor }} 
-            tick={{ fill: chartStyles.axis.labelColor, fontSize: chartStyles.axis.labelFontSize }} 
-            domain={[0, maxValue]}
-          />
-          <Tooltip
-            contentStyle={chartStyles.tooltip}
-            cursor={{ fill: currentTheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}}
-            formatter={(value, name) => [`${value} pacientes`, name === "trend" ? "Tendencia" : name]}
-          />
-          <Legend wrapperStyle={{ color: chartStyles.legend.color, fontSize: chartStyles.legend.fontSize, paddingTop: '10px' }} iconType="circle" iconSize={chartStyles.legend.iconSize} />
-          
-          {/* Renderizar líneas para cada diagnóstico */}
-          {MAIN_DIAGNOSES.map(diagnosis => (
-            <Line
-              key={diagnosis}
-              type="monotone"
-              dataKey={diagnosis}
-              stroke={DIAGNOSIS_COLORS[diagnosis as keyof typeof DIAGNOSIS_COLORS] || chartStyles.axis.labelColor}
-              strokeWidth={chartStyles.line.strokeWidth}
-              dot={{ r: chartStyles.line.dotSize, fill: DIAGNOSIS_COLORS[diagnosis as keyof typeof DIAGNOSIS_COLORS] || chartStyles.axis.labelColor }}
-              activeDot={{ r: chartStyles.line.activeDotSize, stroke: DIAGNOSIS_COLORS[diagnosis as keyof typeof DIAGNOSIS_COLORS] || chartStyles.axis.labelColor }}
-              animationDuration={chartStyles.animation.duration}
-            />
-          ))}
-          
-          {/* Línea de tendencia para el total de diagnósticos */}
-          {chartConfig.showTrend && (
-            <Line
-              key="trend-line"
-              type="monotone"
-              dataKey="trend" // Use 'trend' from trendData
-              name="Tendencia (Total)" // Name for the legend
-              stroke={primaryColor} // Use a distinct color, e.g., primary or a specific trend color
-              strokeWidth={chartStyles.line.strokeWidth + 1} // Slightly thicker or different style
-              strokeDasharray="5 5" // Dashed line to differentiate
-              dot={false} // No dots for trend line typically
-              activeDot={false}
-              animationDuration={chartStyles.animation.duration}
-            />
-          )}
-        </LineChart>
-      );
-    } else {
-      return (
-        <BarChart
-          data={chartData}
-          margin={{ top: 20, right: 30, left: 10, bottom: 10 }}
-          maxBarSize={35}
-        >
-          <CartesianGrid strokeDasharray={chartStyles.grid.strokeDasharray} stroke={chartStyles.grid.stroke} vertical={chartStyles.grid.vertical} />
-          <XAxis 
-            dataKey="periodLabel" 
-            tickLine={false} 
-            axisLine={{ stroke: chartStyles.axis.lineColor }} 
-            tick={{ fill: chartStyles.axis.labelColor, fontSize: chartStyles.axis.labelFontSize }} 
-          />
-          <YAxis 
-            tickLine={false} 
-            axisLine={{ stroke: chartStyles.axis.lineColor }} 
-            tick={{ fill: chartStyles.axis.labelColor, fontSize: chartStyles.axis.labelFontSize }} 
-            domain={[0, maxValue]}
-          />
-          <Tooltip
-            contentStyle={chartStyles.tooltip}
-            cursor={{ fill: currentTheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}}
-            formatter={(value, name) => [`${value} pacientes`, name]}
-          />
-          <Legend wrapperStyle={{ color: chartStyles.legend.color, fontSize: chartStyles.legend.fontSize, paddingTop: '10px' }} iconType="circle" iconSize={chartStyles.legend.iconSize} />
-          
-          {/* Renderizar barras para cada diagnóstico */}
-          {MAIN_DIAGNOSES.map(diagnosis => (
-            <Bar
-              key={diagnosis}
-              dataKey={diagnosis}
-              fill={DIAGNOSIS_COLORS[diagnosis as keyof typeof DIAGNOSIS_COLORS] || chartStyles.axis.labelColor}
-              radius={[chartStyles.bar.radius, chartStyles.bar.radius, 0, 0]}
-              animationDuration={chartStyles.animation.duration}
-            />
-          ))}
-        </BarChart>
-      );
-    }
+  /* ------------------ Derivar datos (heavy) con memo --------------------- */
+  const { chartData, topDiagnoses, maxY } = useMemo<ProcessedChartData>(() => {
+    if (!patients?.length) return { chartData: [], topDiagnoses: [], maxY: 10 };
+
+    /* Totales globales por diagnóstico */
+    const totals = new Map<MainDiagnosis, number>();
+    // Inicializa todos los diagnósticos principales y 'Otro'
+    [...MAIN_DIAGNOSES, 'Otro' as const].forEach(d => totals.set(d, 0));
+
+    /* Agrupación por período */
+    const grouped = new Map<string, DiagnosisPeriodData>();
+
+    patients.forEach(p => {
+      if (!p.fecha_primera_consulta) return;
+
+      const d = new Date(p.fecha_primera_consulta);
+      const key = config.period === 'quarterly' ? getQuarter(d) : getMonthKey(d);
+      const diagnosis = MAIN_DIAGNOSES.includes(p.diagnostico_principal as any)
+        ? (p.diagnostico_principal as MainDiagnosis)
+        : 'Otro';
+
+      if (!grouped.has(key)) {
+        const baseEntry: DiagnosisPeriodData = {
+          periodLabel: formatPeriodLabel(key, config.period),
+          total: 0,
+          ...(Object.fromEntries(
+            [...MAIN_DIAGNOSES, 'Otro' as const].map(d => [d, 0])
+          ) as Record<MainDiagnosis, number>),
+        };
+        grouped.set(key, baseEntry);
+      }
+
+      const entry = grouped.get(key)!;
+      entry[diagnosis] += 1;
+      entry.total += 1;
+      grouped.set(key, entry);
+
+      totals.set(diagnosis, (totals.get(diagnosis)! ?? 0) + 1);
+    });
+
+    /* Top diagnósticos globales */
+    const topDiagnoses = [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, config.topN)
+      .map(([diag]) => diag);
+
+    const chartData = [...grouped.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([, v]) => v);
+
+    const maxY = Math.max(...chartData.map(d => d.total)) * 1.2;
+
+    return { chartData, topDiagnoses, maxY };
+  }, [patients, config.period, config.topN]);
+
+  /* ---------------------------- Render chart ----------------------------- */
+  const Chart = config.view === 'line' ? LineChart : BarChart;
+  
+  /**
+   * Tipo para los datos con línea de tendencia incluida
+   */
+  type DiagnosisTrendData = DiagnosisPeriodData & {
+    trend?: number;
   };
 
+  const trendData = useMemo<DiagnosisTrendData[]>(() => {
+    if (!config.showTrend || chartData.length < 3) return chartData;
+    return chartData.map((d, i, arr) => {
+      const prev = arr[i - 1]?.total ?? d.total;
+      const next = arr[i + 1]?.total ?? d.total;
+      return { ...d, trend: Math.round((prev + d.total + next) / 3) };
+    });
+  }, [chartData, config.showTrend]);
+
+  /* ----------------------------- UI -------------------------------------- */
   return (
-    <Card className={cn("col-span-1 md:col-span-2", className)}>
+    <Card className={cn('col-span-1 md:col-span-2', className)}>
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-primary" />
             <CardTitle>Tendencia de Diagnósticos</CardTitle>
+
             <TooltipProvider>
-              <UITooltip>
+              <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 rounded-full"
-                    onClick={() => setIsHelpOpen(true)}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setShowHelp(true)}
                   >
                     <HelpCircle className="h-4 w-4 text-muted-foreground" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>Más información sobre este gráfico</p>
-                </TooltipContent>
-              </UITooltip>
+                <TooltipContent>Ver ayuda</TooltipContent>
+              </Tooltip>
             </TooltipProvider>
           </div>
-          
-          <div className="flex gap-1">
-            <Button 
-              variant={chartConfig.viewType === 'line' ? "default" : "outline"} 
+
+          <div className="flex flex-wrap gap-1">
+            {/* Toggle tipo de gráfico */}
+            <Button
               size="sm"
-              className="h-8 text-xs"
-              onClick={() => setChartConfig(prev => ({ ...prev, viewType: 'line' }))}
+              variant={config.view === 'line' ? 'default' : 'outline'}
+              onClick={() => setConfig(s => ({ ...s, view: 'line' }))}
             >
-              <TrendingUp className="h-3.5 w-3.5 mr-1" />
-              Líneas
+              <TrendingUp className="h-3.5 w-3.5 mr-1" /> Líneas
             </Button>
-            
-            <Button 
-              variant={chartConfig.viewType === 'bar' ? "default" : "outline"} 
+            <Button
               size="sm"
-              className="h-8 text-xs"
-              onClick={() => setChartConfig(prev => ({ ...prev, viewType: 'bar' }))}
+              variant={config.view === 'bar' ? 'default' : 'outline'}
+              onClick={() => setConfig(s => ({ ...s, view: 'bar' }))}
             >
-              <BarChart2 className="h-3.5 w-3.5 mr-1" />
-              Barras
+              <BarChart2 className="h-3.5 w-3.5 mr-1" /> Barras
             </Button>
-            
-            <Button 
-              variant={chartConfig.timeFrame === 'quarterly' ? "default" : "outline"} 
+
+            {/* Periodo */}
+            <Button
               size="sm"
-              className="h-8 text-xs ml-1"
-              onClick={() => setChartConfig(prev => ({ ...prev, timeFrame: prev.timeFrame === 'monthly' ? 'quarterly' : 'monthly' }))}
+              variant="outline"
+              onClick={() =>
+                setConfig(s => ({
+                  ...s,
+                  period: s.period === 'monthly' ? 'quarterly' : 'monthly',
+                }))
+              }
             >
-              {chartConfig.timeFrame === 'quarterly' ? 'Trimestral' : 'Mensual'}
+              {config.period === 'monthly' ? 'Mensual' : 'Trimestral'}
             </Button>
-            
-            {chartConfig.viewType === 'line' && (
-              <Button 
-                variant={chartConfig.showTrend ? "default" : "outline"} 
+
+            {/* Tendencia */}
+            {config.view === 'line' && (
+              <Button
                 size="sm"
-                className="h-8 text-xs ml-1"
-                onClick={() => setChartConfig(prev => ({ ...prev, showTrend: !prev.showTrend }))}
+                variant={config.showTrend ? 'default' : 'outline'}
+                onClick={() => setConfig(s => ({ ...s, showTrend: !s.showTrend }))}
               >
                 Tendencia
               </Button>
             )}
           </div>
         </div>
+
         <CardDescription>
-          {chartConfig.timeFrame === 'quarterly' 
-            ? 'Evolución trimestral del número de diagnósticos'
-            : 'Distribución mensual de diagnósticos por categoría'}
+          {config.period === 'monthly'
+            ? 'Evolución mensual de diagnósticos'
+            : 'Evolución trimestral de diagnósticos'}
         </CardDescription>
       </CardHeader>
-      
-      <CardContent className="px-2 sm:px-6">
-        {/* Resumen de diagnósticos principales */}
+
+      <CardContent>
+        {/* Badges top diagnósticos */}
         <div className="flex flex-wrap gap-2 mb-4 justify-center">
-          {topDiagnoses.map(({ diagnosis, count, percentage }) => (
-            <Badge 
-              key={diagnosis} 
-              variant="outline" 
+          {topDiagnoses.map(d => (
+            <Badge
+              key={d}
+              variant="outline"
               className="py-1.5 px-3 text-xs font-medium border-l-4"
-              style={{ borderLeftColor: DIAGNOSIS_COLORS[diagnosis as keyof typeof DIAGNOSIS_COLORS] }}
+              style={{ borderLeftColor: DIAG_COLORS[d] }}
             >
-              {diagnosis}: {count} ({percentage}%)
+              {d}
             </Badge>
           ))}
         </div>
-        
-        {/* Gráfico principal */}
+
+        {/* Chart container */}
         <div className="h-[300px] sm:h-[350px]">
-          <ResponsiveContainer width="100%" height="100%">
-            {renderChart()}
+          <ResponsiveContainer>
+            <Chart
+              data={trendData}
+              margin={{ top: 20, right: 30, left: 10, bottom: 10 }}
+              maxBarSize={35}
+            >
+              <CartesianGrid
+                strokeDasharray={CHART_STYLES.grid.strokeDasharray}
+                stroke={CHART_STYLES.grid.stroke}
+              />
+              <XAxis
+                dataKey="periodLabel"
+                tickLine={false}
+                axisLine={{ stroke: CHART_STYLES.axis.lineColor }}
+                tick={{
+                  fill: CHART_STYLES.axis.labelColor,
+                  fontSize: CHART_STYLES.axis.labelFontSize,
+                }}
+              />
+              <YAxis
+                domain={[0, maxY]}
+                tickLine={false}
+                axisLine={{ stroke: CHART_STYLES.axis.lineColor }}
+                tick={{
+                  fill: CHART_STYLES.axis.labelColor,
+                  fontSize: CHART_STYLES.axis.labelFontSize,
+                }}
+              />
+              <RTooltip
+                contentStyle={CHART_STYLES.tooltip}
+                formatter={v => [`${v} pacientes`, '']}
+              />
+              <Legend
+                wrapperStyle={{
+                  color: CHART_STYLES.legend.color,
+                  fontSize: CHART_STYLES.legend.fontSize,
+                }}
+                iconType="circle"
+                iconSize={CHART_STYLES.legend.iconSize}
+              />
+
+              {config.view === 'line'
+                ? topDiagnoses.map(d => (
+                    <Line
+                      key={d}
+                      type="monotone"
+                      dataKey={d}
+                      stroke={DIAG_COLORS[d]}
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: DIAG_COLORS[d] }}
+                      activeDot={{ r: 5 }}
+                    />
+                  ))
+                : topDiagnoses.map(d => (
+                    <Bar
+                      key={d}
+                      dataKey={d}
+                      fill={DIAG_COLORS[d]}
+                      radius={[4, 4, 0, 0]}
+                    />
+                  ))}
+
+              {config.showTrend && config.view === 'line' && (
+                <Line
+                  dataKey="trend"
+                  name="Tendencia"
+                  stroke={isDark ? '#CED4DE' : '#65789B'}
+                  strokeDasharray="5 5"
+                  dot={false}
+                />
+              )}
+            </Chart>
           </ResponsiveContainer>
         </div>
       </CardContent>
-      
-      <CardFooter className="pt-0 px-6 text-xs text-muted-foreground flex-col sm:flex-row gap-2 justify-between">
-        <div>
-          Total: {patients.length} pacientes | Período: {chartData.length > 0 ? 
-            `${chartData[0].periodLabel} - ${chartData[chartData.length - 1].periodLabel}` : 
-            'No hay datos suficientes'}
-        </div>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="h-7 text-xs"
-          onClick={() => setIsHelpOpen(true)}
-        >
-          <Info className="h-3.5 w-3.5 mr-1" />
-          Cómo interpretar
-        </Button>
+
+      <CardFooter className="text-xs text-muted-foreground flex flex-col sm:flex-row justify-between gap-2">
+        Total: {patients.length} pacientes
+        {chartData.length > 0 && (
+          <span>
+            Período: {chartData[0].periodLabel} –{' '}
+            {chartData[chartData.length - 1].periodLabel}
+          </span>
+        )}
       </CardFooter>
-      
-      {/* Modal de ayuda */}
-      <Dialog open={isHelpOpen} onOpenChange={setIsHelpOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+
+      {/* Diálogo de ayuda */}
+      <Dialog open={showHelp} onOpenChange={setShowHelp}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Activity className="h-5 w-5 text-primary" />
-              Cómo usar el gráfico de tendencias
+              Cómo interpretar la gráfica
             </DialogTitle>
-            <DialogDescription>
-              Guía práctica para interpretar y aprovechar la información
-            </DialogDescription>
           </DialogHeader>
-          
-          <HelpContent />
-          
+
+          <div className="space-y-4 text-sm">
+            <p>
+              Esta gráfica muestra la evolución de los diagnósticos principales
+              en su clínica. Use la vista de <strong>barras</strong> para
+              comparar volúmenes y la vista de <strong>líneas</strong> para
+              analizar tendencias.
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Cambie entre vista <em>mensual</em> y <em>trimestral</em> para distintos niveles de detalle.</li>
+              <li>Active “Tendencia” para suavizar fluctuaciones temporales.</li>
+              <li>Los colores siguen la misma paleta en todo el sistema.</li>
+            </ul>
+          </div>
+
           <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button">Entendido</Button>
-            </DialogClose>
+            <Button onClick={() => setShowHelp(false)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>
-  )
+  );
 }

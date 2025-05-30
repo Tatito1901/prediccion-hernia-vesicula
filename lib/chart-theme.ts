@@ -1,196 +1,142 @@
-export const chartPalette = {
-  primary: {
-    100: "#E6F7FF",
-    200: "#BAE7FF",
-    300: "#91D5FF",
-    400: "#69C0FF",
-    500: "#40A9FF",
-    600: "#1890FF",
-    700: "#096DD9",
-    800: "#0050B3",
-    900: "#003A8C",
-  },
-  secondary: {
-    100: "#E6FFFB",
-    200: "#B5F5EC",
-    300: "#87E8DE",
-    400: "#5CDBD3",
-    500: "#36CFC9",
-    600: "#13C2C2",
-    700: "#08979C",
-    800: "#006D75",
-    900: "#00474F",
-  },
-  accent: {
-    teal: "#20B2AA",
-    lavender: "#9683EC",
-    mint: "#5AC8C8",
-    coral: "#FF7F50",
-    navy: "#0A2463",
-  },
-  clinical: {
-    healthy: "#52C41A",
-    attention: "#FAAD14",
-    critical: "#F5222D",
-    stable: "#1890FF",
-    improving: "#13C2C2",
-    chronic: "#722ED1",
-  },
-  neutral: {
-    100: "#FFFFFF",
-    200: "#F5F7FA",
-    300: "#E4E9F2",
-    400: "#C5CEE0",
-    500: "#A6B1C9",
-    600: "#8897B8",
-    700: "#5E6C8F",
-    800: "#384366",
-    900: "#1A2138",
-  },
-  charts: {
+/* -------------------------------------------------------------------------- */
+/*  lib/chart/palette.ts                                                      */
+/*  🎨  Paleta + helpers para todos los charts                                */
+/* -------------------------------------------------------------------------- */
+
+'use client';
+
+import type { CSSProperties } from 'react';
+
+/* ----------------------------------------------------------------------------
+ * 1. PALETAS INMUTABLES
+ * -------------------------------------------------------------------------- */
+
+export const PALETTE = Object.freeze({
+  primary: [
+    '#E6F7FF', '#BAE7FF', '#91D5FF', '#69C0FF', '#40A9FF',
+    '#1890FF', '#096DD9', '#0050B3', '#003A8C',
+  ] as const,
+
+  secondary: [
+    '#E6FFFB', '#B5F5EC', '#87E8DE', '#5CDBD3', '#36CFC9',
+    '#13C2C2', '#08979C', '#006D75', '#00474F',
+  ] as const,
+
+  accent: Object.freeze({
+    teal:      '#20B2AA',
+    lavender:  '#9683EC',
+    mint:      '#5AC8C8',
+    coral:     '#FF7F50',
+    navy:      '#0A2463',
+  }),
+
+  clinical: Object.freeze({
+    healthy:   '#52C41A',
+    attention: '#FAAD14',
+    critical:  '#F5222D',
+    stable:    '#1890FF',
+    improving: '#13C2C2',
+    chronic:   '#722ED1',
+  }),
+
+  neutral: [
+    '#FFFFFF', '#F5F7FA', '#E4E9F2', '#C5CEE0', '#A6B1C9',
+    '#8897B8', '#5E6C8F', '#384366', '#1A2138',
+  ] as const,
+
+  charts: Object.freeze({
     medical: [
-      "#1890FF",
-      "#13C2C2",
-      "#52C41A",
-      "#722ED1",
-      "#2F54EB",
-      "#1D39C4",
-      "#08979C",
-      "#006D75",
-      "#5B8FF9",
-      "#5AD8A6",
-    ],
+      '#1890FF', '#13C2C2', '#52C41A', '#722ED1', '#2F54EB',
+      '#1D39C4', '#08979C', '#006D75', '#5B8FF9', '#5AD8A6',
+    ] as const,
     diagnosis: [
-      "#5B8FF9",
-      "#5AD8A6",
-      "#5D7092",
-      "#F6BD16",
-      "#6DC8EC",
-      "#945FB9",
-      "#FF9845",
-      "#1E9493",
-      "#FF99C3",
-      "#5D61BF",
-    ],
+      '#5B8FF9', '#5AD8A6', '#5D7092', '#F6BD16', '#6DC8EC',
+      '#945FB9', '#FF9845', '#1E9493', '#FF99C3', '#5D61BF',
+    ] as const,
     patients: [
-      "#5B8FF9",
-      "#CDDDFD",
-      "#61DDAA",
-      "#CDF3E4",
-      "#65789B",
-      "#CED4DE",
-      "#F6BD16",
-      "#FCEBB9",
-      "#7262FD",
-      "#D3CEFD",
-    ],
+      '#5B8FF9', '#CDDDFD', '#61DDAA', '#CDF3E4', '#65789B',
+      '#CED4DE', '#F6BD16', '#FCEBB9', '#7262FD', '#D3CEFD',
+    ] as const,
     trends: [
-      "#55A6F3",
-      "#E8684A",
-      "#9270CA",
-      "#59CB74",
-      "#F5C73D",
-      "#5D7092",
-      "#6DC8EC",
-      "#FF9845",
-      "#1E9493",
-      "#FF99C3",
-    ],
-    comparison: ["#5B8FF9", "#5AD8A6", "#5D7092", "#F6BD16", "#6DC8EC", "#945FB9", "#FF9845", "#1E9493"],
-  },
-  themes: {
-    patients: ["#5B8FF9", "#61DDAA", "#65789B", "#F6BD16", "#7262FD", "#5D61BF"],
-    diagnosis: ["#5B8FF9", "#5AD8A6", "#5D7092", "#F6BD16", "#6DC8EC", "#945FB9"],
-    treatment: ["#13C2C2", "#5AD8A6", "#1E9493", "#006D75", "#52C41A", "#08979C"],
-    outcomes: ["#1890FF", "#69C0FF", "#40A9FF", "#096DD9", "#0050B3", "#003A8C"],
-    admin: ["#722ED1", "#9683EC", "#7C4DFF", "#5E35B1", "#512DA8", "#4527A0"],
-  },
+      '#55A6F3', '#E8684A', '#9270CA', '#59CB74', '#F5C73D',
+      '#5D7092', '#6DC8EC', '#FF9845', '#1E9493', '#FF99C3',
+    ] as const,
+    comparison: [
+      '#5B8FF9', '#5AD8A6', '#5D7092', '#F6BD16',
+      '#6DC8EC', '#945FB9', '#FF9845', '#1E9493',
+    ] as const,
+  }),
+});
+
+/* ----------------------------------------------------------------------------
+ * 2. ESTILOS GLOBALES PARA CHARTS
+ * -------------------------------------------------------------------------- */
+export const CHART_STYLES = Object.freeze({
+  tooltip:  { background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.08)', padding: '10px 14px', fontSize: 12, color: '#384366' } as const,
+  legend:   { fontSize: 12, color: '#5E6C8F', iconSize: 10, padding: 5 } as const,
+  axis:     { tickColor: '#E4E9F2', lineColor: '#E4E9F2', labelColor: '#5E6C8F', labelFontSize: 12 } as const,
+  grid:     { strokeDasharray: '3 3', stroke: '#E4E9F2', vertical: false } as const,
+  animation:{ duration: 800, easing: 'easeOutCubic' } as const,
+  area:     { fillOpacity: 0.6, strokeWidth: 2, activeDotSize: 6 } as const,
+  bar:      { radius: 4, barGap: 4, barCategoryGap: 16 } as const,
+  line:     { strokeWidth: 2, activeDotSize: 6, dotSize: 4 } as const,
+  pie:      { innerRadius: 50, outerRadius: 90, paddingAngle: 2, labelOffset: 10, cornerRadius: 4 } as const,
+  radar:    { fillOpacity: 0.6, strokeWidth: 2 } as const,
+});
+
+/* ----------------------------------------------------------------------------
+ * 3. HELPERS (memorizados)                                                   |
+ * -------------------------------------------------------------------------- */
+type PaletteKey = keyof typeof PALETTE.charts;
+
+const memoColorSets = new Map<string, readonly string[]>();
+
+/** Colores categóricos - siempre devuelve el mismo array memoizado */
+export function getChartColors(
+  palette: PaletteKey = 'medical',
+  count = 10
+): readonly string[] {
+  const key = `${palette}-${count}`;
+  if (memoColorSets.has(key)) return memoColorSets.get(key)!;
+
+  const full = PALETTE.charts[palette];
+  const res =
+    count <= full.length
+      ? full.slice(0, count)
+      : Array.from({ length: count }, (_, i) => full[i % full.length]); // wrap-around
+
+  memoColorSets.set(key, res);
+  return res;
 }
 
-export const chartStyles = {
-  tooltip: {
-    backgroundColor: "rgba(255, 255, 255, 0.98)",
-    borderRadius: "8px",
-    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
-    border: "1px solid rgba(0, 0, 0, 0.03)",
-    padding: "10px 14px",
-    fontSize: "12px",
-    color: "#384366",
-  },
-  legend: {
-    fontSize: "12px",
-    color: "#5E6C8F",
-    iconSize: 10,
-    padding: 5,
-  },
-  axis: {
-    tickColor: "#E4E9F2",
-    lineColor: "#E4E9F2",
-    labelColor: "#5E6C8F",
-    labelFontSize: "12px",
-  },
-  grid: {
-    strokeDasharray: "3 3",
-    stroke: "#E4E9F2",
-    vertical: false,
-  },
-  animation: {
-    duration: 1000,
-    easing: "ease-out",
-    staggered: true,
-  },
-  area: {
-    fillOpacity: 0.6,
-    strokeWidth: 2,
-    activeDotSize: 6,
-  },
-  bar: {
-    radius: 4,
-    barGap: 4,
-    barCategoryGap: 16,
-  },
-  line: {
-    strokeWidth: 2,
-    activeDotSize: 6,
-    dotSize: 4,
-  },
-  pie: {
-    innerRadius: 50,
-    outerRadius: 90,
-    paddingAngle: 2,
-    labelOffset: 10,
-    cornerRadius: 4,
-  },
-  radar: {
-    fillOpacity: 0.6,
-    strokeWidth: 2,
-  },
+/** Colores por estado clínico */
+const STATUS_COLORS: Record<string, string> = {
+  completada: PALETTE.clinical.healthy,
+  cancelada:  PALETTE.clinical.critical,
+  pendiente:  PALETTE.clinical.attention,
+  presente:   PALETTE.clinical.stable,
+};
+
+export const getStatusColor = (status: string): string =>
+  STATUS_COLORS[status] ?? PALETTE.neutral[5];
+
+/** Escala secuencial sencilla (aclara hacia blanco) */
+export function getSequentialScale(steps = 6): string[] {
+  const baseHex = PALETTE.primary[4]; // #40A9FF
+  const [r, g, b] = baseHex.match(/\w\w/g)!.map(h => parseInt(h, 16));
+  return Array.from({ length: steps }, (_, i) => {
+    const k = i / (steps - 1);
+    const shade = (c: number) =>
+      Math.round(c + (255 - c) * (1 - k))
+        .toString(16)
+        .padStart(2, '0');
+    return `#${shade(r)}${shade(g)}${shade(b)}`;
+  });
 }
 
-export const getChartColorSet = (type: "categorical" | "sequential", count = 10) => {
-  if (type === "categorical") {
-    return chartPalette.charts.medical.slice(0, count)
-  }
-  // Add sequential color generation logic here if needed
-  return chartPalette.charts.medical.slice(0, count)
-}
-
-export const getStatusColor = (status: string) => {
-  switch (status) {
-    case "completada":
-      return chartPalette.clinical.healthy // Changed from completed to healthy
-    case "cancelada":
-      return chartPalette.clinical.critical // Changed from cancelled to critical
-    case "pendiente":
-      return chartPalette.clinical.attention // Changed from pending to attention
-    case "presente":
-      return chartPalette.clinical.stable // Changed from active to stable
-    default:
-      return chartPalette.neutral[500]
-  }
-}
-
-// Add the missing getMedicalChartColors function
-export const getMedicalChartColors = (count = 10) => {
-  return chartPalette.charts.medical.slice(0, count)
-}
+/* ----------------------------------------------------------------------------
+ * 4. TIPOS PÚBLICOS                                                          |
+ * -------------------------------------------------------------------------- */
+export type ChartColorSet   = ReturnType<typeof getChartColors>;
+export type SequentialScale = ReturnType<typeof getSequentialScale>;
+export type ChartStyles     = typeof CHART_STYLES;

@@ -8,10 +8,10 @@ import { clinicMetrics, getPendingFollowUps, samplePatients } from "../pacientes
 
 // Carga diferida para los componentes principales del dashboard
 const DashboardMetrics = React.lazy(() => 
-  import("../../components/dashboard/dashboard-metrics").then(module => ({ default: module.DashboardMetrics }))
+  import("../../components/dashboard/dashboard-metrics")
 );
 const PatientAnalytics = React.lazy(() => 
-  import("../../components/dashboard/patient-analytics").then(module => ({ default: module.PatientAnalytics }))
+  import("../../components/dashboard/patient-analytics")
 );
 
 // Componente de carga para Suspense

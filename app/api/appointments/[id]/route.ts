@@ -105,6 +105,3 @@ export async function PUT(
     }, { status: 500 });
   }
 }
-
-// Puedes añadir un DELETE handler si es necesario
-// export async function DELETE(...) { ... }

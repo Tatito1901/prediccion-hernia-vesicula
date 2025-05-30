@@ -6,10 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchIcon, ListFilter, Filter } from "lucide-react"
 import { useAppContext } from "@/lib/context/app-context"
 import type { PatientData } from "@/app/dashboard/data-model";
-import { UnifiedPatientRegistrationForm } from "@/components/patient-admision/new-patient-form";
+import { NewPatientForm } from "@/components/patient-admision/new-patient-form";
 import { generateSurveyId } from "@/lib/form-utils"
 import { useRouter } from "next/navigation"
-import { PatientTable } from "./patient-table"
+import  PatientTable  from "./patient-table"
 import { PatientCardView } from "./patient-card-view"
 import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog"
 import { toast } from "sonner"
@@ -279,14 +279,12 @@ export function PatientManagement() {
               </Select>
             )}
             
-            <UnifiedPatientRegistrationForm 
-              mode="registerAndSchedule" 
-              buttonLabel="Nuevo Paciente"
-              onSuccess={({ patient, appointment }) => {
-                // Potentially refresh data or navigate, similar to how NewPatientForm's onSuccess might have worked.
-                // For now, just log, as the original onSuccess behavior is not fully visible.
-                console.log("New patient and appointment created:", patient, appointment);
-                // Example: refetch patients or add to local state if needed
+            <NewPatientForm 
+              onSuccess={() => {
+                // The NewPatientForm doesn't return patient/appointment objects
+                // but it internally calls addPatient and addAppointment from context
+                console.log("New patient and appointment created");
+                // If you need to refresh data, do it here
               }}
             />
           </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import React from "react"
 import { useState, useMemo, useEffect, useCallback, memo, lazy, Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -26,20 +26,17 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   FileBarChart,
   RefreshCw,
   AlertCircle,
-  Download,
   Info,
   CalendarIcon,
   Filter,
   X,
   ChevronDown,
   ChevronUp,
-  Search,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { mockAppointments } from "@/app/admision/mock-data"
@@ -100,7 +97,6 @@ export interface AppointmentFilters {
   dateRange: DateRange | undefined
   motiveFilter: string
   statusFilter: readonly AppointmentStatus[]
-  searchTerm: string
   sortBy: AppointmentSortKey
   sortOrder: SortOrder
   timeRange: readonly [number, number]
@@ -391,8 +387,7 @@ const FilterSummary = memo<FilterSummaryProps>(({ filters, updateFilter, classNa
     return (
       (filters.dateRange?.from ? 1 : 0) +
       (filters.motiveFilter !== "all" ? 1 : 0) +
-      (!allStatusesSelected && filters.statusFilter.length > 0 ? 1 : 0) +
-      (filters.searchTerm !== "" ? 1 : 0)
+      (!allStatusesSelected && filters.statusFilter.length > 0 ? 1 : 0)
     )
   }, [filters])
 
@@ -450,22 +445,6 @@ const FilterSummary = memo<FilterSummaryProps>(({ filters, updateFilter, classNa
             className="h-4 w-4 p-0 ml-1 opacity-70 group-hover:opacity-100"
             onClick={() => updateFilter("statusFilter", [...APPOINTMENT_STATUSES])}
             aria-label="Restablecer filtros de estado"
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </Badge>
-      )}
-
-      {filters.searchTerm && (
-        <Badge variant="secondary" className="flex items-center gap-1 group py-1.5">
-          Búsqueda: "{filters.searchTerm.length > 15 ? `${filters.searchTerm.substring(0, 15)}...` : filters.searchTerm}
-          "
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-4 w-4 p-0 ml-1 opacity-70 group-hover:opacity-100"
-            onClick={() => updateFilter("searchTerm", "")}
-            aria-label="Eliminar búsqueda"
           >
             <X className="h-3 w-3" />
           </Button>
@@ -535,13 +514,13 @@ interface TabContentProps {
   trendChartData: TrendChartData[]
   weekdayChartData: WeekdayChartData[]
   scatterData: ScatterData
-  timeRange: [number, number]
+  timeRange: readonly [number, number]
   isLoading: boolean
   renderPieChart: (data: StatusChartData[], stats: GeneralStats, loading: boolean) => JSX.Element
   renderBarChart: (data: MotiveChartData[], loading: boolean) => JSX.Element
   renderLineChart: (data: TrendChartData[], loading: boolean) => JSX.Element
   renderWeekdayChart: (data: WeekdayChartData[], loading: boolean) => JSX.Element
-  renderScatterChart: (data: ScatterData, range: [number, number], loading: boolean) => JSX.Element
+  renderScatterChart: (data: ScatterData, range: readonly [number, number], loading: boolean) => JSX.Element
   progress: number
   isFirstLoad: boolean
 }
@@ -555,7 +534,7 @@ const GeneralTabContentComponent: React.FC<
     | "renderPieChart"
     | "renderBarChart"
     | "isLoading"
-    | "progress"
+    // | "progress" // Eliminado porque no se usaba directamente aquí
     | "isFirstLoad"
   >
 > = ({
@@ -565,7 +544,6 @@ const GeneralTabContentComponent: React.FC<
   renderPieChart,
   renderBarChart,
   isLoading,
-  progress,
   isFirstLoad,
 }) => (
   <>
@@ -684,7 +662,6 @@ const INITIAL_FILTERS: AppointmentFilters = {
   dateRange: INITIAL_DATE_RANGE,
   motiveFilter: "all",
   statusFilter: [...APPOINTMENT_STATUSES],
-  searchTerm: "",
   sortBy: "fechaConsulta",
   sortOrder: "desc",
   timeRange: [0, 24] as const,
@@ -700,7 +677,6 @@ export function AppointmentStatistics() {
   const [mounted, setMounted] = useState(false)
   const [progress, setProgress] = useState(0)
   const [isFirstLoad, setIsFirstLoad] = useState(true)
-  const [exportMessage, setExportMessage] = useState<string | null>(null)
   const [isAdvancedFilterOpen, setIsAdvancedFilterOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -709,8 +685,6 @@ export function AppointmentStatistics() {
 
   // Chart configuration
   const {
-    chartConfig,
-    ChartConfigControl,
     renderPieChart,
     renderBarChart,
     renderLineChart,
@@ -843,51 +817,54 @@ export function AppointmentStatistics() {
           }
           return true
         })
-        .filter((appointment) => {
-          if (!filters.searchTerm) return true
-          const searchLower = filters.searchTerm.toLowerCase().trim()
-          return (
-            (appointment.nombre || "").toLowerCase().includes(searchLower) ||
-            (appointment.apellidos || "").toLowerCase().includes(searchLower) ||
-            (appointment.motivoConsulta || "").toLowerCase().includes(searchLower) ||
-            (appointment.notas || "").toLowerCase().includes(searchLower)
-          )
-        })
         .sort((a, b) => {
-          const horaCompare = (a.horaConsulta || "25:00").localeCompare(b.horaConsulta || "25:00")
-          if (horaCompare !== 0) return horaCompare
+          let comparison = 0;
+          const valA = a[filters.sortBy]
+          const valB = b[filters.sortBy]
 
-          const motiveCompare = (a.motivoConsulta || "").localeCompare(b.motivoConsulta || "")
-          if (motiveCompare !== 0) return motiveCompare
-
-          const valA_nombre = a.nombre || ""
-          const valA_apellidos = a.apellidos || ""
-          const valB_nombre = b.nombre || ""
-          const valB_apellidos = b.apellidos || ""
-          const fullNameA = `${valA_nombre} ${valA_apellidos}`.trim()
-          const fullNameB = `${valB_nombre} ${valB_apellidos}`.trim()
-          const nameCompare = fullNameA.localeCompare(fullNameB)
-          if (nameCompare !== 0) return nameCompare
-
-          const datePartA = format(a.fechaConsulta, "yyyy-MM-dd")
-          const timePartA = a.horaConsulta
-          const datePartB = format(b.fechaConsulta, "yyyy-MM-dd")
-          const timePartB = b.horaConsulta
-
-          const validTimeA = /^\d{2}:\d{2}$/.test(timePartA)
-          const validTimeB = /^\d{2}:\d{2}$/.test(timePartB)
-
-          const dateA = validTimeA ? parseISO(`${datePartA}T${timePartA}:00`) : null
-          const dateB = validTimeB ? parseISO(`${datePartB}T${timePartB}:00`) : null
-
-          if (dateA && dateB && isValid(dateA) && isValid(dateB)) {
-            return dateA.getTime() - dateB.getTime()
-          } else if (dateA && isValid(dateA)) {
-            return -1
-          } else if (dateB && isValid(dateB)) {
-            return 1
+          if (filters.sortBy === 'fechaConsulta') {
+            const dateA = parseISO(`${format(a.fechaConsulta, "yyyy-MM-dd")}T${a.horaConsulta || '00:00'}:00`);
+            const dateB = parseISO(`${format(b.fechaConsulta, "yyyy-MM-dd")}T${b.horaConsulta || '00:00'}:00`);
+            if (isValid(dateA) && isValid(dateB)) {
+                comparison = dateA.getTime() - dateB.getTime();
+            } else if (isValid(dateA)) {
+                comparison = -1;
+            } else if (isValid(dateB)) {
+                comparison = 1;
+            }
+          } else if (filters.sortBy === 'nombre') {
+            const fullNameA = `${a.nombre || ""} ${a.apellidos || ""}`.trim().toLowerCase();
+            const fullNameB = `${b.nombre || ""} ${b.apellidos || ""}`.trim().toLowerCase();
+            comparison = fullNameA.localeCompare(fullNameB);
+          } else if (typeof valA === 'string' && typeof valB === 'string') {
+            comparison = valA.localeCompare(valB);
+          } else if (typeof valA === 'number' && typeof valB === 'number') {
+            comparison = valA - valB;
           }
-          return 0
+          
+          const result = filters.sortOrder === 'asc' ? comparison : -comparison;
+
+          if (result === 0) {
+            if (filters.sortBy !== 'fechaConsulta') {
+                const dateA = parseISO(`${format(a.fechaConsulta, "yyyy-MM-dd")}T${a.horaConsulta || '00:00'}:00`);
+                const dateB = parseISO(`${format(b.fechaConsulta, "yyyy-MM-dd")}T${b.horaConsulta || '00:00'}:00`);
+                 if (isValid(dateA) && isValid(dateB)) {
+                    const dateComparison = dateA.getTime() - dateB.getTime();
+                    if (dateComparison !== 0) return dateComparison;
+                } else if (isValid(dateA)) {
+                    return -1;
+                } else if (isValid(dateB)) {
+                    return 1;
+                }
+            }
+            if (filters.sortBy !== 'nombre') {
+                const fullNameA = `${a.nombre || ""} ${a.apellidos || ""}`.trim().toLowerCase();
+                const fullNameB = `${b.nombre || ""} ${b.apellidos || ""}`.trim().toLowerCase();
+                const nameComparison = fullNameA.localeCompare(fullNameB);
+                if (nameComparison !== 0) return nameComparison;
+            }
+          }
+          return result;
         })
     } catch (error) {
       console.error("Error al filtrar citas:", error)
@@ -895,6 +872,7 @@ export function AppointmentStatistics() {
       return []
     }
   }, [appointments, filters, setDataError])
+
 
   // Calculate general stats
   const generalStats = useMemo((): GeneralStats => {
@@ -951,17 +929,17 @@ export function AppointmentStatistics() {
   // Status chart data
   const statusChartData = useMemo(
     (): StatusChartData[] => [
-      { name: "Completadas", value: generalStats.completed, color: STATUS_COLORS.completada },
-      { name: "Canceladas", value: generalStats.cancelled, color: STATUS_COLORS.cancelada },
-      { name: "Pendientes", value: generalStats.pendingCount, color: STATUS_COLORS.pendiente },
-      { name: "Presentes", value: generalStats.presentCount, color: STATUS_COLORS.presente },
+      { name: "completada", value: generalStats.completed, color: STATUS_COLORS.completada },
+      { name: "cancelada", value: generalStats.cancelled, color: STATUS_COLORS.cancelada },
+      { name: "pendiente", value: generalStats.pendingCount, color: STATUS_COLORS.pendiente },
+      { name: "presente", value: generalStats.presentCount, color: STATUS_COLORS.presente },
       {
-        name: "Reprogramadas",
+        name: "reprogramada",
         value: filteredAppointments.filter((a) => a.estado === "reprogramada").length,
         color: STATUS_COLORS.reprogramada,
       },
       {
-        name: "No Asistieron",
+        name: "no_asistio",
         value: filteredAppointments.filter((a) => a.estado === "no_asistio").length,
         color: STATUS_COLORS.no_asistio,
       },
@@ -1030,7 +1008,6 @@ export function AppointmentStatistics() {
         } else {
           filledDates.push({
             date: dateStr,
-            total: 0,
             completada: 0,
             cancelada: 0,
             pendiente: 0,
@@ -1124,28 +1101,6 @@ export function AppointmentStatistics() {
     }, 300)
   }, [isLoading])
 
-  const handleExportData = useCallback(() => {
-    if (filteredAppointments.length === 0) {
-      setExportMessage("No hay datos filtrados para exportar.")
-      setTimeout(() => setExportMessage(null), 3000)
-      return
-    }
-
-    const dataToExport = filteredAppointments.map((appointment) => ({
-      nombre_completo: `${appointment.nombre || ""} ${appointment.apellidos || ""}`.trim(),
-      motivo_consulta: appointment.motivoConsulta,
-      fecha: appointment.fechaConsulta ? format(new Date(appointment.fechaConsulta), "dd/MM/yyyy") : "N/A",
-      hora: appointment.horaConsulta,
-      estado: appointment.estado,
-      notas: appointment.notas,
-    }))
-
-    console.log("Datos preparados para exportar:", dataToExport)
-    setExportMessage(
-      "Datos preparados y listados en la consola. Puede implementar aquí su lógica de exportación personalizada.",
-    )
-    setTimeout(() => setExportMessage(null), 7000)
-  }, [filteredAppointments])
 
   if (!mounted) {
     return (
@@ -1239,17 +1194,6 @@ export function AppointmentStatistics() {
                 </Popover>
               )}
             </div>
-
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                type="search"
-                placeholder="Buscar paciente..."
-                className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 h-9"
-                value={filters.searchTerm}
-                onChange={(e) => updateFilter("searchTerm", e.target.value)}
-              />
-            </div>
           </div>
         </div>
 
@@ -1278,7 +1222,7 @@ export function AppointmentStatistics() {
   FilterControls.displayName = "FilterControls"
 
   // Tab content props
-  const tabContentProps: Omit<TabContentProps, "isLoading" | "progress"> = {
+  const tabContentPropsBase = {
     generalStats,
     statusChartData,
     motiveChartData,
@@ -1324,34 +1268,10 @@ export function AppointmentStatistics() {
               <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
               {isLoading ? "Actualizando..." : "Actualizar"}
             </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportData}
-              className="h-9 transition-all hover:bg-muted"
-              disabled={isLoading || filteredAppointments.length === 0}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Exportar Datos
-            </Button>
-
-            <ChartConfigControl />
           </div>
         </div>
 
         <FilterControls uniqueMotives={uniqueMotives} className="bg-card p-4 rounded-lg shadow" />
-
-        {exportMessage && (
-          <Alert
-            variant="default"
-            className="my-4 animate-in fade-in bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-700"
-          >
-            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <AlertTitle className="text-blue-700 dark:text-blue-300">Información de Exportación</AlertTitle>
-            <AlertDescription className="text-blue-600 dark:text-blue-400">{exportMessage}</AlertDescription>
-          </Alert>
-        )}
 
         {dataError && (
           <Alert variant="destructive" className="my-4 animate-in slide-in-from-top duration-300">
@@ -1370,20 +1290,20 @@ export function AppointmentStatistics() {
                   <Progress value={progress} className="h-2 mx-auto max-w-md" />
                 </div>
               ) : (
-                <LazyGeneralTabContent {...tabContentProps} isLoading={isLoading} progress={progress} />
+                <LazyGeneralTabContent {...tabContentPropsBase} isLoading={isLoading} />
               )}
             </TabsContent>
 
             <TabsContent value="trends" className="space-y-8 m-0">
-              <LazyTrendsTabContent {...tabContentProps} isLoading={isLoading} progress={progress} />
+              <LazyTrendsTabContent {...tabContentPropsBase} isLoading={isLoading} progress={progress} />
             </TabsContent>
 
             <TabsContent value="weekday" className="space-y-8 m-0">
-              <LazyWeekdayTabContent {...tabContentProps} isLoading={isLoading} progress={progress} />
+              <LazyWeekdayTabContent {...tabContentPropsBase} isLoading={isLoading} progress={progress} />
             </TabsContent>
 
             <TabsContent value="correlation" className="space-y-8 m-0">
-              <LazyCorrelationTabContent {...tabContentProps} isLoading={isLoading} progress={progress} />
+              <LazyCorrelationTabContent {...tabContentPropsBase} isLoading={isLoading} progress={progress} />
             </TabsContent>
           </Suspense>
         </div>

@@ -1,215 +1,187 @@
-"use client"
+/* -------------------------------------------------------------------------- */
+/*  components/charts/diagnosis-chart.tsx                                     */
+/* -------------------------------------------------------------------------- */
 
-import React, { useMemo } from "react"
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { useTheme } from "next-themes"
 
-// Define the types for the component
+import { useMemo, useCallback } from 'react';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  Legend,
+} from 'recharts';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from '@/components/ui/card';
+import { useTheme } from 'next-themes';
+import { CHART_STYLES, getChartColors } from '@/lib/chart-theme';
+
 export interface DiagnosisData {
-  tipo: string
-  cantidad: number
-  porcentaje?: number
+  tipo: string;
+  cantidad: number;
 }
 
-interface DiagnosisChartProps {
-  data: DiagnosisData[]
-  title?: string
-  description?: string
-  className?: string
+interface Props {
+  data: readonly DiagnosisData[];
+  title?: string;
+  description?: string;
+  className?: string;
 }
 
-export function DiagnosisChart({
+/* -------------------------------- Helpers -------------------------------- */
+
+const ABBR = (s: string, n = 14) => (s.length > n ? `${s.slice(0, n)}…` : s);
+const isHernia = (t: string) => t.toLowerCase().includes('hernia');
+const isVesicula = (t: string) =>
+  t.toLowerCase().includes('vesícul') || t.toLowerCase().includes('colelit');
+
+/* ------------------------------ Component --------------------------------- */
+
+export default function DiagnosisChart({
   data,
-  title = "Distribución de Diagnósticos",
-  description = "Desglose por tipo de diagnóstico",
-  className = "",
-}: DiagnosisChartProps) {
-  const { resolvedTheme } = useTheme()
-  const isDark = resolvedTheme === "dark"
+  title = 'Distribución de diagnósticos',
+  description = 'Desglose por tipo',
+  className,
+}: Props) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
-  // Colors for the chart segments with theme support - Expanded color palette
-  const COLORS = useMemo(() => {
-    // Define colores específicos para categorías comunes
-    const colorMap: Record<string, string> = {
-      // Hernias - Tonos azules
-      "Hernia Inguinal": isDark ? "#60a5fa" : "#3b82f6",
-      "Hernia Umbilical": isDark ? "#93c5fd" : "#60a5fa",
-      "Hernia Incisional": isDark ? "#bfdbfe" : "#93c5fd",
-      "Hernia Hiatal": isDark ? "#dbeafe" : "#bfdbfe",
-      "Hernia Inguinal Recidivante": isDark ? "#3b82f6" : "#2563eb",
-      
-      // Vesícula - Tonos verdes
-      "Vesícula": isDark ? "#34d399" : "#10b981",
-      "Colelitiasis": isDark ? "#6ee7b7" : "#34d399",
-      "Vesícula (Colecistitis Crónica)": isDark ? "#a7f3d0" : "#6ee7b7",
-      
-      // Otros diagnósticos específicos
-      "Apendicitis": isDark ? "#f87171" : "#ef4444",
-      "Quiste Sebáceo Infectado": isDark ? "#fbbf24" : "#f59e0b",
-      "Lipoma Grande": isDark ? "#c084fc" : "#a855f7",
-      "Eventración Abdominal": isDark ? "#fb923c" : "#f97316",
-      "Otros diagnósticos": isDark ? "#d1d5db" : "#9ca3af",
-      
-      // Categoría default
-      "Otro": isDark ? "#9ca3af" : "#6b7280"
-    }
-    
-    // Colores de respaldo para tipos no definidos específicamente
-    const backupColors = [
-      isDark ? "#60a5fa" : "#0088FE", // Blue
-      isDark ? "#34d399" : "#00C49F", // Green
-      isDark ? "#fbbf24" : "#FFBB28", // Yellow
-      isDark ? "#f87171" : "#FF8042", // Orange
-      isDark ? "#c084fc" : "#8884d8", // Purple
-      isDark ? "#4ade80" : "#82ca9d", // Light green
-    ]
-    
-    return { colorMap, backupColors }
-  }, [isDark])
+  /* ------------------------ Data + colores memo ------------------------- */
+  const { processed, total, palette } = useMemo(() => {
+    if (!data?.length) return { processed: [], total: 0, palette: [] };
 
-  // Add percentage calculation and sort the data
-  const processedData = useMemo(() => {
-    if (!data || data.length === 0) return []
+    const all = [...data].sort((a, b) => b.cantidad - a.cantidad);
+    const sum = all.reduce((s, d) => s + d.cantidad, 0);
 
-    const total = data.reduce((sum, item) => sum + item.cantidad, 0)
-    
-    // Procesar datos con porcentajes
-    const processed = data.map((item) => ({
-      ...item,
-      porcentaje: item.porcentaje ?? Math.round((item.cantidad / total) * 100),
-    }))
-    
-    // Agrupar por categorías principales (si hay muchos diagnósticos)
-    if (processed.length > 6) {
-      // Mantener los 5 principales y agrupar el resto como "Otros"
-      const mainDiagnoses = processed.slice(0, 5)
-      const otherDiagnoses = processed.slice(5)
-      
-      if (otherDiagnoses.length > 0) {
-        const otherSum = otherDiagnoses.reduce((sum, item) => sum + item.cantidad, 0)
-        const otherPercentage = Math.round((otherSum / total) * 100)
-        
-        return [...mainDiagnoses, {
-          tipo: "Otros diagnósticos",
-          cantidad: otherSum,
-          porcentaje: otherPercentage
-        }]
-      }
-    }
-    
-    return processed
-  }, [data])
+    const trimmed =
+      all.length > 6
+        ? [
+            ...all.slice(0, 5),
+            {
+              tipo: 'Otros diagnósticos',
+              cantidad: all.slice(5).reduce((s, d) => s + d.cantidad, 0),
+            },
+          ]
+        : all;
 
-  // Custom tooltip to display the diagnosis information
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload
+    const palette = getChartColors('diagnosis', 6);
+
+    /** map tipo → color fijo según familia, o color rotativo */
+    const colorFor = (t: string, idx: number) => {
+      if (isHernia(t)) return palette[0]; // azul
+      if (isVesicula(t)) return palette[1]; // verde
+      if (t.toLowerCase().includes('apend')) return palette[2]; // rojo
+      return palette[(idx + 2) % palette.length]; // resto
+    };
+
+    return {
+      processed: trimmed.map((d, i) => ({
+        ...d,
+        porcentaje: Math.round((d.cantidad / sum) * 100),
+        fill: colorFor(d.tipo, i),
+      })),
+      total: sum,
+      palette,
+    };
+  }, [data]);
+
+  /* ----------------------- Tooltip Component ---------------------------- */
+  const Tooltip = useCallback(
+    ({ active, payload }: any) => {
+      if (!active || !payload?.[0]) return null;
+      const d = payload[0].payload;
       return (
         <div
-          className={`${
-            isDark ? "bg-gray-800 text-gray-100" : "bg-white text-gray-800"
-          } p-3 border rounded shadow-sm text-sm`}
+          style={{
+            ...CHART_STYLES.tooltip,
+            backgroundColor: isDark ? '#1f2937' : '#fff',
+          }}
         >
-          <p className="font-medium">{data.tipo}</p>
-          <p>Casos: {data.cantidad}</p>
-          {data.porcentaje !== undefined && <p>Porcentaje: {data.porcentaje}%</p>}
+          <p className="font-medium">{d.tipo}</p>
+          <p>{d.cantidad} pacientes</p>
+          <p>{d.porcentaje}%</p>
         </div>
-      )
-    }
-    return null
-  }
+      );
+    },
+    [isDark]
+  );
 
-  // Don't render if no data
-  if (!processedData.length) {
+  /* ----------------------------- Empty ---------------------------------- */
+  if (!processed.length)
     return (
       <Card className={className}>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center justify-center h-[220px]">
-          <p className="text-muted-foreground">No hay datos disponibles</p>
+        <CardContent className="flex justify-center items-center h-[220px] text-muted-foreground">
+          Sin datos disponibles
         </CardContent>
       </Card>
-    )
-  }
+    );
 
+  /* ----------------------------- Chart ---------------------------------- */
   return (
     <Card className={className}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+        <CardDescription>
+          {description} · {total} pacientes
+        </CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="h-[220px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={processedData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                outerRadius={80}
-                innerRadius={40}
-                fill="#8884d8"
-                dataKey="cantidad"
-                nameKey="tipo"
-                label={({ tipo, porcentaje }) => {
-                  // Acortar etiquetas muy largas
-                  const displayName = tipo.length > 12 ? `${tipo.substring(0, 10)}...` : tipo
-                  return `${displayName}: ${porcentaje}%`
-                }}
-                paddingAngle={2}
-                animationDuration={800}
-                animationEasing="ease-out"
-              >
-                {processedData.map((entry, index) => {
-                  // Usar el color específico de la categoría si existe, si no usar el color de respaldo
-                  const specificColor = COLORS.colorMap[entry.tipo]
-                  const fillColor = specificColor || COLORS.backupColors[index % COLORS.backupColors.length]
-                  
-                  return (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={fillColor}
-                      stroke={isDark ? "#1f2937" : "#ffffff"}
-                      strokeWidth={1}
-                    />
-                  )
-                })}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend
-                layout="vertical"
-                verticalAlign="middle"
-                align="right"
-                wrapperStyle={{
-                  paddingLeft: "10px",
-                  fontSize: "12px",
-                  lineHeight: "18px"
-                }}
-                formatter={(value) => {
-                  // Si el valor es muy largo, acortarlo
-                  const displayValue = value.length > 18 
-                    ? `${value.substring(0, 16)}...` 
-                    : value
-                  
-                  // Buscar el porcentaje correspondiente
-                  const item = processedData.find(d => d.tipo === value)
-                  const percentage = item ? ` (${item.porcentaje}%)` : ""
-                  
-                  return (
-                    <span className={`text-xs ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                      {displayValue}{percentage}
-                    </span>
-                  )
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+
+      <CardContent className="h-[240px] sm:h-[280px]">
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie
+              data={processed}
+              dataKey="cantidad"
+              nameKey="tipo"
+              cx="50%"
+              cy="50%"
+              innerRadius={45}
+              outerRadius={80}
+              paddingAngle={2}
+              cornerRadius={4}
+              animationDuration={700}
+              label={({ tipo, porcentaje }) => `${ABBR(tipo)} ${porcentaje}%`}
+            >
+              {processed.map((d, i) => (
+                <Cell
+                  key={d.tipo}
+                  fill={d.fill}
+                  stroke={isDark ? '#1f2937' : '#fff'}
+                />
+              ))}
+            </Pie>
+
+            <RTooltip content={Tooltip} />
+
+            <Legend
+              layout="vertical"
+              align="right"
+              verticalAlign="middle"
+              wrapperStyle={{
+                fontSize: CHART_STYLES.legend.fontSize,
+                color: CHART_STYLES.legend.color,
+                paddingLeft: 8,
+              }}
+              iconType="circle"
+              iconSize={CHART_STYLES.legend.iconSize}
+              formatter={(value: string) => {
+                const item = processed.find(p => p.tipo === value);
+                return `${ABBR(value, 18)} ${item ? `(${item.porcentaje}%)` : ''}`;
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
-  )
+  );
 }

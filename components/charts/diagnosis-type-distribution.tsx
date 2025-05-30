@@ -1,163 +1,152 @@
-"use client"
+/* -------------------------------------------------------------------------- */
+/*  components/charts/diagnosis-type-distribution.tsx                         */
+/* -------------------------------------------------------------------------- */
 
-import { useMemo } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
-import type { PatientData } from "@/app/dashboard/data-model"
-import { useTheme } from "next-themes"
 
-interface DiagnosisTypeDistributionProps {
-  patients: PatientData[]
-  className?: string
+import { useMemo } from 'react';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Legend,
+  Tooltip as RTooltip,
+} from 'recharts';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import type { PatientData } from '@/app/dashboard/data-model';
+import { useTheme } from 'next-themes';
+import { CHART_STYLES, getChartColors } from '@/lib/chart-theme';
+import { cn } from '@/lib/utils';
+
+/* -------------------------------- Helpers -------------------------------- */
+
+const isHernia = (d?: string) => d?.toLowerCase().includes('hernia');
+
+/* --------------------------------- Types --------------------------------- */
+
+interface Props {
+  patients: PatientData[];
+  className?: string;
 }
 
-export function DiagnosisTypeDistribution({ patients, className = "" }: DiagnosisTypeDistributionProps) {
-  const { resolvedTheme } = useTheme()
-  const isDark = resolvedTheme === "dark"
+/* ---------------------------- Main Component ----------------------------- */
 
-  // Filtrar solo pacientes con hernias
-  const herniaPatients = useMemo(() => 
-    patients.filter((p) => p.diagnostico.includes("Hernia")), 
-    [patients]
-  )
+export default function DiagnosisTypeDistribution({
+  patients,
+  className,
+}: Props) {
+  /* --------------------------- Theme & colors --------------------------- */
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
-  // Contar por tipo de hernia con memoización
-  const chartData = useMemo(() => {
-    const herniaTypes = herniaPatients.reduce(
-      (acc, patient) => {
-        const type = patient.diagnostico
-        acc[type] = (acc[type] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
+  const colors = useMemo(() => getChartColors('patients', 8), []);
 
-    // Convertir a formato para gráfica y ordenar
-    return Object.entries(herniaTypes)
+  /* ---------------------------- Data memo -------------------------------- */
+  const data = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    patients.forEach(p => {
+      if (!isHernia(p.diagnostico_principal)) return;
+      const key = p.diagnostico_principal || 'Otro';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+
+    return [...counts.entries()]
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-  }, [herniaPatients])
+      .sort((a, b) => b.value - a.value);
+  }, [patients]);
 
-  // Colores específicos para tipos de hernia con adaptación a tema oscuro
-  const COLORS = useMemo(() => [
-    isDark ? "#5090F0" : "#4285F4", // Hernia Inguinal
-    isDark ? "#25B070" : "#0F9D58", // Hernia Umbilical
-    isDark ? "#B44DC8" : "#9C27B0", // Hernia Incisional
-    isDark ? "#E05D50" : "#DB4437", // Otros tipos
-  ], [isDark])
+  const total = useMemo(() => data.reduce((s, d) => s + d.value, 0), [data]);
 
-  // Calcular porcentajes
-  const total = useMemo(() => 
-    chartData.reduce((sum, item) => sum + item.value, 0), 
-    [chartData]
-  )
-
-  // Configuración de estilos para el gráfico
-  const chartStyles = {
-    pie: {
-      outerRadius: 110,
-      innerRadius: 60,
-      paddingAngle: 2,
-      cornerRadius: 4,
-    },
-    animation: {
-      duration: 800,
-      easing: "ease", // Using a valid AnimationTiming value
-    },
-    tooltip: {
-      backgroundColor: isDark ? "#1f2937" : "#ffffff",
-      borderRadius: "6px",
-      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-      border: `1px solid ${isDark ? "#374151" : "#e5e7eb"}`,
-      padding: "8px 12px",
-    },
-    legend: {
-      fontSize: 12,
-      iconSize: 10,
-      color: isDark ? "#e5e7eb" : "#374151",
-    },
-  }
-
-  // Renderizado condicional para datos vacíos
-  if (chartData.length === 0) {
+  /* ---------------------- Empty-state early return ----------------------- */
+  if (!data.length)
     return (
-      <Card className={`col-span-1 md:col-span-2 ${className}`}>
+      <Card className={cn('col-span-1 md:col-span-2', className)}>
         <CardHeader>
-          <CardTitle>Distribución de Tipos de Hernia</CardTitle>
-          <CardDescription>Proporción de los diferentes tipos de hernia</CardDescription>
+          <CardTitle>Distribución de Hernias</CardTitle>
+          <CardDescription>No hay datos registrados de hernias.</CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center justify-center h-[350px]">
-          <p className="text-muted-foreground">No hay datos disponibles sobre hernias</p>
+        <CardContent className="py-12 flex justify-center text-muted-foreground">
+          –
         </CardContent>
       </Card>
-    )
-  }
+    );
 
+  /* ------------------------------ Render --------------------------------- */
   return (
-    <Card className={`col-span-1 md:col-span-2 ${className}`}>
+    <Card className={cn('col-span-1 md:col-span-2', className)}>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <span className="inline-block w-3 h-3 rounded-full bg-primary"></span>
-          Distribución de Tipos de Hernia
-        </CardTitle>
+        <CardTitle>Distribución de Hernias</CardTitle>
         <CardDescription>
-          Proporción de los diferentes tipos de hernia ({total} pacientes)
+          Tipos registrados&nbsp;·&nbsp;{total} pacientes
         </CardDescription>
       </CardHeader>
+
       <CardContent>
-        <div className="h-[350px]">
-          <ResponsiveContainer width="100%" height="100%">
+        {/* Badges con top-3 para visión rápida */}
+        <div className="flex flex-wrap gap-2 mb-4 justify-center">
+          {data.slice(0, 3).map(({ name, value }, i) => (
+            <Badge
+              key={name}
+              variant="outline"
+              className="px-3 py-1.5 text-xs font-medium border-l-4"
+              style={{ borderLeftColor: colors[i] }}
+            >
+              {name}: {value}
+            </Badge>
+          ))}
+        </div>
+
+        <div className="h-[320px] sm:h-[360px]">
+          <ResponsiveContainer>
             <PieChart>
               <Pie
-                data={chartData}
+                data={data}
+                dataKey="value"
+                nameKey="name"
                 cx="50%"
                 cy="50%"
-                labelLine={true}
-                outerRadius={chartStyles.pie.outerRadius}
-                innerRadius={chartStyles.pie.innerRadius}
-                paddingAngle={chartStyles.pie.paddingAngle}
-                cornerRadius={chartStyles.pie.cornerRadius}
-                fill="#8884d8"
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                animationDuration={chartStyles.animation.duration}
-                animationEasing={chartStyles.animation.easing}
+                innerRadius={70}
+                outerRadius={110}
+                paddingAngle={2}
+                cornerRadius={4}
+                stroke={isDark ? '#1f2937' : '#fff'}
+                strokeWidth={1}
               >
-                {chartData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
-                    stroke={isDark ? "#1f2937" : "#ffffff"}
-                    strokeWidth={2}
-                    strokeOpacity={0.8}
-                    style={{
-                      filter: "drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.1))",
-                    }}
-                  />
+                {data.map((_, i) => (
+                  <Cell key={i} fill={colors[i % colors.length]} />
                 ))}
               </Pie>
-              <Tooltip
-                formatter={(value) => [
-                  `${value} pacientes (${(((value as number) / total) * 100).toFixed(1)}%)`,
-                  "Cantidad",
+
+              <RTooltip
+                contentStyle={CHART_STYLES.tooltip as any}
+                formatter={(v: number) => [
+                  `${v} pacientes (${((v / total) * 100).toFixed(1)}%)`,
+                  'Total',
                 ]}
-                contentStyle={chartStyles.tooltip}
               />
+
               <Legend
-                layout="horizontal"
+                wrapperStyle={{
+                  color: CHART_STYLES.legend.color,
+                  fontSize: CHART_STYLES.legend.fontSize,
+                }}
+                iconType="circle"
+                iconSize={CHART_STYLES.legend.iconSize}
                 verticalAlign="bottom"
-                align="center"
-                iconSize={chartStyles.legend.iconSize}
-                formatter={(value) => (
-                  <span style={{ fontSize: chartStyles.legend.fontSize, color: chartStyles.legend.color }}>
-                    {value}
-                  </span>
-                )}
+                height={36}
               />
             </PieChart>
           </ResponsiveContainer>
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

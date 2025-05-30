@@ -1,473 +1,425 @@
-import React, { useState, useMemo, FC, useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import DatePicker, { registerLocale } from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import { format, addDays, isValid } from "date-fns";
-import { es } from "date-fns/locale";
-import { Plus, CalendarIcon } from 'lucide-react';
-import { toast } from "sonner";
+"use client"
 
-import { Button } from "@/components/ui/button";
+import { useMemo } from "react"
+import type React from "react"
+import { useState } from "react"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
+import { setHours, setMinutes, isToday, isBefore, addMonths, startOfDay } from "date-fns"
+import { UserPlus } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import {
-  Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog"
+import { CustomDatePicker } from "@/components/ui/date-picker"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
 import {
-  Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription,
-} from "@/components/ui/form";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectGroup,
+  SelectLabel,
+} from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
+import { useAppContext } from "@/lib/context/app-context"
 import {
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+  DiagnosisEnum,
+  PatientStatusEnum,
+  AppointmentStatusEnum,
+  type AppointmentData,
+} from "@/app/dashboard/data-model"
 
-import { useAppContext } from "@/lib/context/app-context";
-import { PatientData, DiagnosisType, AppointmentStatus, PatientStatus, DateString, TimeString, DiagnosisEnum, AppointmentData } from "@/app/dashboard/data-model";
-import { useIsMobile } from "@/hooks/use-breakpoint";
-import { cn } from "@/lib/utils";
-import type { Database } from "@/lib/types/database.types";
-
-registerLocale("es", es);
-
-// Derive options from enums
-const diagnosticoOptions = Object.values(DiagnosisEnum) as DiagnosisType[];
-
-// Default user ID until auth is implemented
-const DEFAULT_USER_ID = "5e4d29a2-5eec-49ee-ac0f-8d349d5660ed";
-
-// Define supabase insert types
-type PatientInsert = Omit<Database['public']['Tables']['patients']['Insert'], 'id'>
-type AppointmentInsert = Omit<Database['public']['Tables']['appointments']['Insert'], 'id'>
-
-// Helper functions
-const isValidDate = (date: any): boolean => {
-  return date instanceof Date && !isNaN(date.getTime()) && isValid(date);
-};
-
-const safeFormatDate = (date: any, formatString: string, options?: any): string => {
-  try {
-    if (!date) return "";
-    const dateObj = typeof date === "string" ? new Date(date) : date;
-    if (!isValidDate(dateObj)) return "";
-    return format(dateObj, formatString, options);
-  } catch (error) {
-    console.error("[safeFormatDate] Error formatting date:", error);
-    return "";
-  }
-};
-
-const normalizeId = (id: any): string => {
-  if (id === null || id === undefined) return "";
-  return String(id);
-};
-
-// Validation schema generator
-
-// Base schema with common fields
-const baseSchema = z.object({
-  nombre: z.string()
-    .min(2, "Nombre debe tener al menos 2 caracteres.")
-    .max(50, "Nombre no puede exceder 50 caracteres.")
-    .regex(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/, "Nombre solo debe contener letras."),
-  apellidos: z.string()
-    .min(2, "Apellidos deben tener al menos 2 caracteres.")
-    .max(100, "Apellidos no pueden exceder 100 caracteres.")
-    .regex(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/, "Apellidos solo deben contener letras."),
-  edad: z.coerce.number().min(0).max(120).optional(),
-  telefono: z.string()
-    .min(10, "Teléfono debe tener al menos 10 dígitos.")
-    .max(15, "Teléfono no puede exceder 15 dígitos.")
-    .regex(/^\d+$/, "Teléfono solo debe contener números."),
-  email: z.string()
-    .email("Email inválido.")
-    .optional()
-    .or(z.literal("")),
-  comentarios_registro: z.string().max(500, "Comentarios no pueden exceder 500 caracteres.").optional(),
-});
-
-const getUnifiedPatientFormSchema = (mode: 'registerOnly' | 'registerAndSchedule') => {
-  if (mode === 'registerAndSchedule') {
-    return baseSchema.extend({
-      diagnostico: z.enum(diagnosticoOptions as [string, ...string[]]), // Required
-      fechaHoraConsulta: z.date({ required_error: "Fecha y hora son requeridas." })
-        .refine(date => isValidDate(date), "Fecha inválida.")
-        .refine(date => date >= new Date(), "La fecha debe ser futura."), // Required
-    });
-  }
-  // mode === 'registerOnly'
-  return baseSchema.extend({
-    diagnostico: z.enum(diagnosticoOptions as [string, ...string[]]).optional(), // Optional
-    fechaHoraConsulta: z.date().optional(), // Optional
-  });
-};
-
-type UnifiedPatientFormValues = z.infer<ReturnType<typeof getUnifiedPatientFormSchema>>;
-
-interface UnifiedPatientFormProps {
-  mode?: 'registerOnly' | 'registerAndSchedule';
-  onSuccess?: (data: { patient: PatientData; appointment?: AppointmentData }) => void;
-  className?: string;
-  buttonVariant?: "default" | "secondary" | "outline" | "ghost" | "link" | null | undefined;
-  buttonLabel?: string;
-  dialogTrigger?: React.ReactNode; // Allow custom trigger
+const formatDiagnosis = (diagnosis: string): string => {
+  if (!diagnosis) return ""
+  return diagnosis
+    .replace(/_/g, " ")
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ")
 }
 
-export const UnifiedPatientRegistrationForm: FC<UnifiedPatientFormProps> = ({
-  mode = 'registerAndSchedule',
-  onSuccess,
-  className = "",
-  buttonVariant = "secondary",
-  buttonLabel: customButtonLabel,
-  dialogTrigger,
-}) => {
-  const isMobile = useIsMobile();
-  const [open, setOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { addPatient, addAppointment } = useAppContext();
+const formSchema = z.object({
+  nombre: z.string().min(2, "El nombre debe tener al menos 2 caracteres.").max(50, "Máximo 50 caracteres."),
+  apellidos: z.string().min(2, "Los apellidos deben tener al menos 2 caracteres.").max(50, "Máximo 50 caracteres."),
+  edad: z.coerce.number().int().min(0, "La edad no puede ser negativa.").max(120, "Edad no válida.").optional(),
+  telefono: z
+    .string()
+    .min(10, "El teléfono debe tener al menos 10 dígitos.")
+    .max(15, "Máximo 15 dígitos.")
+    .regex(/^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s./0-9]*$/, "Formato de teléfono no válido."),
+  motivoConsulta: z.nativeEnum(DiagnosisEnum, {
+    required_error: "Por favor seleccione un motivo de consulta.",
+  }),
+  fechaConsulta: z.date({
+    required_error: "Por favor seleccione una fecha para la consulta.",
+  }),
+  horaConsulta: z.string({
+    required_error: "Por favor seleccione una hora para la consulta.",
+  }),
+  notas: z.string().max(500, "Máximo 500 caracteres.").optional(),
+})
 
-  const formSchema = useMemo(() => getUnifiedPatientFormSchema(mode), [mode]);
+type FormValues = z.infer<typeof formSchema>
 
-  useEffect(() => {
-    if (!addPatient || (mode === 'registerAndSchedule' && !addAppointment)) {
-      console.error("[UnifiedPatientForm] Context functions not available for mode:", mode);
-      toast.error("Error de configuración", {
-        description: "Las funciones necesarias no están disponibles. Por favor, recarga la página."
-      });
+const generateTimeSlots = (
+  selectedDate: Date | null,
+  appointments: AppointmentData[],
+): { value: string; label: string; disabled: boolean; booked: boolean }[] => {
+  const slots = []
+  const now = new Date()
+
+  for (let hour = 9; hour <= 15; hour++) {
+    for (const minute of [0, 30]) {
+      if (hour === 15 && minute === 30) continue
+
+      const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
+      let isDisabled = false
+      let isBooked = false
+
+      if (selectedDate) {
+        const slotDateTime = setMinutes(setHours(new Date(selectedDate), hour), minute)
+        if (isToday(selectedDate) && isBefore(slotDateTime, now)) {
+          isDisabled = true
+        }
+        if (!isDisabled) {
+          isBooked = appointments.some((app) => {
+            if (app.estado === AppointmentStatusEnum.CANCELADA) return false
+            const appDate = startOfDay(new Date(app.fechaConsulta))
+            return startOfDay(selectedDate).getTime() === appDate.getTime() && app.horaConsulta === timeStr
+          })
+          if (isBooked) isDisabled = true
+        }
+      } else {
+        isDisabled = true
+      }
+      slots.push({ value: timeStr, label: timeStr, disabled: isDisabled, booked: isBooked })
     }
-  }, [addPatient, addAppointment, mode]);
+  }
+  return slots
+}
 
-  const form = useForm<UnifiedPatientFormValues>({
+interface NewPatientFormProps {
+  onSuccess?: () => void
+  triggerButton?: React.ReactNode
+}
+
+export function NewPatientForm({ onSuccess, triggerButton }: NewPatientFormProps) {
+  const [open, setOpen] = useState(false)
+  const { addPatient, addAppointment, appointments = [] } = useAppContext()
+
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       nombre: "",
       apellidos: "",
-      edad: undefined,
       telefono: "",
-      email: "",
-      diagnostico: undefined,
-      fechaHoraConsulta: mode === 'registerAndSchedule' ? addDays(new Date(), 1) : undefined,
-      comentarios_registro: "",
+      notas: "",
     },
-  });
+  })
 
-  useEffect(() => {
-    // Reset form when mode changes and dialog is closed, or when dialog opens
-    if (open) {
-        form.reset({
-            nombre: "",
-            apellidos: "",
-            edad: undefined,
-            telefono: "",
-            email: "",
-            diagnostico: undefined,
-            fechaHoraConsulta: mode === 'registerAndSchedule' ? addDays(new Date(), 1) : undefined,
-            comentarios_registro: "",
-        });
-    }
-  }, [mode, open, form]);
+  const selectedDate = form.watch("fechaConsulta")
+  const timeSlots = useMemo(() => generateTimeSlots(selectedDate, appointments), [selectedDate, appointments])
 
-
-  const timeRanges = useMemo(() => {
-    const minTime = new Date(); minTime.setHours(9, 0, 0, 0);
-    const maxTime = new Date(); maxTime.setHours(17, 0, 0, 0);
-    return { minTime, maxTime };
-  }, []);
-
-  const onSubmit = async (values: UnifiedPatientFormValues) => {
-    if (!addPatient || (mode === 'registerAndSchedule' && !addAppointment)) {
-      toast.error("Error de configuración", { description: "Las funciones necesarias no están disponibles." });
-      return;
-    }
-
-    setIsSubmitting(true);
-
+  async function onSubmit(values: FormValues) {
+    const submissionToast = toast.loading("Registrando paciente...")
     try {
-      const currentUserId = DEFAULT_USER_ID;
-      const fechaRegistro = new Date().toISOString().split('T')[0];
-
-      // Use supabase Insert type for patients
-      const patientPayload: PatientInsert = {
-        nombre: values.nombre.trim(),
-        apellidos: values.apellidos.trim(),
+      const newPatient = await addPatient({
+        nombre: values.nombre,
+        apellidos: values.apellidos,
         edad: values.edad,
-        telefono: values.telefono.trim(),
-        email: values.email?.trim() || undefined,
-        estado_paciente: "PENDIENTE DE CONSULTA" as PatientStatus,
-        diagnostico_principal: values.diagnostico as DiagnosisType | undefined,
-        comentarios_registro: values.comentarios_registro?.trim(),
-        creado_por_id: currentUserId,
-        fecha_registro: fechaRegistro,
-      };
+        fecha_registro: new Date().toISOString(),
+        diagnostico_principal: values.motivoConsulta,
+        estado_paciente: PatientStatusEnum.PENDIENTE_DE_CONSULTA,
+        probabilidad_cirugia: 0.5,
+        notas_paciente: values.notas || "",
+        telefono: values.telefono,
+      })
 
-      const newPatientResponse = await addPatient(patientPayload);
-      if (!newPatientResponse) throw new Error("No se pudo crear el paciente");
+      await addAppointment({
+        patientId: newPatient.id,
+        fechaConsulta: values.fechaConsulta,
+        horaConsulta: values.horaConsulta as `${number}:${number}`,
+        paciente: `${values.nombre} ${values.apellidos}`.trim(),
+        telefono: values.telefono,
+        motivoConsulta: values.motivoConsulta,
+        doctor: "Doctor Asignado",
+        estado: AppointmentStatusEnum.PROGRAMADA,
+        notas: values.notas || "",
+      })
 
-      let patientId: string;
-      let newPatient: PatientData;
-
-      if (typeof newPatientResponse === 'number' || typeof newPatientResponse === 'string') {
-        patientId = normalizeId(newPatientResponse);
-        newPatient = {
-          id: patientId,
-          ...patientPayload,
-          estado: patientPayload.estado_paciente,
-          probabilidadCirugia: 0, // Default value
-          timestampRegistro: new Date().toISOString(),
-          ultimoContacto: fechaRegistro,
-        } as PatientData;
-      } else if (typeof newPatientResponse === 'object' && newPatientResponse.id) {
-        patientId = normalizeId(newPatientResponse.id);
-        newPatient = newPatientResponse as PatientData;
-      } else {
-        throw new Error("Respuesta inesperada al crear paciente");
-      }
-
-      let newAppointment: AppointmentData | undefined = undefined;
-      if (mode === 'registerAndSchedule') {
-        if (!values.fechaHoraConsulta || !values.diagnostico) {
-          throw new Error("Fecha, hora y diagnóstico son requeridos para agendar cita.");
-        }
-
-        const formattedHoraConsulta = safeFormatDate(values.fechaHoraConsulta, 'HH:mm') as TimeString;
-
-        const appointmentPayload: AppointmentInsert = {
-          patient_id: patientId,
-          motivo_cita: values.diagnostico as Database['public']['Enums']['diagnosis_enum'],
-          fecha_hora_cita: values.fechaHoraConsulta.toISOString(),
-          estado_cita: 'PROGRAMADA',
-          es_primera_vez: true,
-          notas_cita_seguimiento: `Consulta inicial por: ${values.diagnostico}. Registrado vía formulario unificado.`,
-        };
-
-        const createdAppointment = await addAppointment(appointmentPayload);
-        if (!createdAppointment) throw new Error("No se pudo crear la cita");
-        newAppointment = createdAppointment;
-      }
-
-      toast.success("Operación exitosa", {
-        description: mode === 'registerAndSchedule' 
-          ? `${values.nombre} ${values.apellidos} ha sido registrado y su cita programada.`
-          : `${values.nombre} ${values.apellidos} ha sido registrado.`
-      });
-      
-      setOpen(false);
-      form.reset();
-      if (onSuccess) {
-        onSuccess({ patient: newPatient, appointment: newAppointment });
-      }
-
-    } catch (error: any) {
-      console.error("[UnifiedPatientForm] Error:", error);
-      toast.error("Error en el formulario", { description: error.message || "Ocurrió un problema." });
-    } finally {
-      setIsSubmitting(false);
+      toast.success("Paciente registrado y cita agendada.", { id: submissionToast })
+      setOpen(false)
+      form.reset()
+      if (onSuccess) onSuccess()
+    } catch (error) {
+      console.error("Error al registrar paciente:", error)
+      toast.error("Error al registrar paciente. Intente de nuevo.", { id: submissionToast })
     }
-  };
+  }
 
-  const currentButtonLabel = customButtonLabel || (mode === 'registerAndSchedule' ? "Nuevo Paciente y Cita" : "Registrar Paciente");
-  const dialogTitle = mode === 'registerAndSchedule' ? "Registrar Nuevo Paciente y Agendar Cita" : "Registrar Nuevo Paciente";
-
-  const trigger = dialogTrigger || (
-    <Button variant={buttonVariant} className={cn("flex items-center", className)}>
-      <Plus className="mr-2 h-4 w-4" /> {currentButtonLabel}
-    </Button>
-  );
+  const diagnosisGroups = {
+    Hernias: [
+      DiagnosisEnum.EVENTRACION_ABDOMINAL,
+      DiagnosisEnum.HERNIA_HIATAL,
+      DiagnosisEnum.HERNIA_INGUINAL,
+      DiagnosisEnum.HERNIA_INGUINAL_BILATERAL,
+      DiagnosisEnum.HERNIA_INGUINAL_RECIDIVANTE,
+      DiagnosisEnum.HERNIA_INCISIONAL,
+      DiagnosisEnum.HERNIA_SPIGEL,
+      DiagnosisEnum.HERNIA_UMBILICAL,
+      DiagnosisEnum.HERNIA_VENTRAL,
+    ],
+    "Vesícula y Vías Biliares": [
+      DiagnosisEnum.COLANGITIS,
+      DiagnosisEnum.COLECISTITIS,
+      DiagnosisEnum.COLEDOCOLITIASIS,
+      DiagnosisEnum.COLELITIASIS,
+    ],
+    "Otros Diagnósticos": [
+      DiagnosisEnum.APENDICITIS,
+      DiagnosisEnum.LIPOMA_GRANDE,
+      DiagnosisEnum.QUISTE_SEBACEO_INFECTADO,
+      DiagnosisEnum.OTRO,
+    ],
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] md:max-w-lg lg:max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
-          <DialogDescription>
-            {mode === 'registerAndSchedule'
-              ? "Completa los datos para registrar al paciente y programar su primera consulta."
-              : "Completa los datos básicos para registrar al nuevo paciente."}
+      <DialogTrigger asChild>
+        {triggerButton || (
+          <Button
+            variant="default"
+            size="sm"
+            className="bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white"
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            Nuevo Paciente
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[95vh] flex flex-col p-0 rounded-lg shadow-2xl">
+        <DialogHeader className="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+          <DialogTitle className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+            Registrar Nuevo Paciente
+          </DialogTitle>
+          <DialogDescription className="text-sm text-slate-500 dark:text-slate-400">
+            Ingrese los datos para crear un nuevo perfil y agendar su consulta.
           </DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4 px-1">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="nombre"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre(s)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ej. Juan" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="apellidos"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Apellidos</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ej. Pérez García" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="telefono"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Teléfono</FormLabel>
-                    <FormControl>
-                      <Input type="tel" placeholder="Ej. 5512345678" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email (Opcional)</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="Ej. juan.perez@correo.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            
-            <FormField
-              control={form.control}
-              name="edad"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Edad (Opcional)</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      placeholder="Ej. 35" 
-                      {...field} 
-                      onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} 
-                      value={field.value === undefined ? '' : field.value} 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <div className="flex-grow overflow-y-auto px-6 py-5">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              {/* Sección de Información Personal */}
+              <div className="space-y-4">
+                <h3 className="text-base font-medium text-slate-800 dark:text-slate-100 border-b pb-2 mb-3 border-slate-200 dark:border-slate-700">
+                  Datos del Paciente
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
+                  <FormField
+                    control={form.control}
+                    name="nombre"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Nombre(s)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: Ana Sofía" {...field} className="h-9 text-sm" />
+                        </FormControl>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="apellidos"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Apellidos</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: García Rodríguez" {...field} className="h-9 text-sm" />
+                        </FormControl>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="telefono"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Teléfono</FormLabel>
+                        <FormControl>
+                          <Input type="tel" placeholder="Ej: 55 1234 5678" {...field} className="h-9 text-sm" />
+                        </FormControl>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="edad"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Edad (Opcional)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="Ej: 35" {...field} className="h-9 text-sm" />
+                        </FormControl>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
 
-            <FormField
-              control={form.control}
-              name="diagnostico"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{mode === 'registerAndSchedule' ? "Motivo de Consulta" : "Diagnóstico Principal (Opcional)"}</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger><SelectValue placeholder={`Selecciona un ${mode === 'registerAndSchedule' ? 'motivo' : 'diagnóstico'}`} /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {diagnosticoOptions.map(option => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {mode === 'registerAndSchedule' && (
-              <>
+              {/* Sección de Detalles de Consulta */}
+              <div className="space-y-4">
+                <h3 className="text-base font-medium text-slate-800 dark:text-slate-100 border-b pb-2 mb-3 border-slate-200 dark:border-slate-700">
+                  Información de la Consulta
+                </h3>
                 <FormField
                   control={form.control}
-                  name="fechaHoraConsulta"
+                  name="motivoConsulta"
                   render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Fecha y Hora de Consulta</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? (
-                                safeFormatDate(field.value, "PPP HH:mm", { locale: es })
-                              ) : (
-                                <span>Selecciona fecha y hora</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Controller
-                            control={form.control}
-                            name="fechaHoraConsulta"
-                            render={({ field: controllerField }) => (
-                              <DatePicker
-                                selected={controllerField.value}
-                                onChange={(date) => controllerField.onChange(date)}
-                                inline
-                                showTimeSelect
-                                timeFormat="HH:mm"
-                                timeIntervals={15}
-                                dateFormat="Pp"
-                                locale={es}
-                                minDate={new Date()} // Prevent past dates
-                                minTime={timeRanges.minTime}
-                                maxTime={timeRanges.maxTime}
-                                filterDate={date => date.getDay() !== 0 && date.getDay() !== 6} // No weekends
-                              />
-                            )}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
+                    <FormItem>
+                      <FormLabel className="text-xs">Motivo de Consulta</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Seleccione un motivo..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-60">
+                          {Object.entries(diagnosisGroups).map(([groupName, diagnoses]) => (
+                            <SelectGroup key={groupName}>
+                              <SelectLabel className="text-xs font-semibold text-slate-500 dark:text-slate-400 px-2 py-1">
+                                {groupName}
+                              </SelectLabel>
+                              {diagnoses.map((diag) => (
+                                <SelectItem key={diag} value={diag} className="text-sm">
+                                  {formatDiagnosis(diag)}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage className="text-xs" />
                     </FormItem>
                   )}
                 />
-              </>
-            )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5 items-start">
+                  <FormField
+                    control={form.control}
+                    name="fechaConsulta"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel className="text-xs">Fecha de Consulta</FormLabel>
+                        <CustomDatePicker
+                          value={field.value}
+                          onChange={field.onChange}
+                          minDate={new Date()}
+                          maxDate={addMonths(new Date(), 3)}
+                          placeholder="Seleccione fecha"
+                          shouldDisableDate={(date) => date.getDay() === 0}
+                          triggerClassName="h-9 text-sm"
+                        />
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="horaConsulta"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Hora de Consulta</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={!selectedDate}>
+                          <FormControl>
+                            <SelectTrigger
+                              className={cn("h-9 text-sm", !selectedDate && "text-slate-500 dark:text-slate-400")}
+                            >
+                              <SelectValue placeholder={selectedDate ? "Seleccione hora" : "Seleccione fecha"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="max-h-60">
+                            {timeSlots.map((slot) => (
+                              <SelectItem
+                                key={slot.value}
+                                value={slot.value}
+                                disabled={slot.disabled}
+                                className={cn(
+                                  "text-sm",
+                                  slot.booked && "text-red-500 line-through data-[disabled]:opacity-100",
+                                )}
+                              >
+                                {slot.label} {slot.booked && "(Ocupado)"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
 
-            <FormField
-              control={form.control}
-              name="comentarios_registro"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Comentarios Adicionales (Opcional)</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Alergias, medicación actual, etc." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              {/* Sección de Notas Adicionales */}
+              <div className="space-y-2">
+                <h3 className="text-base font-medium text-slate-800 dark:text-slate-100 border-b pb-2 mb-3 border-slate-200 dark:border-slate-700">
+                  Notas Adicionales (Opcional)
+                </h3>
+                <FormField
+                  control={form.control}
+                  name="notas"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="sr-only text-xs">Notas</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Información relevante sobre el paciente..."
+                          className="resize-none min-h-[70px] text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage className="text-xs" />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>Cancelar</Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Guardando..." : (mode === 'registerAndSchedule' ? "Registrar y Agendar" : "Registrar Paciente")}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+              <DialogFooter className="pt-6 border-t border-slate-200 dark:border-slate-800 px-6 pb-5 sticky bottom-0 bg-white dark:bg-slate-950 z-10">
+                <DialogClose asChild>
+                  <Button type="button" variant="ghost" size="sm">
+                    Cancelar
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="submit"
+                  disabled={form.formState.isSubmitting}
+                  size="sm"
+                  className="bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white"
+                >
+                  {form.formState.isSubmitting ? "Registrando..." : "Registrar y Agendar"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </div>
       </DialogContent>
     </Dialog>
-  );
-};
+  )
+}

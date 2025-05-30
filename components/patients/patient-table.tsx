@@ -1,366 +1,453 @@
-import { useState, useMemo } from "react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, Edit, Share2, ClipboardList, FileText, ChevronDown, ChevronUp, CheckCircle2, AlertCircle } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { TableSkeleton } from "@/components/tables/table-skeleton"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { useRouter } from "next/navigation"
-import type { PatientData } from "@/app/dashboard/data-model"
+
+import React, { useState, useMemo, useCallback, ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
+import { TableSkeleton } from "@/components/tables/table-skeleton";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipProvider,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import {
+  MoreHorizontal,
+  Edit,
+  Share2,
+  ClipboardList,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  AlertCircle,
+  Eye,
+  CalendarDays,
+  Filter,
+  BriefcaseMedical,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { PatientData } from "@/app/dashboard/data-model";
 
 interface PatientTableProps {
-  patients: PatientData[]
-  loading?: boolean
-  onSelectPatient: (patient: PatientData) => void
-  onShareSurvey?: (patient: PatientData) => void
-  onAnswerSurvey?: (patient: PatientData) => void
-  onEditPatient?: (patient: PatientData) => void
+  patients: PatientData[];
+  loading?: boolean;
+  onSelectPatient: (patient: PatientData) => void;
+  onShareSurvey?: (patient: PatientData) => void;
+  onAnswerSurvey?: (patient: PatientData) => void;
+  onEditPatient?: (patient: PatientData) => void;
 }
 
-export function PatientTable({
-  patients,
-  loading = false,
-  onSelectPatient,
-  onShareSurvey,
-  onAnswerSurvey,
-  onEditPatient,
-}: PatientTableProps) {
-  const router = useRouter()
-  // Referencia a la fecha actual
-  const currentDate = new Date();
-  
-  // Estado para controlar si se muestran o no las consultas futuras
-  const [showFutureDates, setShowFutureDates] = useState(false);
-  // Establecemos una configuración inicial de ordenamiento por timestamp de registro (más reciente primero)
-  const [sortConfig, setSortConfig] = useState<{
-    key: keyof PatientData
-    direction: "ascending" | "descending"
-  }>({ key: "timestampRegistro", direction: "descending" })
+// Sólo los campos que podamos ordenar
+type SortKey = keyof Pick<
+  PatientData,
+  "nombre" | "fechaConsulta" | "diagnostico" | "estado" | "encuesta" | "timestampRegistro"
+>;
 
-  // Función para manejar el ordenamiento
-  const handleSort = (key: keyof PatientData) => {
-    let direction: "ascending" | "descending" = "ascending"
+type SortDirection = "asc" | "desc";
+interface SortConfig {
+  key: SortKey;
+  direction: SortDirection;
+}
 
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === "ascending") {
-      direction = "descending"
-    }
+// Configuración declarativa de columnas
+interface Column<T> {
+  key: SortKey | "actions";
+  label: string;
+  widthClass?: string;
+  hideBelow?: "md" | "lg";
+  align?: "left" | "center" | "right";
+  renderCell?: (item: T) => ReactNode;
+}
 
-    setSortConfig({ key, direction })
-  }
+export const PatientTable: React.FC<PatientTableProps> = React.memo(
+  ({
+    patients,
+    loading = false,
+    onSelectPatient,
+    onShareSurvey,
+    onAnswerSurvey,
+    onEditPatient,
+  }) => {
+    const router = useRouter();
 
-  // Filtrar pacientes para excluir fechas futuras si es necesario
-  const filteredPatients = useMemo(() => {
-    // Si se muestran fechas futuras, devolver todos los pacientes
-    if (showFutureDates) return patients;
-    
-    // Si no, filtrar para excluir fechas futuras
-    return patients.filter(patient => {
-      // Si no hay fecha de consulta, incluirlo
-      if (!patient.fechaConsulta) return true;
-      
-      // Convertir la fecha de consulta a objeto Date
-      const consultDate = new Date(patient.fechaConsulta);
-      
-      // Eliminar la hora para comparar solo fechas
-      consultDate.setHours(0, 0, 0, 0);
-      const today = new Date(currentDate);
-      today.setHours(0, 0, 0, 0);
-      
-      // Incluir solo fechas que sean hoy o anteriores
-      return consultDate <= today;
+    // Estados de búsqueda, filtro y orden
+    const [searchTerm, setSearchTerm] = useState("");
+    const [statusFilter, setStatusFilter] = useState<PatientData["estado"] | "all">("all");
+    const [sortConfig, setSortConfig] = useState<SortConfig>({
+      key: "timestampRegistro",
+      direction: "desc",
     });
-  }, [patients, showFutureDates, currentDate]);
 
-  // Ordenar pacientes según la configuración actual
-  const sortedPatients = [...filteredPatients].sort((a, b) => {
-    const { key, direction } = sortConfig;
+    // Handler de orden
+    const toggleSort = useCallback((key: SortKey) => {
+      setSortConfig((prev) => ({
+        key,
+        direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+      }));
+    }, []);
 
-    const valA = a[key];
-    const valB = b[key];
-
-    const isAsc = direction === 'ascending';
-
-    // Manejo consistente de null/undefined:
-    // En orden ascendente, los no nulos van antes que los nulos.
-    // En orden descendente, los nulos van antes que los no nulos.
-    if (valA == null && valB != null) return isAsc ? 1 : -1; 
-    if (valA != null && valB == null) return isAsc ? -1 : 1;
-    if (valA == null && valB == null) return 0;
-    
-    // A este punto, valA y valB están garantizados de no ser null.
-
-    // Comparaciones específicas por tipo de dato y campos de fecha
-    if (key === 'fechaConsulta' || key === 'fechaRegistro' || key === 'ultimoContacto' || key === 'proximoContacto' || key === 'fechaCirugia') {
-      // Si alguno de los valores es nulo/indefinido, manejo especial
-      if (!valA) return isAsc ? 1 : -1;
-      if (!valB) return isAsc ? -1 : 1;
-      
-      // Convertir las fechas a timestamps para comparación
-      const dateA = new Date(valA as string).getTime();
-      const dateB = new Date(valB as string).getTime();
-      
-      // Para fechas, revertimos la lógica normal de ordenamiento para que
-      // por defecto la fecha más reciente aparezca primero (valor más alto primero)
-      if (dateA < dateB) return isAsc ? 1 : -1; // Invertido intencionalmente
-      if (dateA > dateB) return isAsc ? -1 : 1; // Invertido intencionalmente
-      return 0;
-    }
-
-    if (key === 'encuesta') {
-      const boolA = !!valA; // true si es un objeto PatientSurvey, false si es null
-      const boolB = !!valB; // true si es un objeto PatientSurvey, false si es null
-      if (boolA === boolB) return 0;
-      // Para ascendente: false (Pendiente) antes de true (Completada)
-      if (isAsc) {
-        return boolA ? 1 : -1; 
-      } else {
-        // Para descendente: true (Completada) antes de false (Pendiente)
-        return boolA ? -1 : 1;
+    // Badge de estado
+    const getStatusBadge = useCallback((status: PatientData["estado"]) => {
+      switch (status) {
+        case "Operado":
+          return {
+            className:
+              "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-700",
+            icon: <CheckCircle2 className="h-3 w-3" />,
+            label: "Operado",
+          };
+        case "No Operado":
+          return {
+            className:
+              "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/50 dark:text-red-300 dark:border-red-700",
+            icon: <AlertCircle className="h-3 w-3" />,
+            label: "No Operado",
+          };
+        case "Pendiente de consulta":
+          return {
+            className:
+              "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-700",
+            icon: <BriefcaseMedical className="h-3 w-3" />,
+            label: "Pendiente",
+          };
+        case "Seguimiento":
+          return {
+            className:
+              "bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-900/50 dark:text-violet-300 dark:border-violet-700",
+            icon: <CalendarDays className="h-3 w-3" />,
+            label: "Seguimiento",
+          };
+        default:
+          return {
+            className:
+              "bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600",
+            icon: null,
+            label: status,
+          };
       }
+    }, []);
+
+    // Valores únicos de estado (para filtro)
+    const statusOptions = useMemo<(PatientData["estado"] | "all")[]>(() => {
+      const setEstados = new Set(patients.map((p) => p.estado));
+      return ["all", ...setEstados];
+    }, [patients]);
+
+    // Filtrado y ordenamiento memoizados
+    const processed = useMemo(() => {
+      // 1) Filtrar por nombre y estado
+      const filtered = patients.filter((p) => {
+        const fullName = `${p.nombre} ${p.apellidos}`.toLowerCase();
+        const matchesName = fullName.includes(searchTerm.toLowerCase());
+        const matchesStatus = statusFilter === "all" || p.estado === statusFilter;
+        return matchesName && matchesStatus;
+      });
+
+      // 2) Ordenar
+      const { key, direction } = sortConfig;
+      const asc = direction === "asc";
+      return [...filtered].sort((a, b) => {
+        const va = a[key];
+        const vb = b[key];
+        // nulls al final en ascendente
+        if (va == null && vb != null) return asc ? 1 : -1;
+        if (va != null && vb == null) return asc ? -1 : 1;
+        if (va == null && vb == null) return 0;
+        // Fechas
+        if (key === "fechaConsulta" || key === "timestampRegistro") {
+          return asc
+            ? new Date(va as string).getTime() - new Date(vb as string).getTime()
+            : new Date(vb as string).getTime() - new Date(va as string).getTime();
+        }
+        // Booleano encuesta
+        if (key === "encuesta") {
+          const ba = Boolean(va), bb = Boolean(vb);
+          if (ba === bb) return 0;
+          return asc ? (ba ? 1 : -1) : (ba ? -1 : 1);
+        }
+        // Números
+        if (typeof va === "number" && typeof vb === "number") {
+          return asc ? va - vb : vb - va;
+        }
+        // Strings
+        const sa = String(va).toLowerCase(), sb = String(vb).toLowerCase();
+        if (sa < sb) return asc ? -1 : 1;
+        if (sa > sb) return asc ? 1 : -1;
+        return 0;
+      });
+    }, [patients, searchTerm, statusFilter, sortConfig]);
+
+    // Icono de orden para columna
+    const SortIcon = useCallback(
+      (col: SortKey) =>
+        sortConfig.key !== col ? (
+          <ChevronUp className="h-4 w-4 opacity-20 group-hover:opacity-50" />
+        ) : sortConfig.direction === "asc" ? (
+          <ChevronUp className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+        ),
+      [sortConfig]
+    );
+
+    // Definición de columnas
+    const columns: Column<PatientData>[] = useMemo(
+      () => [
+        {
+          key: "nombre",
+          label: "Paciente",
+          widthClass: "w-[220px] sm:w-[280px]",
+          renderCell: (p) => (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1">
+              <span className="font-semibold">{p.nombre} {p.apellidos}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 sm:hidden">
+                {p.diagnostico ?? "Sin diagnóstico"}
+              </span>
+            </div>
+          ),
+        },
+        {
+          key: "fechaConsulta",
+          label: "Próx. Consulta",
+          hideBelow: "lg",
+          renderCell: (p) =>
+            p.fechaConsulta
+              ? new Intl.DateTimeFormat("es-MX", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                }).format(new Date(p.fechaConsulta))
+              : "N/A",
+        },
+        {
+          key: "diagnostico",
+          label: "Diagnóstico",
+          hideBelow: "md",
+          renderCell: (p) => p.diagnostico ?? "Sin diagnóstico",
+        },
+        {
+          key: "estado",
+          label: "Estado",
+          renderCell: (p) => {
+            const cfg = getStatusBadge(p.estado);
+            return (
+              <Badge variant="outline" className={cn("text-xs font-medium py-1 px-2 rounded", cfg.className)}>
+                {cfg.icon}
+                {cfg.label}
+              </Badge>
+            );
+          },
+        },
+        {
+          key: "encuesta",
+          label: "Encuesta",
+          align: "center",
+          renderCell: (p) => (
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={p.encuesta ? "Ver resultados" : "Responder encuesta"}
+                    onClick={() =>
+                      p.encuesta
+                        ? router.push(`/survey-results/${p.id}`)
+                        : onAnswerSurvey?.(p)
+                    }
+                  >
+                    {p.encuesta ? (
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-amber-500" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {p.encuesta ? "Resultados" : "Pendiente"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ),
+        },
+        {
+          key: "actions",
+          label: "Acciones",
+          align: "right",
+          renderCell: (p) => (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Abrir menú"
+                  className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => onSelectPatient(p)}>
+                  <Eye className="mr-2 h-4 w-4" /> Ver ficha
+                </DropdownMenuItem>
+                {onEditPatient && (
+                  <DropdownMenuItem onClick={() => onEditPatient(p)}>
+                    <Edit className="mr-2 h-4 w-4" /> Editar
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                {p.encuesta && (
+                  <DropdownMenuItem onClick={() => router.push(`/survey-results/${p.id}`)}>
+                    <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-600" /> Resultados
+                  </DropdownMenuItem>
+                )}
+                {!p.encuesta && onAnswerSurvey && (
+                  <DropdownMenuItem onClick={() => onAnswerSurvey(p)}>
+                    <ClipboardList className="mr-2 h-4 w-4" /> Responder
+                  </DropdownMenuItem>
+                )}
+                {onShareSurvey && (
+                  <DropdownMenuItem onClick={() => onShareSurvey(p)}>
+                    <Share2 className="mr-2 h-4 w-4" /> Compartir
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ),
+        },
+      ],
+      [getStatusBadge, onSelectPatient, onEditPatient, onAnswerSurvey, onShareSurvey, router]
+    );
+
+    if (loading) {
+      return <TableSkeleton rows={7} columns={columns.length} className="m-4" />;
     }
 
-    if (typeof valA === 'number' && typeof valB === 'number') { // Maneja 'edad'
-      if (valA < valB) return isAsc ? -1 : 1;
-      if (valA > valB) return isAsc ? 1 : -1;
-      return 0;
-    }
-    
-    // Por defecto, comparación de strings (insensible a mayúsculas/minúsculas)
-    // Maneja 'nombre', 'diagnostico', 'estado'
-    const strA = String(valA).toLowerCase();
-    const strB = String(valB).toLowerCase();
-
-    if (strA < strB) return isAsc ? -1 : 1;
-    if (strA > strB) return isAsc ? 1 : -1;
-    return 0;
-  })
-
-  // Función para obtener el icono y el tooltip de ordenamiento
-  const getSortIcon = (key: keyof PatientData) => {
-    // Si no está ordenado por esta columna, mostrar un icono sutil
-    if (sortConfig.key !== key) {
-      return <ChevronUp className="h-4 w-4 opacity-20" />
-    }
-    
-    // Si es un campo de fecha, invertimos los iconos para mayor claridad
-    const isDateField = ['fechaConsulta', 'fechaRegistro', 'ultimoContacto', 'proximoContacto', 'fechaCirugia', 'timestampRegistro'].includes(key);
-    
-    if (sortConfig.direction === "ascending") {
-      // Para fechas: ascendente muestra lo más antiguo primero (fecha más baja primero)
-      // Para otros: ascendente muestra A-Z o valores más bajos primero
-      return (
-        <div className="inline-flex items-center">
-          <ChevronUp className="h-4 w-4 text-primary" />
-          <span className="sr-only">{isDateField ? "Más antiguo primero" : "A-Z"}</span>
-        </div>
-      )
-    } else {
-      // Para fechas: descendente muestra lo más reciente primero (fecha más alta primero)
-      // Para otros: descendente muestra Z-A o valores más altos primero
-      return (
-        <div className="inline-flex items-center">
-          <ChevronDown className="h-4 w-4 text-primary" />
-          <span className="sr-only">{isDateField ? "Más reciente primero" : "Z-A"}</span>
-        </div>
-      )
-    }
-  }
-
-  // Mejorar la función para obtener el color de estado
-  const getStatusColorClass = (status: string) => {
-    switch (status) {
-      case "Operado":
-        return "bg-green-100 text-green-800 dark:bg-green-800/20 dark:text-green-400"
-      case "No Operado":
-        return "bg-red-100 text-red-800 dark:bg-red-800/20 dark:text-red-400"
-      case "Pendiente de consulta":
-        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-800/20 dark:text-yellow-400"
-      case "Seguimiento":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-800/20 dark:text-purple-400"
-      case "Cancelado":
-        return "bg-gray-100 text-gray-800 dark:bg-gray-800/20 dark:text-gray-400"
-      default:
-        return "bg-blue-100 text-blue-800 dark:bg-blue-800/20 dark:text-blue-400"
-    }
-  }
-
-  if (loading) {
-    return <TableSkeleton rows={5} columns={6} />
-  }
-
-  return (
-    <div className="rounded-md border">
-      {/* Contador de pacientes para tablet */}
-      <div className="lg:hidden border-b bg-muted/10 p-2 flex flex-col gap-1">
-        <div className="text-center text-sm">
-          <span className="font-medium">{sortedPatients.length}</span> pacientes en total
-          {!showFutureDates && patients.length > sortedPatients.length && (
-            <span className="text-xs text-muted-foreground">
-              {" "}
-              (excluidas {patients.length - sortedPatients.length} consultas futuras)
-            </span>
-          )}
-        </div>
-        <div className="flex justify-center">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-7 text-xs" 
-            onClick={() => setShowFutureDates(!showFutureDates)}
+    return (
+      <div className="bg-white dark:bg-slate-950 shadow rounded-lg overflow-hidden">
+        {/* Toolbar */}
+        <div className="flex flex-col md:flex-row items-center gap-3 p-4 border-b border-slate-200 dark:border-slate-800">
+          <Input
+            placeholder="Buscar paciente..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 sm:max-w-xs"
+          />
+          <Select
+            value={statusFilter}
+            onValueChange={(val) => setStatusFilter(val as PatientData["estado"] | "all")}
           >
-            {showFutureDates ? "Ocultar consultas futuras" : "Mostrar todas las consultas"}
-          </Button>
+            <SelectTrigger className="w-full sm:w-auto sm:min-w-[200px]">
+              <SelectValue placeholder="Filtrar por estado" />
+            </SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((st) => (
+                <SelectItem key={st} value={st} className="capitalize">
+                  {st === "all" ? "Todos los estados" : st}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="ml-auto text-sm text-slate-600 dark:text-slate-400">
+            {processed.length} paciente{processed.length !== 1 && "s"}
+          </div>
+        </div>
+
+        {/* Tabla */}
+        <div className="overflow-x-auto">
+          <Table className="min-w-full">
+            <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
+              <TableRow>
+                {columns.map((col) => (
+                  <TableHead
+                    key={col.key}
+                    onClick={
+                      col.key !== "actions"
+                        ? () => toggleSort(col.key as SortKey)
+                        : undefined
+                    }
+                    className={cn(
+                      "cursor-pointer select-none py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider",
+                      col.widthClass,
+                      col.hideBelow && `${col.hideBelow}:hidden`,
+                      col.align === "center" && "text-center",
+                      col.align === "right" && "text-right"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span>{col.label}</span>
+                      {col.key !== "actions" && <SortIcon key={col.key} />}
+                    </div>
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+
+            <TableBody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {processed.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                    <div className="flex flex-col items-center gap-2">
+                      <Filter className="h-12 w-12 text-slate-400 dark:text-slate-500" />
+                      <span className="font-medium">No se encontraron pacientes</span>
+                      <small>Prueba otro término o ajusta filtros</small>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                processed.map((p) => (
+                  <TableRow
+                    key={p.id}
+                    className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
+                  >
+                    {columns.map((col) => (
+                      <TableCell
+                        key={col.key}
+                        onClick={col.key !== "actions" ? () => onSelectPatient(p) : undefined}
+                        className={cn(
+                          "py-3 px-4 align-top",
+                          col.widthClass,
+                          col.hideBelow && `${col.hideBelow}:hidden`,
+                          col.align === "center" && "text-center",
+                          col.align === "right" && "text-right",
+                          "cursor-pointer"
+                        )}
+                      >
+                        {col.renderCell ? col.renderCell(p) : (p[col.key as keyof PatientData] as ReactNode)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
-      
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="cursor-pointer" onClick={() => handleSort("nombre")}>
-              <div className="flex items-center justify-between group">
-                <span>Nombre</span>
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity">{getSortIcon("nombre")}</span>
-              </div>
-            </TableHead>
-            <TableHead className="cursor-pointer hidden lg:table-cell" onClick={() => handleSort("fechaConsulta")}>
-              <div className="flex items-center justify-between group">
-                <span>Fecha Consulta</span>
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity">{getSortIcon("fechaConsulta")}</span>
-              </div>
-            </TableHead>
-            <TableHead className="cursor-pointer hidden lg:table-cell" onClick={() => handleSort("edad")}>
-              <div className="flex items-center justify-between group">
-                <span>Edad</span>
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity">{getSortIcon("edad")}</span>
-              </div>
-            </TableHead>
-            <TableHead className="cursor-pointer hidden md:table-cell" onClick={() => handleSort("diagnostico")}>
-              <div className="flex items-center justify-between group">
-                <span>Diagnóstico</span>
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity">{getSortIcon("diagnostico")}</span>
-              </div>
-            </TableHead>
-            <TableHead className="cursor-pointer" onClick={() => handleSort("estado")}>
-              <div className="flex items-center justify-between group">
-                <span>Estado</span>
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity">{getSortIcon("estado")}</span>
-              </div>
-            </TableHead>
-            <TableHead className="cursor-pointer" onClick={() => handleSort("encuesta")}>
-              <div className="flex items-center justify-between group">
-                <span>Encuesta</span>
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity">{getSortIcon("encuesta")}</span>
-              </div>
-            </TableHead>
-            <TableHead className="text-right">Acciones</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedPatients.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                No se encontraron pacientes.
-              </TableCell>
-            </TableRow>
-          ) : (
-            sortedPatients.map((patient) => (
-              <TableRow key={patient.id} className="cursor-pointer hover:bg-muted/50">
-                <TableCell onClick={() => onSelectPatient(patient)}>
-                  <div>
-                    <div className="font-medium">{patient.nombre} {patient.apellidos}</div>
-                    <div className="text-xs text-muted-foreground md:hidden">Diagn: {patient.diagnostico || "Sin diagnóstico"}</div>
-                  </div>
-                </TableCell>
-                <TableCell onClick={() => onSelectPatient(patient)} className="hidden lg:table-cell">
-                  {patient.fechaConsulta ? new Date(patient.fechaConsulta).toLocaleDateString('es-ES') : "N/A"}
-                </TableCell>
-                <TableCell onClick={() => onSelectPatient(patient)} className="hidden lg:table-cell">{patient.edad || "N/A"}</TableCell>
-                <TableCell onClick={() => onSelectPatient(patient)} className="hidden md:table-cell">
-                  {patient.diagnostico || "Sin diagnóstico"}
-                </TableCell>
-                <TableCell onClick={() => onSelectPatient(patient)}>
-                  <Badge className={getStatusColorClass(patient.estado)}>{patient.estado || "Pendiente"}</Badge>
-                </TableCell>
-                <TableCell className="text-center">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="inline-flex cursor-pointer" onClick={() => {
-                          if (patient.encuesta) {
-                            // Si la encuesta está completada, ir a resultados
-                            router.push(`/survey-results/${patient.id}`)
-                          } else if (onAnswerSurvey) {
-                            // Si no está completada, invocar función para responderla
-                            onAnswerSurvey(patient)
-                          }
-                        }}>
-                          {patient.encuesta ? (
-                            <Badge className="bg-green-100 text-green-800 dark:bg-green-800/20 dark:text-green-400 flex items-center gap-1">
-                              <CheckCircle2 className="h-3 w-3" />
-                              <span>Completada</span>
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="flex items-center gap-1">
-                              <AlertCircle className="h-3 w-3" />
-                              <span>Pendiente</span>
-                            </Badge>
-                          )}
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {patient.encuesta 
-                          ? "Ver resultados de la encuesta" 
-                          : "Completar encuesta pendiente"}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <span className="sr-only">Abrir menu</span>
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onSelectPatient(patient)}>
-                        <FileText className="mr-2 h-4 w-4" />
-                        Ver ficha completa
-                      </DropdownMenuItem>
-                      {patient.encuesta && (
-                        <DropdownMenuItem onClick={() => router.push(`/survey-results/${patient.id}`)}>
-                          <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
-                          Ver resultados encuesta
-                        </DropdownMenuItem>
-                      )}
-                      {onShareSurvey && (
-                        <DropdownMenuItem onClick={() => onShareSurvey(patient)}>
-                          <Share2 className="mr-2 h-4 w-4" />
-                          Compartir encuesta
-                        </DropdownMenuItem>
-                      )}
-                      {onAnswerSurvey && !patient.encuesta && (
-                        <DropdownMenuItem onClick={() => onAnswerSurvey(patient)}>
-                          <ClipboardList className="mr-2 h-4 w-4" />
-                          Responder encuesta
-                        </DropdownMenuItem>
-                      )}
-                      {onEditPatient && (
-                        <DropdownMenuItem onClick={() => onEditPatient(patient)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Editar paciente
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  )
-}
+    );
+  }
+);
+
+PatientTable.displayName = "PatientTable";
+export default PatientTable;

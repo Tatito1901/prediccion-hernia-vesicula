@@ -1,4 +1,5 @@
 // app/dashboard/data-model.ts
+import * as z from "zod";
 
 // --- Tipos Utilitarios Base ---
 export type Nullable<T> = T | null;
@@ -23,18 +24,29 @@ export enum PatientStatusEnum {
 export type PatientStatus = `${PatientStatusEnum}`;
 
 export enum DiagnosisEnum {
-  HERNIA_INGUINAL = "HERNIA INGUINAL",
-  HERNIA_UMBILICAL = "HERNIA UMBILICAL",
-  COLECISTITIS = "COLECISTITIS", // Inflamación de la vesícula (puede ser por cálculos)
-  COLEDOCOLITIASIS = "COLEDOCOLITIASIS", // Cálculos en el colédoco
-  COLANGITIS = "COLANGITIS", // Infección de conductos biliares
-  APENDICITIS = "APENDICITIS",
-  HERNIA_HIATAL = "HERNIA HIATAL",
-  LIPOMA_GRANDE = "LIPOMA GRANDE",
-  HERNIA_INGUINAL_RECIDIVANTE = "HERNIA INGUINAL RECIDIVANTE",
-  QUISTE_SEBACEO_INFECTADO = "QUISTE SEBACEO INFECTADO",
+  // Diagnósticos de hernias (organizados alfabéticamente)
   EVENTRACION_ABDOMINAL = "EVENTRACION ABDOMINAL",
-  VESICULA_COLECISTITIS_CRONICA = "VESICULA (COLECISTITIS CRONICA)", // Más específico
+  HERNIA_HIATAL = "HERNIA HIATAL",
+  HERNIA_INGUINAL = "HERNIA INGUINAL",
+  HERNIA_INGUINAL_BILATERAL = "HERNIA INGUINAL BILATERAL",
+  HERNIA_INGUINAL_RECIDIVANTE = "HERNIA INGUINAL RECIDIVANTE",
+  HERNIA_INCISIONAL = "HERNIA INCISIONAL",
+  HERNIA_SPIGEL = "HERNIA DE SPIGEL",
+  HERNIA_UMBILICAL = "HERNIA UMBILICAL",
+  HERNIA_VENTRAL = "HERNIA VENTRAL",
+  
+  // Diagnósticos de vesícula (organizados alfabéticamente)
+  COLANGITIS = "COLANGITIS", // Infección de conductos biliares
+  COLECISTITIS = "COLECISTITIS / COLECISTITIS CRONICA", // Inflamación de la vesícula
+  COLEDOCOLITIASIS = "COLEDOCOLITIASIS", // Cálculos en el colédoco
+  COLELITIASIS = "COLELITIASIS", // Cálculos en la vesícula
+  
+  // Otros diagnósticos (organizados alfabéticamente)
+  APENDICITIS = "APENDICITIS",
+  LIPOMA_GRANDE = "LIPOMA GRANDE",
+  QUISTE_SEBACEO_INFECTADO = "QUISTE SEBACEO INFECTADO",
+  
+  // Misceláneos
   OTRO = "OTRO"
 }
 export type DiagnosisType = `${DiagnosisEnum}`;
@@ -107,6 +119,79 @@ export enum FollowUpStatusEnum {
   PENDIENTE = "Pendiente" // Usado en tu CRM
 }
 export type FollowUpStatus = `${FollowUpStatusEnum}`;
+
+// Helper para Zod enums (adaptado de implementaciones existentes)
+const zodEnumFromArray = <T extends string>(arr: readonly T[]): z.ZodEnum<[T, ...T[]]> => {
+  if (arr.length === 0) {
+    throw new Error("Cannot create Zod enum from empty array");
+  }
+  const nonEmptyArray = arr as [T, ...T[]];
+  if (nonEmptyArray.length === 0) { 
+      throw new Error("Zod enum must have at least one value.");
+  }
+  return z.enum(nonEmptyArray);
+};
+
+// === ZOD VALIDATION SCHEMAS ===
+
+// Esquema base para los campos del paciente
+export const basePatientSchema = z.object({
+  nombre: z.string()
+    .min(2, "Nombre: Mínimo 2 caracteres.")
+    .max(50, "Nombre: Máximo 50 caracteres.")
+    .regex(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s'-]+$/, "Nombre: Solo letras, espacios, apóstrofes o guiones."),
+  apellidos: z.string()
+    .min(2, "Apellidos: Mínimo 2 caracteres.")
+    .max(100, "Apellidos: Máximo 100 caracteres.")
+    .regex(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s'-]+$/, "Apellidos: Solo letras, espacios, apóstrofes o guiones."),
+  edad: z.coerce.number().min(0, "Edad: No puede ser negativa.").max(120, "Edad: Valor irreal.").optional(),
+  telefono: z.string()
+    .min(7, "Teléfono: Mínimo 7 dígitos.")
+    .max(20, "Teléfono: Máximo 20 caracteres.")
+    .regex(/^[\d\s+()-ext.EXT#*]+$/, "Teléfono: Formato inválido."),
+  email: z.string().email("Email: Formato inválido.").optional().or(z.literal("")),
+  notas_paciente: z.string().max(500, "Notas del paciente: Máximo 500 caracteres.").optional(),
+  diagnostico_principal: zodEnumFromArray(Object.values(DiagnosisEnum)).optional(),
+  estado_paciente: zodEnumFromArray(Object.values(PatientStatusEnum)).optional(),
+});
+
+// Esquema para los campos específicos de la cita
+export const appointmentSpecificSchema = z.object({
+  motivo_cita: zodEnumFromArray(Object.values(DiagnosisEnum)),
+  fecha_hora_cita: z.date({ required_error: "Fecha y hora son requeridas." })
+    .refine(date => date instanceof Date && !isNaN(date.getTime()), "Fecha inválida.")
+    .refine(date => date >= new Date(new Date().setHours(0,0,0,0) - 86400000), "La fecha no puede ser anterior a ayer.") // Permite hoy y futuro
+    .refine(date => { const day = date.getDay(); return day !== 0 && day !== 6; }, "No se permiten citas en sábado o domingo."),
+  es_primera_vez: z.boolean().default(true),
+  notas_cita: z.string().max(500, "Notas de la cita: Máximo 500 caracteres.").optional(),
+  patient_id: z.string().uuid("ID de paciente inválido.").optional(), 
+});
+
+// Función para generar el esquema Zod dinámicamente
+export const getCombinedPatientAppointmentSchema = (mode: 'registerOnly' | 'registerAndSchedule' | 'scheduleOnly' | 'editPatient') => {
+  if (mode === 'registerAndSchedule') {
+    return basePatientSchema.merge(appointmentSpecificSchema.omit({ patient_id: true })); 
+  }
+  if (mode === 'scheduleOnly') {
+    return appointmentSpecificSchema.extend({
+      patient_id: z.string().uuid("ID de paciente es requerido para agendar cita."), 
+    });
+  }
+  if (mode === 'editPatient') {
+    // Para editar paciente, se podría requerir el ID del paciente existente
+    return basePatientSchema.extend({
+        id: z.string().uuid("ID de paciente es requerido para editar."), 
+    });
+  }
+  // mode === 'registerOnly'
+  return basePatientSchema;
+};
+
+// Tipos inferidos para uso en formularios
+export type BasePatientFormValues = z.infer<typeof basePatientSchema>;
+export type AppointmentSpecificFormValues = z.infer<typeof appointmentSpecificSchema>;
+// Para el formulario unificado, el tipo dependerá del modo y se puede inferir así:
+// type UnifiedValues = z.infer<ReturnType<typeof getCombinedPatientAppointmentSchema>>;
 
 // --- Constantes (como las tenías) ---
 export const PAIN_SCALE = { MIN: 0, MAX: 10 } as const;
@@ -209,7 +294,7 @@ export interface PatientData {
   diagnostico_principal_detalle?: Optional<string>; // text
   doctor_asignado_id?: Optional<ID>; // FK a profiles.id
   fecha_primera_consulta?: Optional<DateString>; // date, NULLABLE
-  comentarios_registro?: Optional<string>; // text
+  notas_paciente?: Optional<string>; // Replaced comentarios_registro
   origen_paciente?: Optional<PatientOrigin>; // text (o ENUM si lo creas)
   probabilidad_cirugia?: Optional<number>; // numeric(3,2)
   ultimo_contacto?: Optional<DateString>; // date
@@ -303,7 +388,7 @@ export interface AppointmentDataAPI {
   motivo_cita?: Optional<string>;
   estado_cita: AppointmentStatus; // appointment_status_enum
   es_primera_vez: boolean;
-  notas_cita_seguimiento?: Optional<string>;
+  notas_cita?: Optional<string>; // Renamed from notas_cita_seguimiento
   survey_id_relacionada?: Optional<ID>; // FK a surveys.id
 
   // Campos de JOINs
