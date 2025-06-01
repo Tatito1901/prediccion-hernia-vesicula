@@ -39,7 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex flex-col gap-4 py-2 sm:py-3 md:gap-6 md:py-4 lg:py-6">
               <div className="px-2 sm:px-3 md:px-4 lg:px-6">
                 <div className={cn(
-                  "bg-card rounded-lg shadow-sm border",
+                  "bg-card rounded-lg shadow-sm border border-slate-200 dark:border-slate-950",
                   // Padding escalonado es una buena práctica para la responsividad.
                   "p-2 sm:p-3 md:p-4 lg:p-6", 
                   "transition-all duration-300", // Transiciones suaves mejoran la UX.

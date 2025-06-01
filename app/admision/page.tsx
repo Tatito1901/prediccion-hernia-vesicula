@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, memo, Suspense } from "react"
+import { useState, useMemo, useCallback, memo, Suspense } from "react"
 import dynamic from "next/dynamic"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -9,8 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { 
   PieChartIcon, 
   CalendarIcon, 
-  FileBarChartIcon, 
-  Activity
+  FileBarChartIcon
 } from "lucide-react"
 import { useAppContext } from "@/lib/context/app-context"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -210,48 +209,21 @@ ResponsiveTabTrigger.displayName = "ResponsiveTabTrigger"
 // ============ HEADER RESPONSIVO ============
 
 const ResponsivePageHeader = memo(() => {
-  const [currentTime, setCurrentTime] = useState(new Date())
   const isMobile = useMediaQuery("(max-width: 640px)")
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
-  }, [])
-
   return (
-    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:justify-between sm:items-center mb-4 sm:mb-6">
-      <div className="space-y-1">
-        <h1 className={cn(
-          "font-bold tracking-tight text-center sm:text-left",
-          isMobile ? "text-xl" : "text-2xl"
-        )}>
-          Centro de Gestión Clínica
-        </h1>
-        {!isMobile && (
-          <p className="text-sm text-muted-foreground">
-            Panel de control integral para la gestión de pacientes y citas médicas
-          </p>
-        )}
-      </div>
-      
-      <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-3 text-sm text-muted-foreground">
-        <div className="flex items-center gap-1 sm:gap-2">
-          <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
-          <span className={cn(isMobile ? "text-xs" : "text-sm")}>
-            {isMobile ? "Activo" : "Sistema Activo"}
-          </span>
-        </div>
-        <div className={cn(
-          "bg-muted px-2 py-1 rounded-md font-mono",
-          isMobile ? "text-xs" : "text-xs"
-        )}>
-          {currentTime.toLocaleTimeString('es-ES', { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            ...(isMobile ? {} : { second: '2-digit' })
-          })}
-        </div>
-      </div>
+    <div className="flex flex-col gap-2 mb-4 sm:mb-6">
+      <h1 className={cn(
+        "font-bold tracking-tight text-center sm:text-left",
+        isMobile ? "text-xl" : "text-2xl"
+      )}>
+        Centro de Gestión Clínica
+      </h1>
+      {!isMobile && (
+        <p className="text-sm text-muted-foreground text-center sm:text-left">
+          Panel de control integral para la gestión de pacientes y citas médicas
+        </p>
+      )}
     </div>
   )
 })
@@ -261,7 +233,6 @@ ResponsivePageHeader.displayName = "ResponsivePageHeader"
 
 export default function AdmisionPage() {
   const [activeTab, setActiveTab] = useState("admision")
-  const [isTabChanging, setIsTabChanging] = useState(false)
   const { pendingAppointments, todayAppointments } = useAppContext()
   
   // Detección responsiva de dispositivos
@@ -282,15 +253,10 @@ export default function AdmisionPage() {
     }
   }, [pendingAppointments])
 
-  // Manejo optimizado de cambio de tab
+  // Manejo simplificado de cambio de tab
   const handleTabChange = useCallback((newTab: string) => {
-    if (newTab === activeTab) return
-    
-    setIsTabChanging(true)
     setActiveTab(newTab)
-    
-    setTimeout(() => setIsTabChanging(false), 150)
-  }, [activeTab])
+  }, [])
 
   // Configuración de tabs responsiva
   const tabsConfig = useMemo(() => [
@@ -352,9 +318,8 @@ export default function AdmisionPage() {
 
             {/* Contenido responsivo con padding adaptativo */}
             <div className={cn(
-              "transition-all duration-300 ease-in-out",
-              isMobile ? "p-3" : isTablet ? "p-4" : "p-6",
-              isTabChanging && "opacity-50 scale-[0.98]"
+              "transition-opacity duration-300 ease-in-out",
+              isMobile ? "p-3" : isTablet ? "p-4" : "p-6"
             )}>
               <Suspense fallback={<AdmissionLoadingSkeleton />}>
                 <TabsContent 

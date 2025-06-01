@@ -72,9 +72,14 @@ export async function POST(request: Request) {
       comentarios_registro, // Este serían las 'notas' del form
       creado_por_id, // ID del usuario autenticado que lo registra
       doctor_asignado_id,
-      origen_paciente
+      origen_paciente,
+      notas_paciente,
       // ...otros campos necesarios
     } = body;
+    
+    // Ya no necesitamos transformar el diagnóstico, ya que los valores en DiagnosisEnum
+    // ahora coinciden con los valores esperados por la base de datos
+    console.log('Diagnostic:', diagnostico_principal);
 
     const { data: newPatient, error } = await supabase
       .from('patients')
@@ -85,8 +90,8 @@ export async function POST(request: Request) {
         telefono,
         email,
         estado_paciente,
-        diagnostico_principal,
-        comentarios_registro,
+        diagnostico_principal, // Ya no necesitamos transformar el valor
+        comentarios_registro: notas_paciente || comentarios_registro, // Usar comentarios_registro para almacenar las notas
         creado_por_id, // Asegúrate de obtener esto del usuario autenticado
         doctor_asignado_id,
         origen_paciente

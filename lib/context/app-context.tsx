@@ -232,10 +232,26 @@ function AppProviderInner({ children }: { children: ReactNode }) {
 
   const addAppointmentMutation = useMutation({
     mutationFn: async (payload: Omit<AppointmentData, 'id'>) => {
+      // Format the date and time into a single ISO string
+      const dateTime = new Date(payload.fechaConsulta);
+      const [hours, minutes] = payload.horaConsulta.split(':').map(Number);
+      dateTime.setHours(hours, minutes, 0, 0);
+      
+      // Transform the payload to match the API's expected format
+      const apiPayload = {
+        patient_id: payload.patientId,
+        doctor_id: DEFAULT_USER_ID, // Or derive from payload.doctor if needed
+        fecha_hora_cita: dateTime.toISOString(),
+        motivo_cita: payload.motivoConsulta,
+        estado_cita: payload.estado,
+        es_primera_vez: true, // Default or from payload if available
+        notas_cita_seguimiento: payload.notas || null
+      };
+
       const res = await fetchWithRetry(`${API_BASE_URL}/appointments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(apiPayload),
       });
       if (!res.ok) throw new Error(res.statusText);
       const json = await res.json();

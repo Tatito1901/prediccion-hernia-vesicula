@@ -83,7 +83,7 @@ export interface Appointment {
   telefono: string
   fechaConsulta: ISODateString | Date
   horaConsulta: FormattedTimeString
-  motivoConsulta: string
+  motivoConsulta?: string
   estado: AppointmentStatusEnum
   patientId?: EntityId
 }
@@ -488,7 +488,7 @@ const PatientAdmission: FC = () => {
         filtered = filtered.filter(cita => 
           cita.nombre.toLowerCase().includes(searchTermLower) ||
           cita.apellidos.toLowerCase().includes(searchTermLower) ||
-          cita.motivoConsulta.toLowerCase().includes(searchTermLower)
+          cita.motivoConsulta?.toLowerCase().includes(searchTermLower) || false
         )
       }
       
@@ -557,7 +557,7 @@ const PatientAdmission: FC = () => {
         reschedule: AppointmentStatusEnum.REAGENDADA
       }
 
-      const body: any = { estado: statusMap[confirmDialog.action] }
+      const body: any = { estado_cita: statusMap[confirmDialog.action] }
       
       if (confirmDialog.action === "reschedule") {
         if (!rescheduleDate || !rescheduleTime) {
@@ -602,6 +602,14 @@ const PatientAdmission: FC = () => {
     })
   }, [])
 
+  const handleViewPatientHistory = useCallback((patientId: EntityId) => {
+    // Redirect to patient history page or open a modal with patient history
+    toast.info(`Viendo historial del paciente ${patientId}`)
+    // You could navigate to a patient history page
+    // router.push(`/dashboard/patients/${patientId}/history`)
+    // Or implement a modal to show the history
+  }, [])
+
   const handleNewPatientSuccess = useCallback(() => {
     toast.success("Paciente registrado correctamente")
     handleRefresh()
@@ -624,9 +632,10 @@ const PatientAdmission: FC = () => {
             <AppointmentCard 
               key={cita.id}
               appointment={cita}
-              isPast={isPast}
+              isPastOverride={isPast}
               onAction={handleAction}
               onStartSurvey={handleStartSurvey}
+              onViewHistory={handleViewPatientHistory}
               showNoShowOverride={isPast}
             />
           ))}
@@ -729,7 +738,7 @@ const PatientAdmission: FC = () => {
             <div className="p-6 pt-0">
               <TabsContent value="newPatient" className="mt-0">
                 <Suspense fallback={<LoadingSkeleton />}>
-                  <NewPatientForm mode="registerAndSchedule" onSuccess={handleNewPatientSuccess} />
+                  <NewPatientForm onSuccess={handleNewPatientSuccess} />
                 </Suspense>
               </TabsContent>
               <TabsContent value="today" className="m-0 py-2">

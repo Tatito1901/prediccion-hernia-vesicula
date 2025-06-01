@@ -19,7 +19,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog"
-import { CustomDatePicker } from "@/components/ui/date-picker"
+import { DatePicker } from "@/components/ui/datepicker"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import {
@@ -127,6 +127,7 @@ export function NewPatientForm({ onSuccess, triggerButton }: NewPatientFormProps
       apellidos: "",
       telefono: "",
       notas: "",
+      edad: undefined,  // Explicitly set as undefined for initialization
     },
   })
 
@@ -275,7 +276,13 @@ export function NewPatientForm({ onSuccess, triggerButton }: NewPatientFormProps
                       <FormItem>
                         <FormLabel className="text-xs">Edad (Opcional)</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="Ej: 35" {...field} className="h-9 text-sm" />
+                          <Input 
+                            type="number" 
+                            placeholder="Ej: 35" 
+                            {...field} 
+                            value={field.value === undefined ? '' : field.value}
+                            className="h-9 text-sm" 
+                          />
                         </FormControl>
                         <FormMessage className="text-xs" />
                       </FormItem>
@@ -327,14 +334,14 @@ export function NewPatientForm({ onSuccess, triggerButton }: NewPatientFormProps
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
                         <FormLabel className="text-xs">Fecha de Consulta</FormLabel>
-                        <CustomDatePicker
+                        <DatePicker
                           value={field.value}
                           onChange={field.onChange}
                           minDate={new Date()}
                           maxDate={addMonths(new Date(), 3)}
                           placeholder="Seleccione fecha"
-                          shouldDisableDate={(date) => date.getDay() === 0}
-                          triggerClassName="h-9 text-sm"
+                          filterDate={(date) => date.getDay() !== 0}
+                          className="h-9 text-sm"
                         />
                         <FormMessage className="text-xs" />
                       </FormItem>

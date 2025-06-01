@@ -1,7 +1,8 @@
-import type React from "react"
-import { type FC, memo, useCallback, useMemo } from "react"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
+"use client";
+
+import React, { FC, memo, useCallback, useMemo } from "react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import {
   CheckCircle,
   XCircle,
@@ -13,140 +14,275 @@ import {
   MoreHorizontal,
   Phone,
   History,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu"
-import { Card, CardContent } from "@/components/ui/card"
-import type { AppointmentStatusEnum } from "@/app/dashboard/data-model"
+} from "@/components/ui/dropdown-menu";
+import { Card, CardContent } from "@/components/ui/card";
+import type { AppointmentStatusEnum } from "@/app/dashboard/data-model";
 
-// ==== TIPOS AUXILIARES ====
-type EntityId = string
-type ISODateString = string
-type FormattedTimeString = `${number}:${number}`
+// ==== AUX TYPES ====
+type EntityId = string;
+type ISODateString = string;
+type FormattedTimeString = `${number}:${number}`;
 
-export type ConfirmAction = "checkIn" | "cancel" | "complete" | "noShow" | "reschedule"
+export type ConfirmAction =
+  | "checkIn"
+  | "cancel"
+  | "complete"
+  | "noShow"
+  | "reschedule";
 
 export interface Appointment {
-  id: EntityId
-  nombre: string
-  apellidos: string
-  telefono: string
-  fechaConsulta: ISODateString | Date
-  horaConsulta: FormattedTimeString
-  motivoConsulta?: string
-  estado: AppointmentStatusEnum
-  patientId?: EntityId
+  id: EntityId;
+  nombre: string;
+  apellidos: string;
+  telefono: string;
+  fechaConsulta: ISODateString | Date;
+  horaConsulta: FormattedTimeString;
+  motivoConsulta?: string;
+  estado: AppointmentStatusEnum;
+  patientId?: EntityId;
 }
 
 interface AppointmentCardProps {
-  appointment: Appointment
-  isPastOverride?: boolean
-  showNoShowOverride?: boolean
-  onAction: (action: ConfirmAction, id: EntityId, appointment: Appointment) => void
-  onStartSurvey: (patientId: EntityId, nombre: string, apellidos: string, telefono: string) => void
-  onViewHistory: (patientId: EntityId) => void // Nueva prop para ver historial
+  appointment: Appointment;
+  isPastOverride?: boolean;
+  showNoShowOverride?: boolean;
+  onAction: (
+    action: ConfirmAction,
+    id: EntityId,
+    appointment: Appointment
+  ) => void;
+  onStartSurvey: (
+    patientId: EntityId,
+    nombre: string,
+    apellidos: string,
+    telefono: string
+  ) => void;
+  onViewHistory: (patientId: EntityId) => void;
 }
 
-// ==== UTILIDADES FECHA/HORA ====
-const parseDate = (input: string | Date): Date => {
-  const d = input instanceof Date ? input : new Date(input)
-  return isNaN(d.getTime()) ? new Date() : d
+// ==== STATUS CONFIG (fuera del componente para no redefinir en cada render) ====
+interface StatusConfig {
+  borderClass: string;
+  icon: React.ReactNode;
+  label: string;
+  bgClass: string;
+  textClass: string;
 }
 
-const formatDate = (d: string | Date): string => {
-  return format(parseDate(d), "d MMM, yyyy", { locale: es }) // Formato más corto
-}
+const defaultStatusCfg: StatusConfig = {
+  borderClass: "border-l-slate-400",
+  icon: <Clock className="h-4 w-4" />,
+  label: "Desconocido",
+  bgClass: "bg-gray-100 dark:bg-gray-800",
+  textClass: "text-gray-700 dark:text-gray-300",
+};
 
-const formatTime = (t: string): string => {
-  const [h, m] = t.split(":").map((v) => Number.parseInt(v, 10))
-  return format(new Date().setHours(h, m), "HH:mm", { locale: es })
-}
-
-// ==== CONFIGURACIÓN DE ESTADOS (Minimalista) ====
-const STATUS_CONFIG: Record<
-  AppointmentStatusEnum,
-  {
-    className: string
-    icon: React.ReactNode
-    label: string
-    borderColor: string
-  }
-> = {
+const STATUS_CONFIG: Record<AppointmentStatusEnum, StatusConfig> = {
   PROGRAMADA: {
-    className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-    icon: <Clock className="h-3 w-3" />,
+    borderClass: "border-l-slate-400",
+    icon: <Clock className="h-4 w-4" />,
     label: "Programada",
-    borderColor: "border-l-slate-400",
+    bgClass: "bg-slate-100 dark:bg-slate-800",
+    textClass: "text-slate-700 dark:text-slate-300",
   },
   CONFIRMADA: {
-    className: "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300",
-    icon: <CalendarDays className="h-3 w-3" />,
+    borderClass: "border-l-blue-500",
+    icon: <CalendarDays className="h-4 w-4" />,
     label: "Confirmada",
-    borderColor: "border-l-blue-500",
+    bgClass: "bg-blue-100 dark:bg-blue-900/50",
+    textClass: "text-blue-800 dark:text-blue-300",
   },
   PRESENTE: {
-    className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300",
-    icon: <CheckCircle className="h-3 w-3" />,
+    borderClass: "border-l-emerald-500",
+    icon: <CheckCircle className="h-4 w-4" />,
     label: "Presente",
-    borderColor: "border-l-emerald-500",
+    bgClass: "bg-emerald-100 dark:bg-emerald-900/50",
+    textClass: "text-emerald-800 dark:text-emerald-300",
   },
   COMPLETADA: {
-    className: "bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300",
-    icon: <ClipboardCheck className="h-3 w-3" />,
+    borderClass: "border-l-violet-500",
+    icon: <ClipboardCheck className="h-4 w-4" />,
     label: "Completada",
-    borderColor: "border-l-violet-500",
+    bgClass: "bg-violet-100 dark:bg-violet-900/50",
+    textClass: "text-violet-800 dark:text-violet-300",
   },
   CANCELADA: {
-    className: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300",
-    icon: <XCircle className="h-3 w-3" />,
+    borderClass: "border-l-red-500",
+    icon: <XCircle className="h-4 w-4" />,
     label: "Cancelada",
-    borderColor: "border-l-red-500",
+    bgClass: "bg-red-100 dark:bg-red-900/50",
+    textClass: "text-red-800 dark:text-red-300",
   },
-  NO_ASISTIO: {
-    className: "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
-    icon: <AlertCircle className="h-3 w-3" />,
-    label: "No Asistió",
-    borderColor: "border-l-gray-500",
+  "NO ASISTIO": {
+    borderClass: "border-l-gray-500",
+    icon: <AlertCircle className="h-4 w-4" />,
+    label: "No asistió",
+    bgClass: "bg-gray-200 dark:bg-gray-700",
+    textClass: "text-gray-700 dark:text-gray-300",
   },
   REAGENDADA: {
-    className: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300",
-    icon: <CalendarDays className="h-3 w-3" />,
+    borderClass: "border-l-amber-500",
+    icon: <CalendarDays className="h-4 w-4" />,
     label: "Reagendada",
-    borderColor: "border-l-amber-500",
+    bgClass: "bg-amber-100 dark:bg-amber-900/50",
+    textClass: "text-amber-800 dark:text-amber-300",
   },
-}
+};
 
-// ==== COMPONENTE BADGE DE ESTADO (Minimalista) ====
-export const AppointmentStatusBadge: FC<{
-  status: AppointmentStatusEnum
-}> = memo(({ status }) => {
-  const config = STATUS_CONFIG[status] ?? {
-    className: "bg-gray-100 text-gray-600",
-    icon: null,
-    label: status,
-    borderColor: "border-l-gray-400",
+// ==== STATUS BADGE (sin cambios, ya estaba memoizado) ====
+export const AppointmentStatusBadge: FC<{ status: AppointmentStatusEnum }> = memo(
+  ({ status }) => {
+    const cfg = STATUS_CONFIG[status] ?? defaultStatusCfg;
+
+    return (
+      <Badge
+        className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md ${cfg.bgClass} ${cfg.textClass}`}
+      >
+        {cfg.icon}
+        <span>{cfg.label}</span>
+      </Badge>
+    );
   }
+);
+AppointmentStatusBadge.displayName = "AppointmentStatusBadge";
 
-  return (
-    <Badge
-      variant="secondary" // Usar variant secondary para un look más plano
-      className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md ${config.className}`}
-    >
-      {config.icon}
-      <span>{config.label}</span>
-    </Badge>
-  )
-})
-AppointmentStatusBadge.displayName = "AppointmentStatusBadge"
+// ==== SUBCOMPONENTE: InfoSection ====
+interface InfoSectionProps {
+  nombre: string;
+  apellidos: string;
+  telefono: string;
+  formattedDate: string;
+  formattedTime: string;
+  motivoConsulta?: string;
+  estado: AppointmentStatusEnum;
+}
+const InfoSection: FC<InfoSectionProps> = memo(
+  ({ nombre, apellidos, telefono, formattedDate, formattedTime, motivoConsulta, estado }) => {
+    return (
+      <div className="flex-1 space-y-2 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="truncate font-semibold text-lg text-slate-900 dark:text-slate-100">
+            {nombre} {apellidos}
+          </h3>
+          <AppointmentStatusBadge status={estado} />
+        </div>
+        <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
+          <div className="flex items-center gap-1">
+            <CalendarDays className="h-5 w-5" />
+            <span>{formattedDate}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Clock className="h-5 w-5" />
+            <span>{formattedTime}</span>
+          </div>
+        </div>
+        {motivoConsulta && (
+          <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">
+            <strong>Motivo:</strong> {motivoConsulta}
+          </p>
+        )}
+        <div className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
+          <Phone className="h-5 w-5" />
+          <span className="truncate">{telefono}</span>
+        </div>
+      </div>
+    );
+  }
+);
+InfoSection.displayName = "InfoSection";
 
-// ==== COMPONENTE PRINCIPAL (Minimalista) ====
+// ==== SUBCOMPONENTE: ActionsMenu ====
+interface ActionsMenuProps {
+  isPast: boolean;
+  estado: AppointmentStatusEnum;
+  patientId?: EntityId;
+  onAction: (action: ConfirmAction) => void;
+  onStartSurvey: () => void;
+  onViewHistory: () => void;
+}
+const ActionsMenu: FC<ActionsMenuProps> = memo(
+  ({ isPast, estado, patientId, onAction, onStartSurvey, onViewHistory }) => {
+    // Definir cada handler por separado para reuso
+    const handleCheckIn = useCallback(() => onAction("checkIn"), [onAction]);
+    const handleNoShow = useCallback(() => onAction("noShow"), [onAction]);
+    const handleReschedule = useCallback(() => onAction("reschedule"), [onAction]);
+    const handleCancel = useCallback(() => onAction("cancel"), [onAction]);
+    const handleComplete = useCallback(() => onAction("complete"), [onAction]);
+
+    return (
+      <div className="self-start sm:self-auto">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="opacity-70 group-hover:opacity-100 transition-opacity hover:bg-slate-100 dark:hover:bg-slate-800"
+              aria-label="Opciones de cita"
+            >
+              <MoreHorizontal className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 shadow-lg rounded-md">
+            {!isPast && (
+              <>
+                <DropdownMenuItem onClick={handleCheckIn}>
+                  <CheckCircle className="h-4 w-4 mr-2 text-emerald-600" />
+                  Marcar presente
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleNoShow}>
+                  <AlertCircle className="h-4 w-4 mr-2 text-gray-600" />
+                  No asistió
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleReschedule}>
+                  <CalendarDays className="h-4 w-4 mr-2 text-amber-600" />
+                  Reagendar
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleCancel}>
+                  <XCircle className="h-4 w-4 mr-2 text-red-600" />
+                  Cancelar
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {estado === "PRESENTE" && (
+              <>
+                <DropdownMenuItem onClick={handleComplete}>
+                  <ClipboardCheck className="h-4 w-4 mr-2 text-violet-600" />
+                  Completar
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {patientId && (
+              <>
+                <DropdownMenuItem onClick={onViewHistory}>
+                  <History className="h-4 w-4 mr-2 text-slate-600" />
+                  Ver historial
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onStartSurvey}>
+                  <FileText className="h-4 w-4 mr-2 text-blue-600" />
+                  Enviar encuesta
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  }
+);
+ActionsMenu.displayName = "ActionsMenu";
+
+// ==== COMPONENTE PRINCIPAL: AppointmentCard ====
 export const AppointmentCard: FC<AppointmentCardProps> = memo(
   ({
     appointment,
@@ -154,143 +290,107 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(
     showNoShowOverride = false,
     onAction,
     onStartSurvey,
-    onViewHistory, // Nueva prop
+    onViewHistory,
   }) => {
-    const { id, nombre, apellidos, telefono, fechaConsulta, horaConsulta, motivoConsulta, estado, patientId } =
-      appointment
+    const {
+      id,
+      nombre,
+      apellidos,
+      telefono,
+      fechaConsulta,
+      horaConsulta,
+      motivoConsulta,
+      estado,
+      patientId,
+    } = appointment;
 
-    const isPast = useMemo(() => {
-      return (
+    // Determinar si la cita se considera "pasada"
+    const isPast = useMemo(
+      () =>
         isPastOverride ||
         estado === "COMPLETADA" ||
         estado === "CANCELADA" ||
-        (showNoShowOverride && estado === "NO_ASISTIO")
-      )
-    }, [estado, isPastOverride, showNoShowOverride])
+        (showNoShowOverride && estado === "NO ASISTIO"),
+      [estado, isPastOverride, showNoShowOverride]
+    );
 
+    // Memoizar la configuración de estado para no redefinir en cada render
+    const statusCfg = useMemo(
+      () => STATUS_CONFIG[estado] ?? defaultStatusCfg,
+      [estado]
+    );
+
+    // Formatear fecha (fecha inválida muestra "Fecha inválida")
+    const formattedDate = useMemo(() => {
+      const dt = new Date(fechaConsulta);
+      if (isNaN(dt.getTime())) return "Fecha inválida";
+      return format(dt, "d MMM, yyyy", { locale: es });
+    }, [fechaConsulta]);
+
+    // Formatear hora (tomando string "HH:mm")
+    const formattedTime = useMemo(() => {
+      const [h, m] = horaConsulta.split(":").map(Number);
+      const dt = new Date();
+      dt.setHours(h, m, 0, 0);
+      return format(dt, "HH:mm", { locale: es });
+    }, [horaConsulta]);
+
+    // Callback para despachar acciones con id y objeto completo
     const handleAction = useCallback(
-      (action: ConfirmAction) => onAction(action, id, appointment),
-      [id, appointment, onAction],
-    )
+      (action: ConfirmAction) => {
+        onAction(action, id, appointment);
+      },
+      [onAction, id, appointment]
+    );
 
+    // Callback para enviar encuesta (si existe patientId)
     const handleSurvey = useCallback(() => {
-      if (!patientId) return
-      onStartSurvey(patientId, nombre, apellidos, telefono)
-    }, [patientId, nombre, apellidos, telefono, onStartSurvey])
+      if (patientId) {
+        onStartSurvey(patientId, nombre, apellidos, telefono);
+      }
+    }, [patientId, nombre, apellidos, telefono, onStartSurvey]);
 
-    const handleViewHistory = useCallback(() => {
-      if (!patientId) return
-      onViewHistory(patientId)
-    }, [patientId, onViewHistory])
-
-    const config = STATUS_CONFIG[estado]
+    // Callback para ver historial (si existe patientId)
+    const handleHistory = useCallback(() => {
+      if (patientId) {
+        onViewHistory(patientId);
+      }
+    }, [patientId, onViewHistory]);
 
     return (
       <Card
-        className={`group relative overflow-hidden transition-shadow duration-200 hover:shadow-md border-l-4 ${
-          config?.borderColor || "border-l-gray-300"
-        } ${isPast ? "opacity-70" : ""} bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm`}
+        className={`group transition-all duration-150 hover:shadow-md border-l-4 ${statusCfg.borderClass} ${
+          isPast ? "opacity-75" : "hover:-translate-y-0.5"
+        } bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800`}
       >
         <CardContent className="p-4">
-          <div className="flex items-start justify-between">
-            {/* Información principal */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1.5">
-                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100 truncate">
-                  {nombre} {apellidos}
-                </h3>
-                <AppointmentStatusBadge status={estado} />
-              </div>
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            {/* Sección de Información */}
+            <InfoSection
+              nombre={nombre}
+              apellidos={apellidos}
+              telefono={telefono}
+              formattedDate={formattedDate}
+              formattedTime={formattedTime}
+              motivoConsulta={motivoConsulta}
+              estado={estado}
+            />
 
-              <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 mb-2">
-                <div className="flex items-center gap-1">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  <span>{formatDate(fechaConsulta)}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span className="font-medium text-slate-700 dark:text-slate-200">{formatTime(horaConsulta)}</span>
-                </div>
-              </div>
-
-              {motivoConsulta && (
-                <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 mb-1">
-                  <span className="font-medium">Motivo:</span> {motivoConsulta}
-                </p>
-              )}
-              <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                <Phone className="h-3.5 w-3.5" />
-                <span>{telefono}</span>
-              </div>
-            </div>
-
-            {/* Acciones */}
-            <div className="ml-2 flex-shrink-0">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md opacity-50 group-hover:opacity-100 transition-opacity hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                    <span className="sr-only">Opciones</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  {!isPast && (
-                    <>
-                      <DropdownMenuItem onClick={() => handleAction("checkIn")}>
-                        <CheckCircle className="h-3.5 w-3.5 mr-2 text-emerald-600" />
-                        Marcar presente
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleAction("noShow")}>
-                        <AlertCircle className="h-3.5 w-3.5 mr-2 text-gray-600" />
-                        No asistió
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleAction("reschedule")}>
-                        <CalendarDays className="h-3.5 w-3.5 mr-2 text-amber-600" />
-                        Reagendar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleAction("cancel")}>
-                        <XCircle className="h-3.5 w-3.5 mr-2 text-red-600" />
-                        Cancelar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                    </>
-                  )}
-
-                  {estado === "PRESENTE" && (
-                    <>
-                      <DropdownMenuItem onClick={() => handleAction("complete")}>
-                        <ClipboardCheck className="h-3.5 w-3.5 mr-2 text-violet-600" />
-                        Completar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                    </>
-                  )}
-
-                  {patientId && (
-                    <>
-                      <DropdownMenuItem onClick={handleViewHistory}>
-                        <History className="h-3.5 w-3.5 mr-2 text-slate-600" />
-                        Ver historial
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={handleSurvey}>
-                        <FileText className="h-3.5 w-3.5 mr-2 text-blue-600" />
-                        Enviar encuesta
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            {/* Menú de Acciones */}
+            <ActionsMenu
+              isPast={isPast}
+              estado={estado}
+              patientId={patientId}
+              onAction={handleAction}
+              onStartSurvey={handleSurvey}
+              onViewHistory={handleHistory}
+            />
           </div>
         </CardContent>
       </Card>
-    )
-  },
-)
-AppointmentCard.displayName = "AppointmentCard"
+    );
+  }
+);
+AppointmentCard.displayName = "AppointmentCard";
 
-export default AppointmentCard
+export default AppointmentCard;
