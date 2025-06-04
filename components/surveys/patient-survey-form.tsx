@@ -376,10 +376,11 @@ type SurveyFormValues = z.infer<typeof surveySchema>
 
 interface PatientSurveyFormProps {
   patientId?: number
-  surveyId: string
+  surveyTemplateId: string
+  assignedSurveyId: string
   onComplete?: (data: SurveyFormValues) => void
   onSubmitSuccess?: (data: SurveyFormValues) => void
-  standalone?: boolean // This prop was in your original code, keeping it.
+  standalone?: boolean
   initialData?: Partial<SurveyFormValues>
 }
 
@@ -575,7 +576,8 @@ const pasos = [
 
 export default function PatientSurveyForm({
   patientId,
-  surveyId,
+  surveyTemplateId, // Changed from surveyId
+  assignedSurveyId, // Added
   onComplete,
   onSubmitSuccess,
   initialData,
@@ -660,7 +662,7 @@ export default function PatientSurveyForm({
   useEffect(() => {
     const timer = setTimeout(() => {
       setSurveyDataMeta({
-        id: surveyId,
+        id: surveyTemplateId,
         title: "Cuestionario Médico Pre-Consulta",
         description:
           "Este cuestionario nos ayuda a conocer mejor su situación médica para brindarle la mejor atención posible. Toda su información es completamente confidencial y segura.",
@@ -668,12 +670,12 @@ export default function PatientSurveyForm({
       setIsLoading(false)
     }, 500)
     return () => clearTimeout(timer)
-  }, [surveyId])
+  }, [surveyTemplateId])
 
   // Auto-guardar progreso optimizado
   const saveProgress = useCallback(() => {
     // Check if form is dirty or current step has changed since last save
-    const savedProgressRaw = localStorage.getItem(`survey_${surveyId}`)
+    const savedProgressRaw = localStorage.getItem(`survey_${surveyTemplateId}`)
     const savedStep = savedProgressRaw ? JSON.parse(savedProgressRaw).currentStep : -1;
 
     if (!form.formState.isDirty && currentStep === savedStep) {
@@ -690,7 +692,7 @@ export default function PatientSurveyForm({
     }
 
     try {
-      localStorage.setItem(`survey_${surveyId}`, JSON.stringify(dataToSave))
+      localStorage.setItem(`survey_${surveyTemplateId}`, JSON.stringify(dataToSave))
       setTimeout(() => {
         setIsSaving(false)
         setLastSaved(new Date())
@@ -700,13 +702,13 @@ export default function PatientSurveyForm({
       console.error("Error saving progress:", error)
       setIsSaving(false)
     }
-  }, [form, currentStep, surveyId])
+  }, [form, currentStep, surveyTemplateId])
 
 
   // Cargar datos guardados
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem(`survey_${surveyId}`)
+      const savedData = localStorage.getItem(`survey_${surveyTemplateId}`)
       if (savedData) {
         const parsedData = JSON.parse(savedData)
         form.reset(parsedData.formData)
@@ -715,9 +717,9 @@ export default function PatientSurveyForm({
       }
     } catch (error) {
       console.error("Error loading saved data:", error)
-      localStorage.removeItem(`survey_${surveyId}`)
+      localStorage.removeItem(`survey_${surveyTemplateId}`)
     }
-  }, [surveyId, form])
+  }, [surveyTemplateId, form])
 
   // Auto-guardar cada 30 segundos si hay cambios
   useEffect(() => {
@@ -820,16 +822,28 @@ export default function PatientSurveyForm({
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
-      // Call actual update function if patientId and updatePatient are available
-      if (patientId && updatePatient) {
+      // TODO: Replace mock 'updatePatient' with actual Supabase call.
+      // Your Supabase function should handle:
+      // 1. Saving/updating the survey responses (data) linked to 'assignedSurveyId'.
+      // 2. Updating the status of the 'AssignedSurvey' record (identified by 'assignedSurveyId') to 'completed'.
+      // 3. Potentially linking this to the 'patientId' and 'surveyTemplateId' as needed in your DB schema.
+
+      if (patientId && updatePatient) { // This is the mock call, replace it.
+        console.log(
+          "Mock updatePatient called. For Supabase, use: patientId:", patientId, 
+          ", assignedSurveyId:", assignedSurveyId, 
+          ", surveyTemplateId:", surveyTemplateId, 
+          ", surveyData:", data
+        );
         await updatePatient(patientId, {
-          encuesta: data,
-          estado: "Pendiente de consulta", // Example status
-        })
+          encuesta: data, // surveyData
+          estado: "Pendiente de consulta", // Example status, manage this via AssignedSurveys table
+          // Potentially pass assignedSurveyId here if your mock updatePatient can take it
+        });
       }
       
-      console.log("Survey data submitted:", data)
-      localStorage.removeItem(`survey_${surveyId}`) // Clear saved data on successful submission
+      console.log("Form submission processed. Actual data for Supabase would include: patientId:", patientId, ", assignedSurveyId:", assignedSurveyId, ", surveyTemplateId:", surveyTemplateId, ", surveyData:", data);
+      localStorage.removeItem(`survey_${surveyTemplateId}`) // Clear saved data on successful submission
       setLastSaved(null)
       if (onSubmitSuccess) onSubmitSuccess(data)
       if (onComplete) onComplete(data) // Call onComplete if provided

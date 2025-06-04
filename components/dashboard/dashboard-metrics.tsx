@@ -66,7 +66,7 @@ interface MetricCardProps {
 }
 
 interface DashboardMetricsProps {
-  metrics: ClinicMetrics;
+  metrics?: ClinicMetrics;
 }
 
 // --- Información Detallada de Métricas ---
@@ -274,6 +274,10 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, description, badg
 // Utiliza prefijos responsivos (sm:, lg:) y consultas de contenedor (@container/main).
 export const DashboardMetrics: React.FC<DashboardMetricsProps> = ({ metrics }) => {
   const metricsData = metrics;
+
+  if (!metricsData) {
+    return <div className="p-4 text-center text-muted-foreground">Cargando métricas...</div>;
+  }
 
   const calculatePercentage = (numerator: number, denominator: number): string => {
     if (denominator === 0) return "N/A";

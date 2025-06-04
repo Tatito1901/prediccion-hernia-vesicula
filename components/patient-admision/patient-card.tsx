@@ -25,12 +25,11 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent } from "@/components/ui/card";
-import type { AppointmentStatusEnum } from "@/app/dashboard/data-model";
+import type { AppointmentStatusEnum, AppointmentData } from "@/app/dashboard/data-model";
 
 // ==== AUX TYPES ====
 type EntityId = string;
-type ISODateString = string;
-type FormattedTimeString = `${number}:${number}`;
+// ISODateString and FormattedTimeString are implicitly handled by AppointmentData types
 
 export type ConfirmAction =
   | "checkIn"
@@ -39,29 +38,19 @@ export type ConfirmAction =
   | "noShow"
   | "reschedule";
 
-export interface Appointment {
-  id: EntityId;
-  nombre: string;
-  apellidos: string;
-  telefono: string;
-  fechaConsulta: ISODateString | Date;
-  horaConsulta: FormattedTimeString;
-  motivoConsulta?: string;
-  estado: AppointmentStatusEnum;
-  patientId?: EntityId;
-}
+// Local Appointment interface removed as AppointmentData will be used directly
 
 interface AppointmentCardProps {
-  appointment: Appointment;
+  appointment: AppointmentData;
   isPastOverride?: boolean;
   showNoShowOverride?: boolean;
   onAction: (
     action: ConfirmAction,
-    id: EntityId,
-    appointment: Appointment
+    id: EntityId, // appointment ID
+    appointment: AppointmentData
   ) => void;
   onStartSurvey: (
-    patientId: EntityId,
+    patientId: EntityId, // patient's ID
     nombre: string,
     apellidos: string,
     telefono: string
@@ -157,8 +146,7 @@ AppointmentStatusBadge.displayName = "AppointmentStatusBadge";
 
 // ==== SUBCOMPONENTE: InfoSection ====
 interface InfoSectionProps {
-  nombre: string;
-  apellidos: string;
+  fullName: string; // Changed from nombre, apellidos
   telefono: string;
   formattedDate: string;
   formattedTime: string;
@@ -166,14 +154,14 @@ interface InfoSectionProps {
   estado: AppointmentStatusEnum;
 }
 const InfoSection: FC<InfoSectionProps> = memo(
-  ({ nombre, apellidos, telefono, formattedDate, formattedTime, motivoConsulta, estado }) => {
+  ({ fullName, telefono, formattedDate, formattedTime, motivoConsulta, estado }) => {
     return (
       <div className="flex-1 space-y-2 min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="truncate font-semibold text-lg text-slate-900 dark:text-slate-100">
-            {nombre} {apellidos}
+            {fullName}
           </h3>
-          <AppointmentStatusBadge status={estado} />
+          <AppointmentStatusBadge status={estado as AppointmentStatusEnum} />
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
           <div className="flex items-center gap-1">
@@ -293,16 +281,17 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(
     onViewHistory,
   }) => {
     const {
-      id,
-      nombre,
-      apellidos,
+      id, // Appointment's own ID
+      paciente: pacienteFullName, // Patient's full name string from AppointmentData
       telefono,
+      patientId, // Patient's actual ID from AppointmentData
       fechaConsulta,
       horaConsulta,
       motivoConsulta,
       estado,
-      patientId,
-    } = appointment;
+      // surveyStatus, // Potentially from AppointmentData if needed later
+      // patientSurveys, // Potentially from AppointmentData if needed later
+    } = appointment; // appointment is AppointmentData
 
     // Determinar si la cita se considera "pasada"
     const isPast = useMemo(
@@ -316,7 +305,7 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(
 
     // Memoizar la configuración de estado para no redefinir en cada render
     const statusCfg = useMemo(
-      () => STATUS_CONFIG[estado] ?? defaultStatusCfg,
+      () => STATUS_CONFIG[estado as AppointmentStatusEnum] ?? defaultStatusCfg,
       [estado]
     );
 
@@ -346,9 +335,10 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(
     // Callback para enviar encuesta (si existe patientId)
     const handleSurvey = useCallback(() => {
       if (patientId) {
-        onStartSurvey(patientId, nombre, apellidos, telefono);
+        // Pass patientId, full name as nombre, empty string for apellidos, and telefono
+        onStartSurvey(patientId, pacienteFullName, "", telefono ?? "");
       }
-    }, [patientId, nombre, apellidos, telefono, onStartSurvey]);
+    }, [patientId, pacienteFullName, telefono, onStartSurvey]);
 
     // Callback para ver historial (si existe patientId)
     const handleHistory = useCallback(() => {
@@ -367,13 +357,12 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             {/* Sección de Información */}
             <InfoSection
-              nombre={nombre}
-              apellidos={apellidos}
-              telefono={telefono}
+              fullName={pacienteFullName} // Use combined full name
+              telefono={telefono ?? "N/A"} // Provide fallback for telefono
               formattedDate={formattedDate}
               formattedTime={formattedTime}
               motivoConsulta={motivoConsulta}
-              estado={estado}
+              estado={estado as AppointmentStatusEnum} // Cast estado here as well for InfoSection prop if it expects Enum
             />
 
             {/* Menú de Acciones */}

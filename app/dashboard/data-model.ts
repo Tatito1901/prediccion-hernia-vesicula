@@ -19,7 +19,6 @@ export enum PatientStatusEnum {
   OPERADO = "OPERADO",
   NO_OPERADO = "NO OPERADO",
   INDECISO = "INDECISO",
-  // Considerar si necesitas mapear estados de citas como "PRESENTE" a un estado de paciente
 }
 export type PatientStatus = `${PatientStatusEnum}`;
 
@@ -60,7 +59,7 @@ export enum AppointmentStatusEnum {
   PRESENTE = "PRESENTE",
   REAGENDADA = "REAGENDADA"
 }
-export type AppointmentStatus = 'COMPLETADA' | 'CANCELADA' | 'PROGRAMADA' | 'CONFIRMADA' | 'PRESENTE' | 'REAGENDADA' | 'NO ASISTIO';
+export type AppointmentStatus = `${AppointmentStatusEnum}`;
 
 // --- ENUMS Específicos de la Encuesta (como los tenías) ---
 export enum InsuranceTypeEnum {

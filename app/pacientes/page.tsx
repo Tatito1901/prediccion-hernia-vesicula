@@ -1,7 +1,6 @@
 import { AppSidebar } from "@/components/navigation/app-sidebar"
 import { SiteHeader } from "@/components/navigation/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { samplePatients } from "./sample-data"
 import { PatientManagement } from "@/components/patients/patient-management"
 
 export default function PatientsPage() {

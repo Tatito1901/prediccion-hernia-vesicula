@@ -3,7 +3,6 @@ import {
   useState, 
   useMemo, 
   useCallback, 
-  useEffect, 
   memo, 
   lazy, 
   Suspense,
@@ -61,6 +60,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { toast } from "sonner"
 import { useAppContext } from "@/lib/context/app-context"
 import { generateSurveyId } from "@/lib/form-utils"
+import { usePatientAdmissionFlow } from './use-patient-admission-flow'
 
 // Lazy loading para componentes pesados
 const NewPatientForm = lazy(() => import("./new-patient-form").then(module => ({ default: module.NewPatientForm })))
@@ -415,15 +415,17 @@ EmptyState.displayName = "EmptyState"
 // ============ COMPONENTE PRINCIPAL OPTIMIZADO ============
 
 const PatientAdmission: FC = () => {
-  // Estados optimizados
-  const { appointments } = useAppContext()
-  const [activeTab, setActiveTab] = useState<string>('today')
-  const [isLoading, setIsLoading] = useState<boolean>(true)
-  const [filters, setFilters] = useState<FilterState>({
-    searchTerm: "",
-    statusFilter: "all",
-    sortField: null,
-  })
+  const {
+    appointments,
+    isLoadingAppointments,
+    errorAppointments,
+    activeTab,
+    setActiveTab,
+    filters,
+    setFilters,
+    classifiedAppointments,
+    filteredAppointments,
+  } = usePatientAdmissionFlow()
 
   // Estados para diálogos
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -459,55 +461,6 @@ const PatientAdmission: FC = () => {
 
   const isMobile = useMediaQuery("(max-width: 640px)")
 
-  // Clasificación y filtrado de citas optimizado
-  const { classifiedAppointments, filteredAppointments } = useMemo(() => {
-    if (!appointments || appointments.length === 0) {
-      return {
-        classifiedAppointments: { today: [], future: [], past: [] },
-        filteredAppointments: { today: [], future: [], past: [] }
-      }
-    }
-
-    const adaptedAppointments = appointments.map(adaptAppointmentData)
-    
-    const classified: AppointmentLists = {
-      today: adaptedAppointments.filter(cita => dateUtils.isToday(cita.fechaConsulta)),
-      future: adaptedAppointments.filter(cita => dateUtils.isFuture(cita.fechaConsulta)),
-      past: adaptedAppointments.filter(cita => 
-        dateUtils.isPast(cita.fechaConsulta) || 
-        [AppointmentStatusEnum.COMPLETADA, AppointmentStatusEnum.CANCELADA, AppointmentStatusEnum.NO_ASISTIO].includes(cita.estado)
-      )
-    }
-
-    // Aplicar filtros
-    const applyFilters = (appointmentsToFilter: Appointment[]): Appointment[] => {
-      let filtered = [...appointmentsToFilter]
-      
-      if (filters.searchTerm) {
-        const searchTermLower = filters.searchTerm.toLowerCase()
-        filtered = filtered.filter(cita => 
-          cita.nombre.toLowerCase().includes(searchTermLower) ||
-          cita.apellidos.toLowerCase().includes(searchTermLower) ||
-          cita.motivoConsulta?.toLowerCase().includes(searchTermLower) || false
-        )
-      }
-      
-      if (filters.statusFilter !== 'all') {
-        filtered = filtered.filter(cita => cita.estado === filters.statusFilter)
-      }
-      
-      return filtered
-    }
-
-    const filtered: AppointmentLists = {
-      today: applyFilters(classified.today),
-      future: applyFilters(classified.future),
-      past: applyFilters(classified.past)
-    }
-
-    return { classifiedAppointments: classified, filteredAppointments: filtered }
-  }, [appointments, filters])
-
   // Manejadores optimizados
   const handleUpdateFilters = useCallback((newFilters: FilterState) => {
     setFilters(newFilters)
@@ -522,11 +475,7 @@ const PatientAdmission: FC = () => {
   }, [])
 
   const handleRefresh = useCallback(() => {
-    setIsLoading(true)
-    setTimeout(() => {
-      setIsLoading(false)
-      toast.success("Datos actualizados")
-    }, 1000)
+    // Implementar lógica de refresco
   }, [])
 
   const handleAction = useCallback((action: ConfirmAction, appointmentId: EntityId, appointment: Appointment) => {
@@ -617,7 +566,7 @@ const PatientAdmission: FC = () => {
 
   // Función de renderizado optimizada
   const renderAppointmentsContent = useCallback((appointmentsToRender: Appointment[], isPast = false) => {
-    if (isLoading) {
+    if (isLoadingAppointments) {
       return <LoadingSkeleton />
     }
 
@@ -642,15 +591,7 @@ const PatientAdmission: FC = () => {
         </Suspense>
       </div>
     )
-  }, [isLoading, handleAction, handleStartSurvey])
-
-  // Efecto para carga inicial
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false)
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [appointments])
+  }, [isLoadingAppointments, handleAction, handleStartSurvey])
 
   return (
     <div className="grid grid-cols-1 gap-6">
@@ -660,7 +601,7 @@ const PatientAdmission: FC = () => {
             <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
               <Users className="h-5 w-5 text-primary" />
               <span>Gestión de Citas</span>
-              {isLoading && (
+              {isLoadingAppointments && (
                 <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent text-primary ml-2"></span>
               )}
             </CardTitle>
@@ -685,7 +626,7 @@ const PatientAdmission: FC = () => {
                     <div className="flex items-center gap-1.5">
                       <Clock className="h-4 w-4" />
                       <span className={isMobile ? "hidden" : ""}>Hoy</span>
-                      {classifiedAppointments.today.length > 0 && !isLoading && (
+                      {classifiedAppointments.today.length > 0 && !isLoadingAppointments && (
                         <Badge variant="outline" className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200 px-1.5 py-0.5 text-xs">
                           {classifiedAppointments.today.length}
                         </Badge>
@@ -696,7 +637,7 @@ const PatientAdmission: FC = () => {
                     <div className="flex items-center gap-1.5">
                       <Calendar className="h-4 w-4" />
                       <span className={isMobile ? "hidden" : ""}>Futuras</span>
-                      {classifiedAppointments.future.length > 0 && !isLoading && (
+                      {classifiedAppointments.future.length > 0 && !isLoadingAppointments && (
                         <Badge variant="outline" className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200 px-1.5 py-0.5 text-xs">
                           {classifiedAppointments.future.length}
                         </Badge>
@@ -707,7 +648,7 @@ const PatientAdmission: FC = () => {
                     <div className="flex items-center gap-1.5">
                       <ClipboardCheck className="h-4 w-4" />
                       <span className={isMobile ? "hidden" : ""}>Historial</span>
-                      {classifiedAppointments.past.length > 0 && !isLoading && (
+                      {classifiedAppointments.past.length > 0 && !isLoadingAppointments && (
                         <Badge variant="outline" className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200 px-1.5 py-0.5 text-xs">
                           {classifiedAppointments.past.length}
                         </Badge>

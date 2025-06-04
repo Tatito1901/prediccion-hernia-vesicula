@@ -39,7 +39,7 @@ import { DiagnosisEnum, PatientData, AppointmentData } from "@/app/dashboard/dat
 const NewPatientForm = lazy(() => import("./new-patient-form").then(module => ({ 
   default: module.NewPatientForm 
 })));
-const PatientList = lazy(() => import("./patient-list"));
+const PatientList = lazy(() => import("../patients/patient-list"));
 
 // Loading fallbacks
 const FormSkeleton = () => (

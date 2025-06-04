@@ -4,7 +4,8 @@ import React, { useMemo, Suspense } from "react";
 import { AppSidebar } from "../../components/navigation/app-sidebar";
 import { SiteHeader } from "../../components/navigation/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { clinicMetrics, getPendingFollowUps, samplePatients } from "../pacientes/sample-data"; // Asegúrate que estas rutas sean correctas
+import { clinicMetrics } from "./mock-data";
+
 
 // Carga diferida para los componentes principales del dashboard
 const DashboardMetrics = React.lazy(() => 
@@ -23,11 +24,6 @@ const LoadingSpinner: React.FC = () => (
 );
 
 export default function Page() {
-  // Memoizar el resultado de getPendingFollowUps si es una operación costosa
-  // o si los datos de los que depende no cambian en cada render.
-  const pendingFollowUps = useMemo(() => getPendingFollowUps(), []); 
-  // Si getPendingFollowUps depende de algún valor que pueda cambiar, añádelo al array de dependencias.
-  // Por ejemplo, si dependiera de 'samplePatients': useMemo(() => getPendingFollowUps(samplePatients), [samplePatients])
 
   return (
     <SidebarProvider>

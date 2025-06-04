@@ -50,7 +50,7 @@ import {
   UserRound,
   Medal,
 } from "lucide-react"
-import { gridLayouts, responsiveHeight } from "@/lib/responsive-utils"
+import { gridLayouts, responsiveHeight } from "@/hooks/use-breakpoint"
 import { useAppContext } from "@/lib/context/app-context"
 // import { saveAs } from 'file-saver' // Comentado hasta resolver dependencias
 

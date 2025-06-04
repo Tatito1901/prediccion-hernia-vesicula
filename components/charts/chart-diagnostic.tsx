@@ -1,7 +1,6 @@
 /* -------------------------------------------------------------------------- */
 /*  components/diagnostics/chart-diagnostic.tsx                               */
 /* -------------------------------------------------------------------------- */
-'use client';
 
 import type { FC, ReactNode } from 'react';
 import {

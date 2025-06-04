@@ -4,7 +4,7 @@ import type React from "react"
 import { type FC, useState, useCallback, useRef, useEffect, memo, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { LockKeyhole, AtSign, LogIn, Eye, EyeOff, CheckCircle, AlertCircle, ArrowRight } from "lucide-react"
-import { useRouter } from "next/navigation" // Importar useRouter
+import { useRouter } from "next/navigation"
 
 // ======================
 // Tipos
@@ -18,7 +18,7 @@ interface FormData {
 interface FormState {
   isLoading: boolean
   loginSuccess: boolean
-  activeInput: keyof FormData | null
+  activeInput: "email" | "password" | null // Tipo más específico para activeInput
   showPassword: boolean
 }
 
@@ -38,7 +38,7 @@ const PremiumLogo: FC<{ className?: string }> = memo(({ className = "" }) => (
       style={{
         background: "radial-gradient(ellipse at center, rgba(99, 102, 241, 0.4) 0%, transparent 70%)",
         filter: "blur(24px)",
-        willChange: "transform" // Ayuda al navegador a optimizar animaciones
+        willChange: "transform, opacity"
       }}
     />
 
@@ -53,7 +53,6 @@ const PremiumLogo: FC<{ className?: string }> = memo(({ className = "" }) => (
         aria-labelledby="logoTitle"
       >
         <title id="logoTitle">Logo de la Clínica de Hernia y Vesícula - CHV</title>
-
         <defs>
           <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#f8fafc" />
@@ -64,8 +63,7 @@ const PremiumLogo: FC<{ className?: string }> = memo(({ className = "" }) => (
             <stop offset="100%" stopColor="#8b5cf6" />
           </linearGradient>
         </defs>
-
-        {/* Contenido del SVG (sin cambios, asumimos que está optimizado) */}
+        {/* Contenido del SVG (asumido optimizado) */}
         <g transform="translate(0, 228.3) scale(0.1, -0.1)" stroke="none">
           <g id="monograma-chv" fill="url(#logoGrad)">
             <path d="M2926 2283 c-20 -49 -36 -91 -36 -95 0 -5 28 -8 63 -8 l63 0 58 82 c32 45 60 88 63 95 4 10 -14 13 -85 13 l-89 0 -37 -87z" />
@@ -98,7 +96,6 @@ const PremiumLogo: FC<{ className?: string }> = memo(({ className = "" }) => (
           </g>
         </g>
       </svg>
-
       <div className="mt-4 text-center">
         <p className="text-[10px] font-medium text-slate-300/70 tracking-[0.2em] uppercase">
           Excelencia en Cirugía Especializada
@@ -114,13 +111,12 @@ PremiumLogo.displayName = "PremiumLogo"
 // ======================
 const PremiumBackground: FC = memo(() => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-    {/* Using will-change: opacity to improve rendering performance */}
     <div
       className="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full opacity-15"
       style={{
         background: "radial-gradient(circle, rgba(99,102,241,0.4) 0%, transparent 50%)",
         filter: "blur(80px)",
-        willChange: "opacity" // Ayuda al navegador a optimizar cambios de opacidad
+        willChange: "opacity" // `will-change` puede ayudar al navegador a optimizar las animaciones.
       }}
     />
     <div
@@ -128,7 +124,7 @@ const PremiumBackground: FC = memo(() => (
       style={{
         background: "radial-gradient(circle, rgba(139,92,246,0.3) 0%, transparent 50%)",
         filter: "blur(80px)",
-        willChange: "opacity" // Ayuda al navegador a optimizar cambios de opacidad
+        willChange: "opacity"
       }}
     />
   </div>
@@ -138,8 +134,8 @@ PremiumBackground.displayName = "PremiumBackground"
 // ======================
 // Premium Input Field
 // ======================
-const PremiumInput: FC<{
-  id: keyof FormData
+interface PremiumInputProps {
+  id: "email" | "password" // REFINADO: Tipo más específico para el ID del input.
   type?: string
   label: string
   placeholder: string
@@ -154,12 +150,16 @@ const PremiumInput: FC<{
   showPasswordToggle?: boolean
   showPassword?: boolean
   onTogglePassword?: () => void
-}> = memo(({
+  autoFocus?: boolean
+}
+
+const PremiumInput: FC<PremiumInputProps> = memo(({
   id, type = "text", label, placeholder, value, onChange, onFocus, onBlur,
   error, isActive, icon: Icon, disabled = false, showPasswordToggle = false,
-  showPassword = false, onTogglePassword
+  showPassword = false, onTogglePassword, autoFocus = false
 }) => {
   const inputRef = useRef<HTMLInputElement>(null)
+  const errorId = `${id}-error-message` // ID para el mensaje de error (accesibilidad)
 
   useEffect(() => {
     if (isActive && !disabled && inputRef.current) {
@@ -175,7 +175,7 @@ const PremiumInput: FC<{
         {label}
       </label>
       <div className={`relative transition-all duration-300 ${isActive ? 'transform scale-[1.02]' : ''}`}>
-        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
           <Icon className={`h-5 w-5 transition-colors duration-200 ${
             error ? "text-red-400" : isActive ? "text-indigo-400" : "text-slate-400"
           }`} />
@@ -193,6 +193,9 @@ const PremiumInput: FC<{
           onBlur={onBlur}
           disabled={disabled}
           placeholder={placeholder}
+          autoFocus={autoFocus && !disabled}
+          aria-invalid={!!error} // ACCESIBILIDAD: Indica si el campo es inválido.
+          aria-describedby={error ? errorId : undefined} // ACCESIBILIDAD: Asocia el input con su mensaje de error.
           className={`
             w-full pl-12 pr-${showPasswordToggle ? "12" : "4"} py-3.5
             bg-slate-800/50 backdrop-blur-sm border-2 rounded-xl
@@ -212,27 +215,18 @@ const PremiumInput: FC<{
             type="button"
             onClick={onTogglePassword}
             disabled={disabled}
-            className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-indigo-400 transition-colors duration-200"
+            className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-indigo-400 transition-colors duration-200 z-10"
             aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
           >
             {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
           </button>
         )}
-
-        {/* Elegant focus indicator - optimizado */}
-        {isActive && !error && (
-          <div
-            className="absolute bottom-0 left-0 h-0.5 w-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
-            style={{
-              animation: "slowPulse 2s infinite ease-in-out",
-              willChange: "opacity" // Ayuda al navegador a optimizar esta animación
-            }}
-          />
-        )}
       </div>
 
       {error && (
         <motion.div
+          id={errorId} // ACCESIBILIDAD: ID para aria-describedby.
+          role="alert" // ACCESIBILIDAD: Indica que es un mensaje de alerta.
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center space-x-2 text-sm text-red-400 pt-1"
@@ -255,18 +249,18 @@ const DarkProfessionalButton: FC<{
   disabled: boolean
 }> = memo(({ isLoading, onClick, disabled }) => (
   <motion.button
-    type="button" // Cambiado a button si el form se encarga del submit, o submit si este es el botón principal de envío
-    onClick={onClick} // Puede ser redundante si type="submit" y el form tiene onSubmit
+    type="button" // Es importante que sea "button" si el form se maneja con e.preventDefault() y una función de submit.
+                 // Si fuera "submit", el form lo manejaría directamente.
+    onClick={onClick}
     disabled={disabled}
-    className="group relative w-full overflow-hidden" // overflow-hidden es importante para el efecto shimmer
+    className="group relative w-full overflow-hidden rounded-xl"
     whileHover={{ scale: disabled ? 1 : 1.01 }}
     whileTap={{ scale: disabled ? 1 : 0.99 }}
   >
-    {/* Base button with dark gradient */}
     <div className={`
-      relative w-full py-4 px-8 rounded-xl font-semibold text-base
+      relative w-full py-4 px-8 font-semibold text-base
       bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800
-      border-2 border-slate-700
+      border-2 border-slate-700 rounded-xl 
       text-slate-100
       transition-all duration-500
       ${disabled
@@ -274,7 +268,21 @@ const DarkProfessionalButton: FC<{
         : 'hover:border-slate-600 shadow-lg hover:shadow-xl hover:shadow-slate-900/50'
       }
     `}>
-      {/* Subtle animated gradient overlay */}
+      {/* SUGERENCIA: La animación 'shimmer' podría definirse en tailwind.config.js para mayor coherencia.
+          // tailwind.config.js
+          theme: {
+            extend: {
+              animation: { shimmer: 'shimmer 3s ease-in-out infinite' },
+              keyframes: {
+                shimmer: {
+                  '0%': { transform: 'translateX(-100%) translateZ(0)' },
+                  '100%': { transform: 'translateX(200%) translateZ(0)' },
+                },
+              },
+            },
+          },
+          // Y luego usar `animate-shimmer` aquí.
+      */}
       <div
         className={`absolute inset-0 opacity-0 transition-opacity duration-500 rounded-xl
           ${!disabled && !isLoading ? 'group-hover:opacity-100' : ''}
@@ -282,20 +290,16 @@ const DarkProfessionalButton: FC<{
         style={{
           background: 'linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.1) 50%, transparent 100%)',
           animation: !disabled && !isLoading ? 'shimmer 3s ease-in-out infinite' : 'none',
-          willChange: 'transform, opacity', // Optimización para la animación shimmer
-          transform: 'translateZ(0)' // Promueve la aceleración por hardware
+          willChange: 'transform, opacity', // `will-change` para optimizar animación.
+          transform: 'translateZ(0)' // Promueve la capa a la GPU para animaciones más fluidas.
         }}
       />
-
-      {/* Premium glass effect */}
       <div
         className="absolute inset-0 rounded-xl opacity-50"
         style={{
           background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 50%, rgba(255,255,255,0.02) 100%)'
         }}
       />
-
-      {/* Content */}
       <span className="relative z-10 flex items-center justify-center space-x-3">
         {isLoading ? (
           <>
@@ -310,8 +314,6 @@ const DarkProfessionalButton: FC<{
           </>
         )}
       </span>
-
-      {/* Bottom accent line */}
       <div
         className={`absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent
           transition-opacity duration-500
@@ -319,12 +321,14 @@ const DarkProfessionalButton: FC<{
         `}
       />
     </div>
-
-    {/* CSS animation (ya estaba aquí, solo asegurando que `transform: translateZ(0)` esté en el @keyframes si es necesario) */}
+    {/* El <style jsx> es una forma válida de encapsular estilos específicos del componente.
+        Para proyectos más grandes o si se prefiere una consistencia total con Tailwind,
+        la animación 'shimmer' podría definirse en `tailwind.config.js`.
+    */}
     <style jsx>{`
       @keyframes shimmer {
-        0% { transform: translateX(-100%) translateZ(0); } /* Añadido translateZ(0) para consistencia */
-        100% { transform: translateX(200%) translateZ(0); } /* Añadido translateZ(0) */
+        0% { transform: translateX(-100%) translateZ(0); } /* translateZ(0) para forzar aceleración por hardware */
+        100% { transform: translateX(200%) translateZ(0); }
       }
     `}</style>
   </motion.button>
@@ -345,14 +349,13 @@ const LoginSuccess: FC<{ userName: string }> = memo(({ userName }) => (
       <motion.div
         className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/30 blur-xl"
         animate={{ scale: [1, 1.2, 1] }}
-        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }} // ease: "easeInOut" para suavizar
-        style={{ willChange: "transform" }} // Optimización
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        style={{ willChange: "transform" }}
       />
       <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/30 border-2 border-emerald-500/40 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)]">
         <CheckCircle className="w-12 h-12 text-emerald-400" />
       </div>
     </div>
-
     <div className="space-y-3">
       <h2 className="text-3xl font-bold bg-gradient-to-r from-slate-100 to-emerald-400 bg-clip-text text-transparent">
         ¡Bienvenido de nuevo!
@@ -360,12 +363,11 @@ const LoginSuccess: FC<{ userName: string }> = memo(({ userName }) => (
       <p className="text-xl font-semibold text-slate-100">{userName}</p>
       <p className="text-slate-300">Acceso autorizado correctamente.</p>
     </div>
-
     <motion.div
       className="flex items-center justify-center space-x-2 text-sm text-slate-300"
-      animate={{ x: [0, 5, 0] }} // Animación sutil
+      animate={{ x: [0, 5, 0] }}
       transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-      style={{ willChange: "transform" }} // Optimización
+      style={{ willChange: "transform" }}
     >
       <span>Redirigiendo al panel</span>
       <ArrowRight className="w-4 h-4" />
@@ -375,17 +377,18 @@ const LoginSuccess: FC<{ userName: string }> = memo(({ userName }) => (
 LoginSuccess.displayName = "LoginSuccess"
 
 // ======================
-// Validadores
+// Validadores (Funciones puras, bien estructuradas)
 // ======================
 const validateEmail = (email: string): string | null => {
   if (!email.trim()) return "El correo electrónico es requerido."
-  // Expresión regular mejorada para validación de email
+  // Expresión regular común para validación de email.
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
   return emailRegex.test(email) ? null : "Formato de correo inválido."
 }
 
 const validatePassword = (password: string): string | null => {
   if (!password) return "La contraseña es requerida."
+  // Ejemplo: Mínimo 6 caracteres. Podría ser más complejo.
   return password.length >= 6 ? null : "La contraseña debe tener mínimo 6 caracteres."
 }
 
@@ -393,7 +396,7 @@ const validatePassword = (password: string): string | null => {
 // Main Premium Component
 // ======================
 const PremiumLoginForm: FC = () => {
-  const router = useRouter() // Hook para la navegación
+  const router = useRouter()
   const [formData, setFormData] = useState<FormData>({
     email: "",
     password: "",
@@ -403,42 +406,36 @@ const PremiumLoginForm: FC = () => {
   const [formState, setFormState] = useState<FormState>({
     isLoading: false,
     loginSuccess: false,
-    activeInput: null,
+    activeInput: "email", // Auto-enfocar email al montar.
     showPassword: false,
   })
 
-  const [errors, setErrors] = useState<Partial<FormData & { general?: string }>>({})
+  const [errors, setErrors] = useState<Partial<Record<keyof FormData | "general", string>>>({})
+
 
   const userName = useMemo(() => {
     const localPart = formData.email.split("@")[0] || ""
     return localPart ? localPart.charAt(0).toUpperCase() + localPart.slice(1) : "Usuario"
   }, [formData.email])
 
+  // useCallback para optimizar rendimiento, especialmente si los inputs son componentes memoizados.
   const handleInputChange = useCallback(
     (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.type === "checkbox" ? e.target.checked : e.target.value
       setFormData(prev => ({ ...prev, [field]: value }))
-      // Limpiar error específico cuando el usuario empieza a corregirlo
-      if (errors[field]) {
-        setErrors(prev => {
-          const newErrors = { ...prev }
-          delete newErrors[field]
-          return newErrors
-        })
-      }
-      // Limpiar error general si existe y se modifica algún campo
-      if (errors.general) {
-         setErrors(prev => {
-          const newErrors = { ...prev }
-          delete newErrors.general
-          return newErrors
-        })
-      }
+      
+      // Limpiar errores específicos del campo y errores generales al cambiar el input.
+      setErrors(prevErrors => {
+        const newErrors = { ...prevErrors }
+        if (field in newErrors) delete newErrors[field as keyof FormData]; // Type assertion
+        if (newErrors.general) delete newErrors.general;
+        return newErrors
+      })
     },
-    [errors], // Incluir errors en las dependencias
+    [], // No hay dependencias externas que cambien, setErrors usa la forma de actualizador.
   )
 
-  const handleFocus = useCallback((field: keyof FormData) => {
+  const handleFocus = useCallback((field: "email" | "password") => {
     setFormState(prev => ({ ...prev, activeInput: field }))
   }, [])
 
@@ -446,13 +443,14 @@ const PremiumLoginForm: FC = () => {
     setFormState(prev => ({ ...prev, activeInput: null }))
   }, [])
 
-  const togglePasswordVisibility = useCallback(() => { // Renombrado para claridad
+  const togglePasswordVisibility = useCallback(() => {
     setFormState(prev => ({ ...prev, showPassword: !prev.showPassword }))
   }, [])
 
+  // useCallback para la función de validación.
+  // Depende de formData.email y formData.password, se recalculará si cambian.
   const validateForm = useCallback((): boolean => {
-    const newErrors: Partial<FormData & { general?: string }> = {}
-
+    const newErrors: Partial<Record<keyof FormData | "general", string>> = {}
     const emailError = validateEmail(formData.email)
     if (emailError) newErrors.email = emailError
 
@@ -461,113 +459,118 @@ const PremiumLoginForm: FC = () => {
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
-  }, [formData.email, formData.password]) // Dependencias más específicas
+  }, [formData.email, formData.password])
 
   const handleSubmit = useCallback(async () => {
-    if (!validateForm()) return // Validar primero
-    if (formState.isLoading) return // Evitar envíos múltiples
+    // Prevenir múltiples envíos o envíos sin validación.
+    if (!validateForm() || formState.isLoading) return
 
-    setFormState(prev => ({ ...prev, isLoading: true }))
-    setErrors({}) // Limpiar errores previos
+    setFormState(prev => ({ ...prev, isLoading: true, activeInput: null }))
+    setErrors({}) // Limpiar errores antes del nuevo intento.
 
     try {
       // Simulación de llamada a API
       await new Promise(resolve => setTimeout(resolve, 2000))
 
-      // Aquí iría la lógica real de autenticación.
-      // Si la autenticación es exitosa:
+      // TODO: Implementar lógica de autenticación real.
+      // Ejemplo:
+      // const isAuthenticated = formData.email === "test@example.com" && formData.password === "password123";
+      // if (!isAuthenticated) {
+      //   throw new Error("Credenciales inválidas. Por favor, verifique e intente de nuevo.");
+      // }
+
       setFormState(prev => ({ ...prev, isLoading: false, loginSuccess: true }))
 
-      // Redirigir después de un breve retraso para mostrar el mensaje de éxito
+      // Redirigir después de un breve retraso para mostrar el mensaje de éxito.
       setTimeout(() => {
-        router.push('/dashboard') // Redirección a /dashboard
-      }, 2500) // Ajustar este tiempo según sea necesario
+        router.push('/dashboard') // Ajustar la ruta según sea necesario.
+      }, 2500)
 
     } catch (error) {
-      console.error("Login error:", error) // Loguear el error real
+      console.error("Error de inicio de sesión:", error)
       setErrors({
         general: error instanceof Error ? error.message : "Error de conexión. Intente más tarde.",
       })
       setFormState(prev => ({ ...prev, isLoading: false, loginSuccess: false }))
     }
-  }, [validateForm, formState.isLoading, router, formData.rememberMe]) // Añadir router y formData.rememberMe a dependencias
-
-  // Efecto para manejar el foco inicial o cuando se muestra el formulario
-  const emailInputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (!formState.loginSuccess && emailInputRef.current) {
-      // Podrías querer enfocar el primer campo al montar, o bajo ciertas condiciones
-      // emailInputRef.current.focus(); // Descomentar si se desea auto-foco inicial
-    }
-  }, [formState.loginSuccess]);
+  }, [
+    validateForm, // Esta función ya tiene sus dependencias (formData.email, formData.password)
+    formState.isLoading,
+    router,
+    // formData (o sus partes relevantes si se usaran directamente aquí)
+    // Si la lógica de autenticación usara formData.email, formData.password, formData.rememberMe directamente aquí,
+    // necesitarían ser dependencias. Como están en `validateForm` o serían parte de la llamada API (implícito),
+    // `validateForm` cubre su cambio.
+  ])
 
 
   return (
     <>
+      {/* Estilos globales para el checkbox y responsividad.
+          SUGERENCIA: Para proyectos grandes, los estilos globales podrían ir en un archivo CSS global
+          o ser manejados por plugins de Tailwind si se busca una solución 100% Tailwind.
+      */}
       <style jsx global>{`
-        /* Custom checkbox styling */
-        input[type="checkbox"] {
+        /* Estilo personalizado para checkbox (elegante y profesional) */
+        input[type="checkbox"].form-checkbox {
           appearance: none;
-          width: 18px;
-          height: 18px;
-          border: 2px solid rgb(51 65 85); /* slate-700 - más oscuro */
-          border-radius: 4px;
-          background-color: rgb(15 23 42 / 0.8); /* slate-900 con opacidad */
-          transition: all 0.2s ease-in-out;
+          -webkit-appearance: none;
+          -moz-appearance: none;
+          width: 20px;
+          height: 20px;
+          border: 2px solid rgb(71 85 105); /* slate-600 */
+          border-radius: 6px; /* Esquinas más redondeadas */
+          background-color: rgb(30 41 59 / 0.7); /* slate-800 con opacidad */
+          transition: all 0.25s ease-in-out;
           position: relative;
           cursor: pointer;
-          flex-shrink: 0; /* Evita que se encoja en flex layouts */
+          flex-shrink: 0;
+          display: inline-block;
+          vertical-align: middle;
         }
-
-        input[type="checkbox"]:checked {
+        input[type="checkbox"].form-checkbox:checked {
           background-color: rgb(99 102 241); /* indigo-500 */
-          border-color: rgb(99 102 241); /* indigo-500 */
+          border-color: rgb(99 102 241);
         }
-
-        input[type="checkbox"]:checked::after {
-          content: '✓';
+        input[type="checkbox"].form-checkbox:checked::before {
+          content: '';
           position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          color: white;
-          font-size: 14px;
-          font-weight: bold;
-          line-height: 1; /* Asegura centrado vertical */
+          top: 3px;
+          left: 7px;
+          width: 5px;
+          height: 10px;
+          border: solid white;
+          border-width: 0 2px 2px 0;
+          transform: rotate(45deg);
         }
-
-        input[type="checkbox"]:hover:not(:disabled) {
+        input[type="checkbox"].form-checkbox:hover:not(:disabled) {
           border-color: rgb(129 140 248); /* indigo-400 */
         }
-        
-        input[type="checkbox"]:focus-visible { /* Estilo de foco para accesibilidad */
-          outline: 2px solid rgb(99 102 241);
+        input[type="checkbox"].form-checkbox:focus-visible {
+          outline: 2px solid rgb(99 102 241); /* indigo-500 */
           outline-offset: 2px;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3); /* Sombra de foco más sutil */
+        }
+        input[type="checkbox"].form-checkbox:disabled {
+          border-color: rgb(51 65 85); /* slate-700 */
+          background-color: rgb(51 65 85 / 0.5); /* slate-700 con opacidad */
+          cursor: not-allowed;
+        }
+        input[type="checkbox"].form-checkbox:disabled:checked::before {
+          border-color: rgb(100 116 139); /* slate-500 */
         }
 
-        /* Mobile responsive */
+
+        /* Responsividad móvil */
         @media (max-width: 640px) {
           .login-form-container {
             padding: 2rem 1.5rem; /* Ajustar padding para móviles */
           }
-          /* Podrías querer reducir el tamaño de fuente o espaciado en móviles */
         }
-
-        /* Optimized animations */
-        @keyframes slowPulse {
-          0%, 100% { opacity: 0.8; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.05); }
-        }
-
-        /* Nota: La animación 'shimmer' está definida localmente 
-          en el componente DarkProfessionalButton y no necesita
-          ser global si solo se usa allí. 
-        */
       `}</style>
 
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-[#0a192f] via-[#0d2250] to-[#112d5e] relative overflow-hidden font-sans"> {/* Añadido font-sans como base */}
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-[#0a192f] via-[#0d2250] to-[#112d5e] relative overflow-hidden font-sans antialiased">
         <PremiumBackground />
-
         <motion.main
           className="w-full max-w-lg relative z-10"
           initial={{ opacity: 0, y: 20 }}
@@ -575,35 +578,36 @@ const PremiumLoginForm: FC = () => {
           transition={{ duration: 0.6, ease: "easeOut" }}
         >
           <div className="relative group">
-            {/* Premium glow effect - optimizado para rendimiento */}
+            {/* Efecto de borde brillante al hacer hover sobre el contenedor del formulario */}
             <div
               className="absolute -inset-1 bg-gradient-to-r from-indigo-600/30 via-purple-600/30 to-pink-600/30 rounded-2xl opacity-70 group-hover:opacity-100 transition-opacity duration-700"
               style={{
-                filter: "blur(12px)", // Aumentado un poco el blur para el efecto
-                willChange: "opacity, filter", // Añadido filter a will-change
-                transform: "translateZ(0)" // Promueve aceleración por hardware
+                filter: "blur(12px)",
+                willChange: "opacity, filter",
+                transform: "translateZ(0)" // Promueve a capa GPU
               }}
             />
-
-            <div className="relative bg-[#0a1a2f]/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-800 dark:border-slate-900 rounded-2xl p-8 sm:p-10 shadow-2xl login-form-container"> {/* Bordes más oscuros */}
+            <div className="relative bg-[#0a1a2f]/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-800 dark:border-slate-900 rounded-2xl p-8 sm:p-10 shadow-2xl login-form-container">
               <AnimatePresence mode="wait">
                 {formState.loginSuccess ? (
-                  <LoginSuccess key="success" userName={userName} />
+                  <LoginSuccess key="successView" userName={userName} />
                 ) : (
                   <motion.div
-                    key="form"
+                    key="formView"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    exit={{ opacity: 0, transition: { duration: 0.3 } }} // Transición de salida más rápida
+                    exit={{ opacity: 0, transition: { duration: 0.3 } }}
                     className="space-y-8"
                   >
                     <header className="text-center">
-                      <PremiumLogo className="w-52 sm:w-60 h-auto mx-auto" /> {/* Tamaño responsivo */}
+                      <PremiumLogo className="w-52 sm:w-60 h-auto mx-auto" />
                     </header>
 
-                    <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-6"> {/* Usar form y onSubmit */}
+                    {/* El atributo noValidate en el form previene la validación HTML nativa,
+                        permitiendo que la validación de JS personalizada maneje todo.
+                    */}
+                    <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-6" noValidate>
                       <PremiumInput
-                        // ref={emailInputRef} // Pasar ref al input interno si es necesario, o manejarlo dentro de PremiumInput
                         id="email"
                         type="email"
                         label="Correo Electrónico"
@@ -616,10 +620,11 @@ const PremiumLoginForm: FC = () => {
                         isActive={formState.activeInput === "email"}
                         error={errors.email}
                         disabled={formState.isLoading}
+                        autoFocus // Auto-focus en el campo de email.
                       />
-
                       <PremiumInput
                         id="password"
+                        // type="password" se maneja internamente por showPasswordToggle
                         label="Contraseña"
                         placeholder="Ingrese su contraseña"
                         value={formData.password}
@@ -632,33 +637,35 @@ const PremiumLoginForm: FC = () => {
                         disabled={formState.isLoading}
                         showPasswordToggle
                         showPassword={formState.showPassword}
-                        onTogglePassword={togglePasswordVisibility} // Usar nombre actualizado
+                        onTogglePassword={togglePasswordVisibility}
                       />
 
+                      {/* Mensaje de error general */}
                       {errors.general && (
                         <motion.div
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className="flex items-center space-x-3 p-3 sm:p-4 bg-red-900/30 border border-red-700/40 rounded-xl text-red-300" // Ajuste de colores y padding
+                          role="alert" // ACCESIBILIDAD
+                          className="flex items-center space-x-3 p-3 sm:p-4 bg-red-900/30 border border-red-700/40 rounded-xl text-red-300"
                         >
                           <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-400" />
                           <span className="text-sm">{errors.general}</span>
                         </motion.div>
                       )}
 
-                      <div className="flex flex-col sm:flex-row items-center justify-between pt-2 gap-4 sm:gap-0"> {/* Layout responsivo para checkbox y link */}
-                        <label className="flex items-center space-x-2.5 cursor-pointer group"> {/* Aumentado space-x */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between pt-2 gap-4 sm:gap-0">
+                        <label className="flex items-center space-x-2.5 cursor-pointer group">
                           <input
                             type="checkbox"
-                            name="rememberMe" // Añadido name
+                            name="rememberMe" // Importante para la semántica y manejo del form.
+                            id="rememberMe" // Añadir ID para el label.
                             checked={formData.rememberMe}
                             onChange={handleInputChange("rememberMe")}
                             disabled={formState.isLoading}
-                            className="form-checkbox" // Clase para posible estilizado adicional
+                            className="form-checkbox" // Clase para aplicar estilos personalizados.
                           />
-                          <span className="text-sm text-slate-300 group-hover:text-slate-100 transition-colors">Recordar sesión</span>
+                          <span htmlFor="rememberMe" className="text-sm text-slate-300 group-hover:text-slate-100 transition-colors">Recordar sesión</span>
                         </label>
-
                         <a href="#" className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors duration-200 hover:underline">
                           ¿Olvidó su contraseña?
                         </a>
@@ -666,17 +673,20 @@ const PremiumLoginForm: FC = () => {
 
                       <DarkProfessionalButton
                         isLoading={formState.isLoading}
-                        onClick={handleSubmit} 
-                        // El type="button" es correcto aquí ya que el form tiene su propio onSubmit.
-                        // Si este botón fuera a enviar el formulario directamente y no hubiera <form onSubmit>, sería type="submit".
-                        disabled={formState.isLoading || !!errors.email || !!errors.password} // Deshabilitar si hay errores de campo
+                        onClick={handleSubmit}
+                        disabled={
+                          formState.isLoading ||
+                          !!errors.email || !!errors.password || // Deshabilitar si hay errores de validación.
+                          !formData.email || !formData.password // Deshabilitar si los campos requeridos están vacíos.
+                        }
                       />
                     </form>
 
-                    <footer className="text-center pt-6 border-t border-slate-900"> {/* Borde mucho más oscuro */}
-                      <p className="text-xs text-slate-400/80"> {/* Texto un poco más tenue */}
+                    <footer className="text-center pt-6 border-t border-slate-900 dark:border-slate-700/50">
+                      <p className="text-xs text-slate-400/80">
                         &copy; {new Date().getFullYear()} Clínica de Hernia y Vesícula. Todos los derechos reservados.
                       </p>
+                      {/* Podrías añadir un enlace a políticas de privacidad o términos de servicio aquí. */}
                     </footer>
                   </motion.div>
                 )}
