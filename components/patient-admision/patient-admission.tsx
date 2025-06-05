@@ -134,17 +134,44 @@ const dateUtils = {
 }
 
 // Adaptador optimizado y memoizado
-const adaptAppointmentData = (appointment: AppointmentData): Appointment => ({
-  id: appointment.id,
-  nombre: appointment.paciente?.split(' ')[0] || 'Sin nombre',
-  apellidos: appointment.paciente?.split(' ').slice(1).join(' ') || 'Sin apellido',
-  telefono: appointment.telefono || '',
-  fechaConsulta: appointment.fechaConsulta,
-  horaConsulta: appointment.horaConsulta as FormattedTimeString,
-  motivoConsulta: appointment.motivoConsulta || '',
-  estado: appointment.estado as unknown as AppointmentStatusEnum,
-  patientId: appointment.patientId
-})
+const adaptAppointmentData = (appointment: AppointmentData): Appointment => {
+  // Para cada appointment, paciente es un string que contiene el nombre completo
+  // Necesitamos extraer el nombre y apellidos de manera adecuada
+  let nombre = 'Sin nombre';
+  let apellidos = 'Sin apellido';
+  
+  if (appointment.paciente) {
+    // Intentar primero con un enfoque más conservador que preserve nombres compuestos
+    const nombreCompleto = appointment.paciente.trim();
+    
+    // Si hay al menos un espacio, dividimos en primer nombre y resto
+    if (nombreCompleto.includes(' ')) {
+      const primerEspacio = nombreCompleto.indexOf(' ');
+      nombre = nombreCompleto.substring(0, primerEspacio);
+      apellidos = nombreCompleto.substring(primerEspacio + 1);
+    } else {
+      // Si no hay espacios, todo es nombre
+      nombre = nombreCompleto;
+      apellidos = '';
+    }
+  }
+  
+  // Si tenemos nombres vacíos después del procesamiento, usar valores predeterminados
+  if (!nombre || nombre.trim() === '') nombre = 'Sin nombre';
+  if (!apellidos || apellidos.trim() === '') apellidos = 'Sin apellido';
+  
+  return {
+    id: appointment.id,
+    nombre,
+    apellidos,
+    telefono: appointment.telefono || '',
+    fechaConsulta: appointment.fechaConsulta,
+    horaConsulta: appointment.horaConsulta as FormattedTimeString,
+    motivoConsulta: appointment.motivoConsulta || '',
+    estado: appointment.estado as unknown as AppointmentStatusEnum,
+    patientId: appointment.patientId
+  };
+}
 
 // Badge de estado optimizado
 const AppointmentStatusBadge: FC<{ status: AppointmentStatus }> = memo(({ status }) => {

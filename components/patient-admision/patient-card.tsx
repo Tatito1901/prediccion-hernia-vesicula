@@ -281,44 +281,63 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(
     onStartSurvey,
     onViewHistory,
   }) => {
+    // Extraemos directamente los campos necesarios de appointment
     const {
-      id, // Appointment's own ID
-      paciente: pacienteFullName, // Patient's full name string from AppointmentData
+      id, 
       telefono,
-      patientId, // Patient's actual ID from AppointmentData
+      patientId,
       fechaConsulta,
       horaConsulta,
       motivoConsulta,
       estado,
-      // surveyStatus, // Potentially from AppointmentData if needed later
-      // patientSurveys, // Potentially from AppointmentData if needed later
-    } = appointment; // appointment is AppointmentData
+      paciente: pacienteFullName, // El nombre completo del paciente
+    } = appointment;
     
-    // Separar nombre y apellidos
+    // Obtenemos nombre y apellidos, con lógica de respaldo en caso de que
+    // este componente se use directamente con datos sin procesar
     const { nombre, apellidos } = useMemo(() => {
-      // Registrar el valor recibido para depuración
-      console.log('Valor de pacienteFullName recibido en tarjeta:', pacienteFullName);
+      // Verificamos primero si estas propiedades ya vienen en appointment (desde adaptAppointmentData)
+      if ('nombre' in appointment && 'apellidos' in appointment && 
+          typeof appointment.nombre === 'string' && typeof appointment.apellidos === 'string') {
+        return { 
+          nombre: appointment.nombre || 'Sin nombre', 
+          apellidos: appointment.apellidos || 'Sin apellido' 
+        };
+      }
       
       // Caso: Valor vacío o indefinido
       if (!pacienteFullName) {
         return { nombre: 'Sin Datos', apellidos: 'de Paciente' };
       }
       
-      // Mantener la información de ID, si está presente
-      if (pacienteFullName.startsWith('Paciente ID:')) {
+      // Si el campo paciente contiene información de ID
+      if (typeof pacienteFullName === 'string' && pacienteFullName.startsWith('Paciente ID:')) {
         const parts = pacienteFullName.split('ID:');
-        return { nombre: 'Paciente ID:', apellidos: parts[1].trim() };
+        return { nombre: 'Paciente ID:', apellidos: parts[1]?.trim() || '' };
       }
       
-      // Ya no necesitamos esta condicional porque el nombre real viene en pacienteFullName
-      // directamente desde transformAppointmentData, que maneja correctamente los datos
-      // de paciente, ya sea desde patients o patient en la respuesta API
+      // Procesamiento para obtener nombre y apellidos del nombre completo
+      if (typeof pacienteFullName === 'string') {
+        const nombreCompleto = pacienteFullName.trim();
+        
+        // Si hay al menos un espacio, dividimos por primer nombre y resto
+        if (nombreCompleto.includes(' ')) {
+          const primerEspacio = nombreCompleto.indexOf(' ');
+          const nombre = nombreCompleto.substring(0, primerEspacio);
+          const apellidos = nombreCompleto.substring(primerEspacio + 1);
+          return { nombre, apellidos };
+        }
+        
+        // Si no hay espacios, todo es nombre
+        return { nombre: nombreCompleto, apellidos: '' };
+      }
       
-      // Procesamiento normal para nombres completos
-      const parts = pacienteFullName.split(' ');
-      if (parts.length === 1) return { nombre: parts[0], apellidos: '' };
-      return { nombre: parts[0], apellidos: parts.slice(1).join(' ') };
-    }, [pacienteFullName]);
+      // Caso por defecto
+      return { nombre: 'Sin nombre', apellidos: 'Sin apellido' };
+    }, [appointment, pacienteFullName]);
+    
+    // Para depuración
+    console.log('Mostrando paciente:', { pacienteFullName, nombre, apellidos });
 
     // Determinar si la cita se considera "pasada"
     const isPast = useMemo(
