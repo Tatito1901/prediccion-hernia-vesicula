@@ -14,15 +14,6 @@ import {
   TableCell,
 } from "@/components/ui/table"
 import { TableSkeleton } from "@/components/tables/table-skeleton"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValue,
-} from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -47,32 +38,35 @@ import {
   AlertCircle,
   Eye,
   CalendarDays,
-  Filter,
   FileText as FileTextIcon,
   Phone,
   BriefcaseMedical,
   User,
-  Search,
-  X,
 } from "lucide-react"
 import PatientStatus from "./patient-status"
 import { cn } from "@/lib/utils"
 import { PatientData, PatientStatusEnum } from "@/app/dashboard/data-model"
+import { Button } from "@/components/ui/button"
+
+// Interfaz para datos enriquecidos de pacientes (debe coincidir con PatientManagement)
+export interface EnrichedPatientData extends PatientData {
+  nombreCompleto: string
+  fecha_proxima_cita?: string
+  encuesta_completada: boolean
+  displayDiagnostico: string
+  // Campos críticos para la tabla de historial
+  diagnostico_principal: string
+  edad?: number
+  fecha_registro: string
+}
 
 interface PatientTableProps {
-  patients: ItemType[]
+  patients: EnrichedPatientData[]
   loading?: boolean
   onSelectPatient: (patient: PatientData) => void
   onShareSurvey?: (patient: PatientData) => void
   onAnswerSurvey?: (patient: PatientData) => void
   onEditPatient?: (patient: PatientData) => void
-}
-
-export type ItemType = PatientData & {
-  nombreCompleto: string
-  fecha_proxima_cita?: string
-  encuesta_completada?: boolean
-  displayDiagnostico?: string
 }
 
 type SortableColumnKey =
@@ -82,13 +76,13 @@ type SortableColumnKey =
   | "estado_paciente"
   | "encuesta_completada"
   | "fecha_registro"
+  | "edad"
 
 type TableColumnKey =
   | "nombre"
-  | "telefono"
+  | "edad"
   | "fechaConsulta"
   | "diagnostico_principal"
-  | "notas_paciente"
   | "estado"
   | "encuesta"
   | "acciones"
@@ -98,7 +92,7 @@ interface SortConfig {
   direction: "asc" | "desc"
 }
 
-interface Column<T extends ItemType> {
+interface Column<T extends EnrichedPatientData> {
   key: TableColumnKey
   label: string
   icon?: React.ReactNode
@@ -106,13 +100,16 @@ interface Column<T extends ItemType> {
   hideBelow?: "sm" | "md" | "lg" | "xl"
   align?: "left" | "center" | "right"
   renderCell: (item: T) => React.ReactNode
+  sortable?: boolean
 }
 
 const TABLE_KEY_TO_SORTABLE_KEY: Partial<
   Record<TableColumnKey, SortableColumnKey>
 > = {
   nombre: "nombreCompleto",
+  edad: "edad",
   fechaConsulta: "fecha_registro",
+  fechaRevision: "fecha_proxima_cita",
   diagnostico_principal: "diagnostico_principal",
   estado: "estado_paciente",
   encuesta: "encuesta_completada",
@@ -135,21 +132,23 @@ const PatientTableComponent: React.FC<PatientTableProps> = ({
   onAnswerSurvey,
   onEditPatient,
 }) => {
-  const router = useRouter()
-
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState<PatientStatusEnum | "all">("all")
+  // Debug: Verificar datos de pacientes
+  console.log("PATIENT_TABLE DEBUG: Datos recibidos:", {
+    totalPatients: patients?.length || 0,
+    samplePatient: patients?.[0] ? {
+      id: patients[0].id,
+      nombreCompleto: patients[0].nombreCompleto,
+      edad: patients[0].edad,
+      diagnostico_principal: patients[0].diagnostico_principal,
+      fecha_registro: patients[0].fecha_registro,
+      encuesta_completada: patients[0].encuesta_completada
+    } : null
+  });
+  
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "fecha_registro",
     direction: "desc",
   })
-  const [showFilters, setShowFilters] = useState(false)
-
-  // Obtener opciones de estado del enum
-  const statusOptions = useMemo(
-    () => ["all", ...Object.values(PatientStatusEnum)] as const,
-    []
-  )
 
   const toggleSort = useCallback((key: SortableColumnKey) => {
     setSortConfig((prev) => ({
@@ -159,39 +158,15 @@ const PatientTableComponent: React.FC<PatientTableProps> = ({
     }))
   }, [])
 
-  // Procesamiento optimizado de pacientes
+  // Procesamiento optimizado de pacientes con ordenamiento
   const processedPatients = useMemo(() => {
     if (loading || !patients) return []
 
-    const mapped = patients.map((patient) => ({
-      ...patient,
-      displayDiagnostico: patient.diagnostico_principal || "Sin diagnóstico"
-    }))
-
-    // Filtrado por búsqueda
-    let filtered = mapped
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      filtered = filtered.filter((p) => {
-        return (
-          p.nombreCompleto?.toLowerCase().includes(term) ||
-          p.telefono?.toLowerCase().includes(term) ||
-          p.diagnostico_principal?.toLowerCase().includes(term) ||
-          p.email?.toLowerCase().includes(term)
-        )
-      })
-    }
-
-    // Filtrado por estado
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((p) => p.estado_paciente === statusFilter)
-    }
-
-    // Ordenamiento
+    // Ordenamiento optimizado
     const { key, direction } = sortConfig
     const asc = direction === "asc"
 
-    return [...filtered].sort((a, b) => {
+    return [...patients].sort((a, b) => {
       const valA = a[key]
       const valB = b[key]
 
@@ -220,230 +195,257 @@ const PatientTableComponent: React.FC<PatientTableProps> = ({
       const strB = String(valB).toLowerCase()
       return asc ? strA.localeCompare(strB) : strB.localeCompare(strA)
     })
-  }, [patients, loading, searchTerm, statusFilter, sortConfig])
+  }, [patients, loading, sortConfig])
 
-  // Definición de columnas con renderizado optimizado
-  const columns = useMemo<Column<ItemType>[]>(
-    () => [
-      {
-        key: "nombre",
-        label: "Nombre",
-        icon: <User className="h-4 w-4" />,
-        widthClass: "min-w-[180px] max-w-[300px]",
-        renderCell: (p) => (
-          <div className="flex flex-col gap-0.5">
-            <button
-              onClick={() => onSelectPatient(p)}
-              className="font-semibold text-left hover:underline text-blue-700 dark:text-blue-400 truncate transition-colors"
-            >
-              {normalizarTexto(p.nombreCompleto)}
-            </button>
-            <span className="text-xs text-muted-foreground">
-              ID: {p.id.slice(0, 8)}
-              {p.edad && ` • ${p.edad} años`}
-            </span>
-          </div>
-        ),
-      },
-      {
-        key: "telefono",
-        label: "Teléfono",
-        icon: <Phone className="h-4 w-4" />,
-        widthClass: "w-[140px]",
-        hideBelow: "lg",
-        renderCell: (p) => (
-          <a 
-            href={`tel:${p.telefono}`} 
-            className="text-sm text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-            onClick={(e) => e.stopPropagation()}
+  // Definición de columnas optimizada - TODAS las columnas críticas SIEMPRE visibles
+  const columns = useMemo<Column<EnrichedPatientData>[]>(() => [
+    {
+      key: "nombre",
+      label: "Nombre",
+      icon: <User className="h-4 w-4" />,
+      widthClass: "min-w-[180px] max-w-[250px]",
+      sortable: true,
+      renderCell: (patient: EnrichedPatientData) => (
+        <div className="flex flex-col gap-0.5">
+          <button
+            onClick={() => onSelectPatient(patient)}
+            className="font-semibold text-left hover:underline text-blue-700 dark:text-blue-400 truncate transition-colors"
           >
-            {p.telefono || "-"}
-          </a>
-        ),
-      },
-      {
-        key: "fechaConsulta",
-        label: "Registro",
-        icon: <CalendarDays className="h-4 w-4" />,
-        widthClass: "w-[120px]",
-        hideBelow: "md",
-        renderCell: (p) => (
-          <span className="text-sm text-slate-600 dark:text-slate-400">
-            {p.fecha_registro
-              ? new Date(p.fecha_registro).toLocaleDateString("es-ES", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })
-              : "-"}
+            {normalizarTexto(patient.nombreCompleto)}
+          </button>
+          <span className="text-xs text-muted-foreground">
+            ID: {patient.id.slice(0, 8)}
           </span>
-        ),
-      },
-      {
-        key: "diagnostico_principal",
-        label: "Diagnóstico",
-        icon: <BriefcaseMedical className="h-4 w-4" />,
-        widthClass: "min-w-[140px] max-w-[240px]",
-        hideBelow: "md",
-        renderCell: (p) => (
+        </div>
+      ),
+    },
+    {
+      key: "edad",
+      label: "Edad",
+      widthClass: "w-[90px]",
+      sortable: true,
+      // SIEMPRE VISIBLE - Sin hideBelow
+      renderCell: (patient: EnrichedPatientData) => (
+        <div className="text-center">
+          <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">
+            {patient.edad ? `${patient.edad}` : "N/D"}
+          </span>
+          {patient.edad && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">años</p>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "diagnostico_principal",
+      label: "Diagnóstico / Motivo",
+      icon: <BriefcaseMedical className="h-4 w-4" />,
+      widthClass: "min-w-[200px] max-w-[320px]",
+      sortable: true,
+      // SIEMPRE VISIBLE - Sin hideBelow
+      renderCell: (patient: EnrichedPatientData) => {
+        const diagnostico = normalizarTexto(patient.diagnostico_principal)
+        let badgeColor = "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
+        
+        // Códigos de color por especialidad médica
+        if (diagnostico.includes("HERNIA")) {
+          badgeColor = "bg-blue-50 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border border-blue-200"
+        } else if (diagnostico.includes("COLE")) {
+          badgeColor = "bg-purple-50 text-purple-800 dark:bg-purple-900 dark:text-purple-200 border border-purple-200"
+        } else if (diagnostico.includes("EVENTRA")) {
+          badgeColor = "bg-amber-50 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border border-amber-200"
+        } else if (diagnostico.includes("APENDICITIS")) {
+          badgeColor = "bg-red-50 text-red-800 dark:bg-red-900 dark:text-red-200 border border-red-200"
+        } else if (diagnostico.includes("LIPOMA")) {
+          badgeColor = "bg-green-50 text-green-800 dark:bg-green-900 dark:text-green-200 border border-green-200"
+        } else if (diagnostico.includes("QUISTE")) {
+          badgeColor = "bg-orange-50 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border border-orange-200"
+        }
+        
+        return (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-sm text-slate-600 dark:text-slate-400 block truncate cursor-help">
-                  {normalizarTexto(p.displayDiagnostico)}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span 
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-semibold cursor-help truncate max-w-[280px] block",
+                      badgeColor
+                    )}
+                  >
+                    {diagnostico || "Sin diagnóstico"}
+                  </span>
+                </div>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
-                <p className="text-sm">{normalizarTexto(p.displayDiagnostico)}</p>
+                <p className="text-sm font-medium">Motivo de consulta:</p>
+                <p className="text-sm">{diagnostico || "Sin diagnóstico especificado"}</p>
+                {patient.diagnostico_principal_detalle && (
+                  <p className="text-xs mt-1 text-muted-foreground">{normalizarTexto(patient.diagnostico_principal_detalle)}</p>
+                )}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-        ),
+        )
       },
-      {
-        key: "notas_paciente",
-        label: "Notas",
-        icon: <FileTextIcon className="h-4 w-4" />,
-        widthClass: "max-w-[200px]",
-        hideBelow: "xl",
-        renderCell: (p) => {
-          if (!p.notas_paciente) {
-            return (
-              <span className="text-slate-400 italic text-sm">
-                Sin notas
-              </span>
-            )
-          }
-          const texto = normalizarTexto(p.notas_paciente)
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <p className="text-sm truncate cursor-help">
-                    {texto}
-                  </p>
-                </TooltipTrigger>
-                <TooltipContent
-                  align="start"
-                  className="max-w-xs whitespace-normal break-words"
-                >
-                  {texto}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )
-        },
-      },
-      {
-        key: "estado",
-        label: "Estado",
-        widthClass: "w-[180px]",
-        renderCell: (p) => (
-          <PatientStatus
-            status={p.estado_paciente || PatientStatusEnum.PENDIENTE_DE_CONSULTA}
-            surveyCompleted={p.encuesta_completada}
-          />
-        ),
-      },
-      {
-        key: "encuesta",
-        label: "Encuesta",
-        align: "center",
-        widthClass: "w-[100px]",
-        renderCell: (p) => {
-          let icon: React.ReactNode, tooltip: string, colorClass: string
+    },
+    {
+      key: "fechaConsulta",
+      label: "Fecha de Atención",
+      icon: <CalendarDays className="h-4 w-4" />,
+      widthClass: "w-[140px]",
+      sortable: true,
+      // SIEMPRE VISIBLE - Sin hideBelow
+      renderCell: (patient: EnrichedPatientData) => (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex flex-col gap-0.5 text-center">
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  {patient.fecha_registro
+                    ? new Date(patient.fecha_registro).toLocaleDateString("es-ES", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "2-digit",
+                      })
+                    : "No registrada"}
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded">
+                  {patient.fecha_registro
+                    ? new Date(patient.fecha_registro).toLocaleDateString("es-ES", {
+                        weekday: "short",
+                      })
+                    : "-"}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p className="text-sm font-medium">Fecha de primera atención</p>
+              <p className="text-sm">
+                {patient.fecha_registro
+                  ? new Date(patient.fecha_registro).toLocaleDateString("es-ES", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })
+                  : "Fecha no registrada"}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ),
+    },
+    {
+      key: "estado",
+      label: "Estado",
+      widthClass: "w-[160px]",
+      sortable: true,
+      renderCell: (patient: EnrichedPatientData) => (
+        <PatientStatus
+          status={patient.estado_paciente || PatientStatusEnum.PENDIENTE_DE_CONSULTA}
+          surveyCompleted={patient.encuesta_completada}
+        />
+      ),
+    },
+    {
+      key: "encuesta",
+      label: "Encuesta",
+      align: "center",
+      widthClass: "w-[100px]",
+      sortable: true,
+      renderCell: (patient) => {
+        let icon: React.ReactNode, tooltip: string, colorClass: string
 
-          if (p.encuesta_completada) {
-            icon = <CheckCircle2 className="h-5 w-5" />
-            tooltip = "Encuesta completada"
-            colorClass = "text-green-600 dark:text-green-500"
-          } else if (p.encuesta?.id) {
-            icon = <ClipboardList className="h-5 w-5" />
-            tooltip = "Encuesta enviada"
-            colorClass = "text-blue-600 dark:text-blue-500"
-          } else {
-            icon = <AlertCircle className="h-5 w-5" />
-            tooltip = "Encuesta pendiente"
-            colorClass = "text-amber-600 dark:text-amber-500"
-          }
+        if (patient.encuesta_completada) {
+          icon = <CheckCircle2 className="h-5 w-5" />
+          tooltip = "Encuesta completada"
+          colorClass = "text-green-600 dark:text-green-500"
+        } else if (patient.encuesta?.id) {
+          icon = <ClipboardList className="h-5 w-5" />
+          tooltip = "Encuesta enviada"
+          colorClass = "text-blue-600 dark:text-blue-500"
+        } else {
+          icon = <AlertCircle className="h-5 w-5" />
+          tooltip = "Encuesta pendiente"
+          colorClass = "text-amber-600 dark:text-amber-500"
+        }
 
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <span className={cn("transition-colors", colorClass)}>
-                    {icon}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {tooltip}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )
-        },
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <span className={cn("transition-colors", colorClass)}>
+                  {icon}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {tooltip}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )
       },
-      {
-        key: "acciones",
-        label: "Acciones",
-        align: "right",
-        widthClass: "w-[80px]",
-        renderCell: (p) => (
-          <div className="flex justify-end">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">Acciones</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
+    },
+    {
+      key: "acciones",
+      label: "Acciones",
+      align: "right",
+      widthClass: "w-[80px]",
+      renderCell: (patient: EnrichedPatientData) => (
+        <div className="flex justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">Acciones</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onClick={() => onSelectPatient(patient)}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Eye className="h-4 w-4" /> Ver detalles
+              </DropdownMenuItem>
+              {onEditPatient && (
                 <DropdownMenuItem
-                  onClick={() => onSelectPatient(p)}
+                  onClick={() => onEditPatient(patient)}
                   className="flex items-center gap-2 cursor-pointer"
                 >
-                  <Eye className="h-4 w-4" /> Ver detalles
+                  <Edit className="h-4 w-4" /> Editar paciente
                 </DropdownMenuItem>
-                {onEditPatient && (
-                  <DropdownMenuItem
-                    onClick={() => onEditPatient(p)}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <Edit className="h-4 w-4" /> Editar paciente
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                {onAnswerSurvey && !p.encuesta_completada && (
-                  <DropdownMenuItem
-                    onClick={() => onAnswerSurvey(p)}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <ClipboardList className="h-4 w-4" /> Contestar encuesta
-                  </DropdownMenuItem>
-                )}
-                {onShareSurvey && !p.encuesta_completada && (
-                  <DropdownMenuItem
-                    onClick={() => onShareSurvey(p)}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <Share2 className="h-4 w-4" /> Compartir encuesta
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ),
-      },
-    ],
-    [onSelectPatient, onEditPatient, onAnswerSurvey, onShareSurvey]
-  )
+              )}
+              <DropdownMenuSeparator />
+              {onAnswerSurvey && !patient.encuesta_completada && (
+                <DropdownMenuItem
+                  onClick={() => onAnswerSurvey(patient)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <ClipboardList className="h-4 w-4" /> Contestar encuesta
+                </DropdownMenuItem>
+              )}
+              {onShareSurvey && !patient.encuesta_completada && (
+                <DropdownMenuItem
+                  onClick={() => onShareSurvey(patient)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Share2 className="h-4 w-4" /> Compartir encuesta
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ], [onSelectPatient, onEditPatient, onAnswerSurvey, onShareSurvey])
 
-  // Componente de fila de tabla memoizado
-  const TableRowItem = memo(({ patient }: { patient: ItemType }) => (
+  // Componente de fila memoizado
+  const TableRowItem = memo(({ patient }: { patient: EnrichedPatientData }) => (
     <TableRow 
       className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
       onClick={() => onSelectPatient(patient)}
@@ -467,52 +469,30 @@ const PatientTableComponent: React.FC<PatientTableProps> = ({
   ))
   TableRowItem.displayName = "TableRowItem"
 
-  // Componente de tarjeta móvil mejorado
-  const MobileCard = memo(({ patient }: { patient: ItemType }) => (
+  // Componente de tarjeta móvil optimizado - HISTORIAL MÉDICO COMPLETO
+  const MobileCard = memo(({ patient }: { patient: EnrichedPatientData }) => (
     <div 
-      className="bg-white dark:bg-slate-900 shadow-sm hover:shadow-md rounded-lg p-4 mb-3 last:mb-0 transition-all cursor-pointer border border-slate-200 dark:border-slate-800"
+      className="bg-white dark:bg-slate-900 shadow-md hover:shadow-lg rounded-xl p-5 mb-4 transition-all cursor-pointer border border-slate-200 dark:border-slate-800"
       onClick={() => onSelectPatient(patient)}
     >
-      <div className="flex justify-between items-start gap-3">
+      {/* Header del paciente */}
+      <div className="flex justify-between items-start gap-3 mb-4">
         <div className="flex-1 min-w-0">
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 truncate">
-            {normalizarTexto(patient.nombreCompleto)}
-          </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            ID: {patient.id.slice(0, 8)}
-            {patient.edad && ` • ${patient.edad} años`}
-          </p>
-          <div className="mt-3 space-y-1.5">
-            {patient.telefono && (
-              <a 
-                href={`tel:${patient.telefono}`}
-                className="text-sm text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1.5"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Phone className="h-3.5 w-3.5" />
-                {patient.telefono}
-              </a>
-            )}
-            <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-              <CalendarDays className="h-3.5 w-3.5" />
-              {patient.fecha_registro
-                ? new Date(patient.fecha_registro).toLocaleDateString("es-ES", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })
-                : "Sin fecha"}
-            </p>
-            {patient.diagnostico_principal && (
-              <p className="text-sm text-slate-600 dark:text-slate-400 flex items-start gap-1.5">
-                <BriefcaseMedical className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                <span className="line-clamp-2">
-                  {normalizarTexto(patient.diagnostico_principal)}
-                </span>
-              </p>
+          <div className="flex items-center gap-3 mb-2">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
+              {normalizarTexto(patient.nombreCompleto)}
+            </h3>
+            {patient.edad && (
+              <span className="text-sm bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full font-bold border border-blue-200">
+                {patient.edad} años
+              </span>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            ID: {patient.id.slice(0, 8)}
+          </p>
         </div>
+
         <div className="flex flex-col items-end gap-2" onClick={(e) => e.stopPropagation()}>
           <PatientStatus
             status={patient.estado_paciente || PatientStatusEnum.PENDIENTE_DE_CONSULTA}
@@ -568,15 +548,83 @@ const PatientTableComponent: React.FC<PatientTableProps> = ({
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Información crítica del historial médico */}
+      <div className="grid grid-cols-1 gap-3">
+        {/* Fecha de atención - PROMINENTE */}
+        <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="p-2 bg-blue-500 rounded-lg">
+            <CalendarDays className="h-4 w-4 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold uppercase tracking-wide">Fecha de Atención</p>
+            <p className="text-sm font-bold text-blue-900 dark:text-blue-200">
+              {patient.fecha_registro
+                ? new Date(patient.fecha_registro).toLocaleDateString("es-ES", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                    weekday: "long",
+                  })
+                : "No registrada"}
+            </p>
+          </div>
+        </div>
+
+        {/* Diagnóstico/Motivo - PROMINENTE */}
+        {patient.diagnostico_principal && (
+          <div className="flex items-start gap-3 p-3 bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/30 rounded-lg border border-purple-200 dark:border-purple-800">
+            <div className="p-2 bg-purple-500 rounded-lg">
+              <BriefcaseMedical className="h-4 w-4 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-purple-600 dark:text-purple-400 font-semibold uppercase tracking-wide">Motivo de Consulta</p>
+              <p className="text-sm font-bold text-purple-900 dark:text-purple-200 line-clamp-2">
+                {normalizarTexto(patient.diagnostico_principal)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Estado de encuesta */}
+        <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2">
+            {patient.encuesta_completada ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <span className="text-sm font-semibold text-green-700 dark:text-green-300">Encuesta Completada</span>
+              </>
+            ) : (
+              <>
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">Encuesta Pendiente</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Próxima revisión si existe */}
+        {patient.fecha_proxima_cita && (
+          <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 rounded-lg border border-green-200 dark:border-green-800">
+            <div className="p-2 bg-green-500 rounded-lg">
+              <CalendarDays className="h-4 w-4 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-green-600 dark:text-green-400 font-semibold uppercase tracking-wide">Próxima Revisión</p>
+              <p className="text-sm font-bold text-green-900 dark:text-green-200">
+                {new Date(patient.fecha_proxima_cita).toLocaleDateString("es-ES", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   ))
   MobileCard.displayName = "MobileCard"
-
-  // Limpiar filtros
-  const clearFilters = useCallback(() => {
-    setSearchTerm("")
-    setStatusFilter("all")
-  }, [])
 
   if (loading) {
     return <TableSkeleton rows={8} columns={columns.length} />
@@ -584,84 +632,6 @@ const PatientTableComponent: React.FC<PatientTableProps> = ({
 
   return (
     <div className="bg-white dark:bg-slate-950 shadow-sm rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800">
-      {/* Toolbar mejorado */}
-      <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-        {/* Barra principal */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowFilters(!showFilters)}
-              className={cn(
-                "transition-colors",
-                showFilters && "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-800"
-              )}
-            >
-              <Filter className="h-4 w-4" />
-            </Button>
-            
-            <Select
-              value={statusFilter}
-              onValueChange={(val) => setStatusFilter(val as PatientStatusEnum | "all")}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Filtrar por estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                {statusOptions.slice(1).map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="text-sm text-slate-600 dark:text-slate-400 font-medium whitespace-nowrap">
-            {processedPatients.length} paciente{processedPatients.length !== 1 && "s"}
-          </div>
-        </div>
-        
-        {/* Filtros activos */}
-        {(searchTerm || statusFilter !== "all") && (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-sm text-slate-600 dark:text-slate-400">Filtros activos:</span>
-            {searchTerm && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-xs">
-                Búsqueda: "{searchTerm}"
-                <button
-                  onClick={() => setSearchTerm("")}
-                  className="ml-1 hover:text-blue-900 dark:hover:text-blue-100"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-            {statusFilter !== "all" && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-xs">
-                Estado: {statusFilter.replace(/_/g, " ").toLowerCase()}
-                <button
-                  onClick={() => setStatusFilter("all")}
-                  className="ml-1 hover:text-blue-900 dark:hover:text-blue-100"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearFilters}
-              className="h-7 text-xs"
-            >
-              Limpiar todo
-            </Button>
-          </div>
-        )}
-      </div>
-
       {/* Vista Desktop - Tabla */}
       <div className="hidden md:block overflow-x-auto">
         <Table>
@@ -670,28 +640,31 @@ const PatientTableComponent: React.FC<PatientTableProps> = ({
               {columns.map((col) => {
                 const sortableKey = TABLE_KEY_TO_SORTABLE_KEY[col.key]
                 const isSorted = sortableKey === sortConfig.key
+                const canSort = col.sortable && sortableKey
+                
                 return (
                   <TableHead
                     key={col.key}
                     className={cn(
-                      "text-xs font-medium uppercase tracking-wider select-none",
+                      "text-xs font-bold uppercase tracking-wider select-none bg-slate-50 dark:bg-slate-900",
                       col.widthClass,
+                      // NUNCA ocultar las columnas críticas
                       col.hideBelow && `hidden ${col.hideBelow}:table-cell`,
                       col.align === "center" && "text-center",
                       col.align === "right" && "text-right",
-                      sortableKey && "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                      canSort && "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     )}
-                    onClick={sortableKey ? () => toggleSort(sortableKey) : undefined}
+                    onClick={canSort ? () => toggleSort(sortableKey) : undefined}
                   >
                     <div
-                      className={cn("inline-flex items-center gap-1.5", {
+                      className={cn("inline-flex items-center gap-1.5 py-2", {
                         "justify-center": col.align === "center",
                         "justify-end": col.align === "right",
                       })}
                     >
                       {col.icon}
-                      <span>{col.label}</span>
-                      {sortableKey && (
+                      <span className="font-bold">{col.label}</span>
+                      {canSort && (
                         <>
                           {isSorted ? (
                             sortConfig.direction === "asc" ? (
@@ -722,24 +695,16 @@ const PatientTableComponent: React.FC<PatientTableProps> = ({
                 >
                   <div className="flex flex-col items-center gap-3">
                     <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-full">
-                      <Filter className="h-8 w-8 text-slate-400 dark:text-slate-500" />
+                      <BriefcaseMedical className="h-8 w-8 text-slate-400 dark:text-slate-500" />
                     </div>
                     <div>
                       <p className="font-medium text-slate-900 dark:text-slate-100">
-                        No se encontraron pacientes
+                        No hay registros de atención médica
                       </p>
                       <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        {searchTerm || statusFilter !== "all" 
-                          ? "Prueba con otros términos o ajusta los filtros"
-                          : "No hay pacientes registrados"
-                        }
+                        Los pacientes atendidos aparecerán aquí con su historial completo
                       </p>
                     </div>
-                    {(searchTerm || statusFilter !== "all") && (
-                      <Button variant="outline" size="sm" onClick={clearFilters}>
-                        Limpiar filtros
-                      </Button>
-                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -757,24 +722,16 @@ const PatientTableComponent: React.FC<PatientTableProps> = ({
         {processedPatients.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-8">
             <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-full">
-              <Filter className="h-8 w-8 text-slate-400 dark:text-slate-500" />
+              <BriefcaseMedical className="h-8 w-8 text-slate-400 dark:text-slate-500" />
             </div>
             <div className="text-center">
               <p className="font-medium text-slate-900 dark:text-slate-100">
-                No se encontraron pacientes
+                No hay registros de atención médica
               </p>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                {searchTerm || statusFilter !== "all" 
-                  ? "Prueba con otros términos o ajusta los filtros"
-                  : "No hay pacientes registrados"
-                }
+                Los pacientes atendidos aparecerán aquí con su historial completo
               </p>
             </div>
-            {(searchTerm || statusFilter !== "all") && (
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                Limpiar filtros
-              </Button>
-            )}
           </div>
         ) : (
           processedPatients.map((patient) => (

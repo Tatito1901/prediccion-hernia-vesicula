@@ -8,7 +8,7 @@ import {
   useDeferredValue,
   Suspense,
 } from "react";
-import dynamic from "next/dynamic";
+import dynamic from "next/navigation";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -36,28 +36,25 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-/* ---------- lazy-loaded componentes ---------- */
-const PatientTable = dynamic(() => import("./patient-table"), { 
-  ssr: false,
-  loading: () => <PatientTableSkeleton />
-});
-const PatientCardView = dynamic(
-  () => import("./patient-card-view").then((mod) => mod.PatientCardView),
-  { 
-    ssr: false,
-    loading: () => <PatientCardSkeleton />
-  }
-);
-const NewPatientForm = dynamic(
-  () => import("@/components/patient-admision/new-patient-form").then((mod) => mod.NewPatientForm),
-  { ssr: false }
-);
-const SurveyShareDialog = dynamic(
-  () => import("@/components/surveys/survey-share-dialog").then((mod) => mod.SurveyShareDialog),
-  { ssr: false }
-);
+// Importaciones directas sin lazy loading según la petición
+import PatientTable from "./patient-table";
+import { PatientCardView } from "./patient-card-view";
+import { NewPatientForm } from "@/components/patient-admision/new-patient-form";
+import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog";
 
-/* ---------- Skeleton Components ---------- */
+// Interfaz extendida para datos enriquecidos de pacientes
+export interface EnrichedPatientData extends PatientData {
+  nombreCompleto: string;
+  fecha_proxima_cita?: string;
+  encuesta_completada: boolean;
+  displayDiagnostico: string;
+  // Asegurar campos críticos para la tabla de historial
+  diagnostico_principal: string;
+  edad?: number;
+  fecha_registro: string;
+}
+
+// Skeleton Components optimizados
 const PatientTableSkeleton = () => (
   <div className="bg-white dark:bg-slate-950 shadow-sm rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800">
     <div className="animate-pulse">
@@ -91,7 +88,7 @@ const PatientCardSkeleton = () => (
   </div>
 );
 
-/* ---------- Mapeo de colores de estado consistente ---------- */
+// Configuración de colores de estado consistente
 const STATUS_CONFIG: Record<PatientStatusEnum, { 
   color: string; 
   bgColor: string; 
@@ -174,17 +171,15 @@ const getStatusLabel = (status: PatientStatusEnum): string => {
   return labels[status] || status;
 };
 
-/* ---------- componente principal ---------- */
 export function PatientManagement() {
   const { patients, appointments } = useAppContext();
   const router = useRouter();
 
-  /* ------------- estado UI ------------- */
+  // Estados UI optimizados
   const [searchTerm, setSearchTerm] = useState("");
   const deferredSearch = useDeferredValue(searchTerm);
   const [statusFilter, setStatusFilter] = useState<PatientStatusEnum | "all">("all");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
-  const [showAllFilters, setShowAllFilters] = useState(false);
 
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<PatientData | null>(null);
@@ -194,58 +189,101 @@ export function PatientManagement() {
   const [isPending, startTransition] = useTransition();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  /* ------------- enriquecer pacientes con datos adicionales ------------- */
-  const enrichedPatients = useMemo(() => {
-    return patients.map((p) => {
+  // Enriquecimiento optimizado de datos de pacientes CORREGIDO
+  const enrichedPatients = useMemo((): EnrichedPatientData[] => {
+    if (!patients || !appointments) return [];
+
+    console.log('ENRICHMENT DEBUG - Raw patients sample:', patients.slice(0, 2));
+
+    return patients.map((patient) => {
+      // Encontrar citas del paciente ordenadas por fecha
       const patientAppointments = appointments
-        .filter((a) => a.patientId === p.id)
+        .filter((appointment) => appointment.patientId === patient.id)
         .sort((a, b) => {
           const dateA = a.fechaConsulta instanceof Date ? a.fechaConsulta : new Date(a.fechaConsulta);
           const dateB = b.fechaConsulta instanceof Date ? b.fechaConsulta : new Date(b.fechaConsulta);
           return dateA.getTime() - dateB.getTime();
         });
 
-      const nextAppointment = patientAppointments.find(a => {
-        const date = a.fechaConsulta instanceof Date ? a.fechaConsulta : new Date(a.fechaConsulta);
-        return date >= new Date();
+      // Encontrar la próxima cita (futura)
+      const nextAppointment = patientAppointments.find(appointment => {
+        const appointmentDate = appointment.fechaConsulta instanceof Date 
+          ? appointment.fechaConsulta 
+          : new Date(appointment.fechaConsulta);
+        return appointmentDate >= new Date();
       });
 
-      return {
-        ...p,
-        nombreCompleto: `${p.nombre} ${p.apellidos}`,
-        fecha_proxima_cita: nextAppointment?.fechaConsulta.toISOString(),
-        encuesta_completada: !!p.encuesta?.id,
-        diagnostico: p.diagnostico_principal || "-",
+      // Determinar si la encuesta está completada
+      const encuesta_completada = Boolean(
+        patient.encuesta?.id && 
+        patient.encuesta?.completada !== false
+      );
+
+      // ← CORREGIDO: Usar la fecha_registro real del paciente, NO generar una nueva fecha
+      const fechaAtencion = patient.fecha_registro; // Ya viene como string ISO de la transformación
+
+      const enrichedPatient: EnrichedPatientData = {
+        ...patient,
+        nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
+        
+        // ← CORREGIDO: Usar fecha_registro real del paciente
+        fecha_registro: fechaAtencion, // Ya está en formato ISO string
+        
+        fecha_proxima_cita: nextAppointment?.fechaConsulta 
+          ? (nextAppointment.fechaConsulta instanceof Date 
+              ? nextAppointment.fechaConsulta.toISOString()
+              : nextAppointment.fechaConsulta.toString())
+          : undefined,
+        encuesta_completada,
+        displayDiagnostico: patient.diagnostico_principal || "Sin diagnóstico",
+        
+        // ← CORREGIDO: Asegurar que usamos los campos reales del paciente
+        diagnostico_principal: patient.diagnostico_principal || "Sin especificar",
+        edad: patient.edad || undefined, // Ya viene del transform
       };
+
+      console.log('ENRICHED PATIENT DEBUG:', {
+        id: enrichedPatient.id,
+        nombre: enrichedPatient.nombreCompleto,
+        edad: enrichedPatient.edad,
+        diagnostico: enrichedPatient.diagnostico_principal,
+        fecha_registro: enrichedPatient.fecha_registro
+      });
+
+      return enrichedPatient;
     });
   }, [patients, appointments]);
 
-  /* ------------- filtros mejorados ------------- */
+  // Filtrado optimizado con useMemo
   const filteredPatients = useMemo(() => {
-    let list = enrichedPatients;
+    let result = enrichedPatients;
 
-    // Filtro por búsqueda
+    // Filtro por búsqueda - incluir búsqueda por diagnóstico
     if (deferredSearch) {
       const term = deferredSearch.toLowerCase();
-      list = list.filter(
-        (p) =>
-          p.nombreCompleto.toLowerCase().includes(term) ||
-          p.telefono?.toLowerCase().includes(term) ||
-          p.email?.toLowerCase().includes(term) ||
-          p.diagnostico_principal?.toLowerCase().includes(term) ||
-          p.id.toLowerCase().includes(term)
+      result = result.filter(
+        (patient) =>
+          patient.nombreCompleto.toLowerCase().includes(term) ||
+          patient.telefono?.toLowerCase().includes(term) ||
+          patient.email?.toLowerCase().includes(term) ||
+          patient.diagnostico_principal?.toLowerCase().includes(term) ||
+          patient.id.toLowerCase().includes(term) ||
+          // Búsqueda adicional por detalles del diagnóstico
+          patient.diagnostico_principal_detalle?.toLowerCase().includes(term) ||
+          // Búsqueda por notas del paciente
+          patient.notas_paciente?.toLowerCase().includes(term)
       );
     }
 
     // Filtro por estado
     if (statusFilter !== "all") {
-      list = list.filter((p) => p.estado_paciente === statusFilter);
+      result = result.filter((patient) => patient.estado_paciente === statusFilter);
     }
 
-    return list;
+    return result;
   }, [enrichedPatients, deferredSearch, statusFilter]);
 
-  /* ------------- estadísticas de estado ------------- */
+  // Estadísticas de estado optimizadas
   const statusStats = useMemo(() => {
     const stats: Record<PatientStatusEnum | "all", number> = {
       all: enrichedPatients.length,
@@ -257,16 +295,16 @@ export function PatientManagement() {
       [PatientStatusEnum.INDECISO]: 0,
     };
 
-    enrichedPatients.forEach(p => {
-      if (p.estado_paciente && p.estado_paciente in stats) {
-        stats[p.estado_paciente]++;
+    enrichedPatients.forEach(patient => {
+      if (patient.estado_paciente && patient.estado_paciente in stats) {
+        stats[patient.estado_paciente]++;
       }
     });
 
     return stats;
   }, [enrichedPatients]);
 
-  /* ------------- paginación mejorada ------------- */
+  // Paginación optimizada
   const PAGE_SIZE = viewMode === "table" ? 20 : 12;
   const totalPages = Math.max(Math.ceil(filteredPatients.length / PAGE_SIZE), 1);
   
@@ -281,7 +319,7 @@ export function PatientManagement() {
     });
   }, [totalPages]);
 
-  /* ------------- manejadores de eventos ------------- */
+  // Manejadores de eventos optimizados
   const createSurveyLink = useCallback(
     (id: string) => `${location.origin}/survey/${generateSurveyId()}?patientId=${id}`,
     []
@@ -293,19 +331,18 @@ export function PatientManagement() {
     setShareDialogOpen(true);
   }, [createSurveyLink]);
 
-  const handleSelectPatient = useCallback((p: PatientData) => {
-    router.push(`/dashboard/patients/${p.id}`);
+  const handleSelectPatient = useCallback((patient: PatientData) => {
+    router.push(`/dashboard/patients/${patient.id}`);
   }, [router]);
 
-  const handleEditPatient = useCallback((p: PatientData) => {
-    // Implementar edición
-    toast.info(`Editando paciente: ${p.nombre} ${p.apellidos}`);
+  const handleEditPatient = useCallback((patient: PatientData) => {
+    toast.info(`Editando paciente: ${patient.nombre} ${patient.apellidos}`);
   }, []);
 
   const handleAnswerSurvey = useCallback(
-    (p: PatientData) => {
+    (patient: PatientData) => {
       router.push(
-        `/survey/${generateSurveyId()}?patientId=${p.id}&mode=internal`
+        `/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`
       );
     },
     [router]
@@ -319,13 +356,13 @@ export function PatientManagement() {
     });
   }, []);
 
-  /* ------------- Componentes de filtro mejorados ------------- */
-  const StatusFilter = () => (
+  // Componentes de filtro optimizados
+  const StatusFilter = useCallback(() => (
     <Select
       value={statusFilter}
-      onValueChange={(v) => {
+      onValueChange={(value) => {
         startTransition(() => {
-          setStatusFilter(v as PatientStatusEnum | "all");
+          setStatusFilter(value as PatientStatusEnum | "all");
           setCurrentPage(1);
         });
       }}
@@ -357,9 +394,9 @@ export function PatientManagement() {
         ))}
       </SelectContent>
     </Select>
-  );
+  ), [statusFilter, statusStats]);
 
-  const ActiveFilters = () => {
+  const ActiveFilters = useCallback(() => {
     const hasFilters = searchTerm || statusFilter !== "all";
     
     if (!hasFilters) return null;
@@ -412,26 +449,26 @@ export function PatientManagement() {
         </Button>
       </div>
     );
-  };
+  }, [searchTerm, statusFilter, clearFilters]);
 
   return (
     <div className="w-full space-y-4">
-      {/* --------- Cabecera mejorada --------- */}
+      {/* Cabecera optimizada */}
       <header className="bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-950 dark:to-blue-950/20 rounded-lg border border-slate-200 dark:border-slate-800 p-6">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                Gestión de Pacientes
+                Historial de Pacientes
               </h2>
               <p className="text-slate-600 dark:text-slate-400 mt-1">
-                Administre la información y seguimiento de sus pacientes
+                Historial completo de atención médica con diagnósticos, fechas y seguimiento
               </p>
             </div>
             
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="px-3 py-1">
-                <span className="text-lg font-semibold mr-2">{patients.length}</span>
+                <span className="text-lg font-semibold mr-2">{enrichedPatients.length}</span>
                 <span className="text-sm">pacientes totales</span>
               </Badge>
             </div>
@@ -439,11 +476,10 @@ export function PatientManagement() {
 
           {/* Barra de herramientas */}
           <div className="flex flex-col lg:flex-row gap-3">
-            {/* Buscador mejorado */}
             <div className="relative flex-1 max-w-xl">
               <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Buscar por nombre, teléfono, email o diagnóstico..."
+                placeholder="Buscar por nombre, diagnóstico, teléfono o email..."
                 value={searchTerm}
                 onChange={(e) => startTransition(() => setSearchTerm(e.target.value))}
                 className="pl-10 pr-10 h-10"
@@ -460,14 +496,11 @@ export function PatientManagement() {
               )}
             </div>
 
-            {/* Controles de filtro y vista */}
             <div className="flex gap-2">
-              {/* Filtro de estado en desktop */}
               <div className="hidden sm:block">
                 <StatusFilter />
               </div>
 
-              {/* Botón de filtros en móvil */}
               <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
                 <SheetTrigger asChild>
                   <Button
@@ -496,7 +529,6 @@ export function PatientManagement() {
                 </SheetContent>
               </Sheet>
 
-              {/* Selector de vista */}
               <div className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
                 <Button
                   variant={viewMode === "table" ? "default" : "ghost"}
@@ -516,31 +548,22 @@ export function PatientManagement() {
                 </Button>
               </div>
 
-              {/* Nuevo paciente */}
-              <Suspense fallback={
-                <Button disabled className="gap-2">
-                  Cargando...
-                </Button>
-              }>
-                <NewPatientForm />
-              </Suspense>
+              <NewPatientForm />
             </div>
           </div>
 
-          {/* Filtros activos */}
           <ActiveFilters />
         </div>
       </header>
 
-      {/* --------- Contenido principal --------- */}
+      {/* Contenido principal */}
       <section className="bg-white dark:bg-slate-950 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-        {/* Resumen de resultados */}
         <div className="px-6 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Mostrando {paginatedPatients.length} de {filteredPatients.length} pacientes
-              {filteredPatients.length !== patients.length && (
-                <span className="text-slate-500"> (filtrado de {patients.length} totales)</span>
+              Historial: {paginatedPatients.length} de {filteredPatients.length} registros de atención
+              {filteredPatients.length !== enrichedPatients.length && (
+                <span className="text-slate-500"> (filtrado de {enrichedPatients.length} totales)</span>
               )}
             </p>
             {totalPages > 1 && (
@@ -569,30 +592,26 @@ export function PatientManagement() {
           </div>
         </div>
 
-        {/* Vista de datos */}
-        <Suspense fallback={viewMode === "table" ? <PatientTableSkeleton /> : <PatientCardSkeleton />}>
-          {viewMode === "table" ? (
-            <PatientTable
-              patients={paginatedPatients}
-              onSelectPatient={handleSelectPatient}
-              onShareSurvey={handleShareSurvey}
-              onAnswerSurvey={handleAnswerSurvey}
-              onEditPatient={handleEditPatient}
-              loading={isPending}
-            />
-          ) : (
-            <PatientCardView
-              patients={paginatedPatients}
-              onSelectPatient={handleSelectPatient}
-              onShareSurvey={handleShareSurvey}
-              onAnswerSurvey={handleAnswerSurvey}
-              onEditPatient={handleEditPatient}
-              loading={isPending}
-            />
-          )}
-        </Suspense>
+        {viewMode === "table" ? (
+          <PatientTable
+            patients={paginatedPatients}
+            onSelectPatient={handleSelectPatient}
+            onShareSurvey={handleShareSurvey}
+            onAnswerSurvey={handleAnswerSurvey}
+            onEditPatient={handleEditPatient}
+            loading={isPending}
+          />
+        ) : (
+          <PatientCardView
+            patients={paginatedPatients}
+            onSelectPatient={handleSelectPatient}
+            onShareSurvey={handleShareSurvey}
+            onAnswerSurvey={handleAnswerSurvey}
+            onEditPatient={handleEditPatient}
+            loading={isPending}
+          />
+        )}
 
-        {/* Paginación inferior para muchos resultados */}
         {totalPages > 5 && (
           <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-center gap-2">
@@ -661,21 +680,18 @@ export function PatientManagement() {
           </div>
         )}
 
-        {/* Diálogo de compartir encuesta */}
         {selectedPatient && (
-          <Suspense fallback={null}>
-            <SurveyShareDialog
-              isOpen={shareDialogOpen}
-              patient={selectedPatient}
-              surveyLink={surveyLink}
-              onStartInternal={() =>
-                router.push(
-                  `/survey/${generateSurveyId()}?patientId=${selectedPatient.id}&mode=internal`
-                )
-              }
-              onClose={() => setShareDialogOpen(false)}
-            />
-          </Suspense>
+          <SurveyShareDialog
+            isOpen={shareDialogOpen}
+            patient={selectedPatient}
+            surveyLink={surveyLink}
+            onStartInternal={() =>
+              router.push(
+                `/survey/${generateSurveyId()}?patientId=${selectedPatient.id}&mode=internal`
+              )
+            }
+            onClose={() => setShareDialogOpen(false)}
+          />
         )}
       </section>
     </div>

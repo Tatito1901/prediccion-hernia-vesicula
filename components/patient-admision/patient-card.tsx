@@ -146,7 +146,8 @@ AppointmentStatusBadge.displayName = "AppointmentStatusBadge";
 
 // ==== SUBCOMPONENTE: InfoSection ====
 interface InfoSectionProps {
-  fullName: string; // Changed from nombre, apellidos
+  nombre: string;
+  apellidos: string;
   telefono: string;
   formattedDate: string;
   formattedTime: string;
@@ -154,12 +155,12 @@ interface InfoSectionProps {
   estado: AppointmentStatusEnum;
 }
 const InfoSection: FC<InfoSectionProps> = memo(
-  ({ fullName, telefono, formattedDate, formattedTime, motivoConsulta, estado }) => {
+  ({ nombre, apellidos, telefono, formattedDate, formattedTime, motivoConsulta, estado }) => {
     return (
       <div className="flex-1 space-y-2 min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="truncate font-semibold text-lg text-slate-900 dark:text-slate-100">
-            {fullName}
+            <span className="font-bold">{nombre}</span>{apellidos ? ` ${apellidos}` : ''}
           </h3>
           <AppointmentStatusBadge status={estado as AppointmentStatusEnum} />
         </div>
@@ -292,6 +293,32 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(
       // surveyStatus, // Potentially from AppointmentData if needed later
       // patientSurveys, // Potentially from AppointmentData if needed later
     } = appointment; // appointment is AppointmentData
+    
+    // Separar nombre y apellidos
+    const { nombre, apellidos } = useMemo(() => {
+      // Registrar el valor recibido para depuración
+      console.log('Valor de pacienteFullName recibido en tarjeta:', pacienteFullName);
+      
+      // Caso: Valor vacío o indefinido
+      if (!pacienteFullName) {
+        return { nombre: 'Sin Datos', apellidos: 'de Paciente' };
+      }
+      
+      // Mantener la información de ID, si está presente
+      if (pacienteFullName.startsWith('Paciente ID:')) {
+        const parts = pacienteFullName.split('ID:');
+        return { nombre: 'Paciente ID:', apellidos: parts[1].trim() };
+      }
+      
+      // Ya no necesitamos esta condicional porque el nombre real viene en pacienteFullName
+      // directamente desde transformAppointmentData, que maneja correctamente los datos
+      // de paciente, ya sea desde patients o patient en la respuesta API
+      
+      // Procesamiento normal para nombres completos
+      const parts = pacienteFullName.split(' ');
+      if (parts.length === 1) return { nombre: parts[0], apellidos: '' };
+      return { nombre: parts[0], apellidos: parts.slice(1).join(' ') };
+    }, [pacienteFullName]);
 
     // Determinar si la cita se considera "pasada"
     const isPast = useMemo(
@@ -335,10 +362,10 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(
     // Callback para enviar encuesta (si existe patientId)
     const handleSurvey = useCallback(() => {
       if (patientId) {
-        // Pass patientId, full name as nombre, empty string for apellidos, and telefono
-        onStartSurvey(patientId, pacienteFullName, "", telefono ?? "");
+        // Pass patientId, nombre, apellidos, and telefono
+        onStartSurvey(patientId, nombre, apellidos, telefono ?? "");
       }
-    }, [patientId, pacienteFullName, telefono, onStartSurvey]);
+    }, [patientId, nombre, apellidos, telefono, onStartSurvey]);
 
     // Callback para ver historial (si existe patientId)
     const handleHistory = useCallback(() => {
@@ -357,12 +384,13 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             {/* Sección de Información */}
             <InfoSection
-              fullName={pacienteFullName} // Use combined full name
+              nombre={nombre}
+              apellidos={apellidos}
               telefono={telefono ?? "N/A"} // Provide fallback for telefono
               formattedDate={formattedDate}
               formattedTime={formattedTime}
               motivoConsulta={motivoConsulta}
-              estado={estado as AppointmentStatusEnum} // Cast estado here as well for InfoSection prop if it expects Enum
+              estado={estado as unknown as AppointmentStatusEnum} // Corregir el tipado con doble cast
             />
 
             {/* Menú de Acciones */}

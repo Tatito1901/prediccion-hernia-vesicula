@@ -152,19 +152,23 @@ const PatientListItem: React.FC<{
   
   // Calcular edad si hay fecha de nacimiento
   const age = useMemo(() => {
-    if (patient.fecha_nacimiento) {
-      const birthDate = patient.fecha_nacimiento instanceof Date 
-        ? patient.fecha_nacimiento 
-        : new Date(patient.fecha_nacimiento);
-      const today = new Date();
-      const years = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        return years - 1;
+    if (patient.fecha_nacimiento && typeof patient.fecha_nacimiento === 'string') {
+      const birthDate = new Date(patient.fecha_nacimiento);
+      if (!isNaN(birthDate.getTime())) { // Verificar que la fecha sea válida tras el parsing
+        const today = new Date();
+        let years = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          years--;
+        }
+        return years >= 0 ? years : patient.edad; // Devolver la edad calculada o la edad existente si el cálculo es negativo
       }
-      return years;
     }
-    return patient.edad;
+    // Si no hay fecha_nacimiento válida, o si es un número (edad precalculada), usar patient.edad
+    if (typeof patient.edad === 'number' && patient.edad >= 0) {
+      return patient.edad;
+    }
+    return undefined; // O algún valor por defecto como "N/A" o null si se prefiere
   }, [patient.fecha_nacimiento, patient.edad]);
 
   return (
@@ -188,13 +192,40 @@ const PatientListItem: React.FC<{
                 <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100 truncate">
                   {patient.nombre} {patient.apellidos}
                 </h3>
-                <div className="flex items-center gap-3 mt-1 text-sm text-slate-600 dark:text-slate-400">
+                <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1 text-sm text-slate-600 dark:text-slate-400">
                   <span className="flex items-center gap-1">
                     <User className="h-3.5 w-3.5" />
-                    {age ? `${age} años` : "Edad no disponible"}
+                    {age ? `${age} años` : "Edad no disp."}
                   </span>
-                  <span className="text-slate-400">•</span>
-                  <span className="text-xs">ID: {patient.id.slice(0, 8)}</span>
+                  <span className="text-slate-400 hidden sm:inline">•</span>
+                  {patient.diagnostico_principal && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "py-0.5 px-1.5 text-xs font-medium cursor-help border-opacity-70",
+                              patient.diagnostico_principal.includes("HERNIA") ? "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-700" :
+                              patient.diagnostico_principal.includes("COLE") ? "bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-900/50 dark:text-purple-300 dark:border-purple-700" :
+                              patient.diagnostico_principal.includes("EVENTRA") ? "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-700" :
+                              "bg-slate-50 text-slate-600 border-slate-300 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700"
+                            )}
+                          >
+                            <Stethoscope className="h-3 w-3 mr-1" />
+                            {patient.diagnostico_principal.length > 20 ? `${patient.diagnostico_principal.substring(0, 20)}...` : patient.diagnostico_principal}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm font-medium">{patient.diagnostico_principal}</p>
+                          {patient.diagnostico_principal_detalle && <p className="text-xs mt-1 text-muted-foreground">{patient.diagnostico_principal_detalle}</p>}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
+                <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  ID: {patient.id.slice(0,8)}
                 </div>
               </div>
               
@@ -283,6 +314,27 @@ const PatientListItem: React.FC<{
                 <Calendar className="h-3.5 w-3.5" />
                 Registro: {formatDate(patient.fecha_registro)}
               </span>
+              {patient.fecha_proxima_cita && (
+                <>
+                  <span className="text-slate-400">•</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={cn(
+                          "flex items-center gap-1 cursor-help",
+                          new Date(patient.fecha_proxima_cita) > new Date() ? "text-green-600 dark:text-green-400 font-medium" : "text-slate-500 dark:text-slate-400"
+                        )}>
+                          <CalendarClock className="h-3.5 w-3.5" />
+                          Próx. Rev: {format(new Date(patient.fecha_proxima_cita), "d MMM yy", { locale: es })}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p>Próxima revisión: {format(new Date(patient.fecha_proxima_cita), "PPPP", { locale: es })}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </>
+              )}
               {patient.fecha_primera_consulta && (
                 <span className="flex items-center gap-1">
                   <CalendarClock className="h-3.5 w-3.5" />

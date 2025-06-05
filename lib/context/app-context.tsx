@@ -14,8 +14,7 @@ import {
   QueryClientProvider,
   useQuery,
   useMutation,
-  useQueryClient as useTanStackQueryClient, // Renombrar para evitar confusión con nuestro QueryClient
-  // MutateOptions,
+  useQueryClient as useTanStackQueryClient,
 } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { parseISO, isValid, format } from 'date-fns';
@@ -40,66 +39,94 @@ export type {
   AppointmentStatus,
 };
 
-// Placeholder for AppointmentHistoryItem - refinar si se conoce la estructura
 export interface AppointmentHistoryItem {
-  id: string; // Asumiendo que cada item de historial tiene un ID
-  event_type: string; // ej: 'CREATED', 'STATUS_CHANGED', 'RESCHEDULED'
-  timestamp: string; // ISO date string
-  changed_by_user_id?: string; // ID del usuario que hizo el cambio
-  details: Record<string, any>; // Para campos como previous_values, new_values u otros detalles
-  // [key: string]: any; // Evitar 'any' si es posible. Record<string, unknown> es más seguro.
+  id: string;
+  event_type: string;
+  timestamp: string;
+  changed_by_user_id?: string;
+  details: Record<string, any>;
 }
 
 // Constants
 const API_BASE_URL = '/api';
 const DEFAULT_USER_ID = '5e4d29a2-5eec-49ee-ac0f-8d349d5660ed';
 const QUERY_STALE_TIME = 5 * 60 * 1000; // 5 minutes
-const QUERY_GC_TIME = 10 * 60 * 1000; // 10 minutes (gcTime es el nuevo nombre para cacheTime en v5+)
-const MAX_FETCH_RETRIES = 2; // Máximo de reintentos para fetchWithRetry (0 es el primer intento, 2 son 2 reintentos adicionales)
+const QUERY_GC_TIME = 10 * 60 * 1000; // 10 minutes
+const MAX_FETCH_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 1000;
 const FETCH_TIMEOUT_MS = 10000;
 
-// --- API Response and Payload Types ---
+// --- API Response Types corregidos para Supabase ---
 
 interface ApiPatient {
-  id: string | number; // API puede enviar ID como string o number
+  id: string | number;
   nombre?: string;
   apellidos?: string;
+  edad?: number | null; // ← CORREGIDO: Ahora incluye edad
   telefono?: string;
-  estado_paciente: PatientStatus | null; // Puede ser null desde la API
-  fecha_nacimiento?: string | null; // ISO string o null
+  email?: string;
+  fecha_registro?: string | null; // ← CORREGIDO: Fecha de registro real
+  estado_paciente?: PatientStatus | null;
+  diagnostico_principal?: string | null; // ← CORREGIDO: Diagnóstico principal
+  diagnostico_principal_detalle?: string | null;
+  doctor_asignado_id?: string | null;
+  fecha_primera_consulta?: string | null;
+  comentarios_registro?: string | null;
+  origen_paciente?: string | null;
+  probabilidad_cirugia?: number | null;
+  ultimo_contacto?: string | null;
+  proximo_contacto?: string | null;
+  etiquetas?: string | null;
+  fecha_cirugia_programada?: string | null;
+  creado_por_id?: string;
+  fecha_nacimiento?: string | null;
   correo_electronico?: string;
   direccion?: string;
   historial_medico_relevante?: string;
-  creado_por_id?: string;
-  fecha_creacion?: string | null; // ISO string o null
-  ultima_actualizacion?: string | null; // ISO string o null
-  // otros campos específicos de la API
+  notas_paciente?: string;
+  // Relaciones de Supabase
+  doctor?: {
+    id: string;
+    full_name: string;
+  };
+  creator?: {
+    id: string;
+    full_name: string;
+  };
 }
 
 interface ApiAppointment {
-  id: string | number; // API puede enviar ID como string o number
-  patient_id: string | number; // ID del paciente asociado
+  id: string | number;
+  patient_id: string | number;
   doctor_id?: string | number;
-  fecha_hora_cita: string; // ISO string
+  fecha_hora_cita: string;
   motivo_cita?: string;
   estado_cita: AppointmentStatus;
   notas_cita_seguimiento?: string | null;
-  // Datos anidados opcionales que la API podría devolver
-  patients?: { // Nombre de la tabla/relación en la API
+  // Manejar ambas posibles estructuras que podría devolver Supabase
+  patients?: {
     nombre?: string;
     apellidos?: string;
     telefono?: string;
   };
-  doctors?: { // Nombre de la tabla/relación en la API
-    full_name?: string; // o nombre, apellido_paterno, etc.
+  // A veces Supabase puede devolverlo en singular
+  patient?: {
+    nombre?: string;
+    apellidos?: string;
+    telefono?: string;
+  };
+  doctors?: {
+    full_name?: string;
+  };
+  doctor?: {
+    full_name?: string;
   };
 }
 
 interface ApiAddAppointmentPayload {
   patient_id: string;
   doctor_id: string;
-  fecha_hora_cita: string; // ISO string
+  fecha_hora_cita: string;
   motivo_cita: string;
   estado_cita: AppointmentStatus;
   es_primera_vez: boolean;
@@ -110,10 +137,10 @@ interface ApiUpdateAppointmentStatusPayload {
   estado_cita: AppointmentStatus;
   actor_id: string;
   motivo_cambio?: string;
-  fecha_hora_cita?: string; // ISO string, si se permite reagendar con el cambio de estado
+  fecha_hora_cita?: string;
 }
 
-// Custom Error class for API interactions
+// Custom Error class
 class ApiError extends Error {
   status?: number;
   code?: string;
@@ -125,7 +152,6 @@ class ApiError extends Error {
     this.status = status;
     this.details = details;
     this.code = code;
-    // Mantener la pila de errores correcta en V8
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, ApiError);
     }
@@ -146,7 +172,7 @@ const safeParseDate = (dateString: string | null | undefined): Date | null => {
     const date = parseISO(dateString);
     return isValid(date) ? date : null;
   } catch {
-    return null; // Si parseISO lanza un error (ej. formato inválido que no maneja)
+    return null;
   }
 };
 
@@ -166,9 +192,8 @@ const fetchWithRetry = async (
       clearTimeout(timeoutId);
 
       if (response.ok || (response.status >= 400 && response.status < 500)) {
-        return response; // Success or client error (no retry)
+        return response;
       }
-      // Server error (5xx) or other retryable network issues
       lastError = new ApiError(`Server error: ${response.status} ${response.statusText}`, response.status);
     } catch (error) {
       clearTimeout(timeoutId);
@@ -182,93 +207,159 @@ const fetchWithRetry = async (
       }
     }
     
-    // If it's the last attempt, break and throw `lastError`
     if (attempt === retries) break;
 
-    // Exponential backoff with jitter
     const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt) + Math.random() * (BASE_RETRY_DELAY_MS / 2);
     await new Promise(resolve => setTimeout(resolve, delay));
   }
   
-  // If lastError is not already an ApiError, wrap it
   if (!(lastError instanceof ApiError)) {
     const finalError = new ApiError(
       `Failed after ${retries + 1} attempts. Last error: ${lastError.message}`,
-      (lastError as any).status // Try to get status if present
+      (lastError as any).status
     );
-    finalError.cause = lastError; // Preserve original error
+    finalError.cause = lastError;
     throw finalError;
   }
   throw lastError;
 };
 
-
-// --- Data Transformation Functions ---
+// --- Data Transformation Functions CORREGIDAS ---
 
 const transformPatientData = (apiPatient: ApiPatient): PatientData => {
-  const defaultCreationDate = new Date();
+  // DEBUG: Log para verificar datos recibidos
+  console.log('TRANSFORM_PATIENT DEBUG:', {
+    id: apiPatient.id,
+    nombre: apiPatient.nombre,
+    apellidos: apiPatient.apellidos,
+    edad: apiPatient.edad,
+    fecha_registro: apiPatient.fecha_registro,
+    diagnostico_principal: apiPatient.diagnostico_principal,
+    estado_paciente: apiPatient.estado_paciente
+  });
+
+  // Usar la fecha de registro real de la API, no la fecha actual
+  const fechaRegistro = apiPatient.fecha_registro 
+    ? safeParseDate(apiPatient.fecha_registro) 
+    : new Date();
+
   return {
     // Campos obligatorios en PatientData
     id: normalizeId(apiPatient.id),
     nombre: apiPatient.nombre || 'Nombre Desconocido',
     apellidos: apiPatient.apellidos || '',
-    fecha_registro: defaultCreationDate.toISOString(), // Asumiendo que se usa el formato ISO string
-    diagnostico_principal: undefined, // PatientData requiere esto, la API no lo provee directamente
+    
+    // ← CORREGIDO: Usar fecha_registro real de la API
+    fecha_registro: fechaRegistro ? fechaRegistro.toISOString() : new Date().toISOString(),
+    
+    // ← CORREGIDO: Usar diagnostico_principal real de la API
+    diagnostico_principal: apiPatient.diagnostico_principal || 'Sin diagnóstico',
+    
     estado_paciente: apiPatient.estado_paciente || PatientStatusEnum.PENDIENTE_DE_CONSULTA,
-    probabilidad_cirugia: 0, // PatientData requiere esto
-    notas_paciente: '', // PatientData requiere esto
+    probabilidad_cirugia: apiPatient.probabilidad_cirugia || 0,
+    
+    // ← CORREGIDO: Usar notas del campo correcto
+    notas_paciente: apiPatient.comentarios_registro || apiPatient.notas_paciente || '',
+    
     telefono: apiPatient.telefono || 'Sin teléfono',
 
-    // Campos opcionales o con defaults
-    edad: undefined, // PatientData lo tiene como opcional
+    // ← CORREGIDO: Usar edad real de la API
+    edad: apiPatient.edad || undefined,
+    
+    // Mapeo de campos adicionales
+    diagnostico_principal_detalle: apiPatient.diagnostico_principal_detalle || undefined,
     fecha_nacimiento: apiPatient.fecha_nacimiento
       ? (() => {
           const date = safeParseDate(apiPatient.fecha_nacimiento);
           return date ? format(date, 'yyyy-MM-dd') : undefined;
         })()
-      : undefined, // Convertir a DateString (yyyy-MM-dd) o undefined
-    correo_electronico: apiPatient.correo_electronico || undefined,
+      : undefined,
+    email: apiPatient.email || apiPatient.correo_electronico || undefined,
     direccion: apiPatient.direccion || undefined,
     historial_medico_relevante: apiPatient.historial_medico_relevante || undefined,
+    doctor_asignado_id: apiPatient.doctor_asignado_id || undefined,
+    fecha_primera_consulta: apiPatient.fecha_primera_consulta 
+      ? safeParseDate(apiPatient.fecha_primera_consulta) 
+      : undefined,
+    origen_paciente: apiPatient.origen_paciente || undefined,
+    ultimo_contacto: apiPatient.ultimo_contacto 
+      ? safeParseDate(apiPatient.ultimo_contacto) 
+      : undefined,
+    proximo_contacto: apiPatient.proximo_contacto 
+      ? safeParseDate(apiPatient.proximo_contacto) 
+      : undefined,
+    etiquetas: apiPatient.etiquetas ? apiPatient.etiquetas.split(',') : undefined,
+    fecha_cirugia_programada: apiPatient.fecha_cirugia_programada 
+      ? safeParseDate(apiPatient.fecha_cirugia_programada) 
+      : undefined,
     creado_por_id: apiPatient.creado_por_id || DEFAULT_USER_ID,
-    fecha_creacion: apiPatient.fecha_creacion ? safeParseDate(apiPatient.fecha_creacion) : defaultCreationDate,
-    ultima_actualizacion: apiPatient.ultima_actualizacion ? safeParseDate(apiPatient.ultima_actualizacion) : defaultCreationDate,
+    fecha_creacion: fechaRegistro || new Date(),
+    ultima_actualizacion: new Date(), // Esto se podría mapear de updated_at si existe
   };
 };
 
 const transformAppointmentData = (apiAppointment: ApiAppointment): AppointmentData => {
   const fechaHora = safeParseDate(apiAppointment.fecha_hora_cita);
-  const fallbackDate = new Date(); // Usar solo si fechaHora es null y se necesita una Date sí o sí
+  const fallbackDate = new Date();
 
-  // Extraer nombre del paciente de la data anidada si existe
-  const pacienteNombre = apiAppointment.patients?.nombre && apiAppointment.patients?.apellidos
-    ? `${apiAppointment.patients.nombre} ${apiAppointment.patients.apellidos}`.trim()
-    : apiAppointment.patients?.nombre // Si solo hay nombre
-    ? apiAppointment.patients.nombre.trim()
-    : 'Paciente Desconocido';
+  // Obtener información del paciente - manejar diferentes estructuras
+  const patientInfo = apiAppointment.patients || apiAppointment.patient || null;
+  
+  // Mejorar la extracción de datos del paciente con logging para depuración
+  console.log('API Appointment data:', {
+    id: apiAppointment.id,
+    patient_id: apiAppointment.patient_id,
+    patients: apiAppointment.patients,
+    patient: apiAppointment.patient,
+    patient_info: patientInfo,
+    fecha_hora_cita: apiAppointment.fecha_hora_cita,
+  });
 
-  const doctorNombre = apiAppointment.doctors?.full_name || 'Doctor No Asignado';
+  // Este es un problema de estructura de datos. Si tenemos un ID de paciente pero no tenemos información,
+  // deberíamos buscar ese paciente directamente en la API, pero eso requeriría una llamada asíncrona.
+  // Esto debería ser abordado al nivel de la API para asegurar que siempre incluya los datos del paciente.
+  if (apiAppointment.patient_id && !patientInfo) {
+    console.warn(`Falta información del paciente para la cita ${apiAppointment.id}. ID del paciente: ${apiAppointment.patient_id}. ` +
+      `Se recomienda revisar la estructura de la respuesta de la API o la consulta Supabase.`);
+  }
+
+  // Obtener el nombre del paciente de forma más robusta
+  let pacienteNombre = 'Paciente Sin Nombre';
+  
+  if (patientInfo) {
+    if (patientInfo.nombre && patientInfo.apellidos) {
+      pacienteNombre = `${patientInfo.nombre} ${patientInfo.apellidos}`.trim();
+    } else if (patientInfo.nombre) {
+      pacienteNombre = patientInfo.nombre.trim();
+    } else if (patientInfo.apellidos) {
+      pacienteNombre = patientInfo.apellidos.trim();
+    }
+  } else if (apiAppointment.patient_id) {
+    // Si no tenemos información del paciente pero sí tenemos el ID,
+    // usamos un placeholder más informativo que incluye el ID
+    pacienteNombre = `Paciente ID: ${apiAppointment.patient_id}`;
+  }
+  
+  // Obtener información del doctor - manejar diferentes estructuras
+  const doctorInfo = apiAppointment.doctors || apiAppointment.doctor;
+  const doctorNombre = doctorInfo?.full_name || 'Doctor No Asignado';
 
   return {
-    // Campos obligatorios en AppointmentData
     id: normalizeId(apiAppointment.id),
     patientId: normalizeId(apiAppointment.patient_id),
     paciente: pacienteNombre,
     telefono: apiAppointment.patients?.telefono || 'Sin teléfono',
     doctor: doctorNombre,
-    fechaConsulta: fechaHora || fallbackDate, // Considerar si null es mejor que fallbackDate si la fecha es crucial
+    fechaConsulta: fechaHora || fallbackDate,
     horaConsulta: fechaHora ? format(fechaHora, 'HH:mm') : format(fallbackDate, 'HH:mm'),
     motivoConsulta: apiAppointment.motivo_cita || 'No especificado',
     estado: apiAppointment.estado_cita || AppointmentStatusEnum.PROGRAMADA,
-    
-    // Campos opcionales o con defaults
     notas: apiAppointment.notas_cita_seguimiento || '',
-    raw_fecha_hora_cita: apiAppointment.fecha_hora_cita, // Mantener string original para referencia
-    raw_patient_id: String(apiAppointment.patient_id), // Mantener original, asegurando que sea string
+    raw_fecha_hora_cita: apiAppointment.fecha_hora_cita,
+    raw_patient_id: String(apiAppointment.patient_id),
     raw_doctor_id: apiAppointment.doctor_id ? normalizeId(apiAppointment.doctor_id) : undefined,
   };
 };
-
 
 // --- App Context Interface ---
 interface AppContextType {
@@ -316,19 +407,31 @@ const createQueryClient = () => new QueryClient({
       gcTime: QUERY_GC_TIME,
       retry: (failureCount, error) => {
         if (error instanceof ApiError && error.status && error.status >= 400 && error.status < 500) {
-          return false; // No reintentar en errores 4xx
+          return false;
         }
-        return failureCount < MAX_FETCH_RETRIES; // Reintentar otras fallas (ej. 5xx, red)
+        return failureCount < MAX_FETCH_RETRIES;
       },
       retryDelay: attemptIndex => Math.min(BASE_RETRY_DELAY_MS * 2 ** attemptIndex, 30000),
     },
     mutations: {
-      retry: false, // Generalmente no se reintentan las mutaciones automáticamente
+      retry: false,
     },
   },
 });
 
-export function AppProvider({ children }: { children: ReactNode }) {
+// Función para obtener datos de un paciente por ID directamente de la API
+const fetchPatientById = async (patientId: string | number): Promise<ApiPatient | null> => {
+  try {
+    const response = await fetchWithRetry(`${API_BASE_URL}/patients/${patientId}`);
+    if (!response.ok) return null;
+    return response.json() as Promise<ApiPatient>;
+  } catch (error) {
+    console.error(`Error al obtener datos del paciente ID ${patientId}:`, error);
+    return null;
+  }
+};
+
+export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [queryClientInstance] = useState(() => createQueryClient());
 
   return (
@@ -343,13 +446,14 @@ function AppProviderInner({ children }: { children: ReactNode }) {
 
   // Fetch Patients Query
   const {
-    data: patientsDataFromQuery = [], // Ya transformado por 'select'
+    data: patientsDataFromQuery = [],
     isLoading: isLoadingPatients,
-    error: errorPatients, // Tipo: ApiError | null
+    error: errorPatients,
     refetch: refetchPatientsQuery,
   } = useQuery<ApiPatient[], ApiError, PatientData[], ['patients']>({
     queryKey: ['patients'],
     queryFn: async () => {
+      console.log('FETCHING PATIENTS from API...');
       const response = await fetchWithRetry(`${API_BASE_URL}/patients`);
       if (!response.ok) {
         const responseData = await response.json().catch(() => ({ message: response.statusText }));
@@ -359,16 +463,23 @@ function AppProviderInner({ children }: { children: ReactNode }) {
           responseData
         );
       }
-      return response.json() as Promise<ApiPatient[]>; // API devuelve ApiPatient[]
+      const data = await response.json() as ApiPatient[];
+      console.log('RAW PATIENTS from API:', data.slice(0, 2)); // Log first 2 patients
+      return data;
     },
-    select: useCallback((data: ApiPatient[]): PatientData[] => data.map(transformPatientData), []),
+    select: useCallback((data: ApiPatient[]): PatientData[] => {
+      console.log('TRANSFORMING PATIENTS:', data.length, 'patients');
+      const transformed = data.map(transformPatientData);
+      console.log('TRANSFORMED PATIENTS sample:', transformed.slice(0, 2));
+      return transformed;
+    }, []),
   });
 
   // Fetch Appointments Query
   const {
-    data: appointmentsDataFromQuery = [], // Ya transformado por 'select'
+    data: appointmentsDataFromQuery = [],
     isLoading: isLoadingAppointments,
-    error: errorAppointments, // Tipo: ApiError | null
+    error: errorAppointments,
     refetch: refetchAppointmentsQuery,
   } = useQuery<ApiAppointment[], ApiError, AppointmentData[], ['appointments']>({
     queryKey: ['appointments'],
@@ -382,22 +493,19 @@ function AppProviderInner({ children }: { children: ReactNode }) {
           responseData
         );
       }
-      return response.json() as Promise<ApiAppointment[]>; // API devuelve ApiAppointment[]
+      return response.json() as Promise<ApiAppointment[]>;
     },
     select: useCallback((data: ApiAppointment[]): AppointmentData[] => data.map(transformAppointmentData), []),
   });
 
   const patients = useMemo(() => {
-    // Si no hay datos de pacientes o citas, o las citas aún están cargando, no se puede derivar mucho.
     if (!patientsDataFromQuery.length || !appointmentsDataFromQuery.length) {
-        // Si las citas están cargando pero los pacientes ya están, devolver pacientes tal cual.
         if (isLoadingAppointments && patientsDataFromQuery.length) return patientsDataFromQuery;
-        return patientsDataFromQuery; // O [] si se prefiere lista vacía hasta que todo cargue.
+        return patientsDataFromQuery;
     }
     
     const appointmentsByPatientId = new Map<string, AppointmentData[]>();
     appointmentsDataFromQuery.forEach(appointment => {
-      // Usar patientId de AppointmentData, que ya está normalizado.
       const patientId = appointment.patientId; 
       if (!appointmentsByPatientId.has(patientId)) {
         appointmentsByPatientId.set(patientId, []);
@@ -405,38 +513,34 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       appointmentsByPatientId.get(patientId)!.push(appointment);
     });
 
-    // Ordenar citas por paciente para obtener la más reciente fácilmente
     appointmentsByPatientId.forEach(patientAppointments => {
       patientAppointments.sort((a, b) =>
-        (b.fechaConsulta.getTime()) - (a.fechaConsulta.getTime()) // Usar Date objects directamente
+        (b.fechaConsulta.getTime()) - (a.fechaConsulta.getTime())
       );
     });
 
     return patientsDataFromQuery.map(patient => {
-      const patientAppointments = appointmentsByPatientId.get(patient.id); // patient.id está normalizado
+      const patientAppointments = appointmentsByPatientId.get(patient.id);
       if (!patientAppointments || patientAppointments.length === 0) {
-        return patient; // Sin citas, estado_paciente no cambia
+        return patient;
       }
 
-      const latestAppointment = patientAppointments[0]; // La más reciente por la ordenación
+      const latestAppointment = patientAppointments[0];
       let derivedStatus = patient.estado_paciente;
 
-      // Lógica de derivación de estado basada en la última cita
       switch (latestAppointment.estado) {
         case AppointmentStatusEnum.COMPLETADA:
           derivedStatus = PatientStatusEnum.CONSULTADO;
           break;
-        case AppointmentStatusEnum.PRESENTE: // Asumiendo que PRESENTE implica que la consulta está en curso o recién terminada
+        case AppointmentStatusEnum.PRESENTE:
         case AppointmentStatusEnum.PROGRAMADA:
         case AppointmentStatusEnum.CONFIRMADA:
         case AppointmentStatusEnum.REAGENDADA:
           derivedStatus = PatientStatusEnum.PENDIENTE_DE_CONSULTA;
           break;
         case AppointmentStatusEnum.NO_ASISTIO:
-          derivedStatus = PatientStatusEnum.EN_SEGUIMIENTO; // O algún otro estado para no asistencias
+          derivedStatus = PatientStatusEnum.EN_SEGUIMIENTO;
           break;
-        // AppointmentStatusEnum.CANCELADA no cambia el estado del paciente por defecto.
-        // Si una cita CANCELADA fuera la única o la más reciente, el estado del paciente se mantendría.
       }
       
       return derivedStatus !== patient.estado_paciente
@@ -445,16 +549,12 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     });
   }, [patientsDataFromQuery, appointmentsDataFromQuery, isLoadingAppointments]);
 
-
   // --- Mutations ---
-  // Add Patient
   const addPatientMutation = useMutation<PatientData, ApiError, AddPatientInput>({
     mutationFn: async (patientPayload) => {
       const apiPayload = {
-        ...patientPayload, // Campos que el usuario provee
-        // Campos que el sistema/API debería asignar o que tienen defaults en transformPatientData
+        ...patientPayload,
         creado_por_id: DEFAULT_USER_ID, 
-        // estado_paciente, fecha_registro, etc. se pueden definir en backend o en transformPatientData
       };
       const response = await fetchWithRetry(`${API_BASE_URL}/patients`, {
         method: 'POST',
@@ -470,7 +570,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     },
     onSuccess: (newPatient) => {
       tanStackQueryClient.setQueryData<PatientData[]>(['patients'], (oldData = []) =>
-        [newPatient, ...oldData].sort((a,b) => (b.fecha_creacion?.getTime() ?? 0) - (a.fecha_creacion?.getTime() ?? 0)) // Mantener ordenado
+        [newPatient, ...oldData].sort((a,b) => (b.fecha_creacion?.getTime() ?? 0) - (a.fecha_creacion?.getTime() ?? 0))
       );
       toast.success('Paciente registrado exitosamente.');
     },
@@ -480,11 +580,10 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     },
   });
 
-  // Update Patient
   const updatePatientMutation = useMutation<PatientData, ApiError, UpdatePatientInput>({
     mutationFn: async ({ id, ...updatePayload }) => {
       const response = await fetchWithRetry(`${API_BASE_URL}/patients/${id}`, {
-        method: 'PUT', // o PATCH
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatePayload),
       });
@@ -493,7 +592,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
         throw new ApiError('Failed to update patient', response.status, resData);
       }
       const updatedApiPatient = await response.json() as ApiPatient;
-      return transformPatientData({ ...updatedApiPatient, id }); // Asegurar que el ID se mantenga
+      return transformPatientData({ ...updatedApiPatient, id });
     },
     onSuccess: (updatedPatient) => {
       tanStackQueryClient.setQueryData<PatientData[]>(['patients'], (oldData = []) =>
@@ -507,7 +606,6 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     },
   });
   
-  // Add Appointment
   const addAppointmentMutation = useMutation<AppointmentData, ApiError, AddAppointmentInput>({
     mutationFn: async (appointmentPayload) => {
       const dateTime = new Date(appointmentPayload.fechaConsulta);
@@ -536,10 +634,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       return transformAppointmentData(newApiAppointment);
     },
     onSuccess: () => {
-      // Invalidar es más simple y robusto si la nueva cita puede afectar múltiples vistas/filtros
       tanStackQueryClient.invalidateQueries({ queryKey: ['appointments'] });
-      // Opcionalmente, invalidar pacientes si el estado derivado puede cambiar
-      // tanStackQueryClient.invalidateQueries({ queryKey: ['patients'] }); 
       toast.success('Cita agendada exitosamente.');
     },
     onError: (error) => {
@@ -548,7 +643,6 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     },
   });
 
-  // Update Appointment
   const updateAppointmentMutation = useMutation<AppointmentData, ApiError, UpdateAppointmentInput>({
     mutationFn: async ({ id, ...updatePayload }) => {
       const apiPayloadForUpdate: Partial<ApiAddAppointmentPayload> = {};
@@ -566,7 +660,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       if (updatePayload.notas) apiPayloadForUpdate.notas_cita_seguimiento = updatePayload.notas;
 
       const response = await fetchWithRetry(`${API_BASE_URL}/appointments/${id}`, {
-        method: 'PUT', // o PATCH
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(apiPayloadForUpdate),
       });
@@ -581,7 +675,6 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       tanStackQueryClient.setQueryData<AppointmentData[]>(['appointments'], (oldData = []) =>
         oldData.map(a => a.id === updatedAppointment.id ? updatedAppointment : a)
       );
-      // tanStackQueryClient.invalidateQueries({ queryKey: ['patients'] }); // Si afecta estado del paciente
       toast.success('Cita actualizada exitosamente.');
     },
     onError: (error, variables) => {
@@ -590,7 +683,6 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     },
   });
 
-  // Get Appointment History
   const getAppointmentHistory = useCallback(async (appointmentId: string): Promise<AppointmentHistoryItem[]> => {
     try {
       const response = await fetchWithRetry(`${API_BASE_URL}/appointments/${appointmentId}/history`);
@@ -605,9 +697,8 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       toast.error(`Error al cargar historial: ${apiError.message}`, { description: JSON.stringify(apiError.details) });
       return [];
     }
-  }, []); // fetchWithRetry es externo, API_BASE_URL es constante
+  }, []);
 
-  // Update Appointment Status
   const updateAppointmentStatus = useCallback(async (
     appointmentId: string, newStatus: AppointmentStatus, motivo?: string, nuevaFechaHora?: string
   ): Promise<AppointmentData> => {
@@ -633,29 +724,27 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       tanStackQueryClient.setQueryData<AppointmentData[]>(['appointments'], (oldData = []) =>
         oldData.map(a => a.id === appointmentId ? transformed : a)
       );
-      // tanStackQueryClient.invalidateQueries({ queryKey: ['patients'] }); // Si afecta estado del paciente
       toast.success('Estado de cita actualizado.');
       return transformed;
     } catch (error) {
       const apiError = error instanceof ApiError ? error : new ApiError(String(error));
       console.error('Error al actualizar estado de cita:', apiError.message, apiError.details);
       toast.error(`Error al actualizar estado: ${apiError.message}`, { description: JSON.stringify(apiError.details) });
-      throw apiError; // Re-lanzar para que el llamador pueda manejarlo
+      throw apiError;
     }
-  }, [tanStackQueryClient]); // tanStackQueryClient es estable
+  }, [tanStackQueryClient]);
 
-  // Placeholder data - implement fetching as needed
   const doctors = useMemo<DoctorData[]>(() => [], []);
   const metrics = useMemo<ClinicMetrics>(() => ({} as ClinicMetrics), []);
 
   const contextValue = useMemo<AppContextType>(() => ({
-    patients, // Derivado y memoizado
+    patients,
     isLoadingPatients,
-    errorPatients, // ApiError | null
+    errorPatients,
 
-    appointments: appointmentsDataFromQuery, // Transformado y de la query
+    appointments: appointmentsDataFromQuery,
     isLoadingAppointments,
-    errorAppointments, // ApiError | null
+    errorAppointments,
 
     doctors,
     metrics,

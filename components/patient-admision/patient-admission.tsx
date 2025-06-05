@@ -4,8 +4,6 @@ import {
   useMemo, 
   useCallback, 
   memo, 
-  lazy, 
-  Suspense,
   type FC 
 } from "react"
 import {
@@ -62,12 +60,12 @@ import { useAppContext } from "@/lib/context/app-context"
 import { generateSurveyId } from "@/lib/form-utils"
 import { usePatientAdmissionFlow } from './use-patient-admission-flow'
 
-// Lazy loading para componentes pesados
-const NewPatientForm = lazy(() => import("./new-patient-form").then(module => ({ default: module.NewPatientForm })))
-const SurveyShareDialog = lazy(() => import("@/components/surveys/survey-share-dialog").then(module => ({ default: module.SurveyShareDialog })))
-const AppointmentCard = lazy(() => import('./patient-card').then(module => ({ default: module.AppointmentCard })))
+// Importaciones directas según la petición
+import { NewPatientForm } from "./new-patient-form"
+import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog"
+import { AppointmentCard } from './patient-card'
 
-// ============ TIPOS OPTIMIZADOS ============
+// Tipos optimizados
 import { type AppointmentStatus, AppointmentStatusEnum, type AppointmentData } from "@/app/dashboard/data-model"
 
 type EntityId = string
@@ -100,22 +98,7 @@ interface AppointmentLists {
   future: Appointment[]
 }
 
-// ============ UTILIDADES OPTIMIZADAS ============
-
-// Adaptador optimizado y memoizado
-const adaptAppointmentData = (appointment: AppointmentData): Appointment => ({
-  id: appointment.id,
-  nombre: appointment.paciente?.split(' ')[0] || 'Sin nombre',
-  apellidos: appointment.paciente?.split(' ').slice(1).join(' ') || 'Sin apellido',
-  telefono: appointment.telefono || '',
-  fechaConsulta: appointment.fechaConsulta,
-  horaConsulta: appointment.horaConsulta as FormattedTimeString,
-  motivoConsulta: appointment.motivoConsulta || '',
-  estado: appointment.estado as unknown as AppointmentStatusEnum,
-  patientId: appointment.patientId
-})
-
-// Utilidades de fecha simplificadas
+// Utilidades de fecha optimizadas
 const dateUtils = {
   parseDate: (dateInput: string | Date | undefined | null): Date | null => {
     if (!dateInput) return null
@@ -150,7 +133,18 @@ const dateUtils = {
   },
 }
 
-// ============ COMPONENTES MEMOIZADOS ============
+// Adaptador optimizado y memoizado
+const adaptAppointmentData = (appointment: AppointmentData): Appointment => ({
+  id: appointment.id,
+  nombre: appointment.paciente?.split(' ')[0] || 'Sin nombre',
+  apellidos: appointment.paciente?.split(' ').slice(1).join(' ') || 'Sin apellido',
+  telefono: appointment.telefono || '',
+  fechaConsulta: appointment.fechaConsulta,
+  horaConsulta: appointment.horaConsulta as FormattedTimeString,
+  motivoConsulta: appointment.motivoConsulta || '',
+  estado: appointment.estado as unknown as AppointmentStatusEnum,
+  patientId: appointment.patientId
+})
 
 // Badge de estado optimizado
 const AppointmentStatusBadge: FC<{ status: AppointmentStatus }> = memo(({ status }) => {
@@ -412,8 +406,7 @@ const EmptyState: FC<{ isPast?: boolean; onNewPatient?: () => void }> = memo(({ 
 ))
 EmptyState.displayName = "EmptyState"
 
-// ============ COMPONENTE PRINCIPAL OPTIMIZADO ============
-
+// Componente principal optimizado
 const PatientAdmission: FC = () => {
   const {
     appointments,
@@ -464,7 +457,7 @@ const PatientAdmission: FC = () => {
   // Manejadores optimizados
   const handleUpdateFilters = useCallback((newFilters: FilterState) => {
     setFilters(newFilters)
-  }, [])
+  }, [setFilters])
 
   const handleClearFilters = useCallback(() => {
     setFilters({
@@ -472,10 +465,11 @@ const PatientAdmission: FC = () => {
       statusFilter: "all", 
       sortField: null,
     })
-  }, [])
+  }, [setFilters])
 
   const handleRefresh = useCallback(() => {
     // Implementar lógica de refresco
+    toast.info("Actualizando citas...")
   }, [])
 
   const handleAction = useCallback((action: ConfirmAction, appointmentId: EntityId, appointment: Appointment) => {
@@ -552,17 +546,20 @@ const PatientAdmission: FC = () => {
   }, [])
 
   const handleViewPatientHistory = useCallback((patientId: EntityId) => {
-    // Redirect to patient history page or open a modal with patient history
     toast.info(`Viendo historial del paciente ${patientId}`)
-    // You could navigate to a patient history page
-    // router.push(`/dashboard/patients/${patientId}/history`)
-    // Or implement a modal to show the history
   }, [])
 
   const handleNewPatientSuccess = useCallback(() => {
     toast.success("Paciente registrado correctamente")
     handleRefresh()
   }, [handleRefresh])
+
+  // Convertir AppointmentData a Appointment
+  const convertedAppointments = useMemo(() => ({
+    today: filteredAppointments.today.map(adaptAppointmentData),
+    future: filteredAppointments.future.map(adaptAppointmentData),
+    past: filteredAppointments.past.map(adaptAppointmentData),
+  }), [filteredAppointments])
 
   // Función de renderizado optimizada
   const renderAppointmentsContent = useCallback((appointmentsToRender: Appointment[], isPast = false) => {
@@ -576,22 +573,20 @@ const PatientAdmission: FC = () => {
 
     return (
       <div className="space-y-4">
-        <Suspense fallback={<LoadingSkeleton />}>
-          {appointmentsToRender.map((cita) => (
-            <AppointmentCard 
-              key={cita.id}
-              appointment={cita}
-              isPastOverride={isPast}
-              onAction={handleAction}
-              onStartSurvey={handleStartSurvey}
-              onViewHistory={handleViewPatientHistory}
-              showNoShowOverride={isPast}
-            />
-          ))}
-        </Suspense>
+        {appointmentsToRender.map((cita) => (
+          <AppointmentCard 
+            key={cita.id}
+            appointment={cita}
+            isPastOverride={isPast}
+            onAction={handleAction}
+            onStartSurvey={handleStartSurvey}
+            onViewHistory={handleViewPatientHistory}
+            showNoShowOverride={isPast}
+          />
+        ))}
       </div>
     )
-  }, [isLoadingAppointments, handleAction, handleStartSurvey])
+  }, [isLoadingAppointments, handleAction, handleStartSurvey, handleViewPatientHistory, setActiveTab])
 
   return (
     <div className="grid grid-cols-1 gap-6">
@@ -626,9 +621,9 @@ const PatientAdmission: FC = () => {
                     <div className="flex items-center gap-1.5">
                       <Clock className="h-4 w-4" />
                       <span className={isMobile ? "hidden" : ""}>Hoy</span>
-                      {classifiedAppointments.today.length > 0 && !isLoadingAppointments && (
+                      {convertedAppointments.today.length > 0 && !isLoadingAppointments && (
                         <Badge variant="outline" className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200 px-1.5 py-0.5 text-xs">
-                          {classifiedAppointments.today.length}
+                          {convertedAppointments.today.length}
                         </Badge>
                       )}
                     </div>
@@ -637,9 +632,9 @@ const PatientAdmission: FC = () => {
                     <div className="flex items-center gap-1.5">
                       <Calendar className="h-4 w-4" />
                       <span className={isMobile ? "hidden" : ""}>Futuras</span>
-                      {classifiedAppointments.future.length > 0 && !isLoadingAppointments && (
+                      {convertedAppointments.future.length > 0 && !isLoadingAppointments && (
                         <Badge variant="outline" className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200 px-1.5 py-0.5 text-xs">
-                          {classifiedAppointments.future.length}
+                          {convertedAppointments.future.length}
                         </Badge>
                       )}
                     </div>
@@ -648,9 +643,9 @@ const PatientAdmission: FC = () => {
                     <div className="flex items-center gap-1.5">
                       <ClipboardCheck className="h-4 w-4" />
                       <span className={isMobile ? "hidden" : ""}>Historial</span>
-                      {classifiedAppointments.past.length > 0 && !isLoadingAppointments && (
+                      {convertedAppointments.past.length > 0 && !isLoadingAppointments && (
                         <Badge variant="outline" className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200 px-1.5 py-0.5 text-xs">
-                          {classifiedAppointments.past.length}
+                          {convertedAppointments.past.length}
                         </Badge>
                       )}
                     </div>
@@ -678,42 +673,38 @@ const PatientAdmission: FC = () => {
 
             <div className="p-6 pt-0">
               <TabsContent value="newPatient" className="mt-0">
-                <Suspense fallback={<LoadingSkeleton />}>
-                  <NewPatientForm onSuccess={handleNewPatientSuccess} />
-                </Suspense>
+                <NewPatientForm onSuccess={handleNewPatientSuccess} />
               </TabsContent>
               <TabsContent value="today" className="m-0 py-2">
-                {renderAppointmentsContent(filteredAppointments.today)}
+                {renderAppointmentsContent(convertedAppointments.today)}
               </TabsContent>
               <TabsContent value="future" className="m-0 py-2">
-                {renderAppointmentsContent(filteredAppointments.future)}
+                {renderAppointmentsContent(convertedAppointments.future)}
               </TabsContent>
               <TabsContent value="past" className="m-0 py-2">
-                {renderAppointmentsContent(filteredAppointments.past, true)}
+                {renderAppointmentsContent(convertedAppointments.past, true)}
               </TabsContent>
             </div>
           </Tabs>
         </CardContent>
       </Card>
 
-      {/* Diálogo para compartir encuesta - Lazy loaded */}
-      <Suspense fallback={null}>
-        <SurveyShareDialog
-          isOpen={surveyDialog.isOpen}
-          patient={{
-            id: surveyDialog.patientId,
-            nombre: surveyDialog.patientName,
-            apellidos: surveyDialog.patientLastName,
-            telefono: surveyDialog.patientPhone,
-          }}
-          surveyLink={surveyDialog.surveyLink}
-          onStartInternal={() => {
-            toast.success(`Iniciando encuesta para ${surveyDialog.patientName}`)
-            setSurveyDialog(prev => ({ ...prev, isOpen: false }))
-          }}
-          onClose={() => setSurveyDialog(prev => ({ ...prev, isOpen: false }))}
-        />
-      </Suspense>
+      {/* Diálogo para compartir encuesta */}
+      <SurveyShareDialog
+        isOpen={surveyDialog.isOpen}
+        patient={{
+          id: surveyDialog.patientId,
+          nombre: surveyDialog.patientName,
+          apellidos: surveyDialog.patientLastName,
+          telefono: surveyDialog.patientPhone,
+        }}
+        surveyLink={surveyDialog.surveyLink}
+        onStartInternal={() => {
+          toast.success(`Iniciando encuesta para ${surveyDialog.patientName}`)
+          setSurveyDialog(prev => ({ ...prev, isOpen: false }))
+        }}
+        onClose={() => setSurveyDialog(prev => ({ ...prev, isOpen: false }))}
+      />
 
       {/* Diálogo de confirmación optimizado */}
       <AlertDialog 

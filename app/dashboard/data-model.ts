@@ -297,7 +297,8 @@ export interface PatientData {
   origen_paciente?: Optional<PatientOrigin>; // text (o ENUM si lo creas)
   probabilidad_cirugia?: Optional<number>; // numeric(3,2)
   ultimo_contacto?: Optional<DateString>; // date
-  proximo_contacto?: Optional<DateString>; // date
+  proximo_contacto?: Optional<DateString>;
+  fecha_proxima_cita?: Optional<ISODateTimeString>; // Añadido para la próxima revisión
   etiquetas?: Optional<string[]>; // _text (text[])
   fecha_cirugia_programada?: Optional<DateString>; // date
   id_legacy?: Optional<number>; // int4
