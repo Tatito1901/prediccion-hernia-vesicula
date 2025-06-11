@@ -1,342 +1,611 @@
-/* -------------------------------------------------------------------------- */
-/*  components/diagnostics/chart-diagnostic.tsx                               */
-/* -------------------------------------------------------------------------- */
+// components/diagnostics/chart-diagnostic-client.tsx
 
-import type { FC, ReactNode } from 'react';
-import {
-  memo, Suspense, useMemo, useCallback, useState, lazy, useDeferredValue,
-} from 'react';
+import type { FC } from 'react';
+import { memo, useState, useMemo, useCallback, Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { PieChartIcon, Activity, ChartLine, TrendingUp, TrendingDown } from 'lucide-react';
+import {
+  PieChart as PieChartIcon,
+  ChartLine,
+  Brain,
+  Target,
+  Users,
+  TrendingUp,
+  AlertTriangle,
+  Award,
+  RefreshCw,
+  BarChart3,
+  TrendingDown,
+} from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { useAppContext } from '@/lib/context/app-context';
-import {
-  Card, CardHeader, CardContent, CardTitle, CardDescription,
-} from '@/components/ui/card';
+import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import type {
-  PatientData, DiagnosisType,
-} from '@/app/dashboard/data-model';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { DiagnosisEnum } from '@/app/dashboard/data-model';
 
-/* --------------------------- Tipos & Constantes --------------------------- */
+/* ============================================================================
+ * TIPOS Y INTERFACES ESPECIALIZADAS
+ * ========================================================================== */
 
-export const HERNIA_CATEGORIES = [
-  'Hernia Inguinal',
-  'Hernia Umbilical',
-  'Hernia Incisional',
-  'Hernia Hiatal',
-  'Hernia Inguinal Recidivante',
-] as const;
-
-export const VESICULA_CATEGORIES = [
-  'Vesícula',
-  'Vesícula (Colecistitis Crónica)',
-  'Colelitiasis',
-] as const;
-
-type Hernia = typeof HERNIA_CATEGORIES[number];
-type Vesicula = typeof VESICULA_CATEGORIES[number];
-
-export type LocalDiagnosisCategory =
-  | Hernia
-  | Vesicula
-  | 'Apendicitis'
-  | 'Lipoma Grande'
-  | 'Quiste Sebáceo Infectado'
-  | 'Eventración Abdominal'
-  | 'Otro';
-
-export interface DiagnosisData {
-  readonly tipo: LocalDiagnosisCategory;
-  readonly cantidad: number;
+export interface PatientData {
+  id: string;
+  diagnostico?: DiagnosisType | string;
+  diagnostico_principal?: DiagnosisType | string;
+  fecha_registro?: string;
+  fecha_primera_consulta?: string;
+  edad?: number;
+  genero?: 'M' | 'F';
 }
 
-export interface DiagnosisMetrics {
-  readonly totalPacientes: number;
-  readonly totalHernias: number;
-  readonly totalVesicula: number;
-  readonly diagnosticosMasComunes: ReadonlyArray<DiagnosisData>;
-  readonly distribucionHernias: ReadonlyArray<DiagnosisData>;
-  readonly porcentajeHernias: number;
-  readonly porcentajeVesicula: number;
-  readonly ratioHerniaVesicula: number;
+// Represents all specific diagnoses from the enum, excluding the generic "OTRO"
+export type DiagnosisType = Exclude<`${DiagnosisEnum}`, typeof DiagnosisEnum.OTRO>;
+
+// Represents a category for charting or local logic, which can be a specific diagnosis or "OTRO"
+export type LocalDiagnosisCategory = DiagnosisType | typeof DiagnosisEnum.OTRO;
+
+export interface ChartData {
+  tipo: LocalDiagnosisCategory;
+  cantidad: number;
+  porcentaje?: number;
+  tendencia?: number;
 }
 
-/* ---------------------------- Lazy components ----------------------------- */
+export interface TimelineData {
+  date: string;
+  cantidad: number;
+  formattedDate: string;
+}
 
-const DiagnosisChart = dynamic(() => import('@/components/charts/diagnosis-chart'), {
-  ssr: false,
-  loading: () => <Skeleton className="h-[300px]" />,
-});
-const DiagnosisTimelineChart = dynamic(
-  () => import('@/components/charts/diagnosis-timeline-chart'),
-  { ssr: false, loading: () => <Skeleton className="h-[300px]" /> },
+export interface Metrics {
+  totalPacientes: number;
+  totalHernias: number;
+  totalVesicula: number;
+  totalApendicitis: number;
+  diagnosticosMasComunes: ChartData[];
+  distribucionHernias: ChartData[];
+  porcentajeHernias: number;
+  porcentajeVesicula: number;
+  porcentajeApendicitis: number;
+  ratioHerniaVesicula: number;
+  diversidadDiagnostica: number;
+  tendenciaGeneral: number;
+}
+
+export interface DiagnosticInsight {
+  type: 'warning' | 'info' | 'success';
+  title: string;
+  description: string;
+  metric?: number;
+  trend?: 'up' | 'down' | 'stable';
+}
+
+export interface MetricsResult {
+  metrics: Metrics;
+  timeline: TimelineData[];
+  insights: DiagnosticInsight[];
+}
+
+/* ============================================================================
+ * CONSTANTES DE ESTILOS OPTIMIZADAS
+ * ============================================================================ */
+
+const CARD_VARIANTS = {
+  blue: {
+    border: 'border-blue-500',
+    bg: 'bg-blue-50 dark:bg-blue-900/20',
+    icon: 'text-blue-600',
+    trend: {
+      up: 'text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50',
+      down: 'text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50'
+    }
+  },
+  green: {
+    border: 'border-green-500',
+    bg: 'bg-green-50 dark:bg-green-900/20',
+    icon: 'text-green-600'
+  },
+  purple: {
+    border: 'border-purple-500',
+    bg: 'bg-purple-50 dark:bg-purple-900/20',
+    icon: 'text-purple-600'
+  },
+  orange: {
+    border: 'border-orange-500',
+    bg: 'bg-orange-50 dark:bg-orange-900/20',
+    icon: 'text-orange-600'
+  }
+} as const;
+
+const ALERT_VARIANTS = {
+  warning: {
+    border: 'border-l-yellow-500',
+    bg: 'bg-yellow-50 dark:bg-yellow-950/20',
+    text: 'text-yellow-800 dark:text-yellow-300',
+    icon: AlertTriangle,
+    iconColor: 'text-yellow-600'
+  },
+  success: {
+    border: 'border-l-green-500',
+    bg: 'bg-green-50 dark:bg-green-950/20',
+    text: 'text-green-800 dark:text-green-300',
+    icon: Award,
+    iconColor: 'text-green-600'
+  },
+  info: {
+    border: 'border-l-blue-500',
+    bg: 'bg-blue-50 dark:bg-blue-950/20',
+    text: 'text-blue-800 dark:text-blue-300',
+    icon: Brain,
+    iconColor: 'text-blue-600'
+  }
+} as const;
+
+/* ============================================================================
+ * COMPONENTES DE GRÁFICOS OPTIMIZADOS
+ * ============================================================================ */
+
+// Preload crítico - sin lazy loading para el gráfico principal
+const DiagnosisChart = dynamic(
+  () => import('@/components/charts/diagnosis-chart').then(mod => mod.default),
+  { 
+    loading: () => <OptimizedChartSkeleton />,
+    ssr: false 
+  }
 );
 
-/* ---------------------------- Helper Functions ---------------------------- */
+// Lazy loading para gráficos secundarios
+const DiagnosisTimelineChart = dynamic(
+  () => import('@/components/charts/diagnosis-timeline-chart').then(mod => mod.default),
+  { 
+    loading: () => <OptimizedChartSkeleton height="h-80" />,
+    ssr: false 
+  }
+);
 
-const classify = (d?: DiagnosisType | string): LocalDiagnosisCategory => {
-  if (!d) return 'Otro';
-  if (HERNIA_CATEGORIES.includes(d as any)) return d as Hernia;
-  if (VESICULA_CATEGORIES.includes(d as any)) return 'Vesícula';
-  if (d === 'Apendicitis') return 'Apendicitis';
-  if (['Lipoma Grande', 'Quiste Sebáceo Infectado', 'Eventración Abdominal'].includes(d)) return d as LocalDiagnosisCategory;
-  if (d === DiagnosisEnum.HERNIA_INGUINAL || d.toLowerCase().includes('hernia')) return 'Hernia Inguinal';
-  return 'Otro';
-};
+const DiagnosisBarChart = dynamic(
+  () => import('@/components/charts/diagnosis-bar-chart').then(mod => mod.default),
+  { 
+    loading: () => <OptimizedChartSkeleton />,
+    ssr: false 
+  }
+);
 
-const buildTimeline = (pts: readonly PatientData[]) => {
-  const map = new Map<string, number>();
-  pts.forEach(({ fecha_registro }) => {
-    if (!fecha_registro) return;
-    const key = new Date(fecha_registro).toLocaleDateString('es-ES');
-    map.set(key, (map.get(key) ?? 0) + 1);
-  });
-  return [...map.entries()]
-    .map(([date, cantidad]) => ({ date, cantidad }))
-    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-};
+const DiagnosisTypeDistribution = dynamic(
+  () => import('@/components/charts/diagnosis-type-distribution').then(mod => mod.default),
+  { 
+    loading: () => <OptimizedChartSkeleton />,
+    ssr: false 
+  }
+);
 
-/* -------------------------------------------------------------------------- */
-/*  UI • Metric card                                                          */
-/* -------------------------------------------------------------------------- */
+/* ============================================================================
+ * COMPONENTES DE LOADING OPTIMIZADOS
+ * ============================================================================ */
 
-interface MetricProps {
-  title: string;
-  value: number | string;
-  subtitle: string;
-  icon: ReactNode;
-  trend: 'up' | 'down' | 'stable';
-  borderColor: string;
-  loading?: boolean;
-}
+const OptimizedChartSkeleton: FC<{ height?: string }> = memo(({ height = "h-64" }) => (
+  <Card className="p-6 shadow-none border animate-pulse">
+    <div className="h-6 w-2/5 mb-4 bg-muted rounded" />
+    <div className={cn("w-full rounded bg-muted", height)} />
+  </Card>
+));
+OptimizedChartSkeleton.displayName = 'OptimizedChartSkeleton';
 
-const TrendIcon = ({ t }: { t: MetricProps['trend'] }) =>
-  t === 'up' ? <TrendingUp className="h-4 w-4 text-green-500" /> :
-  t === 'down' ? <TrendingDown className="h-4 w-4 text-red-500" /> : null;
+const StatCardSkeleton: FC = memo(() => (
+  <Card className="p-6 border-l-4 border-transparent animate-pulse">
+    <div className="h-4 w-20 mb-2 bg-muted rounded" />
+    <div className="h-8 w-16 mb-1 bg-muted rounded" />
+    <div className="h-3 w-32 bg-muted rounded" />
+  </Card>
+));
+StatCardSkeleton.displayName = 'StatCardSkeleton';
 
-const MetricCard: FC<MetricProps> = memo(({
-  title, value, subtitle, icon, borderColor, trend, loading,
-}) => (
-  <Card className={cn('border-l-4', borderColor)}>
-    {loading ? (
-      <CardContent className="p-6 space-y-2">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-8 w-16" />
-        <Skeleton className="h-3 w-32" />
-      </CardContent>
-    ) : (
-      <CardContent className="p-6">
-        <div className="flex justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
-            <div className="flex items-center gap-1 mt-1">
-              <span className="text-3xl font-bold">{value}</span>
-              <TrendIcon t={trend} />
-            </div>
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          </div>
-          <span className="bg-muted h-12 w-12 rounded-full flex items-center justify-center text-primary">
-            {icon}
-          </span>
-        </div>
-      </CardContent>
+export const DiagnosticSkeleton: FC = memo(() => (
+  <div className="space-y-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      {Array.from({ length: 4 }, (_, i) => <StatCardSkeleton key={i} />)}
+    </div>
+    
+    <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+    
+    <div className="space-y-6">
+      <div className="grid lg:grid-cols-2 gap-6">
+        <OptimizedChartSkeleton />
+        <OptimizedChartSkeleton />
+      </div>
+    </div>
+  </div>
+));
+DiagnosticSkeleton.displayName = 'DiagnosticSkeleton';
+
+const ErrorState: FC<{ message: string; onRetry?: () => void }> = memo(({ message, onRetry }) => (
+  <Card className="p-8 text-center border-destructive">
+    <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+    <h3 className="text-lg font-semibold mb-2 text-destructive">Error</h3>
+    <p className="text-muted-foreground mb-4">{message}</p>
+    {onRetry && (
+      <Button onClick={onRetry} variant="outline" size="sm">
+        <RefreshCw className="h-4 w-4 mr-2" />
+        Reintentar
+      </Button>
     )}
   </Card>
 ));
-MetricCard.displayName = 'MetricCard';
+ErrorState.displayName = 'ErrorState';
 
-/* -------------------------------------------------------------------------- */
-/*  Root component                                                            */
-/* -------------------------------------------------------------------------- */
+/* ============================================================================
+ * COMPONENTES AUXILIARES OPTIMIZADOS
+ * ============================================================================ */
 
-const ChartDiagnostic: FC = memo(() => {
-  const { patients, isLoadingPatients } = useAppContext();
-  /** defer para que el cambio de pestaña no bloquee input */
-  const dataDeferred = useDeferredValue(patients);
-
-  /* --------------------------- Métricas memorizadas --------------------- */
-  const metrics: DiagnosisMetrics = useMemo(() => {
-    if (!dataDeferred?.length) {
-      return {
-        totalPacientes: 0,
-        totalHernias: 0,
-        totalVesicula: 0,
-        diagnosticosMasComunes: [],
-        distribucionHernias: [],
-        porcentajeHernias: 0,
-        porcentajeVesicula: 0,
-        ratioHerniaVesicula: 0,
-      };
-    }
-
-    const counts = new Map<LocalDiagnosisCategory, number>();
-    dataDeferred.forEach(p => {
-      const cat = classify(p.diagnostico);
-      counts.set(cat, (counts.get(cat) ?? 0) + 1);
-    });
-
-    const total = dataDeferred.length;
-    const totalH = HERNIA_CATEGORIES.reduce((s, h) => s + (counts.get(h) ?? 0), 0);
-    const totalV = VESICULA_CATEGORIES.reduce((s, v) => s + (counts.get(v) ?? 0), 0)
-      + (counts.get('Colelitiasis') ?? 0);
-
-    const toArr = (c: readonly LocalDiagnosisCategory[]) =>
-      c.map(tipo => ({ tipo, cantidad: counts.get(tipo) ?? 0 }))
-        .filter(x => x.cantidad);
-
-    return {
-      totalPacientes: total,
-      totalHernias: totalH,
-      totalVesicula: totalV,
-      diagnosticosMasComunes:
-        [...counts.entries()]
-          .map(([tipo, cantidad]) => ({ tipo, cantidad }))
-          .sort((a, b) => b.cantidad - a.cantidad),
-      distribucionHernias: toArr(HERNIA_CATEGORIES),
-      porcentajeHernias: Math.round((totalH / total) * 100),
-      porcentajeVesicula: Math.round((totalV / total) * 100),
-      ratioHerniaVesicula: totalV ? +(totalH / totalV).toFixed(1) : 0,
-    };
-  }, [dataDeferred]);
-
-  const timeline = useMemo(() => buildTimeline(dataDeferred), [dataDeferred]);
-
-  /* ---------------------------- Render helpers -------------------------- */
-
-  const proportion = [
-    { label: 'Hernias', val: metrics.porcentajeHernias, color: 'bg-blue-500' },
-    { label: 'Vesícula', val: metrics.porcentajeVesicula, color: 'bg-green-500' },
-    { label: 'Otros', val: 100 - metrics.porcentajeHernias - metrics.porcentajeVesicula, color: 'bg-gray-400' },
-  ] as const;
-
-  /* ------------------------------- UI ----------------------------------- */
-
+const TrendIndicator: FC<{ trend: number }> = memo(({ trend }) => {
+  if (trend === 0) return null;
+  
+  const isPositive = trend > 0;
+  const Icon = isPositive ? TrendingUp : TrendingDown;
+  
   return (
-    <section className="space-y-6">
-      {/* header */}
-      <div className="flex items-center gap-2">
-        <Activity className="h-6 w-6 text-primary" />
-        <h2 className="text-xl font-bold">Diagnósticos</h2>
-        <span className="px-2 py-0.5 bg-muted rounded text-sm">
-          {metrics.totalPacientes} pacientes
-        </span>
+    <span className={cn(
+      "text-xs font-semibold flex items-center gap-1 px-1.5 py-0.5 rounded-full",
+      isPositive 
+        ? "text-red-600 bg-red-100 dark:text-red-300 dark:bg-red-900/50" 
+        : "text-green-600 bg-green-100 dark:text-green-300 dark:bg-green-900/50"
+    )}>
+      <Icon className="h-3 w-3" />
+      {Math.abs(trend).toFixed(1)}%
+    </span>
+  );
+});
+TrendIndicator.displayName = 'TrendIndicator';
+
+const StatCard: FC<{
+  title: string;
+  value: string | number;
+  subtitle: string;
+  icon: React.ReactNode;
+  variant: keyof typeof CARD_VARIANTS;
+  trend?: number;
+}> = memo(({ title, value, subtitle, icon, variant, trend }) => {
+  const styles = CARD_VARIANTS[variant];
+  
+  return (
+    <Card className={cn(
+      'border-l-4 hover:shadow-lg transition-all duration-200 hover:scale-[1.02]',
+      styles.border,
+      styles.bg
+    )}>
+      <CardContent className="p-6">
+        <div className="flex justify-between items-start">
+          <div className="space-y-1 flex-1">
+            <p className="text-sm font-medium text-muted-foreground">
+              {title}
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold tracking-tight">
+                {value}
+              </span>
+              {trend !== undefined && <TrendIndicator trend={trend} />}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {subtitle}
+            </p>
+          </div>
+          <div className="p-2 rounded-lg bg-background/60 dark:bg-card shrink-0">
+            {icon}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+StatCard.displayName = 'StatCard';
+
+const InsightAlert: FC<{ insight: DiagnosticInsight }> = memo(({ insight }) => {
+  const config = ALERT_VARIANTS[insight.type];
+  const IconComponent = config.icon;
+  
+  return (
+    <Alert className={cn("border-l-4", config.border, config.bg, config.text)}>
+      <div className="flex items-start gap-3">
+        <IconComponent className={cn("h-4 w-4 mt-0.5", config.iconColor)} />
+        <div className="flex-1">
+          <p className="font-semibold text-sm">{insight.title}</p>
+          <AlertDescription className="text-xs mt-1 text-inherit">
+            {insight.description}
+          </AlertDescription>
+        </div>
+        {insight.metric !== undefined && (
+          <div className="text-right shrink-0">
+            <div className="font-bold text-lg">{insight.metric}</div>
+            {insight.trend && (
+              <div className={cn(
+                "text-xs flex items-center gap-1 justify-end",
+                insight.trend === 'up' ? "text-red-500" : "text-green-500"
+              )}>
+                {insight.trend === 'up' ?
+                  <TrendingUp className="h-3 w-3" /> :
+                  <TrendingDown className="h-3 w-3" />}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Alert>
+  );
+});
+InsightAlert.displayName = 'InsightAlert';
+
+/* ============================================================================
+ * PROPS DEL COMPONENTE CLIENTE
+ * ============================================================================ */
+interface ChartDiagnosticClientProps {
+  initialMetricsResult: MetricsResult;
+  initialPatientsData: PatientData[];
+  lastUpdated: string;
+}
+
+/* ============================================================================
+ * COMPONENTE CLIENTE PRINCIPAL OPTIMIZADO
+ * ============================================================================ */
+
+export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
+  initialMetricsResult,
+  initialPatientsData,
+  lastUpdated,
+}) => {
+  /* ============================== ESTADO OPTIMIZADO ============================== */
+  const [activeTab, setActiveTab] = useState<'distribution' | 'timeline' | 'analysis'>('distribution');
+  const [error, setError] = useState<string | null>(null);
+
+  const { metrics, insights } = initialMetricsResult;
+
+  /* ======================= CALLBACKS OPTIMIZADOS ======================= */
+  const handleTabChange = useCallback((value: string) => {
+    if (value === 'distribution' || value === 'timeline' || value === 'analysis') {
+      setActiveTab(value);
+    }
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    setError(null);
+  }, []);
+
+  /* ======================= DATOS MEMOIZADOS ======================= */
+  const statCardsData = useMemo(() => [
+    {
+      title: 'Total Pacientes',
+      value: metrics.totalPacientes,
+      subtitle: 'Casos analizados',
+      icon: <Users className="h-5 w-5" />,
+      variant: 'blue' as const,
+      trend: metrics.tendenciaGeneral,
+    },
+    {
+      title: 'Casos de Hernia',
+      value: metrics.totalHernias,
+      subtitle: `${metrics.porcentajeHernias.toFixed(0)}% del total`,
+      icon: <Target className="h-5 w-5" />,
+      variant: 'green' as const,
+    },
+    {
+      title: 'Vesícula/Colecistitis',
+      value: metrics.totalVesicula,
+      subtitle: `${metrics.porcentajeVesicula.toFixed(0)}% del total`,
+      icon: <PieChartIcon className="h-5 w-5" />,
+      variant: 'purple' as const,
+    },
+    {
+      title: 'Diversidad Diagnóstica',
+      value: metrics.diversidadDiagnostica.toFixed(1),
+      subtitle: 'Índice Shannon',
+      icon: <ChartLine className="h-5 w-5" />,
+      variant: 'orange' as const,
+    },
+  ], [metrics]);
+
+  const specialtyProportions = useMemo(() => [
+    { label: 'Hernias', value: metrics.porcentajeHernias, color: 'bg-blue-500' },
+    { label: 'Vesícula/Colecistitis', value: metrics.porcentajeVesicula, color: 'bg-green-500' },
+    { label: 'Apendicitis', value: metrics.porcentajeApendicitis, color: 'bg-red-500' },
+    {
+      label: 'Otros',
+      value: Math.max(0, 100 - metrics.porcentajeHernias - metrics.porcentajeVesicula - metrics.porcentajeApendicitis),
+      color: 'bg-gray-500'
+    },
+  ], [metrics.porcentajeHernias, metrics.porcentajeVesicula, metrics.porcentajeApendicitis]);
+
+  /* ========================== MANEJO DE ERRORES ========================== */
+  if (error) {
+    return <ErrorState message={error} onRetry={handleRetry} />;
+  }
+
+  /* ========================== RENDERIZADO OPTIMIZADO ========================== */
+  return (
+    <div className="space-y-6">
+      {/* Insights */}
+      {insights.length > 0 && (
+        <div className="grid gap-3">
+          {insights.slice(0, 2).map((insight, index) => (
+            <InsightAlert key={`${insight.type}-${index}`} insight={insight} />
+          ))}
+        </div>
+      )}
+
+      {/* Métricas Principales */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {statCardsData.map((stat) => (
+          <StatCard key={stat.title} {...stat} />
+        ))}
       </div>
 
-      {/* métricas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <MetricCard
-          title="Hernias"
-          value={metrics.totalHernias}
-          subtitle={`${metrics.porcentajeHernias}% del total`}
-          icon={<PieChartIcon className="h-6 w-6" />}
-          borderColor="border-blue-500"
-          trend="stable"
-          loading={isLoadingPatients}
-        />
-        <MetricCard
-          title="Vesícula"
-          value={metrics.totalVesicula}
-          subtitle={`${metrics.porcentajeVesicula}% del total`}
-          icon={<PieChartIcon className="h-6 w-6" />}
-          borderColor="border-green-500"
-          trend="stable"
-          loading={isLoadingPatients}
-        />
-        <MetricCard
-          title="Ratio H:V"
-          value={metrics.ratioHerniaVesicula}
-          subtitle="Hernias / Vesícula"
-          icon={<ChartLine className="h-6 w-6" />}
-          borderColor="border-purple-500"
-          trend="stable"
-          loading={isLoadingPatients}
-        />
-      </div>
-
-      {/* tabs */}
-      <Tabs defaultValue="d" className="w-full">
-        <TabsList className="grid grid-cols-2 bg-muted">
-          <TabsTrigger value="d">Distribución</TabsTrigger>
-          <TabsTrigger value="t">Tendencia</TabsTrigger>
+      {/* Tabs de Contenido */}
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-3 bg-muted/60 dark:bg-muted/30">
+          <TabsTrigger value="distribution" className="gap-2 data-[state=active]:bg-background">
+            <PieChartIcon className="h-4 w-4" />
+            Distribución
+          </TabsTrigger>
+          <TabsTrigger value="timeline" className="gap-2 data-[state=active]:bg-background">
+            <ChartLine className="h-4 w-4" />
+            Tendencias
+          </TabsTrigger>
+          <TabsTrigger value="analysis" className="gap-2 data-[state=active]:bg-background">
+            <BarChart3 className="h-4 w-4" />
+            Análisis
+          </TabsTrigger>
         </TabsList>
 
-        {/* Distribución */}
-        <TabsContent value="d">
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Distribución de diagnósticos</CardTitle>
-              </CardHeader>
-              <CardContent className="aspect-video">
-                {isLoadingPatients
-                  ? <Skeleton className="w-full h-full" />
-                  : <DiagnosisChart data={metrics.diagnosticosMasComunes} />}
-              </CardContent>
-            </Card>
-
-            {!!metrics.distribucionHernias.length && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Tipos de hernia</CardTitle>
+        <TabsContent value="distribution" className="space-y-6">
+          <div className="grid lg:grid-cols-2 gap-6">
+            <Suspense fallback={<OptimizedChartSkeleton />}>
+              <Card className="flex flex-col h-full overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Distribución General</CardTitle>
+                  <CardDescription>Todos los diagnósticos por frecuencia</CardDescription>
                 </CardHeader>
-                <CardContent className="aspect-video">
-                  {isLoadingPatients
-                    ? <Skeleton className="w-full h-full" />
-                    : <DiagnosisChart data={metrics.distribucionHernias} />}
+                <CardContent className="flex-1 min-h-[350px] p-4">
+                  <DiagnosisChart
+                    data={metrics.diagnosticosMasComunes}
+                    title=""
+                    description=""
+                    className="h-full"
+                  />
                 </CardContent>
               </Card>
+            </Suspense>
+
+            {metrics.distribucionHernias.length > 0 && (
+              <Suspense fallback={<OptimizedChartSkeleton />}>
+                <Card className="flex flex-col h-full overflow-hidden">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Distribución de Hernias</CardTitle>
+                    <CardDescription>Tipos específicos de hernias por frecuencia</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-1 min-h-[350px] p-4">
+                    <DiagnosisTypeDistribution 
+                      patients={initialPatientsData}
+                      className="h-full"
+                    />
+                  </CardContent>
+                </Card>
+              </Suspense>
             )}
           </div>
 
-          {/* Proporciones */}
-          <Card className="mt-4">
+          {/* Proporciones por Especialidad */}
+          <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Proporciones</CardTitle>
+              <CardTitle className="text-lg">Proporciones por Especialidad</CardTitle>
+              <CardDescription>
+                Distribución porcentual de los principales grupos diagnósticos
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {proportion.map(p => (
-                <div key={p.label}>
-                  <div className="flex justify-between text-sm">
-                    <span>{p.label}</span>
-                    <span>{p.val}%</span>
+              {specialtyProportions.map((item) => (
+                <div key={item.label} className="space-y-2">
+                  <div className="flex justify-between text-sm font-medium">
+                    <span className="flex items-center gap-2">
+                      <div className={cn("w-3 h-3 rounded-full", item.color)} />
+                      {item.label}
+                    </span>
+                    <span>{item.value.toFixed(1)}%</span>
                   </div>
-                  <Progress value={p.val} className="h-2" color={p.color} />
+                  <Progress value={item.value} className="h-2" />
                 </div>
               ))}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Tendencia */}
-        <TabsContent value="t">
-          <Card>
-            <CardHeader>
-              <CardTitle>Tendencia temporal</CardTitle>
-            </CardHeader>
-            <CardContent className="aspect-video">
-              {isLoadingPatients
-                ? <Skeleton className="w-full h-full" />
-                : timeline.length
-                  ? <DiagnosisTimelineChart patients={dataDeferred} />
-                  : <p className="text-muted-foreground text-center mt-10">Sin datos</p>}
-            </CardContent>
-          </Card>
+        <TabsContent value="timeline" className="space-y-6">
+          <Suspense fallback={<OptimizedChartSkeleton height="h-80" />}>
+            <DiagnosisTimelineChart patients={initialPatientsData} />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="analysis" className="space-y-6">
+          <div className="grid gap-6">
+            <Suspense fallback={<OptimizedChartSkeleton />}>
+              <DiagnosisBarChart
+                data={metrics.diagnosticosMasComunes}
+                title="Análisis Comparativo de Frecuencias"
+              />
+            </Suspense>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Proporciones de Especialidad */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Proporciones de Especialidad</CardTitle>
+                  <CardDescription>
+                    Distribución porcentual entre hernias, vesícula y apendicitis
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {specialtyProportions.map((item) => (
+                    <div key={item.label} className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{item.label}</span>
+                      <div className="flex items-center gap-2">
+                        <Progress value={item.value} className={cn("h-2 w-24", item.color)} />
+                        <span className="text-xs font-semibold w-10 text-right">
+                          {item.value.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Métricas Avanzadas */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Métricas Avanzadas</CardTitle>
+                  <CardDescription>
+                    Indicadores especializados para optimización
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="font-medium text-muted-foreground">Ratio Hernia:Vesícula</span>
+                      <Badge variant="secondary" className="font-mono text-xs">
+                        {metrics.ratioHerniaVesicula.toFixed(1)}:1
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="font-medium text-muted-foreground">Índice de Diversidad</span>
+                      <Badge variant="secondary" className="font-mono text-xs">
+                        {metrics.diversidadDiagnostica.toFixed(2)}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="font-medium text-muted-foreground">Especialización</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {metrics.diversidadDiagnostica < 2 ? 'Alta' :
+                         metrics.diversidadDiagnostica < 3 ? 'Media' : 'Baja'}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
-      {/* footer */}
-      <p className="text-right text-xs text-muted-foreground">
-        Actualizado {format(new Date(), "d MMM yyyy HH:mm", { locale: es })}
-      </p>
-    </section>
+      {/* Footer */}
+      <div className="text-right">
+        <p className="text-xs text-muted-foreground">
+          Última actualización: {lastUpdated}
+        </p>
+      </div>
+    </div>
   );
 });
-ChartDiagnostic.displayName = 'ChartDiagnostic';
-export default ChartDiagnostic;
+
+ChartDiagnosticClient.displayName = 'ChartDiagnosticClient';
+
+// Export the component as default for dynamic import to work correctly
+export default ChartDiagnosticClient;

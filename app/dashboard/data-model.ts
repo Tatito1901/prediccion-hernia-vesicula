@@ -284,6 +284,7 @@ export interface PatientData {
   apellidos: string;
   edad?: Optional<number>; // int4
   fecha_nacimiento?: Optional<DateString>; // date
+  gravedad?: 'leve' | 'moderada' | 'severa';
   estado?: Optional<PatientStatus>; // Added to align with app-context usage
   telefono?: Optional<PhoneString>; // varchar
   email?: Optional<EmailString>; // varchar
@@ -377,7 +378,7 @@ export interface PatientSurveyData {
 }
 
 
-// Interfaz para los datos de la API de appointments
+// Interfaz para la tabla 'appointments'
 export interface AppointmentDataAPI {
   readonly id: ID; // uuid
   patient_id: ID; // FK a patients.id, NOT NULL
@@ -404,7 +405,8 @@ export interface AppointmentData {
   horaConsulta: TimeString; // HH:mm para UI
   paciente: string; // Nombre completo, derivado
   telefono?: Optional<PhoneString>; // Derivado
-  motivoConsulta?: Optional<DiagnosisType | string>; // Puede ser DiagnosisType o texto libre si es "OTRO"
+  email?: Optional<EmailString>; // Added to include email field
+  motivoConsulta?: Optional<DiagnosisType | string>; // Puede ser DiagnosisType o texto libre si es 'OTRO'
   doctor: string; // Nombre del doctor, derivado
   estado: AppointmentStatus;
   notas?: Optional<string>; // Mapea a notas_cita_seguimiento

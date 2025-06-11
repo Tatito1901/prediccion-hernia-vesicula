@@ -1,9 +1,10 @@
 // app/dashboard/mock-data.ts
+import { DiagnosisEnum } from './data-model'; // Import DiagnosisEnum
 import type { DoctorData, ClinicMetrics, DiagnosisType, PatientOrigin } from './data-model';
 
 export const sampleDoctors: DoctorData[] = [
   {
-    id: 1,
+    id: "doc-mock-1",
     nombre: "Dr. Luis Ángel Medina Andrade",
     especialidad: "Cirugía General y Laparoscópica",
     pacientesAtendidos: 120,
@@ -23,19 +24,22 @@ export const clinicMetrics: ClinicMetrics = {
   fuentePrincipalPacientes: "Google",
   diagnosticosMasComunes: [
     {
-      tipo: "Hernia Inguinal", cantidad: 95,
+      tipo: DiagnosisEnum.HERNIA_INGUINAL, cantidad: 95,
       porcentaje: 0
     },
     {
-      tipo: "Vesícula", cantidad: 85,
+      // Assuming "Vesícula" generally refers to Colelitiasis or Colecistitis.
+      // Using COLELITIASIS as a common general term for gallbladder issues.
+      // Adjust if COLECISTITIS is more appropriate for this mock data.
+      tipo: DiagnosisEnum.COLELITIASIS, cantidad: 85,
       porcentaje: 0
     },
     {
-      tipo: "Hernia Umbilical", cantidad: 45,
+      tipo: DiagnosisEnum.HERNIA_UMBILICAL, cantidad: 45,
       porcentaje: 0
     },
     {
-      tipo: "Hernia Incisional", cantidad: 25,
+      tipo: DiagnosisEnum.HERNIA_INCISIONAL, cantidad: 25,
       porcentaje: 0
     },
   ],

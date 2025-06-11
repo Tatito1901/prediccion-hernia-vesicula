@@ -80,11 +80,26 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
-    --chart-1: 12 76% 61%;
+    /* Chart color palette - Light Mode */
+    --chart-1: 210 75% 40%;
     --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --chart-3: 43 74% 66%;
+    --chart-4: 0 84% 60%;
+    --chart-5: 271 81% 56%;
+    --chart-6: 197 37% 24%;
+
+    /* Chart status colors - light mode */
+    --chart-green: 160 84% 39%;
+    --chart-yellow: 40 90% 50%;
+    --chart-red: 0 84% 60%;
+    --chart-blue: 210 75% 40%;
+    --chart-purple: 271 81% 56%;
+    --chart-gray: 210 10% 50%;
+    
+    /* Chart visual elements - light mode */
+    --chart-grid: 214 32% 91%;
+    --chart-tooltip-bg: 0 0% 100%;
+    --chart-tooltip-text: 222 84% 4%;
   }
 
   .dark {
@@ -158,11 +173,26 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* Chart color palette - Dark Mode */
+    --chart-1: 215 75% 55%;
+    --chart-2: 173 58% 50%;
+    --chart-3: 45 93% 55%;
+    --chart-4: 0 70% 65%;
+    --chart-5: 265 83% 65%;
+    --chart-6: 194 80% 55%;
+
+    /* Chart status colors - dark mode */
+    --chart-green: 145 63% 50%;
+    --chart-yellow: 45 93% 60%;
+    --chart-red: 0 70% 65%;
+    --chart-blue: 215 75% 55%;
+    --chart-purple: 265 83% 65%;
+    --chart-gray: 210 10% 70%;
+    
+    /* Chart visual elements - dark mode */
+    --chart-grid: 215 20% 25%;
+    --chart-tooltip-bg: 215 28% 17%;
+    --chart-tooltip-text: 210 20% 98%;
   }
 }
 

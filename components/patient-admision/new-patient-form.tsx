@@ -1,5 +1,4 @@
 // Asegúrate de que esta línea esté al principio de tu archivo .tsx
-"use client";
 
 import { useMemo, useState } from "react";
 import type React from "react"; // Necesario si usas React.ReactNode explícitamente

@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   Sun,
   Moon,
+  FileBarChart,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -43,6 +44,7 @@ const data = {
     { title: "Encuesta Digital", url: "/encuesta", icon: TabletIcon },
     { title: "Cirugías", url: "/cirugias", icon: CalendarIcon },
     { title: "Admisión", url: "/admision", icon: UserPlusIcon },
+    { title: "Estadísticas", url: "/estadisticas", icon: FileBarChart },
   ],
   navSecondary: [
     { title: "Configuración", url: "#", icon: Settings2Icon },
