@@ -1,4 +1,4 @@
-import { Appointment, AppointmentStatus } from '@/components/patient-admision/appointment-statistics';
+import { Appointment, AppointmentStatus } from '@/components/charts/appointment-statistics';
 import { format, subDays, addDays } from 'date-fns';
 
 export const mockAppointments: Appointment[] = [

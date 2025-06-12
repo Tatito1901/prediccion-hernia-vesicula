@@ -14,7 +14,7 @@ import { DiagnosisEnum } from '@/app/dashboard/data-model';
 
 // Importaciones dinámicas para mejor rendimiento
 const AppointmentStatistics = dynamic(
-  () => import("@/components/patient-admision/appointment-statistics").then(mod => ({ default: mod.AppointmentStatistics })),
+  () => import("@/components/charts/appointment-statistics").then(mod => ({ default: mod.AppointmentStatistics })),
   {
     loading: () => <StatisticsLoadingSkeleton />,
     ssr: false

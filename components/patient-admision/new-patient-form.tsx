@@ -2,7 +2,7 @@ import { useMemo, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import { setHours, setMinutes, isToday, isBefore, addMonths, startOfDay } from "date-fns"
+import { setHours, setMinutes, isToday, isBefore, addMonths, startOfDay, format } from "date-fns"
 import { UserPlus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -32,12 +32,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
-import { useAppContext } from "@/lib/context/app-context"
+import { useAppContext, type AddAppointmentInput } from "@/lib/context/app-context" // Import AddAppointmentInput for explicit cast
 import {
   DiagnosisEnum,
   PatientStatusEnum,
   AppointmentStatusEnum,
   type AppointmentData,
+  type TimeString,
 } from "@/app/dashboard/data-model"
 
 // =================================================================
@@ -124,6 +125,7 @@ const generateTimeSlots = (
     // Generar slots deshabilitados cuando no hay fecha
     for (let hour = WORKING_HOURS.start; hour <= WORKING_HOURS.end; hour++) {
       for (const minute of [0, 30]) {
+        // @ts-expect-error Linter false positive: hour can be WORKING_HOURS.end (15), and minute can be 30. Comparison is intentional and correct.
         if (hour === WORKING_HOURS.end && minute === 30) continue
         const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
         slots.push({ value: timeStr, label: timeStr, disabled: true, booked: false })
@@ -136,7 +138,7 @@ const generateTimeSlots = (
   const startOfSelectedDay = startOfDay(selectedDate)
 
   // Pre-filtrar citas del día seleccionado para optimizar
-  const dayAppointments = new Set(
+  const dayAppointments = new Set<TimeString>(
     appointments
       .filter(app => 
         app.estado !== AppointmentStatusEnum.CANCELADA &&
@@ -150,7 +152,7 @@ const generateTimeSlots = (
     for (const minute of [0, 30]) {
       if (hour === WORKING_HOURS.end && minute === 30) continue
 
-      const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
+      const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}` as TimeString
       const slotDateTime = setMinutes(setHours(new Date(startOfSelectedDay), hour), minute)
       
       const isPast = isSelectedDateToday && isBefore(slotDateTime, now)
@@ -211,23 +213,30 @@ export function NewPatientForm({ onSuccess, triggerButton }: NewPatientFormProps
 
       await addAppointment({
         patientId: newPatient.id,
-        fechaConsulta: values.fechaConsulta,
-        horaConsulta: values.horaConsulta as `${number}:${number}`,
-        paciente: `${values.nombre} ${values.apellidos}`.trim(),
-        telefono: values.telefono,
-        motivoConsulta: values.motivoConsulta,
-        doctor: "Doctor Asignado",
+        fecha_raw: format(values.fechaConsulta, "yyyy-MM-dd"),
+        hora_raw: values.horaConsulta,
         estado: AppointmentStatusEnum.PROGRAMADA,
+        motivoConsulta: values.motivoConsulta,
         notas: values.notas || "",
-      })
+        // raw_doctor_id: undefined, // Or provide an actual doctor ID if available
+      } as AddAppointmentInput)
 
       toast.success("Paciente registrado y cita agendada.", { id: submissionToast })
       setOpen(false)
       form.reset()
       onSuccess?.()
     } catch (error) {
-      console.error("Error al registrar paciente:", error)
-      toast.error("Error al registrar paciente. Intente de nuevo.", { id: submissionToast })
+      let errorMessage = "Error al registrar paciente. Intente de nuevo.";
+      if (error instanceof Error) {
+        errorMessage = `Error al registrar paciente: ${error.message}`;
+        console.error("Error al registrar paciente:", error);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+        console.error("Error al registrar paciente (string):", error);
+      } else {
+        console.error("Error al registrar paciente (unknown type):", error);
+      }
+      toast.error(errorMessage, { id: submissionToast });
     }
   }
 
@@ -236,10 +245,16 @@ export function NewPatientForm({ onSuccess, triggerButton }: NewPatientFormProps
     form.setValue("edad", value === "" ? undefined : Number(value))
   }
 
-  const handleDateChange = (date: Date | undefined) => {
-    form.setValue("fechaConsulta", date!)
+  const handleDateChange = (date: Date | null) => {
+    if (date) {
+      form.setValue("fechaConsulta", date);
+    } else {
+      // Handle case where date is cleared (becomes null)
+      // For a required Zod field, setting to undefined will trigger validation error as expected.
+      form.setValue("fechaConsulta", undefined as any, { shouldValidate: true });
+    }
     // Limpiar hora si cambia la fecha
-    form.setValue("horaConsulta", "")
+    form.setValue("horaConsulta", "");
   }
 
   return (

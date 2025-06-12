@@ -1,4 +1,15 @@
-import React, { useState, useMemo, useCallback, useTransition, useEffect } from "react"
+// PatientAdmission.tsx (modificado)
+"use client"; // Asegúrate de que este componente sea un Client Component
+
+import React, { 
+  useState, 
+  useMemo, 
+  useCallback, 
+  useTransition, 
+  useEffect, 
+  Suspense,
+  lazy 
+} from "react"
 import {
   Search,
   Calendar,
@@ -25,8 +36,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { format, isToday as dateIsToday, isBefore, isAfter, startOfDay, parseISO, isValid } from "date-fns"
-import { es } from "date-fns/locale"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,21 +49,33 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
-import { useMediaQuery } from "@/hooks/use-media-query"
+// Importar desde use-breakpoint
+import { useBreakpointStore } from "@/hooks/use-breakpoint"; // Ajusta la ruta si es necesario
 import { toast } from "sonner"
+import { AppointmentCard } from "./patient-card";
 import { useAppContext } from "@/lib/context/app-context"
 import { usePatientAdmissionFlow } from "./use-patient-admission-flow"
-import { NewPatientForm } from "./new-patient-form"
-import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog"
-import { AppointmentCard } from "./patient-card"
 import {
   AppointmentStatusEnum,
   type AppointmentData,
   type AppointmentStatus as AppointmentStatusType,
-} from "@/app/dashboard/data-model"
+} from "@/app/dashboard/data-model" // Asumiendo que esta ruta es correcta
 
 // =================================================================
-// TIPOS Y CONSTANTES (Movidas fuera para evitar recreación)
+// LAZY LOADING DE COMPONENTES PESADOS
+// =================================================================
+const LazyNewPatientForm = lazy(() => 
+  import("./new-patient-form").then(module => ({ default: module.NewPatientForm }))
+)
+
+const LazySurveyShareDialog = lazy(() => 
+  import("@/components/surveys/survey-share-dialog").then(module => ({ 
+    default: module.SurveyShareDialog 
+  }))
+)
+
+// =================================================================
+// TIPOS Y CONSTANTES OPTIMIZADAS
 // =================================================================
 type EntityId = string
 type ISODateString = string
@@ -78,10 +99,10 @@ export interface Appointment {
 interface FilterState {
   readonly searchTerm: string
   readonly statusFilter: AppointmentStatusType | "all"
-  readonly sortField: string | null
+  readonly sortField: string | null // 'default' no es un sortField válido, usar null o un campo real
 }
 
-// Constantes estáticas para evitar recreación
+// Constantes estáticas optimizadas
 const STATUS_CONFIG = {
   [AppointmentStatusEnum.PRESENTE]: {
     className: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-700",
@@ -120,10 +141,10 @@ const STATUS_CONFIG = {
   },
 } as const
 
-const TIME_SLOTS = Array.from({ length: 24 }, (_, i) => {
+const TIME_SLOTS = Array.from({ length: 24 }, (_, i) => { // 8:00 AM a 7:30 PM
   const hour = Math.floor(i / 2) + 8
   const minute = (i % 2) * 30
-  if (hour >= 20) return null
+  if (hour >= 20) return null // No generar slots para 8 PM o más tarde
   return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
 }).filter(Boolean) as string[]
 
@@ -141,19 +162,29 @@ const MOBILE_TABS_CONFIG = [
   { id: "past" as TabValue, icon: History, label: "Historial", countKey: "past" as const },
 ]
 
-// Utilidades optimizadas
+// =================================================================
+// UTILIDADES OPTIMIZADAS (sin dependencias externas)
+// =================================================================
 const dateUtils = {
   parseToDate: (dateInput: string | Date | undefined | null): Date | null => {
     if (!dateInput) return null
-    const date = dateInput instanceof Date ? dateInput : parseISO(String(dateInput))
-    return !isNaN(date.getTime()) ? date : null
+    try {
+      const date = dateInput instanceof Date ? dateInput : new Date(String(dateInput))
+      return !isNaN(date.getTime()) ? date : null
+    } catch {
+      return null
+    }
   },
   
-  formatDisplay: (date: Date | string | null | undefined, formatStr = "EEEE, d 'de' MMMM"): string => {
+  formatDisplay: (date: Date | string | null | undefined): string => {
     const parsedDate = dateUtils.parseToDate(date)
     if (!parsedDate) return "Fecha inválida"
     try {
-      return format(parsedDate, formatStr, { locale: es })
+      return parsedDate.toLocaleDateString("es-ES", { 
+        weekday: "long", 
+        day: "numeric", 
+        month: "long" 
+      })
     } catch {
       return "Error de formato"
     }
@@ -161,21 +192,32 @@ const dateUtils = {
   
   isToday: (date: Date | string | null | undefined): boolean => {
     const parsedDate = dateUtils.parseToDate(date)
-    return !!parsedDate && dateIsToday(parsedDate)
+    if (!parsedDate) return false
+    const today = new Date()
+    return parsedDate.toDateString() === today.toDateString()
   },
   
   isPast: (date: Date | string | null | undefined): boolean => {
     const parsedDate = dateUtils.parseToDate(date)
-    return !!parsedDate && isBefore(parsedDate, startOfDay(new Date()))
+    if (!parsedDate) return false
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const compareDate = new Date(parsedDate)
+    compareDate.setHours(0, 0, 0, 0)
+    return compareDate < today
   },
   
   isFuture: (date: Date | string | null | undefined): boolean => {
     const parsedDate = dateUtils.parseToDate(date)
-    return !!parsedDate && isAfter(parsedDate, startOfDay(new Date())) && !dateIsToday(parsedDate)
+    if (!parsedDate) return false
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const compareDate = new Date(parsedDate)
+    compareDate.setHours(0, 0, 0, 0)
+    return compareDate > today
   },
 }
 
-// Función de adaptación optimizada
 const adaptAppointmentData = (appointment: AppointmentData): Appointment => {
   let nombre = "N/A"
   let apellidos = ""
@@ -193,7 +235,7 @@ const adaptAppointmentData = (appointment: AppointmentData): Appointment => {
   
   const fecha = dateUtils.parseToDate(appointment.fechaConsulta)
   const hora = appointment.horaConsulta as FormattedTimeString
-  let combinedDateTime = new Date(0)
+  let combinedDateTime = new Date(0) // Default to epoch if invalid
   
   if (fecha && hora && /^\d{2}:\d{2}$/.test(hora)) {
     const [hours, minutes] = hora.split(":").map(Number)
@@ -205,9 +247,9 @@ const adaptAppointmentData = (appointment: AppointmentData): Appointment => {
     nombre,
     apellidos,
     telefono: appointment.telefono || "N/A",
-    fechaConsulta: appointment.fechaConsulta,
+    fechaConsulta: appointment.fechaConsulta, // Mantener original para visualización si es necesario
     horaConsulta: hora,
-    dateTime: combinedDateTime,
+    dateTime: combinedDateTime, // Usar este para lógica de fechas
     motivoConsulta: appointment.motivoConsulta || "N/A",
     estado: appointment.estado as AppointmentStatusEnum,
     patientId: appointment.patientId,
@@ -215,9 +257,51 @@ const adaptAppointmentData = (appointment: AppointmentData): Appointment => {
 }
 
 // =================================================================
+// COMPONENTES DE LOADING OPTIMIZADOS
+// =================================================================
+function ComponentSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn("space-y-4", className)}>
+      <Skeleton className="h-12 w-full bg-slate-200 dark:bg-slate-700" />
+      <Skeleton className="h-32 w-full bg-slate-200 dark:bg-slate-700" />
+    </div>
+  )
+}
+
+function AppointmentCardSkeleton() {
+  return (
+    <Card className="p-4 shadow-sm bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-32 bg-slate-200 dark:bg-slate-700" />
+            <Skeleton className="h-3 w-20 bg-slate-200 dark:bg-slate-700" />
+          </div>
+          <Skeleton className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700" />
+        </div>
+        <div className="flex gap-4">
+          <Skeleton className="h-8 flex-1 bg-slate-200 dark:bg-slate-700" />
+          <Skeleton className="h-8 flex-1 bg-slate-200 dark:bg-slate-700" />
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: 3 }, (_, i) => (
+        <AppointmentCardSkeleton key={i} />
+      ))}
+    </div>
+  )
+}
+
+// =================================================================
 // COMPONENTES OPTIMIZADOS
 // =================================================================
-
 function AppointmentStatusBadge({ status }: { status: AppointmentStatusType }) {
   const config = STATUS_CONFIG[status as AppointmentStatusEnum] || {
     className: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-700",
@@ -241,17 +325,21 @@ function AppointmentStatusBadge({ status }: { status: AppointmentStatusType }) {
   )
 }
 
-interface FilterControlsProps {
+function FilterControls({ 
+  filters, 
+  onUpdateFilters, 
+  onClearFilters, 
+  onRefresh, 
+  isLoading 
+}: {
   filters: FilterState
   onUpdateFilters: (filters: Partial<FilterState>) => void
   onClearFilters: () => void
   onRefresh: () => void
   isLoading: boolean
-}
-
-function FilterControls({ filters, onUpdateFilters, onClearFilters, onRefresh, isLoading }: FilterControlsProps) {
+}) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const { mobile: isMobile } = useBreakpointStore(); // Usar useBreakpointStore
   
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onUpdateFilters({ searchTerm: e.target.value })
@@ -377,24 +465,40 @@ function RescheduleDatePicker({
   onStateChange 
 }: { 
   rescheduleState: { appointmentId: string | null; date: Date | null; time: string | null }
-  onStateChange: (update: any) => void 
+  onStateChange: (update: Partial<typeof rescheduleState>) => void 
 }) {
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const date = e.target.value ? new Date(e.target.value) : null
+    onStateChange({ date })
+  }
+
+  const formatDateForInput = (date: Date | null) => {
+    if (!date) return ""
+    // Ajustar a la zona horaria local para evitar problemas con UTC
+    const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    return localDate.toISOString().split('T')[0]
+  }
+
   return (
     <div className="space-y-4">
       <div>
-        <label className="text-sm font-medium mb-2 block">Nueva fecha</label>
-        <Calendar
-          mode="single"
-          selected={rescheduleState.date || undefined}
-          onSelect={(date) => onStateChange({ date })}
-          disabled={(date) => date < new Date() || date < new Date("1900-01-01")}
-          className="rounded-md border"
+        <label htmlFor="reschedule-date" className="text-sm font-medium mb-2 block">Nueva fecha</label>
+        <Input
+          id="reschedule-date"
+          type="date"
+          value={formatDateForInput(rescheduleState.date)}
+          onChange={handleDateChange}
+          min={new Date().toISOString().split('T')[0]} // Min hoy en UTC, considerar zona horaria si es crítico
+          className="w-full"
         />
       </div>
       <div>
-        <label className="text-sm font-medium mb-2 block">Nueva hora</label>
-        <Select value={rescheduleState.time || ""} onValueChange={(time) => onStateChange({ time })}>
-          <SelectTrigger>
+        <label htmlFor="reschedule-time" className="text-sm font-medium mb-2 block">Nueva hora</label>
+        <Select 
+          value={rescheduleState.time || ""} 
+          onValueChange={(time) => onStateChange({ time })}
+        >
+          <SelectTrigger id="reschedule-time">
             <SelectValue placeholder="Seleccionar hora" />
           </SelectTrigger>
           <SelectContent>
@@ -406,37 +510,6 @@ function RescheduleDatePicker({
           </SelectContent>
         </Select>
       </div>
-    </div>
-  )
-}
-
-function AppointmentCardSkeleton() {
-  return (
-    <Card className="p-4 shadow-sm bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-32 bg-slate-200 dark:bg-slate-700" />
-            <Skeleton className="h-3 w-20 bg-slate-200 dark:bg-slate-700" />
-          </div>
-          <Skeleton className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700" />
-        </div>
-        <div className="flex gap-4">
-          <Skeleton className="h-8 flex-1 bg-slate-200 dark:bg-slate-700" />
-          <Skeleton className="h-8 flex-1 bg-slate-200 dark:bg-slate-700" />
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-4">
-      {Array.from({ length: 3 }, (_, i) => (
-        <AppointmentCardSkeleton key={i} />
-      ))}
     </div>
   )
 }
@@ -525,7 +598,7 @@ function MobileTabs({
 }
 
 // =================================================================
-// COMPONENTE PRINCIPAL
+// COMPONENTE PRINCIPAL CON LAZY LOADING
 // =================================================================
 export default function PatientAdmission() {
   const {
@@ -557,23 +630,30 @@ export default function PatientAdmission() {
     surveyLink: ""
   })
   
-  const [rescheduleState, setRescheduleState] = useState({
-    appointmentId: null as string | null,
-    date: null as Date | null,
-    time: null as string | null
+  const [rescheduleState, setRescheduleState] = useState<{
+    appointmentId: string | null;
+    date: Date | null;
+    time: string | null;
+  }>({
+    appointmentId: null,
+    date: null,
+    time: null
   })
   
   const [isPending, startTransition] = useTransition()
-  const isMobile = useMediaQuery("(max-width: 640px)")
-  const isTablet = useMediaQuery("(max-width: 1024px)")
+  
+  // Usar useBreakpointStore para obtener los flags de breakpoints
+  const breakpoints = useBreakpointStore();
+  const isMobile = breakpoints.mobile;
+  // isSmallOrMediumScreen simula el comportamiento original de `isTablet (max-width: 1024px)`
+  const isSmallOrMediumScreen = breakpoints.mobile || breakpoints.tablet;
 
-  // Procesamiento de citas optimizado
+
   const processedAppointments = useMemo(
     () => (rawAppointments || []).map(adaptAppointmentData),
     [rawAppointments]
   )
 
-  // Clasificación y filtrado optimizado
   const classifiedAndFilteredAppointments = useMemo(() => {
     const today: Appointment[] = []
     const future: Appointment[] = []
@@ -594,18 +674,20 @@ export default function PatientAdmission() {
           today.push(appt)
         } else if (dateUtils.isFuture(appt.dateTime)) {
           future.push(appt)
-        } else if (dateUtils.isPast(appt.dateTime) || !isValid(appt.dateTime)) {
+        } else {
+          // Si no es hoy ni futuro, es pasado (o inválido, pero adaptAppointmentData debería manejarlo)
           past.push(appt)
         }
       }
     }
     
-    const sortByDateTime = (a: Appointment, b: Appointment) => a.dateTime.getTime() - b.dateTime.getTime()
+    const sortByDateTimeAsc = (a: Appointment, b: Appointment) => a.dateTime.getTime() - b.dateTime.getTime()
+    const sortByDateTimeDesc = (a: Appointment, b: Appointment) => b.dateTime.getTime() - a.dateTime.getTime()
     
     return {
-      today: today.sort(sortByDateTime),
-      future: future.sort(sortByDateTime),
-      past: past.sort((a, b) => b.dateTime.getTime() - a.dateTime.getTime()),
+      today: today.sort(sortByDateTimeAsc),
+      future: future.sort(sortByDateTimeAsc),
+      past: past.sort(sortByDateTimeDesc),
     }
   }, [processedAppointments, filters])
 
@@ -615,7 +697,6 @@ export default function PatientAdmission() {
     past: classifiedAndFilteredAppointments.past.length,
   }), [classifiedAndFilteredAppointments])
 
-  // Handlers optimizados
   const handleUpdateFilters = useCallback((newFilters: Partial<FilterState>) => {
     startTransition(() => {
       setFilters(prev => ({ ...prev, ...newFilters }))
@@ -624,7 +705,8 @@ export default function PatientAdmission() {
 
   const handleClearFilters = useCallback(() => {
     startTransition(() => {
-      setFilters({ searchTerm: "", statusFilter: "all", sortField: "default" })
+      // Asegúrate de que sortField se maneje consistentemente
+      setFilters({ searchTerm: "", statusFilter: "all", sortField: null }) 
     })
   }, [setFilters])
 
@@ -639,7 +721,7 @@ export default function PatientAdmission() {
     if (action === "reschedule") {
       setRescheduleState({
         appointmentId: appointment.id,
-        date: dateUtils.parseToDate(appointment.fechaConsulta),
+        date: dateUtils.parseToDate(appointment.fechaConsulta), // Usar fechaConsulta que es ISODateString o Date
         time: appointment.horaConsulta
       })
     }
@@ -651,53 +733,61 @@ export default function PatientAdmission() {
     const { action, appointmentId } = confirmDialog
     let promise: Promise<any> | undefined
 
-    switch (action) {
-      case "checkIn":
-        promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.PRESENTE, "Check-in manual")
-        break
-      case "cancel":
-        promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.CANCELADA, "Cancelación manual")
-        break
-      case "complete":
-        promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.COMPLETADA, "Consulta completada")
-        break
-      case "noShow":
-        promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.NO_ASISTIO, "Paciente no asistió")
-        break
-      case "reschedule":
-        if (!rescheduleState.date || !rescheduleState.time) {
-          toast.error("Por favor, seleccione una fecha y hora para reprogramar.")
-          return
-        }
-        const [hours, minutes] = rescheduleState.time.split(':').map(Number)
-        const newDate = new Date(rescheduleState.date)
-        newDate.setHours(hours, minutes)
-        promise = updateAppointmentStatus(
-          appointmentId,
-          AppointmentStatusEnum.REAGENDADA,
-          "Cita reprogramada",
-          newDate.toISOString()
-        )
-        break
-    }
+    try {
+      switch (action) {
+        case "checkIn":
+          promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.PRESENTE, "Check-in manual")
+          break
+        case "cancel":
+          promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.CANCELADA, "Cancelación manual")
+          break
+        case "complete":
+          promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.COMPLETADA, "Consulta completada")
+          break
+        case "noShow":
+          promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.NO_ASISTIO, "Paciente no asistió")
+          break
+        case "reschedule":
+          if (!rescheduleState.date || !rescheduleState.time) {
+            toast.error("Por favor, seleccione una fecha y hora para reprogramar.")
+            return
+          }
+          const [hours, minutes] = rescheduleState.time.split(':').map(Number)
+          // Asegurar que rescheduleState.date es un objeto Date válido
+          const baseDate = rescheduleState.date instanceof Date ? rescheduleState.date : new Date(rescheduleState.date!);
+          const newDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hours, minutes)
+          
+          promise = updateAppointmentStatus(
+            appointmentId,
+            AppointmentStatusEnum.REAGENDADA,
+            "Cita reprogramada",
+            newDate.toISOString()
+          )
+          break
+      }
 
-    if (promise) {
-      toast.promise(promise, {
-        loading: "Actualizando...",
-        success: "Actualizado correctamente",
-        error: "Error al actualizar",
-      })
-      await promise
-      refetchAppointments()
-    }
-
-    setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null })
-    if (action === "reschedule") {
-      setRescheduleState({ appointmentId: null, date: null, time: null })
+      if (promise) {
+        toast.promise(promise, {
+          loading: "Actualizando...",
+          success: "Actualizado correctamente",
+          error: (err) => `Error al actualizar: ${err.message || 'Error desconocido'}`,
+        })
+        await promise
+        refetchAppointments() // Refrescar datos después de la acción
+      }
+    } catch (error) {
+      console.error("Error en handleConfirmAction:", error)
+      // El toast.promise ya maneja el error, pero puedes añadir lógica adicional aquí si es necesario
+    } finally {
+      setConfirmDialog({ isOpen: false, action: null, appointmentId: null, appointmentData: null })
+      if (action === "reschedule") {
+        setRescheduleState({ appointmentId: null, date: null, time: null })
+      }
     }
   }, [confirmDialog, rescheduleState, refetchAppointments, updateAppointmentStatus])
 
   const handleOpenSurveyDialog = useCallback((appointment: Appointment) => {
+    // Asegurar que `patients` existe y es un array antes de usar `find`
     const patient = patients?.find(p => p.id === (appointment.patientId || appointment.id))
     
     if (!patient) {
@@ -705,7 +795,8 @@ export default function PatientAdmission() {
       return
     }
 
-    const surveyLink = `https://example.com/survey?patientId=${patient.id}&appointmentId=${appointment.id}`
+    // Ejemplo de enlace, ajustar según la implementación real
+    const surveyLink = `/surveys/start?patientId=${patient.id}&appointmentId=${appointment.id}` 
     
     setSurveyDialog({
       isOpen: true,
@@ -717,17 +808,17 @@ export default function PatientAdmission() {
     })
   }, [patients])
 
-  // Render de contenido de citas optimizado
   const renderAppointmentsContent = useCallback((appointmentsToRender: Appointment[], tabKey: TabValue) => {
     if (isLoadingAppointments || isPending) {
       return <LoadingSkeleton />
     }
 
     if (appointmentsToRender.length === 0) {
-      const titles = {
+      const titles: Record<TabValue, string> = {
         today: "No hay citas para hoy",
         future: "No hay citas futuras", 
-        past: "No hay citas pasadas"
+        past: "No hay citas pasadas",
+        newPatient: "" // No se usa para EmptyState aquí
       }
       return (
         <EmptyState
@@ -744,6 +835,7 @@ export default function PatientAdmission() {
           const patientId = cita.patientId || cita.id
           const patient = patients?.find(p => p.id === patientId)
           
+          // Lógica de encuesta (ejemplo, ajustar según modelo de datos real)
           const surveyCompleted = Boolean(patient?.encuesta?.id && patient?.encuesta?.submitted_at)
           const requireSurvey = [
             AppointmentStatusEnum.PRESENTE, 
@@ -786,7 +878,7 @@ export default function PatientAdmission() {
 
   useEffect(() => {
     if (errorAppointments) {
-      toast.error("Error al cargar las citas")
+      toast.error(`Error al cargar las citas: ${errorAppointments.message || 'Error desconocido'}`)
       console.error("Error fetching appointments:", errorAppointments)
     }
   }, [errorAppointments])
@@ -822,7 +914,7 @@ export default function PatientAdmission() {
                     activeTab={activeTab}
                     onTabChange={setActiveTab}
                     appointmentCounts={appointmentCounts}
-                    isLoading={isLoadingAppointments}
+                    isLoading={isLoadingAppointments || isPending}
                   />
                 ) : (
                   <TabsList className="grid w-full grid-cols-4 h-auto rounded-xl bg-slate-100 dark:bg-slate-800/50 p-1.5 border border-slate-200 dark:border-slate-700">
@@ -835,11 +927,12 @@ export default function PatientAdmission() {
                         <div className="flex items-center justify-center gap-2.5">
                           <tab.icon className="h-4 w-4 sm:h-5 sm:w-5" />
                           <span className={cn(
-                            isTablet && tab.value !== "newPatient" ? "hidden lg:inline" : "inline"
+                            // Usar isSmallOrMediumScreen aquí
+                            isSmallOrMediumScreen && tab.value !== "newPatient" ? "hidden lg:inline" : "inline"
                           )}>
                             {tab.label}
                           </span>
-                          {tab.countKey && appointmentCounts[tab.countKey] > 0 && !isLoadingAppointments && (
+                          {tab.countKey && appointmentCounts[tab.countKey] > 0 && !(isLoadingAppointments || isPending) && (
                             <Badge 
                               variant="secondary" 
                               className="h-5 px-2 text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -869,7 +962,9 @@ export default function PatientAdmission() {
 
             <div className="px-4 sm:px-6 pb-6">
               <TabsContent value="newPatient" className="mt-0">
-                <NewPatientForm onSuccess={handleNewPatientSuccess} />
+                <Suspense fallback={<ComponentSkeleton className="p-4 sm:p-6" />}>
+                  <LazyNewPatientForm onSuccess={handleNewPatientSuccess} />
+                </Suspense>
               </TabsContent>
 
               <TabsContent value="today" className="mt-0">
@@ -888,32 +983,44 @@ export default function PatientAdmission() {
         </CardContent>
       </Card>
 
+      {/* Survey Dialog con Lazy Loading */}
       {surveyDialog.isOpen && (
-        <SurveyShareDialog
-          isOpen={surveyDialog.isOpen}
-          patient={{
-            id: surveyDialog.patientId,
-            nombre: surveyDialog.patientName,
-            apellidos: surveyDialog.patientLastName,
-            telefono: surveyDialog.patientPhone
-          }}
-          surveyLink={surveyDialog.surveyLink}
-          onStartInternal={() => {
-            toast.success(`Encuesta iniciada para ${surveyDialog.patientName}`)
-            setSurveyDialog(prev => ({ ...prev, isOpen: false }))
-          }}
-          onClose={() => setSurveyDialog(prev => ({ ...prev, isOpen: false }))}
-        />
+        <Suspense fallback={null}> {/* Considera un Skeleton más específico si la carga es perceptible */}
+          <LazySurveyShareDialog
+            isOpen={surveyDialog.isOpen}
+            patient={{
+              id: surveyDialog.patientId,
+              nombre: surveyDialog.patientName,
+              apellidos: surveyDialog.patientLastName,
+              telefono: surveyDialog.patientPhone
+            }}
+            surveyLink={surveyDialog.surveyLink}
+            onStartInternal={() => {
+              toast.success(`Encuesta iniciada para ${surveyDialog.patientName}`)
+              setSurveyDialog(prev => ({ ...prev, isOpen: false }))
+            }}
+            onClose={() => setSurveyDialog(prev => ({ ...prev, isOpen: false }))}
+          />
+        </Suspense>
       )}
 
+      {/* Alert Dialog */}
       <AlertDialog 
         open={confirmDialog.isOpen} 
-        onOpenChange={(open) => !open && setConfirmDialog({
-          isOpen: false,
-          action: null,
-          appointmentId: null,
-          appointmentData: null
-        })}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmDialog({
+              isOpen: false,
+              action: null,
+              appointmentId: null,
+              appointmentData: null
+            })
+            // Resetear rescheduleState también si el diálogo se cierra sin confirmar
+            if (confirmDialog.action === "reschedule") {
+              setRescheduleState({ appointmentId: null, date: null, time: null });
+            }
+          }
+        }}
       >
         <AlertDialogContent className="sm:max-w-lg">
           <AlertDialogHeader className="space-y-3">
@@ -975,14 +1082,15 @@ export default function PatientAdmission() {
             <AlertDialogAction
               onClick={handleConfirmAction}
               disabled={(confirmDialog.action === "reschedule" && 
-                        (!rescheduleState.date || !rescheduleState.time)) || isPending}
+                        (!rescheduleState.date || !rescheduleState.time)) || isPending || isLoadingAppointments}
               className={cn(
-                confirmDialog.action === "cancel" && "bg-red-600 hover:bg-red-700",
-                confirmDialog.action === "complete" && "bg-green-600 hover:bg-green-700",
-                confirmDialog.action === "noShow" && "bg-amber-600 hover:bg-amber-700"
+                confirmDialog.action === "cancel" && "bg-red-600 hover:bg-red-700 text-white",
+                confirmDialog.action === "complete" && "bg-green-600 hover:bg-green-700 text-white",
+                confirmDialog.action === "noShow" && "bg-amber-600 hover:bg-amber-700 text-white",
+                // Por defecto, usa el color primario del tema para el botón de acción
               )}
             >
-              {isPending ? (
+              {(isPending || isLoadingAppointments) && confirmDialog.action !== "reschedule" ? ( // Evitar doble spinner si ya está cargando citas
                 <span className="flex items-center gap-2">
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   Procesando...

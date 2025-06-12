@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactElement } from "react";
 import { useAppContext } from "@/lib/context/app-context";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
@@ -26,9 +26,9 @@ import {
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 
-import type {
-  AppointmentData,
+import {
   AppointmentStatusEnum,
+  type AppointmentData,
 } from "@/app/dashboard/data-model";
 
 interface PatientAppointmentsListProps {
@@ -66,7 +66,7 @@ const getStatusBadgeStyle = (
  * Retorna el icono correspondiente a cada estado. 
  * Usa AppointmentStatusEnum como tipo para evitar strings sueltos.
  */
-const getStatusIcon = (status: AppointmentStatusEnum): JSX.Element => {
+const getStatusIcon = (status: AppointmentStatusEnum): ReactElement => {
   switch (status) {
     case AppointmentStatusEnum.COMPLETADA:
       return <CheckCircle2 className="h-4 w-4 text-green-600" />;
@@ -107,7 +107,7 @@ const AppointmentCard = ({
 }) => {
   // Parseo y formateo de fecha para el título
   const fechaFormateada = useMemo(() => {
-    const dateObj = parseISO(appointment.fechaConsulta);
+    const dateObj = appointment.fechaConsulta instanceof Date ? appointment.fechaConsulta : parseISO(String(appointment.fechaConsulta));
     if (!isValid(dateObj)) return "Fecha inválida";
     return format(dateObj, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es });
   }, [appointment.fechaConsulta]);
@@ -142,7 +142,7 @@ const AppointmentCard = ({
         )}
         <p className="mt-1 text-gray-600 dark:text-gray-400">
           Fecha/Hora agendada:{" "}
-          {formatDisplayDateTime(appointment.fechaConsulta + "T" + appointment.horaConsulta)}
+          {format(appointment.fechaConsulta, "dd MMM yyyy", { locale: es })} {appointment.horaConsulta}
         </p>
       </CardContent>
       <CardFooter>

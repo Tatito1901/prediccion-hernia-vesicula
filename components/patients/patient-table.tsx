@@ -32,6 +32,19 @@ import {
   ArrowUpDown,
   FileText,
   Activity,
+  User,
+  Briefcase,
+  Phone,
+  Mail,
+  MapPin,
+  Info,
+  XCircle,
+  Check,
+  X,
+  Plus,
+  Minus,
+  ArrowRight,
+  ArrowLeft,
 } from "lucide-react"
 import PatientStatus from "./patient-status"
 import { cn } from "@/lib/utils"
@@ -55,6 +68,7 @@ interface PatientTableProps {
   onShareSurvey?: (patient: PatientData) => void
   onAnswerSurvey?: (patient: PatientData) => void
   onEditPatient?: (patient: PatientData) => void
+  onScheduleAppointment?: (patient: PatientData) => void
 }
 
 type SortConfig = {
@@ -195,38 +209,64 @@ const PatientCard = ({
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8 flex items-center justify-center gap-1 opacity-100 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+            >
               <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only sm:not-sr-only text-xs">Acciones</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
-              <Eye className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" />
-              Ver detalles
+          <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-lg">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <Eye className="h-4 w-4 mr-2 text-blue-500 dark:text-blue-400" />
+              Ver detalles del paciente
             </DropdownMenuItem>
             {onEditPatient && (
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
-                <Edit className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" />
-                Editar
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                <Edit className="h-4 w-4 mr-2 text-amber-500 dark:text-amber-400" />
+                Editar datos del paciente
               </DropdownMenuItem>
             )}
-            {!patient.encuesta_completada && (
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
+            {!patient.encuesta_completada ? (
               <>
-                <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
                 {onAnswerSurvey && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAnswerSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    <ClipboardList className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" />
-                    Contestar encuesta
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAnswerSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                    <ClipboardList className="h-4 w-4 mr-2 text-emerald-500 dark:text-emerald-400" />
+                    Completar encuesta clínica
                   </DropdownMenuItem>
                 )}
                 {onShareSurvey && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    <Share2 className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" />
-                    Compartir encuesta
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                    <Share2 className="h-4 w-4 mr-2 text-purple-500 dark:text-purple-400" />
+                    Enviar enlace de encuesta
                   </DropdownMenuItem>
                 )}
               </>
+            ) : (
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                <FileText className="h-4 w-4 mr-2 text-emerald-500 dark:text-emerald-400" />
+                Ver resultados de encuesta
+              </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
+            <DropdownMenuItem onClick={(e) => { 
+              e.stopPropagation(); 
+              onScheduleAppointment?.(patient);
+            }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <Calendar className="h-4 w-4 mr-2 text-indigo-500 dark:text-indigo-400" />
+              Agendar cita
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { 
+              e.stopPropagation();
+              const url = `/dashboard/patients/${patient.id}?tab=medical`; 
+              onSelectPatient(patient);
+            }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <Activity className="h-4 w-4 mr-2 text-red-500 dark:text-red-400" />
+              Ver historial médico
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -390,39 +430,61 @@ const PatientRow = ({
             <Button
               variant="outline" 
               size="sm" 
-              className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="h-8 flex items-center justify-center gap-1 opacity-100 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
             >
               <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only md:not-sr-only text-xs">Acciones</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
-              <Eye className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" />
-              Ver detalles
+          <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-lg">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <Eye className="h-4 w-4 mr-2 text-blue-500 dark:text-blue-400" />
+              Ver detalles del paciente
             </DropdownMenuItem>
             {onEditPatient && (
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
-                <Edit className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" />
-                Editar paciente
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                <Edit className="h-4 w-4 mr-2 text-amber-500 dark:text-amber-400" />
+                Editar datos del paciente
               </DropdownMenuItem>
             )}
-            {!patient.encuesta_completada && (
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
+            {!patient.encuesta_completada ? (
               <>
-                <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
                 {onAnswerSurvey && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAnswerSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    <ClipboardList className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" />
-                    Contestar encuesta
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAnswerSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                    <ClipboardList className="h-4 w-4 mr-2 text-emerald-500 dark:text-emerald-400" />
+                    Completar encuesta clínica
                   </DropdownMenuItem>
                 )}
                 {onShareSurvey && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    <Share2 className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" />
-                    Compartir encuesta
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                    <Share2 className="h-4 w-4 mr-2 text-purple-500 dark:text-purple-400" />
+                    Enviar enlace de encuesta
                   </DropdownMenuItem>
                 )}
               </>
+            ) : (
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                <FileText className="h-4 w-4 mr-2 text-emerald-500 dark:text-emerald-400" />
+                Ver resultados de encuesta
+              </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
+            <DropdownMenuItem onClick={(e) => { 
+              e.stopPropagation(); 
+              onScheduleAppointment?.(patient);
+            }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <Calendar className="h-4 w-4 mr-2 text-indigo-500 dark:text-indigo-400" />
+              Agendar cita
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { 
+              e.stopPropagation();
+              const url = `/dashboard/patients/${patient.id}?tab=medical`; 
+              onSelectPatient(patient);
+            }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <Activity className="h-4 w-4 mr-2 text-red-500 dark:text-red-400" />
+              Ver historial médico
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>
@@ -438,6 +500,7 @@ const PatientTable: React.FC<PatientTableProps> = ({
   onShareSurvey,
   onAnswerSurvey,
   onEditPatient,
+  onScheduleAppointment,
 }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "fecha_registro",

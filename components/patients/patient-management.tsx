@@ -40,8 +40,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import PatientTable from "./patient-table";
-import NewPatientForm from "@/components/patient-admision/new-patient-form";
-import SurveyShareDialog from "@/components/surveys/survey-share-dialog";
+import { NewPatientForm } from "@/components/patient-admision/new-patient-form";
+import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog";
+import PatientDetailsDialog from "./patient-details-dialog";
+import { ScheduleAppointmentDialog } from "./schedule-appointment-dialog";
 
 export interface EnrichedPatientData extends PatientData {
   nombreCompleto: string;
@@ -267,6 +269,14 @@ export function PatientManagement() {
   const [surveyLink, setSurveyLink] = useState("");
   const [isNewPatientFormOpen, setIsNewPatientFormOpen] = useState(false);
 
+  // Estado para detalles de paciente
+  const [selectedPatientDetails, setSelectedPatientDetails] = useState<PatientData | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  // Estado para agendar cita
+  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
+  const [patientForAppointment, setPatientForAppointment] = useState<PatientData | null>(null);
+
   // Datos enriquecidos - simplificado
   const enrichedPatients = useMemo((): EnrichedPatientData[] => {
     if (!patients || !appointments) return [];
@@ -284,7 +294,7 @@ export function PatientManagement() {
         ...patient,
         nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
         fecha_proxima_cita_iso: nextAppointment?.fechaConsulta.toString(),
-        encuesta_completada: !!(patient.encuesta?.id && patient.encuesta?.completada !== false),
+        encuesta_completada: !!patient.encuesta?.id,
         displayDiagnostico: patient.diagnostico_principal || "Sin diagnóstico",
       };
     });
@@ -359,7 +369,8 @@ export function PatientManagement() {
   };
 
   const handleSelectPatient = (patient: PatientData) => {
-    router.push(`/dashboard/patients/${patient.id}`);
+    setSelectedPatientDetails(patient);
+    setDetailsDialogOpen(true);
   };
 
   const handleShareSurvey = (patient: PatientData) => {
@@ -374,6 +385,11 @@ export function PatientManagement() {
 
   const handleAnswerSurvey = (patient: PatientData) => {
     router.push(`/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`);
+  };
+
+  const handleScheduleAppointment = (patient: PatientData) => {
+    setPatientForAppointment(patient);
+    setAppointmentDialogOpen(true);
   };
 
   const clearAllFilters = () => {
@@ -630,6 +646,7 @@ export function PatientManagement() {
         onShareSurvey={handleShareSurvey}
         onAnswerSurvey={handleAnswerSurvey}
         onEditPatient={handleEditPatient}
+        onScheduleAppointment={handleScheduleAppointment}
         loading={false}
       />
 
@@ -656,8 +673,7 @@ export function PatientManagement() {
       {/* Modales */}
       {isNewPatientFormOpen && (
         <NewPatientForm 
-          isOpen={isNewPatientFormOpen} 
-          onClose={() => setIsNewPatientFormOpen(false)} 
+          onSuccess={() => setIsNewPatientFormOpen(false)}
         />
       )}
       
@@ -676,6 +692,28 @@ export function PatientManagement() {
             setShareDialogOpen(false);
             setSelectedPatientForSurvey(null);
           }} 
+        />
+      )}
+      
+      {selectedPatientDetails && detailsDialogOpen && (
+        <PatientDetailsDialog
+          isOpen={detailsDialogOpen}
+          patient={selectedPatientDetails}
+          onClose={() => {
+            setDetailsDialogOpen(false);
+            setSelectedPatientDetails(null);
+          }}
+        />
+      )}
+      
+      {patientForAppointment && appointmentDialogOpen && (
+        <ScheduleAppointmentDialog
+          isOpen={appointmentDialogOpen}
+          patient={patientForAppointment}
+          onClose={() => {
+            setAppointmentDialogOpen(false);
+            setPatientForAppointment(null);
+          }}
         />
       )}
     </div>
