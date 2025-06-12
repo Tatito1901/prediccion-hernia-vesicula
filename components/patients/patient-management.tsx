@@ -1,16 +1,6 @@
 "use client";
 
-import React, {
-  useState,
-  useMemo,
-  useCallback,
-  useTransition,
-  useDeferredValue,
-  Suspense,
-  lazy,
-  useEffect, // Mantener si se usa explícitamente, sino se puede quitar si no hay useEffects directos
-  FC, // Añadido para tipar StatsCard
-} from "react";
+import React, { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -21,7 +11,6 @@ import {
 } from "@/components/ui/select";
 import { 
   SearchIcon, 
-  // Filter, // No usado directamente
   X, 
   ChevronLeft, 
   ChevronRight, 
@@ -31,12 +20,11 @@ import {
   TrendingUp,
   Calendar,
   FileText,
-  Loader2,
-  SlidersHorizontal, // Icono para botón de filtros en móvil
+  SlidersHorizontal,
 } from "lucide-react";
-import { useRouter } from "next/navigation"; // Correcto para App Router
+import { useRouter } from "next/navigation";
 import { useAppContext } from "@/lib/context/app-context";
-import type { PatientData, DiagnosisType, AppointmentData } from "@/app/dashboard/data-model"; // Asumiendo AppointmentData type
+import type { PatientData, DiagnosisType, AppointmentData } from "@/app/dashboard/data-model";
 import { PatientStatusEnum } from "@/app/dashboard/data-model";
 import { generateSurveyId } from "@/lib/form-utils";
 import { toast } from "sonner";
@@ -44,156 +32,247 @@ import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
-import { Card } from "@/components/ui/card"; // StatsCard lo usa
-
-// Lazy load de componentes
-const PatientTable = lazy(() => import("./patient-table"));
-// Asumiendo que NewPatientForm es un default export
-const NewPatientForm = lazy(() => import("@/components/patient-admision/new-patient-form"));
-const SurveyShareDialog = lazy(() => import("@/components/surveys/survey-share-dialog"));
-
+import { Card } from "@/components/ui/card";
+import PatientTable from "./patient-table";
+import NewPatientForm from "@/components/patient-admision/new-patient-form";
+import SurveyShareDialog from "@/components/surveys/survey-share-dialog";
 
 export interface EnrichedPatientData extends PatientData {
   nombreCompleto: string;
-  fecha_proxima_cita_iso?: string; // Usar ISO string para consistencia
+  fecha_proxima_cita_iso?: string;
   encuesta_completada: boolean;
   displayDiagnostico: string;
-  // diagnostico_principal?: DiagnosisType; // Ya está en PatientData
-  // edad?: number; // Ya está en PatientData
-  // fecha_registro: string; // Ya está en PatientData
 }
 
-const PAGE_SIZE = 15; // Reducido para mejor visualización en diferentes dispositivos
+const PAGE_SIZE = 15;
 
-const STATUS_LABELS: Readonly<Record<PatientStatusEnum, string>> = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: "Pend. Consulta", // Abreviado para móvil
-  [PatientStatusEnum.CONSULTADO]: "Consultado",
-  [PatientStatusEnum.EN_SEGUIMIENTO]: "Seguimiento", // Abreviado
-  [PatientStatusEnum.OPERADO]: "Operado",
-  [PatientStatusEnum.NO_OPERADO]: "No Operado",
-  [PatientStatusEnum.INDECISO]: "Indeciso"
-};
+const STATUS_CONFIG = {
+  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: {
+    label: "Pend. Consulta",
+    style: "bg-amber-50 text-amber-700 border-amber-200"
+  },
+  [PatientStatusEnum.CONSULTADO]: {
+    label: "Consultado", 
+    style: "bg-blue-50 text-blue-700 border-blue-200"
+  },
+  [PatientStatusEnum.EN_SEGUIMIENTO]: {
+    label: "Seguimiento",
+    style: "bg-purple-50 text-purple-700 border-purple-200"
+  },
+  [PatientStatusEnum.OPERADO]: {
+    label: "Operado",
+    style: "bg-emerald-50 text-emerald-700 border-emerald-200"
+  },
+  [PatientStatusEnum.NO_OPERADO]: {
+    label: "No Operado",
+    style: "bg-red-50 text-red-700 border-red-200"
+  },
+  [PatientStatusEnum.INDECISO]: {
+    label: "Indeciso",
+    style: "bg-slate-50 text-slate-700 border-slate-200"
+  }
+} as const;
 
-const STATUS_STYLES: Readonly<Record<PatientStatusEnum, string>> = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
-  [PatientStatusEnum.CONSULTADO]: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800",
-  [PatientStatusEnum.EN_SEGUIMIENTO]: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800",
-  [PatientStatusEnum.OPERADO]: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800",
-  [PatientStatusEnum.NO_OPERADO]: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-800",
-  [PatientStatusEnum.INDECISO]: "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-700"
-};
-
-interface StatsCardProps {
+// Componente StatsCard simplificado
+const StatsCard = ({ 
+  icon, 
+  label, 
+  value, 
+  trend, 
+  color = "blue" 
+}: {
   icon: React.ReactNode;
   label: string;
   value: number | string;
-  trend?: number; // Porcentaje
-  color?: "blue" | "purple" | "amber" | "emerald" | "red" | "slate"; // Colores de Tailwind
-  className?: string;
-}
+  trend?: number;
+  color?: "blue" | "purple" | "amber" | "emerald" | "red" | "slate";
+}) => {
+  const colorClasses = {
+    blue: "bg-blue-100 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
+    purple: "bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400", 
+    amber: "bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400",
+    emerald: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
+    red: "bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400",
+    slate: "bg-slate-100 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400"
+  };
 
-const StatsCard: FC<StatsCardProps> = ({ icon, label, value, trend, color = "blue", className }) => (
-  <Card className={cn(
-    "relative overflow-hidden border-0 shadow-sm transition-all duration-300 hover:shadow-lg",
-    "bg-white dark:bg-slate-800/50 backdrop-blur-sm", // Ajustado dark mode
-    className
-  )}>
-    <div className="p-3 sm:p-4">
-      <div className="flex items-center justify-between">
-        <div className={cn(
-          "h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0",
-          // Usar clases completas para que Tailwind las detecte
-          color === "blue" && "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",
-          color === "purple" && "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400",
-          color === "amber" && "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400",
-          color === "emerald" && "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400",
-          color === "red" && "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400",
-          color === "slate" && "bg-slate-100 dark:bg-slate-700/30 text-slate-600 dark:text-slate-400",
-        )}>
-          {icon}
-        </div>
-        {trend !== undefined && (
+  const gradientClasses = {
+    blue: "from-blue-400 to-blue-600 dark:from-blue-500/70 dark:to-blue-700/70",
+    purple: "from-purple-400 to-purple-600 dark:from-purple-500/70 dark:to-purple-700/70",
+    amber: "from-amber-400 to-amber-600 dark:from-amber-500/70 dark:to-amber-700/70", 
+    emerald: "from-emerald-400 to-emerald-600 dark:from-emerald-500/70 dark:to-emerald-700/70",
+    red: "from-red-400 to-red-600 dark:from-red-500/70 dark:to-red-700/70",
+    slate: "from-slate-400 to-slate-600 dark:from-slate-500/70 dark:to-slate-700/70"
+  };
+
+  return (
+    <Card className="relative overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-slate-900">
+      <div className="p-3 sm:p-4">
+        <div className="flex items-center justify-between">
           <div className={cn(
-            "flex items-center gap-1 text-2xs sm:text-xs font-medium",
-            trend >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+            "h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
+            colorClasses[color]
           )}>
-            <TrendingUp className={cn("h-2.5 w-2.5 sm:h-3 sm:w-3", trend < 0 && "transform rotate-180")} />
-            {Math.abs(trend)}%
+            {icon}
           </div>
+          {trend !== undefined && (
+            <div className={cn(
+              "flex items-center gap-1 text-xs font-medium",
+              trend >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+            )}>
+              <TrendingUp className={cn("h-3 w-3", trend < 0 && "transform rotate-180")} />
+              {Math.abs(trend)}%
+            </div>
+          )}
+        </div>
+        <div className="mt-2 sm:mt-3">
+          <p className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 truncate">{value}</p>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 truncate">{label}</p>
+        </div>
+      </div>
+      <div className={cn("absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r", gradientClasses[color])} />
+    </Card>
+  );
+};
+
+// Loading skeleton simplificado
+const LoadingSkeleton = () => (
+  <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+    <div className="p-4 sm:p-6 space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-20 sm:h-24 bg-slate-100 dark:bg-slate-800/50 rounded-lg animate-pulse" />
+        ))}
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="h-12 sm:h-16 bg-slate-100 dark:bg-slate-800/50 rounded-lg animate-pulse" />
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+// Paginación simple
+const SimplePagination = ({ 
+  currentPage, 
+  totalPages, 
+  onPageChange,
+  loading 
+}: {
+  currentPage: number;
+  totalPages: number; 
+  onPageChange: (page: number) => void;
+  loading: boolean;
+}) => {
+  if (totalPages <= 1) return null;
+
+  const getVisiblePages = () => {
+    const delta = 2;
+    const range = [];
+    const rangeWithDots = [];
+
+    for (let i = Math.max(2, currentPage - delta); 
+         i <= Math.min(totalPages - 1, currentPage + delta); 
+         i++) {
+      range.push(i);
+    }
+
+    if (currentPage - delta > 2) {
+      rangeWithDots.push(1, '...');
+    } else {
+      rangeWithDots.push(1);
+    }
+
+    rangeWithDots.push(...range);
+
+    if (currentPage + delta < totalPages - 1) {
+      rangeWithDots.push('...', totalPages);
+    } else if (totalPages > 1) {
+      rangeWithDots.push(totalPages);
+    }
+
+    return rangeWithDots;
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-1 sm:gap-2">
+      <Button 
+        variant="outline" 
+        size="sm"
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1 || loading}
+        className="h-8 w-8 sm:w-auto sm:px-3"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        <span className="hidden sm:inline ml-1">Anterior</span>
+      </Button>
+      
+      <div className="flex items-center gap-1">
+        {getVisiblePages().map((page, idx) => 
+          page === '...' ? (
+            <span key={`dots-${idx}`} className="px-2 text-slate-400">...</span>
+          ) : (
+            <Button
+              key={page}
+              variant={page === currentPage ? "default" : "outline"}
+              size="sm"
+              onClick={() => onPageChange(page as number)}
+              disabled={loading}
+              className={cn(
+                "h-8 w-8",
+                page === currentPage && "bg-blue-600 hover:bg-blue-700 text-white"
+              )}
+            >
+              {page}
+            </Button>
+          )
         )}
       </div>
-      <div className="mt-2 sm:mt-3">
-        <p className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 truncate" title={String(value)}>{value}</p>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 truncate" title={label}>{label}</p>
-      </div>
-    </div>
-    <div className={cn(
-      "absolute inset-x-0 bottom-0 h-1",
-      color === "blue" && "bg-gradient-to-r from-blue-400 to-blue-600",
-      color === "purple" && "bg-gradient-to-r from-purple-400 to-purple-600",
-      color === "amber" && "bg-gradient-to-r from-amber-400 to-amber-600",
-      color === "emerald" && "bg-gradient-to-r from-emerald-400 to-emerald-600",
-      color === "red" && "bg-gradient-to-r from-red-400 to-red-600",
-      color === "slate" && "bg-gradient-to-r from-slate-400 to-slate-600",
-    )} />
-  </Card>
-);
 
-const TableLoadingSkeleton: FC = () => (
-  <div className="bg-white dark:bg-slate-800/30 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700/50 overflow-hidden backdrop-blur-sm">
-    <div className="p-4 sm:p-6 space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="h-20 sm:h-24 bg-slate-100 dark:bg-slate-700/40 rounded-lg animate-pulse" />
-        ))}
-      </div>
-      <div className="space-y-2 sm:space-y-3">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-12 sm:h-16 bg-slate-100 dark:bg-slate-700/40 rounded-lg animate-pulse" />
-        ))}
-      </div>
+      <Button 
+        variant="outline" 
+        size="sm"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages || loading}
+        className="h-8 w-8 sm:w-auto sm:px-3"
+      >
+        <span className="hidden sm:inline mr-1">Siguiente</span>
+        <ChevronRight className="h-4 w-4" />
+      </Button>
     </div>
-  </div>
-);
-
-const GenericSuspenseFallback: FC = () => (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999]"> {/* Mayor z-index */}
-    <div className="bg-white dark:bg-slate-800 rounded-lg p-4 sm:p-6 shadow-xl">
-      <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-blue-600" />
-    </div>
-  </div>
-);
-
+  );
+};
 
 export function PatientManagement() {
   const { patients, appointments } = useAppContext();
   const router = useRouter();
 
+  // Estados simplificados
   const [searchTerm, setSearchTerm] = useState("");
-  const deferredSearch = useDeferredValue(searchTerm);
   const [statusFilter, setStatusFilter] = useState<PatientStatusEnum | "all">("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const [isPending, startTransition] = useTransition();
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false); // Para Sheet en móvil
+  const [loading, setLoading] = useState(false);
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
+  // Estados para modales
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [selectedPatientForSurvey, setSelectedPatientForSurvey] = useState<PatientData | null>(null);
   const [surveyLink, setSurveyLink] = useState("");
   const [isNewPatientFormOpen, setIsNewPatientFormOpen] = useState(false);
 
+  // Datos enriquecidos - simplificado
   const enrichedPatients = useMemo((): EnrichedPatientData[] => {
     if (!patients || !appointments) return [];
     
     return patients.map((patient) => {
-      const patientAppointments = (appointments as AppointmentData[]) // Type assertion
+      const patientAppointments = (appointments as AppointmentData[])
         .filter((appointment) => appointment.patientId === patient.id)
         .sort((a, b) => new Date(a.fechaConsulta).getTime() - new Date(b.fechaConsulta).getTime());
 
@@ -204,249 +283,401 @@ export function PatientManagement() {
       return {
         ...patient,
         nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
-        fecha_proxima_cita_iso: nextAppointment?.fechaConsulta.toString(), // Asume que es string ISO o serializable
+        fecha_proxima_cita_iso: nextAppointment?.fechaConsulta.toString(),
         encuesta_completada: !!(patient.encuesta?.id && patient.encuesta?.completada !== false),
         displayDiagnostico: patient.diagnostico_principal || "Sin diagnóstico",
       };
     });
   }, [patients, appointments]);
 
-  const filteredPatients = useMemo(() => {
-    let result = enrichedPatients;
-    const term = deferredSearch.toLowerCase();
+  // Filtrado y paginación combinados
+  const { filteredPatients, paginatedPatients, totalPages, statusStats } = useMemo(() => {
+    let filtered = enrichedPatients;
+    const term = searchTerm.toLowerCase();
 
+    // Filtrar por búsqueda
     if (term) {
-      result = result.filter(p =>
+      filtered = filtered.filter(p =>
         p.nombreCompleto.toLowerCase().includes(term) ||
         p.telefono?.toLowerCase().includes(term) ||
         p.email?.toLowerCase().includes(term) ||
-        p.diagnostico_principal?.nombre?.toLowerCase().includes(term) || // Asumiendo que diagnostico_principal es un objeto
+        p.displayDiagnostico.toLowerCase().includes(term) ||
         p.id.toLowerCase().includes(term)
       );
     }
-    if (statusFilter !== "all") {
-      result = result.filter((p) => p.estado_paciente === statusFilter);
-    }
-    return result;
-  }, [enrichedPatients, deferredSearch, statusFilter]);
 
-  const statusStats = useMemo(() => {
-    const initialStats: Record<PatientStatusEnum, number> = {
+    // Filtrar por estado
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((p) => p.estado_paciente === statusFilter);
+    }
+
+    // Calcular estadísticas
+    const stats = enrichedPatients.reduce((acc, patient) => {
+      if (patient.estado_paciente && patient.estado_paciente in STATUS_CONFIG) {
+        acc[patient.estado_paciente]++;
+      }
+      return acc;
+    }, {
       [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: 0,
       [PatientStatusEnum.CONSULTADO]: 0,
       [PatientStatusEnum.EN_SEGUIMIENTO]: 0,
       [PatientStatusEnum.OPERADO]: 0,
       [PatientStatusEnum.NO_OPERADO]: 0,
       [PatientStatusEnum.INDECISO]: 0,
-    };
-    const stats = enrichedPatients.reduce((acc, patient) => {
-      if (patient.estado_paciente && patient.estado_paciente in acc) {
-        acc[patient.estado_paciente]++;
-      }
-      return acc;
-    }, initialStats);
-    return { ...stats, all: enrichedPatients.length };
-  }, [enrichedPatients]);
+    });
 
-  const totalPages = Math.max(Math.ceil(filteredPatients.length / PAGE_SIZE), 1);
-  const paginatedPatients = useMemo(() => {
+    // Paginar
+    const pages = Math.max(Math.ceil(filtered.length / PAGE_SIZE), 1);
     const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredPatients.slice(start, start + PAGE_SIZE);
-  }, [filteredPatients, currentPage]);
+    const paginated = filtered.slice(start, start + PAGE_SIZE);
 
-  const handlePageChange = useCallback((page: number) => {
-    startTransition(() => {
-      setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-  }, [totalPages]);
+    return {
+      filteredPatients: filtered,
+      paginatedPatients: paginated,
+      totalPages: pages,
+      statusStats: { ...stats, all: enrichedPatients.length }
+    };
+  }, [enrichedPatients, searchTerm, statusFilter, currentPage]);
 
-  const handleSelectPatient = useCallback((patientId: string) => { // Recibe ID
-    router.push(`/dashboard/patients/${patientId}`);
-  }, [router]);
-
-  const handleShareSurvey = useCallback((patient: PatientData) => {
-    setSelectedPatientForSurvey(patient);
-    // Asegurarse que location.origin está disponible (Client Component)
-    setSurveyLink(`${window.location.origin}/survey/${generateSurveyId()}?patientId=${patient.id}`);
-    setShareDialogOpen(true);
-  }, []);
-
-  const handleEditPatient = useCallback((patientId: string) => { // Recibe ID
-    const patient = patients?.find(p => p.id === patientId);
-    if (patient) {
-      toast.info(`Funcionalidad para editar a: ${patient.nombre} ${patient.apellidos} (ID: ${patientId})`);
-      // Lógica para abrir formulario de edición, posiblemente con router.push o un modal/sheet.
-      // router.push(`/dashboard/patients/${patientId}/edit`);
-    }
-  }, [patients, router]);
-
-  const handleAnswerSurvey = useCallback((patientId: string) => { // Recibe ID
-    router.push(`/survey/${generateSurveyId()}?patientId=${patientId}&mode=internal`);
-  }, [router]);
-
-  const clearAllFilters = useCallback(() => {
-    startTransition(() => {
-      setSearchTerm("");
-      setStatusFilter("all");
-      setCurrentPage(1);
-      setIsMobileFiltersOpen(false); // Cerrar sheet de filtros si está abierto
-    });
-  }, []);
-
-  const hasActiveFilters = !!searchTerm || statusFilter !== "all";
-
+  // Estadísticas principales
   const mainStats = useMemo(() => {
     const totalSurveys = enrichedPatients.filter(p => p.encuesta_completada).length;
     return {
       totalPatients: enrichedPatients.length,
-      surveyCompletionRate: enrichedPatients.length > 0 ? Math.round((totalSurveys / enrichedPatients.length) * 100) : 0,
+      surveyCompletionRate: enrichedPatients.length > 0 
+        ? Math.round((totalSurveys / enrichedPatients.length) * 100) 
+        : 0,
       pendingConsults: statusStats[PatientStatusEnum.PENDIENTE_DE_CONSULTA] || 0,
       operatedPatients: statusStats[PatientStatusEnum.OPERADO] || 0,
     };
   }, [enrichedPatients, statusStats]);
 
-  const renderFilters = (isMobileSheet: boolean = false) => (
-    <>
+  // Handlers simplificados
+  const handlePageChange = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectPatient = (patient: PatientData) => {
+    router.push(`/dashboard/patients/${patient.id}`);
+  };
+
+  const handleShareSurvey = (patient: PatientData) => {
+    setSelectedPatientForSurvey(patient);
+    setSurveyLink(`${window.location.origin}/survey/${generateSurveyId()}?patientId=${patient.id}`);
+    setShareDialogOpen(true);
+  };
+
+  const handleEditPatient = (patient: PatientData) => {
+    toast.info(`Editar paciente: ${patient.nombre} ${patient.apellidos}`);
+  };
+
+  const handleAnswerSurvey = (patient: PatientData) => {
+    router.push(`/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`);
+  };
+
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setCurrentPage(1);
+    setIsMobileFiltersOpen(false);
+  };
+
+  const hasActiveFilters = !!searchTerm || statusFilter !== "all";
+
+  // Componente de filtros
+  const FilterContent = ({ isMobile = false }: { isMobile?: boolean }) => (
+    <div className="space-y-4">
       <Select
         value={statusFilter}
         onValueChange={(value) => {
-          startTransition(() => {
-            setStatusFilter(value as PatientStatusEnum | "all");
-            setCurrentPage(1);
-            if (isMobileSheet) setIsMobileFiltersOpen(false);
-          });
+          setStatusFilter(value as PatientStatusEnum | "all");
+          setCurrentPage(1);
+          if (isMobile) setIsMobileFiltersOpen(false);
         }}
       >
-        <SelectTrigger className={cn("h-9 sm:h-10 text-xs sm:text-sm", isMobileSheet ? "w-full" : "w-full sm:w-[200px] lg:w-[220px]", "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 transition-all duration-200")}>
-          <SelectValue placeholder="Filtrar por estado" />
+        <SelectTrigger className={cn(
+          "h-9 sm:h-10 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700",
+          "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors",
+          isMobile ? "w-full" : "w-full sm:w-[200px]"
+        )}>
+          <SelectValue placeholder="Filtrar por estado" className="text-slate-600 dark:text-slate-300" />
         </SelectTrigger>
-        <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
-          <SelectItem value="all">
-            <div className="flex items-center justify-between w-full text-xs sm:text-sm">
+        <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
+          <SelectItem value="all" className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
+            <div className="flex items-center justify-between w-full">
               <span>Todos los estados</span>
-              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-2xs sm:text-xs">{statusStats.all}</Badge>
+              <Badge variant="secondary" className="ml-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600">
+                {statusStats.all}
+              </Badge>
             </div>
           </SelectItem>
-          {Object.values(PatientStatusEnum).map((status) => (
-            <SelectItem key={status} value={status}>
-              <div className="flex items-center justify-between w-full text-xs sm:text-sm">
-                <span>{STATUS_LABELS[status]}</span>
-                <Badge variant="outline" className={cn("ml-2 px-1.5 py-0.5 text-2xs sm:text-xs border", STATUS_STYLES[status])}>{statusStats[status]}</Badge>
+          {Object.entries(STATUS_CONFIG).map(([status, config]) => (
+            <SelectItem key={status} value={status} className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
+              <div className="flex items-center justify-between w-full">
+                <span>{config.label}</span>
+                <Badge variant="outline" className={cn(
+                  "ml-2 shadow-sm font-medium", 
+                  status === statusFilter ? "ring-1 ring-offset-1 ring-slate-200 dark:ring-slate-700 dark:ring-offset-slate-900" : "",
+                  config.style
+                )}>
+                  {statusStats[status as PatientStatusEnum]}
+                </Badge>
               </div>
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+      
       {hasActiveFilters && (
         <Button 
           variant="ghost" 
-          size={isMobileSheet ? "default" : "sm"}
+          size={isMobile ? "default" : "sm"}
           onClick={clearAllFilters}
-          className={cn("h-9 sm:h-10 text-xs sm:text-sm", isMobileSheet && "w-full mt-4", !isMobileSheet && "hidden sm:inline-flex")}
+          className={cn(
+            "text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100",
+            "hover:bg-slate-100 dark:hover:bg-slate-800",
+            isMobile ? "w-full" : ""
+          )}
         >
           Limpiar Filtros
         </Button>
       )}
-    </>
+    </div>
   );
+
+  if (loading) {
+    return <LoadingSkeleton />;
+  }
 
   return (
     <div className="w-full space-y-4 sm:space-y-6 pb-8">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-lg sm:rounded-xl border shadow-sm bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/30 dark:from-slate-900 dark:via-blue-950/20 dark:to-indigo-950/20 border-slate-200 dark:border-slate-700/50">
-        <div className="absolute inset-0 opacity-5 overflow-hidden"><div className="absolute -top-24 -right-24 w-72 h-72 sm:w-96 sm:h-96 bg-blue-500 rounded-full blur-3xl" /><div className="absolute -bottom-24 -left-24 w-72 h-72 sm:w-96 sm:h-96 bg-indigo-500 rounded-full blur-3xl" /></div>
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-lg sm:rounded-xl border shadow-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
         <div className="relative p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">Gestión de Pacientes</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 sm:mt-2 max-w-xl">Sistema integral para seguimiento médico, historiales y citas.</p>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button onClick={() => setIsNewPatientFormOpen(true)} size="sm" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md hover:shadow-lg transition-all duration-200 text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 h-auto">
-                  <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />Nuevo Paciente
-                </Button>
-              </motion.div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 mt-4 sm:mt-6">
-            <StatsCard icon={<Users className="h-4 w-4 sm:h-5 sm:w-5" />} label="Total Pacientes" value={mainStats.totalPatients} color="blue" />
-            <StatsCard icon={<FileText className="h-4 w-4 sm:h-5 sm:w-5" />} label="Encuestas Comp." value={`${mainStats.surveyCompletionRate}%`} trend={mainStats.surveyCompletionRate > 70 ? 5 : (mainStats.surveyCompletionRate < 30 ? -2 : 1) } color="purple" />
-            <StatsCard icon={<Calendar className="h-4 w-4 sm:h-5 sm:w-5" />} label="Pend. Consulta" value={mainStats.pendingConsults} color="amber" />
-            <StatsCard icon={<Activity className="h-4 w-4 sm:h-5 sm:w-5" />} label="Pac. Operados" value={mainStats.operatedPatients} trend={2} color="emerald" />
-          </div>
-        </div>
-      </motion.div>
-
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white dark:bg-slate-800/30 backdrop-blur-sm rounded-lg sm:rounded-xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-3 sm:p-4">
-        <div className="space-y-3 sm:space-y-4">
-          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
-            <div className="relative flex-grow w-full sm:max-w-md lg:max-w-lg">
-              <SearchIcon className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-400 dark:text-slate-500" />
-              <Input placeholder="Buscar paciente..." value={searchTerm} onChange={(e) => startTransition(() => setSearchTerm(e.target.value))} className="pl-8 sm:pl-10 pr-8 sm:pr-10 h-9 sm:h-10 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 focus:bg-white dark:focus:bg-slate-800 transition-all duration-200 w-full" />
-              <AnimatePresence>{searchTerm && (<motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="absolute right-1 sm:right-1.5 top-1/2 transform -translate-y-1/2">
-                <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => startTransition(() => setSearchTerm(""))}><X className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></Button></motion.div>)}</AnimatePresence>
-            </div>
-            <div className="hidden sm:flex items-center gap-2 sm:gap-3">{renderFilters()}</div>
-            <Sheet open={isMobileFiltersOpen} onOpenChange={setIsMobileFiltersOpen}>
-              <SheetTrigger asChild className="sm:hidden w-full">
-                <Button variant="outline" className="h-9 text-xs flex items-center justify-center gap-2 w-full bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
-                  <SlidersHorizontal className="h-3.5 w-3.5" /> Filtros ({hasActiveFilters ? Object.values(STATUS_LABELS).includes(statusFilter) ? 1 + (searchTerm?1:0) : (searchTerm?1:0) : 0})
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="bottom" className="p-4 rounded-t-lg bg-white dark:bg-slate-900">
-                <SheetHeader className="mb-4"><SheetTitle>Filtros</SheetTitle></SheetHeader>
-                <div className="space-y-4">{renderFilters(true)}</div>
-              </SheetContent>
-            </Sheet>
-          </div>
-          <AnimatePresence>{hasActiveFilters && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="hidden sm:flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 dark:border-slate-700/50">
-            <span className="text-xs text-slate-500 dark:text-slate-400">Filtros activos:</span>
-            {searchTerm && (<Badge variant="secondary" className="gap-1 pr-0.5 text-xs bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"><SearchIcon className="h-3 w-3" />{searchTerm.length > 15 ? searchTerm.substring(0,15)+'...' : searchTerm}<Button variant="ghost" size="icon" className="h-5 w-5 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/50" onClick={() => startTransition(() => setSearchTerm(""))}><X className="h-2.5 w-2.5" /></Button></Badge>)}
-            {statusFilter !== "all" && (<Badge variant="outline" className={cn("gap-1 pr-0.5 text-xs border", STATUS_STYLES[statusFilter])}>{STATUS_LABELS[statusFilter]}<Button variant="ghost" size="icon" className="h-5 w-5 p-0 hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => startTransition(() => setStatusFilter("all"))}><X className="h-2.5 w-2.5" /></Button></Badge>)}
-          </motion.div>)}</AnimatePresence>
-        </div>
-      </motion.div>
-
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Suspense fallback={<TableLoadingSkeleton />}>
-          <PatientTable patients={paginatedPatients} onSelectPatient={handleSelectPatient} onShareSurvey={handleShareSurvey} onAnswerSurvey={handleAnswerSurvey} onEditPatient={handleEditPatient} loading={isPending} />
-        </Suspense>
-        {totalPages > 1 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mt-4 sm:mt-6 bg-white dark:bg-slate-800/30 backdrop-blur-sm rounded-lg sm:rounded-xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-3 sm:p-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                Mostrando {paginatedPatients.length} de {filteredPatients.length} pacientes
-                {filteredPatients.length !== enrichedPatients.length && (<span className="text-slate-400 dark:text-slate-500"> (de {enrichedPatients.length} totales)</span>)}
+              <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">
+                Gestión de Pacientes
+              </h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 sm:mt-2 max-w-xl">
+                Sistema integral para seguimiento médico, historiales y citas.
               </p>
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Button variant="outline" size="icon-sm" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1 || isPending} className="h-8 w-8 sm:h-9 sm:w-auto sm:px-3 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"><ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" /><span className="hidden sm:inline ml-1 text-xs">Ant.</span></Button>
-                <div className="flex items-center gap-1">{(() => {
-                  const pages = []; const maxPagesToShow = 3; const wingSize = 1;
-                  if (totalPages <= maxPagesToShow + wingSize*2) { for (let i = 1; i <= totalPages; i++) pages.push(i); }
-                  else {
-                    pages.push(1); if (currentPage > wingSize + 2) pages.push(-1); // Ellipsis
-                    for (let i = Math.max(2, currentPage - wingSize); i <= Math.min(totalPages - 1, currentPage + wingSize); i++) pages.push(i);
-                    if (currentPage < totalPages - wingSize - 1) pages.push(-1); pages.push(totalPages);
-                  }
-                  return pages.map((p, idx) => p === -1 ? <span key={`ellipsis-${idx}`} className="text-slate-400 dark:text-slate-500 text-xs px-1">...</span> : <Button key={p} variant={p === currentPage ? "default" : "outline"} size="icon-sm" onClick={() => handlePageChange(p)} disabled={isPending} className={cn("h-8 w-8 sm:h-9 sm:w-9 text-xs min-w-0", p === currentPage && "bg-blue-600 hover:bg-blue-700 text-white border-blue-600")}>{p}</Button>);
-                })()}</div>
-                <Button variant="outline" size="icon-sm" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages || isPending} className="h-8 w-8 sm:h-9 sm:w-auto sm:px-3 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"><span className="hidden sm:inline mr-1 text-xs">Sig.</span><ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></Button>
-              </div>
             </div>
-          </motion.div>
-        )}
-      </motion.div>
+            <Button 
+              onClick={() => setIsNewPatientFormOpen(true)} 
+              size="sm" 
+              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Nuevo Paciente
+            </Button>
+          </div>
+          
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6">
+            <StatsCard 
+              icon={<Users className="h-4 w-4 sm:h-5 sm:w-5" />} 
+              label="Total Pacientes" 
+              value={mainStats.totalPatients} 
+              color="blue" 
+            />
+            <StatsCard 
+              icon={<FileText className="h-4 w-4 sm:h-5 sm:w-5" />} 
+              label="Encuestas Comp." 
+              value={`${mainStats.surveyCompletionRate}%`} 
+              trend={mainStats.surveyCompletionRate > 70 ? 5 : -2}
+              color="purple" 
+            />
+            <StatsCard 
+              icon={<Calendar className="h-4 w-4 sm:h-5 sm:w-5" />} 
+              label="Pend. Consulta" 
+              value={mainStats.pendingConsults} 
+              color="amber" 
+            />
+            <StatsCard 
+              icon={<Activity className="h-4 w-4 sm:h-5 sm:w-5" />} 
+              label="Pac. Operados" 
+              value={mainStats.operatedPatients} 
+              trend={2}
+              color="emerald" 
+            />
+          </div>
+        </div>
+      </div>
 
-      {isNewPatientFormOpen && (<Suspense fallback={<GenericSuspenseFallback />}>
-        <NewPatientForm isOpen={isNewPatientFormOpen} onClose={() => setIsNewPatientFormOpen(false)} />
-      </Suspense>)}
+      {/* Filtros */}
+      <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
+        {/* Título de filtros */}
+        <div className="mb-2 sm:mb-3 flex items-center gap-2">
+          <SlidersHorizontal className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+          <h2 className="text-sm sm:text-base font-medium text-slate-800 dark:text-slate-200">Filtros</h2>
+        </div>
+        <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
+          {/* Búsqueda */}
+          <div className="relative w-full sm:w-auto">
+            <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
+            <Input
+              placeholder="Buscar pacientes..."
+              className="pl-9 h-9 sm:h-10 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:ring-slate-400 dark:focus-visible:ring-slate-500"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+            {searchTerm && (
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              </Button>
+            )}
+          </div>
+          {/* Filtros desktop */}
+          <div className="hidden sm:flex items-center gap-3">
+            <FilterContent />
+          </div>
+          {/* Filtros móvil */}
+          <Sheet open={isMobileFiltersOpen} onOpenChange={setIsMobileFiltersOpen}>
+            <SheetTrigger asChild className="sm:hidden w-full">
+              <Button 
+                variant="outline" 
+                className="h-9 w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70"
+              >
+                <SlidersHorizontal className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" /> 
+                Filtros {hasActiveFilters && (
+                  <span className="ml-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full h-5 w-5 inline-flex items-center justify-center text-xs font-medium">
+                    {Number(!!searchTerm) + Number(statusFilter !== "all")}
+                  </span>
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="rounded-t-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+              <SheetHeader className="mb-4">
+                <SheetTitle className="text-slate-900 dark:text-slate-100">Filtros</SheetTitle>
+              </SheetHeader>
+              <FilterContent isMobile />
+            </SheetContent>
+          </Sheet>
+        </div>
+
+        {/* Filtros activos */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap gap-2 mt-3 sm:mt-4 p-2 sm:p-3 bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center mr-1">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Filtros activos:</span>
+            </div>
+            {statusFilter !== "all" && (
+              <Badge variant="outline" className={cn(
+                "gap-1.5 py-1 px-2.5 shadow-sm font-medium", 
+                STATUS_CONFIG[statusFilter].style,
+                statusFilter === PatientStatusEnum.PENDIENTE_DE_CONSULTA && "dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
+                statusFilter === PatientStatusEnum.CONSULTADO && "dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800",
+                statusFilter === PatientStatusEnum.EN_SEGUIMIENTO && "dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800",
+                statusFilter === PatientStatusEnum.OPERADO && "dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800",
+                statusFilter === PatientStatusEnum.NO_OPERADO && "dark:bg-red-950/30 dark:text-red-300 dark:border-red-800",
+                statusFilter === PatientStatusEnum.INDECISO && "dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-700"
+              )}>
+                {STATUS_CONFIG[statusFilter].label}
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setStatusFilter("all")}
+                  className="h-5 w-5 p-0 ml-1 rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-700/70 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            )}
+            {searchTerm && (
+              <Badge 
+                variant="secondary" 
+                className="flex items-center gap-1.5 py-1 px-2.5 shadow-sm bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+              >
+                <SearchIcon className="h-3 w-3 text-blue-500 dark:text-blue-400" />
+                {searchTerm.length > 15 ? `${searchTerm.substring(0, 15)}...` : searchTerm}
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => { setSearchTerm(""); setCurrentPage(1); }}
+                  className="h-5 w-5 p-0 rounded-full hover:bg-blue-100/70 dark:hover:bg-blue-800/70 text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </Badge>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 ml-auto"
+            >
+              <X className="h-3.5 w-3.5 mr-1.5" />
+              Limpiar todos
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Tabla */}
+      <PatientTable 
+        patients={paginatedPatients}
+        onSelectPatient={handleSelectPatient}
+        onShareSurvey={handleShareSurvey}
+        onAnswerSurvey={handleAnswerSurvey}
+        onEditPatient={handleEditPatient}
+        loading={false}
+      />
+
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Mostrando {paginatedPatients.length} de {filteredPatients.length} pacientes
+              {filteredPatients.length !== enrichedPatients.length && (
+                <span className="text-slate-400 dark:text-slate-500"> (de {enrichedPatients.length} totales)</span>
+              )}
+            </p>
+            <SimplePagination 
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              loading={false}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Modales */}
+      {isNewPatientFormOpen && (
+        <NewPatientForm 
+          isOpen={isNewPatientFormOpen} 
+          onClose={() => setIsNewPatientFormOpen(false)} 
+        />
+      )}
       
-      {selectedPatientForSurvey && shareDialogOpen && (<Suspense fallback={<GenericSuspenseFallback />}>
-        <SurveyShareDialog isOpen={shareDialogOpen} patient={selectedPatientForSurvey} surveyLink={surveyLink}
-          onStartInternal={() => { if(selectedPatientForSurvey) { router.push(`/survey/${generateSurveyId()}?patientId=${selectedPatientForSurvey.id}&mode=internal`); setShareDialogOpen(false); }}}
-          onClose={() => { setShareDialogOpen(false); setSelectedPatientForSurvey(null); }} />
-      </Suspense>)}
+      {selectedPatientForSurvey && shareDialogOpen && (
+        <SurveyShareDialog 
+          isOpen={shareDialogOpen} 
+          patient={selectedPatientForSurvey} 
+          surveyLink={surveyLink}
+          onStartInternal={() => {
+            if(selectedPatientForSurvey) {
+              router.push(`/survey/${generateSurveyId()}?patientId=${selectedPatientForSurvey.id}&mode=internal`);
+              setShareDialogOpen(false);
+            }
+          }}
+          onClose={() => {
+            setShareDialogOpen(false);
+            setSelectedPatientForSurvey(null);
+          }} 
+        />
+      )}
     </div>
   );
 }

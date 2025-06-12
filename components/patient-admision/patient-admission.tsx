@@ -1,41 +1,22 @@
-import { Label } from "@/components/ui/label"
-import React from "react"
-import { 
-  useState, 
-  useMemo, 
-  useCallback, 
-  memo, 
-  useTransition, 
-  useEffect, 
-  lazy, 
-  Suspense,
-  type ComponentType,
-  type ReactNode,
-  type ChangeEvent
-} from "react"
+import React, { useState, useMemo, useCallback, useTransition, useEffect } from "react"
 import {
   Search,
-  CalendarIcon,
-  FileText,
+  Calendar,
   CheckCircle,
   XCircle,
   Clock,
-  CalendarDaysIcon,
+  CalendarDays,
   Users,
   ClipboardCheck,
   AlertCircle,
   CalendarClock,
-  CalendarCheck,
   RefreshCcw,
   X,
   ChevronDown,
-  ListFilter,
-  History,
   UserRoundPlus,
   CalendarHeart,
   CalendarX2,
-  type LucideIcon,
-  Filter,
+  History,
   SlidersHorizontal,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -57,43 +38,29 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { toast } from "sonner"
 import { useAppContext } from "@/lib/context/app-context"
-import { generateSurveyId } from "@/lib/form-utils"
 import { usePatientAdmissionFlow } from "./use-patient-admission-flow"
+import { NewPatientForm } from "./new-patient-form"
+import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog"
+import { AppointmentCard } from "./patient-card"
 import {
-  type AppointmentStatus as AppointmentStatusType,
   AppointmentStatusEnum,
   type AppointmentData,
+  type AppointmentStatus as AppointmentStatusType,
 } from "@/app/dashboard/data-model"
 
-// Importar componentes
-import { Calendar } from "@/components/ui/calendar"
-
-// Lazy load components
-const NewPatientForm = lazy(() => import("./new-patient-form").then(module => ({ 
-  default: module.NewPatientForm 
-})))
-const SurveyShareDialog = lazy(() => import("@/components/surveys/survey-share-dialog").then(module => ({ 
-  default: module.SurveyShareDialog 
-})))
-const AppointmentCard = lazy(() => import("./patient-card").then(module => ({ 
-  default: module.AppointmentCard 
-})))
-
 // =================================================================
-// TIPOS
+// TIPOS Y CONSTANTES (Movidas fuera para evitar recreación)
 // =================================================================
 type EntityId = string
 type ISODateString = string
 type FormattedTimeString = `${number}:${number}`
 type TabValue = "newPatient" | "today" | "future" | "past"
 export type ConfirmAction = "checkIn" | "cancel" | "complete" | "noShow" | "reschedule"
-type AppointmentActionType = ConfirmAction | "startSurvey" | "viewPatientHistory"
 
 export interface Appointment {
   readonly id: EntityId
@@ -114,88 +81,8 @@ interface FilterState {
   readonly sortField: string | null
 }
 
-interface ConfirmDialogState {
-  readonly isOpen: boolean
-  readonly action: ConfirmAction | null
-  readonly appointmentId: EntityId | null
-  readonly appointmentData?: Appointment | null
-}
-
-interface SurveyDialogState {
-  readonly isOpen: boolean
-  readonly patientId: EntityId
-  readonly patientName: string
-  readonly patientLastName: string
-  readonly patientPhone: string
-  readonly surveyLink: string
-}
-
-interface RescheduleState {
-  readonly appointmentId: EntityId | null
-  readonly date: Date | null
-  readonly time: string | null
-}
-
-interface StatusConfig {
-  readonly className: string
-  readonly icon: LucideIcon
-  readonly label: string
-}
-
-interface AppointmentCounts {
-  readonly today: number
-  readonly future: number
-  readonly past: number
-}
-
-interface TabConfig {
-  readonly id: TabValue
-  readonly icon: LucideIcon
-  readonly label: string
-  readonly countKey: keyof AppointmentCounts | null
-}
-
-// =================================================================
-// UTILIDADES Y CONSTANTES
-// =================================================================
-const dateUtils = {
-  parseToDate: (dateInput: string | Date | undefined | null): Date | null => {
-    if (!dateInput) return null
-    const date = dateInput instanceof Date ? dateInput : parseISO(String(dateInput))
-    return !isNaN(date.getTime()) ? date : null
-  },
-  
-  formatDisplay: (date: Date | string | null | undefined, formatStr = "EEEE, d 'de' MMMM"): string => {
-    const parsedDate = dateUtils.parseToDate(date)
-    if (!parsedDate) return "Fecha inválida"
-    try {
-      return format(parsedDate, formatStr, { locale: es })
-    } catch {
-      return "Error de formato"
-    }
-  },
-  
-  formatForStorage: (date: Date | null): ISODateString | "" => {
-    return date ? format(date, "yyyy-MM-dd") : ""
-  },
-  
-  isToday: (date: Date | string | null | undefined): boolean => {
-    const parsedDate = dateUtils.parseToDate(date)
-    return !!parsedDate && dateIsToday(parsedDate)
-  },
-  
-  isPast: (date: Date | string | null | undefined): boolean => {
-    const parsedDate = dateUtils.parseToDate(date)
-    return !!parsedDate && isBefore(parsedDate, startOfDay(new Date()))
-  },
-  
-  isFuture: (date: Date | string | null | undefined): boolean => {
-    const parsedDate = dateUtils.parseToDate(date)
-    return !!parsedDate && isAfter(parsedDate, startOfDay(new Date())) && !dateIsToday(parsedDate)
-  },
-} as const
-
-const STATUS_CONFIG: Record<AppointmentStatusEnum, StatusConfig> = {
+// Constantes estáticas para evitar recreación
+const STATUS_CONFIG = {
   [AppointmentStatusEnum.PRESENTE]: {
     className: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-700",
     icon: CheckCircle,
@@ -223,7 +110,7 @@ const STATUS_CONFIG: Record<AppointmentStatusEnum, StatusConfig> = {
   },
   [AppointmentStatusEnum.REAGENDADA]: {
     className: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/50 dark:text-purple-300 dark:border-purple-700",
-    icon: CalendarDaysIcon,
+    icon: CalendarDays,
     label: "Reagendada",
   },
   [AppointmentStatusEnum.CONFIRMADA]: {
@@ -233,13 +120,62 @@ const STATUS_CONFIG: Record<AppointmentStatusEnum, StatusConfig> = {
   },
 } as const
 
-const TIME_SLOTS: readonly string[] = Array.from({ length: 24 }, (_, i) => {
+const TIME_SLOTS = Array.from({ length: 24 }, (_, i) => {
   const hour = Math.floor(i / 2) + 8
   const minute = (i % 2) * 30
   if (hour >= 20) return null
   return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
-}).filter((slot): slot is string => slot !== null)
+}).filter(Boolean) as string[]
 
+const TABS_CONFIG = [
+  { value: "newPatient" as TabValue, label: "Nuevo Paciente", icon: UserRoundPlus, countKey: null },
+  { value: "today" as TabValue, label: "Hoy", icon: Clock, countKey: "today" as const },
+  { value: "future" as TabValue, label: "Futuras", icon: CalendarHeart, countKey: "future" as const },
+  { value: "past" as TabValue, label: "Historial", icon: History, countKey: "past" as const },
+]
+
+const MOBILE_TABS_CONFIG = [
+  { id: "newPatient" as TabValue, icon: UserRoundPlus, label: "Nuevo", countKey: null },
+  { id: "today" as TabValue, icon: Clock, label: "Hoy", countKey: "today" as const },
+  { id: "future" as TabValue, icon: CalendarHeart, label: "Futuras", countKey: "future" as const },
+  { id: "past" as TabValue, icon: History, label: "Historial", countKey: "past" as const },
+]
+
+// Utilidades optimizadas
+const dateUtils = {
+  parseToDate: (dateInput: string | Date | undefined | null): Date | null => {
+    if (!dateInput) return null
+    const date = dateInput instanceof Date ? dateInput : parseISO(String(dateInput))
+    return !isNaN(date.getTime()) ? date : null
+  },
+  
+  formatDisplay: (date: Date | string | null | undefined, formatStr = "EEEE, d 'de' MMMM"): string => {
+    const parsedDate = dateUtils.parseToDate(date)
+    if (!parsedDate) return "Fecha inválida"
+    try {
+      return format(parsedDate, formatStr, { locale: es })
+    } catch {
+      return "Error de formato"
+    }
+  },
+  
+  isToday: (date: Date | string | null | undefined): boolean => {
+    const parsedDate = dateUtils.parseToDate(date)
+    return !!parsedDate && dateIsToday(parsedDate)
+  },
+  
+  isPast: (date: Date | string | null | undefined): boolean => {
+    const parsedDate = dateUtils.parseToDate(date)
+    return !!parsedDate && isBefore(parsedDate, startOfDay(new Date()))
+  },
+  
+  isFuture: (date: Date | string | null | undefined): boolean => {
+    const parsedDate = dateUtils.parseToDate(date)
+    return !!parsedDate && isAfter(parsedDate, startOfDay(new Date())) && !dateIsToday(parsedDate)
+  },
+}
+
+// Función de adaptación optimizada
 const adaptAppointmentData = (appointment: AppointmentData): Appointment => {
   let nombre = "N/A"
   let apellidos = ""
@@ -282,11 +218,7 @@ const adaptAppointmentData = (appointment: AppointmentData): Appointment => {
 // COMPONENTES OPTIMIZADOS
 // =================================================================
 
-interface AppointmentStatusBadgeProps {
-  status: AppointmentStatusType
-}
-
-const AppointmentStatusBadge = memo<AppointmentStatusBadgeProps>(({ status }) => {
+function AppointmentStatusBadge({ status }: { status: AppointmentStatusType }) {
   const config = STATUS_CONFIG[status as AppointmentStatusEnum] || {
     className: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-700",
     icon: AlertCircle,
@@ -307,8 +239,7 @@ const AppointmentStatusBadge = memo<AppointmentStatusBadgeProps>(({ status }) =>
       <span className="truncate">{config.label}</span>
     </Badge>
   )
-})
-AppointmentStatusBadge.displayName = "AppointmentStatusBadge"
+}
 
 interface FilterControlsProps {
   filters: FilterState
@@ -318,75 +249,17 @@ interface FilterControlsProps {
   isLoading: boolean
 }
 
-// Lazy loading fallback for components
-const ComponentLoadingFallback = () => (
-  <div className="w-full p-4 border rounded-md animate-pulse bg-slate-100 dark:bg-slate-800/50">
-    <div className="h-8 w-40 bg-slate-200 dark:bg-slate-700 rounded mb-2"></div>
-    <div className="h-6 w-full bg-slate-200 dark:bg-slate-700 rounded"></div>
-  </div>
-);
-
-// Lazy load the FilterControls component
-const FilterControlsLazy = lazy(() => import('./filter-controls').then(module => ({
-  default: module.FilterControls
-})))
-
-// Create a wrapper component that adapts our FilterState to the one from filter-controls.tsx
-const FilterControlsAdapter = memo<FilterControlsProps>(({ 
-  filters, 
-  onUpdateFilters, 
-  onClearFilters, 
-  onRefresh,
-  isLoading 
-}) => {
-  // Convert our FilterState to the format expected by FilterControls
-  const adaptedFilters = {
-    searchTerm: filters.searchTerm,
-    statusFilter: filters.statusFilter === 'all' ? 'all' : filters.statusFilter,
-    sortField: filters.sortField || undefined
-  }
-
-  // Create an adapter for the update function
-  const handleUpdateFilters = (newFilters: any) => {
-    onUpdateFilters({
-      searchTerm: newFilters.searchTerm,
-      statusFilter: newFilters.statusFilter,
-      sortField: newFilters.sortField || null
-    })
-  }
-
-  return (
-    <FilterControlsLazy
-      filters={adaptedFilters}
-      onUpdateFilters={handleUpdateFilters}
-      onClearFilters={onClearFilters}
-      onRefresh={onRefresh}
-    />
-  )
-})
-
-// Our original component
-const FilterControlsMemoized = memo<FilterControlsProps>(({ 
-  filters, 
-  onUpdateFilters, 
-  onClearFilters, 
-  onRefresh, 
-  isLoading 
-}) => {
+function FilterControls({ filters, onUpdateFilters, onClearFilters, onRefresh, isLoading }: FilterControlsProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const isMobile = useMediaQuery("(max-width: 640px)")
   
-  const handleSearchChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => onUpdateFilters({ searchTerm: e.target.value }),
-    [onUpdateFilters]
-  )
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdateFilters({ searchTerm: e.target.value })
+  }
   
-  const handleStatusChange = useCallback(
-    (value: string) => onUpdateFilters({ statusFilter: value as AppointmentStatusType | "all" }),
-    [onUpdateFilters]
-  )
-  
-  const toggleExpanded = useCallback(() => setIsExpanded(prev => !prev), [])
+  const handleStatusChange = (value: string) => {
+    onUpdateFilters({ statusFilter: value as AppointmentStatusType | "all" })
+  }
   
   const hasActiveFilters = filters.searchTerm !== "" || filters.statusFilter !== "all"
   
@@ -404,7 +277,7 @@ const FilterControlsMemoized = memo<FilterControlsProps>(({
         />
       </div>
       <Select value={filters.statusFilter} onValueChange={handleStatusChange}>
-        <SelectTrigger className="w-full sm:w-48 h-10 text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700" aria-label="Filtrar por estado">
+        <SelectTrigger className="w-full sm:w-48 h-10 text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
           <SelectValue placeholder="Estado" />
         </SelectTrigger>
         <SelectContent>
@@ -465,7 +338,6 @@ const FilterControlsMemoized = memo<FilterControlsProps>(({
             variant="ghost" 
             size="sm" 
             className="gap-2 hover:bg-slate-200 dark:hover:bg-slate-700"
-            onClick={toggleExpanded}
           >
             <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
           </Button>
@@ -498,110 +370,125 @@ const FilterControlsMemoized = memo<FilterControlsProps>(({
       </CollapsibleContent>
     </Collapsible>
   )
-})
-FilterControlsMemoized.displayName = "FilterControls"
-
-interface RescheduleDatePickerProps {
-  rescheduleState: RescheduleState
-  onStateChange: (newState: Partial<RescheduleState>) => void
 }
 
-// Lazy load RescheduleDatePicker from separate file
-const RescheduleDatePicker = lazy(() => import('./patient-admission.reschedule').then(module => ({
-  default: module.RescheduleDatePicker
-})))
-
-const AppointmentCardSkeleton = memo(() => (
-  <Card className="p-4 shadow-sm bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <Skeleton className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-32 bg-slate-200 dark:bg-slate-700" />
-          <Skeleton className="h-3 w-20 bg-slate-200 dark:bg-slate-700" />
-        </div>
-        <Skeleton className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700" />
+function RescheduleDatePicker({ 
+  rescheduleState, 
+  onStateChange 
+}: { 
+  rescheduleState: { appointmentId: string | null; date: Date | null; time: string | null }
+  onStateChange: (update: any) => void 
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-sm font-medium mb-2 block">Nueva fecha</label>
+        <Calendar
+          mode="single"
+          selected={rescheduleState.date || undefined}
+          onSelect={(date) => onStateChange({ date })}
+          disabled={(date) => date < new Date() || date < new Date("1900-01-01")}
+          className="rounded-md border"
+        />
       </div>
-      <div className="flex gap-4">
-        <Skeleton className="h-8 flex-1 bg-slate-200 dark:bg-slate-700" />
-        <Skeleton className="h-8 flex-1 bg-slate-200 dark:bg-slate-700" />
+      <div>
+        <label className="text-sm font-medium mb-2 block">Nueva hora</label>
+        <Select value={rescheduleState.time || ""} onValueChange={(time) => onStateChange({ time })}>
+          <SelectTrigger>
+            <SelectValue placeholder="Seleccionar hora" />
+          </SelectTrigger>
+          <SelectContent>
+            {TIME_SLOTS.map((slot) => (
+              <SelectItem key={slot} value={slot}>
+                {slot}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
-  </Card>
-))
-AppointmentCardSkeleton.displayName = "AppointmentCardSkeleton"
-
-const LoadingSkeleton = memo(() => (
-  <div className="space-y-4">
-    {Array.from({ length: 3 }, (_, i) => (
-      <AppointmentCardSkeleton key={i} />
-    ))}
-  </div>
-))
-LoadingSkeleton.displayName = "LoadingSkeleton"
-
-interface EmptyStateProps {
-  title: string
-  description: string
-  icon?: LucideIcon
-  onAction?: () => void
-  actionLabel?: string
+  )
 }
 
-const EmptyState = memo<EmptyStateProps>(({ 
+function AppointmentCardSkeleton() {
+  return (
+    <Card className="p-4 shadow-sm bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-32 bg-slate-200 dark:bg-slate-700" />
+            <Skeleton className="h-3 w-20 bg-slate-200 dark:bg-slate-700" />
+          </div>
+          <Skeleton className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700" />
+        </div>
+        <div className="flex gap-4">
+          <Skeleton className="h-8 flex-1 bg-slate-200 dark:bg-slate-700" />
+          <Skeleton className="h-8 flex-1 bg-slate-200 dark:bg-slate-700" />
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: 3 }, (_, i) => (
+        <AppointmentCardSkeleton key={i} />
+      ))}
+    </div>
+  )
+}
+
+function EmptyState({ 
   title, 
   description, 
   icon: IconComponent, 
   onAction, 
   actionLabel 
-}) => (
-  <div className="text-center p-12 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 min-h-[320px] flex flex-col items-center justify-center">
-    {IconComponent && (
-      <div className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
-        <IconComponent className="h-8 w-8 text-slate-500 dark:text-slate-400" />
-      </div>
-    )}
-    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">{title}</h3>
-    <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto mb-6">
-      {description}
-    </p>
-    {onAction && actionLabel && (
-      <Button 
-        variant="secondary" 
-        className="gap-2" 
-        onClick={onAction}
-      >
-        <UserRoundPlus className="h-4 w-4" />
-        {actionLabel}
-      </Button>
-    )}
-  </div>
-))
-EmptyState.displayName = "EmptyState"
-
-interface MobileTabsProps {
-  activeTab: TabValue
-  onTabChange: (tab: TabValue) => void
-  appointmentCounts: AppointmentCounts
-  isLoading: boolean
+}: {
+  title: string
+  description: string
+  icon?: React.ComponentType<{ className?: string }>
+  onAction?: () => void
+  actionLabel?: string
+}) {
+  return (
+    <div className="text-center p-12 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 min-h-[320px] flex flex-col items-center justify-center">
+      {IconComponent && (
+        <div className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+          <IconComponent className="h-8 w-8 text-slate-500 dark:text-slate-400" />
+        </div>
+      )}
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">{title}</h3>
+      <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto mb-6">
+        {description}
+      </p>
+      {onAction && actionLabel && (
+        <Button variant="secondary" className="gap-2" onClick={onAction}>
+          <UserRoundPlus className="h-4 w-4" />
+          {actionLabel}
+        </Button>
+      )}
+    </div>
+  )
 }
 
-const MobileTabs = memo<MobileTabsProps>(({ 
+function MobileTabs({ 
   activeTab, 
   onTabChange, 
   appointmentCounts, 
   isLoading 
-}) => {
-  const tabsConfig: TabConfig[] = [
-    { id: "newPatient", icon: UserRoundPlus, label: "Nuevo", countKey: null },
-    { id: "today", icon: Clock, label: "Hoy", countKey: "today" },
-    { id: "future", icon: CalendarHeart, label: "Futuras", countKey: "future" },
-    { id: "past", icon: History, label: "Historial", countKey: "past" },
-  ]
-  
+}: {
+  activeTab: TabValue
+  onTabChange: (tab: TabValue) => void
+  appointmentCounts: { today: number; future: number; past: number }
+  isLoading: boolean
+}) {
   return (
     <div className="grid grid-cols-4 gap-2 p-2 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-      {tabsConfig.map((tab) => {
+      {MOBILE_TABS_CONFIG.map((tab) => {
         const Icon = tab.icon
         const count = tab.countKey ? appointmentCounts[tab.countKey] : 0
         const isActive = activeTab === tab.id
@@ -635,16 +522,14 @@ const MobileTabs = memo<MobileTabsProps>(({
       })}
     </div>
   )
-})
-MobileTabs.displayName = "MobileTabs"
+}
 
 // =================================================================
 // COMPONENTE PRINCIPAL
 // =================================================================
-const PatientAdmission = memo(() => {
+export default function PatientAdmission() {
   const {
     appointments: rawAppointments = [], 
-    classifiedAppointments, 
     isLoadingAppointments,
     errorAppointments,
     activeTab,
@@ -654,20 +539,16 @@ const PatientAdmission = memo(() => {
     refetchAppointments,
   } = usePatientAdmissionFlow()
 
-  const {
-    patients,
-    updateAppointment,
-    updateAppointmentStatus,
-  } = useAppContext()
+  const { patients, updateAppointmentStatus } = useAppContext()
 
-  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+  const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
-    action: null,
-    appointmentId: null,
-    appointmentData: null
+    action: null as ConfirmAction | null,
+    appointmentId: null as string | null,
+    appointmentData: null as Appointment | null
   })
   
-  const [surveyDialog, setSurveyDialog] = useState<SurveyDialogState>({
+  const [surveyDialog, setSurveyDialog] = useState({
     isOpen: false,
     patientId: "",
     patientName: "",
@@ -676,21 +557,23 @@ const PatientAdmission = memo(() => {
     surveyLink: ""
   })
   
-  const [rescheduleState, setRescheduleState] = useState<RescheduleState>({
-    appointmentId: null,
-    date: null,
-    time: null
+  const [rescheduleState, setRescheduleState] = useState({
+    appointmentId: null as string | null,
+    date: null as Date | null,
+    time: null as string | null
   })
   
   const [isPending, startTransition] = useTransition()
   const isMobile = useMediaQuery("(max-width: 640px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
 
+  // Procesamiento de citas optimizado
   const processedAppointments = useMemo(
     () => (rawAppointments || []).map(adaptAppointmentData),
     [rawAppointments]
   )
 
+  // Clasificación y filtrado optimizado
   const classifiedAndFilteredAppointments = useMemo(() => {
     const today: Appointment[] = []
     const future: Appointment[] = []
@@ -699,7 +582,7 @@ const PatientAdmission = memo(() => {
     const searchTermLower = filters.searchTerm.toLowerCase()
     
     for (const appt of processedAppointments) {
-      const matchesSearch = filters.searchTerm === "" || 
+      const matchesSearch = !filters.searchTerm || 
         appt.nombre.toLowerCase().includes(searchTermLower) || 
         appt.apellidos.toLowerCase().includes(searchTermLower) || 
         (appt.motivoConsulta || "").toLowerCase().includes(searchTermLower)
@@ -717,22 +600,22 @@ const PatientAdmission = memo(() => {
       }
     }
     
-    const sortAppointments = (arr: Appointment[]) => 
-      arr.sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime())
+    const sortByDateTime = (a: Appointment, b: Appointment) => a.dateTime.getTime() - b.dateTime.getTime()
     
     return {
-      today: sortAppointments(today),
-      future: sortAppointments(future),
+      today: today.sort(sortByDateTime),
+      future: future.sort(sortByDateTime),
       past: past.sort((a, b) => b.dateTime.getTime() - a.dateTime.getTime()),
     }
   }, [processedAppointments, filters])
 
-  const appointmentCounts = useMemo((): AppointmentCounts => ({
+  const appointmentCounts = useMemo(() => ({
     today: classifiedAndFilteredAppointments.today.length,
     future: classifiedAndFilteredAppointments.future.length,
     past: classifiedAndFilteredAppointments.past.length,
   }), [classifiedAndFilteredAppointments])
 
+  // Handlers optimizados
   const handleUpdateFilters = useCallback((newFilters: Partial<FilterState>) => {
     startTransition(() => {
       setFilters(prev => ({ ...prev, ...newFilters }))
@@ -741,17 +624,9 @@ const PatientAdmission = memo(() => {
 
   const handleClearFilters = useCallback(() => {
     startTransition(() => {
-      setFilters({
-        searchTerm: "",
-        statusFilter: "all",
-        sortField: "default"
-      })
+      setFilters({ searchTerm: "", statusFilter: "all", sortField: "default" })
     })
   }, [setFilters])
-
-  const handleRefresh = useCallback(() => {
-    refetchAppointments()
-  }, [refetchAppointments])
 
   const handleAction = useCallback((action: ConfirmAction, appointment: Appointment) => {
     setConfirmDialog({
@@ -776,30 +651,34 @@ const PatientAdmission = memo(() => {
     const { action, appointmentId } = confirmDialog
     let promise: Promise<any> | undefined
 
-    if (action === "checkIn") {
-      promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.PRESENTE, "Check-in manual")
-    } else if (action === "cancel") {
-      promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.CANCELADA, "Cancelación manual")
-    } else if (action === "complete") {
-      promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.COMPLETADA, "Consulta completada")
-    } else if (action === "noShow") {
-      promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.NO_ASISTIO, "Paciente no asistió")
-    } else if (action === "reschedule") {
-      if (!rescheduleState.date || !rescheduleState.time) {
-        toast.error("Por favor, seleccione una fecha y hora para reprogramar.")
-        return
-      }
-
-      const [hours, minutes] = rescheduleState.time.split(':').map(Number)
-      const newDate = new Date(rescheduleState.date)
-      newDate.setHours(hours, minutes)
-
-      promise = updateAppointmentStatus(
-        appointmentId,
-        AppointmentStatusEnum.REAGENDADA,
-        "Cita reprogramada",
-        newDate.toISOString()
-      )
+    switch (action) {
+      case "checkIn":
+        promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.PRESENTE, "Check-in manual")
+        break
+      case "cancel":
+        promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.CANCELADA, "Cancelación manual")
+        break
+      case "complete":
+        promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.COMPLETADA, "Consulta completada")
+        break
+      case "noShow":
+        promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.NO_ASISTIO, "Paciente no asistió")
+        break
+      case "reschedule":
+        if (!rescheduleState.date || !rescheduleState.time) {
+          toast.error("Por favor, seleccione una fecha y hora para reprogramar.")
+          return
+        }
+        const [hours, minutes] = rescheduleState.time.split(':').map(Number)
+        const newDate = new Date(rescheduleState.date)
+        newDate.setHours(hours, minutes)
+        promise = updateAppointmentStatus(
+          appointmentId,
+          AppointmentStatusEnum.REAGENDADA,
+          "Cita reprogramada",
+          newDate.toISOString()
+        )
+        break
     }
 
     if (promise) {
@@ -826,9 +705,7 @@ const PatientAdmission = memo(() => {
       return
     }
 
-    const patientId = patient.id || '';
-    const appointmentId = appointment.id || '';
-    const surveyLink = `https://example.com/survey?patientId=${patientId}&appointmentId=${appointmentId}`
+    const surveyLink = `https://example.com/survey?patientId=${patient.id}&appointmentId=${appointment.id}`
     
     setSurveyDialog({
       isOpen: true,
@@ -840,19 +717,21 @@ const PatientAdmission = memo(() => {
     })
   }, [patients])
 
-  const handleViewPatientHistory = useCallback((patientId: EntityId | undefined) => {
-    toast.info(`Ver historial del paciente ${patientId}`)
-  }, [])
-  
+  // Render de contenido de citas optimizado
   const renderAppointmentsContent = useCallback((appointmentsToRender: Appointment[], tabKey: TabValue) => {
     if (isLoadingAppointments || isPending) {
       return <LoadingSkeleton />
     }
 
     if (appointmentsToRender.length === 0) {
+      const titles = {
+        today: "No hay citas para hoy",
+        future: "No hay citas futuras", 
+        past: "No hay citas pasadas"
+      }
       return (
         <EmptyState
-          title={`No hay citas ${tabKey === "today" ? "para hoy" : tabKey === "future" ? "futuras" : "pasadas"}`}
+          title={titles[tabKey] || "No hay citas"}
           description="Cuando haya citas disponibles, aparecerán aquí."
           icon={CalendarX2}
         />
@@ -862,49 +741,48 @@ const PatientAdmission = memo(() => {
     return (
       <div className="space-y-4">
         {appointmentsToRender.map((cita) => {
-          const patientId = cita.patientId || cita.id;
-          const patient = patients?.find(p => p.id === patientId);
+          const patientId = cita.patientId || cita.id
+          const patient = patients?.find(p => p.id === patientId)
           
-          const surveyCompleted = Boolean(
-            patient?.encuesta?.id &&
-            patient?.encuesta?.submitted_at
-          );
-          
+          const surveyCompleted = Boolean(patient?.encuesta?.id && patient?.encuesta?.submitted_at)
           const requireSurvey = [
             AppointmentStatusEnum.PRESENTE, 
             AppointmentStatusEnum.CONFIRMADA,
             AppointmentStatusEnum.PROGRAMADA
-          ].includes(cita.estado);
-          
-          const disableActions = requireSurvey && !surveyCompleted;
+          ].includes(cita.estado)
+          const disableActions = requireSurvey && !surveyCompleted
           
           return (
-            <Suspense fallback={<AppointmentCardSkeleton />}>
-              <AppointmentCard
-                key={cita.id}
-                appointment={cita}
-                onAction={(action, appointmentId) => {
-                  const appointment = appointmentsToRender.find(apt => apt.id === appointmentId);
-                  if (appointment) {
-                    handleAction(action as ConfirmAction, appointment);
-                  }
-                }}
-                onStartSurvey={(appointmentId) => {
-                  const appointment = appointmentsToRender.find(apt => apt.id === appointmentId);
-                  if (appointment) {
-                    handleOpenSurveyDialog(appointment);
-                  }
-                }}
-                onViewHistory={(patientId) => handleViewPatientHistory(patientId)}
-                disableActions={disableActions}
-                surveyCompleted={surveyCompleted}
-              />
-            </Suspense>
+            <AppointmentCard
+              key={cita.id}
+              appointment={cita}
+              onAction={(action, appointmentId) => {
+                const appointment = appointmentsToRender.find(apt => apt.id === appointmentId)
+                if (appointment) {
+                  handleAction(action as ConfirmAction, appointment)
+                }
+              }}
+              onStartSurvey={(appointmentId) => {
+                const appointment = appointmentsToRender.find(apt => apt.id === appointmentId)
+                if (appointment) {
+                  handleOpenSurveyDialog(appointment)
+                }
+              }}
+              onViewHistory={(patientId) => toast.info(`Ver historial del paciente ${patientId}`)}
+              disableActions={disableActions}
+              surveyCompleted={surveyCompleted}
+            />
           )
         })}
       </div>
     )
-  }, [isLoadingAppointments, isPending, handleAction, handleOpenSurveyDialog, patients, handleViewPatientHistory])
+  }, [isLoadingAppointments, isPending, handleAction, handleOpenSurveyDialog, patients])
+
+  const handleNewPatientSuccess = () => {
+    refetchAppointments()
+    setActiveTab("today")
+    toast.success("Paciente agregado exitosamente")
+  }
 
   useEffect(() => {
     if (errorAppointments) {
@@ -912,39 +790,6 @@ const PatientAdmission = memo(() => {
       console.error("Error fetching appointments:", errorAppointments)
     }
   }, [errorAppointments])
-
-  const tabsConfig: Array<{
-    value: TabValue
-    label: string
-    icon: LucideIcon
-    count: number | null
-  }> = [
-    { value: "newPatient", label: "Nuevo Paciente", icon: UserRoundPlus, count: null },
-    { value: "today", label: "Hoy", icon: Clock, count: appointmentCounts.today },
-    { value: "future", label: "Futuras", icon: CalendarHeart, count: appointmentCounts.future },
-    { value: "past", label: "Historial", icon: History, count: appointmentCounts.past },
-  ]
-
-  const handleTabChange = (tabValue: string) => {
-    setActiveTab(tabValue as TabValue)
-  }
-
-  const handleRescheduleStateChange = useCallback((update: Partial<RescheduleState>) => {
-    setRescheduleState((prevState: RescheduleState): RescheduleState => {
-      const newState = { ...prevState, ...update };
-      return {
-        appointmentId: newState.appointmentId === undefined ? prevState.appointmentId : newState.appointmentId,
-        date: newState.date === undefined ? prevState.date : newState.date,
-        time: newState.time === undefined ? prevState.time : newState.time,
-      };
-    });
-  }, [setRescheduleState]);
-
-  const handleNewPatientSuccess = () => {
-    refetchAppointments()
-    setActiveTab("today")
-    toast.success("Paciente agregado exitosamente")
-  }
 
   return (
     <div className="w-full max-w-7xl mx-auto p-3 sm:p-4 lg:p-6 space-y-6 bg-slate-50 dark:bg-slate-950 min-h-screen">
@@ -969,19 +814,19 @@ const PatientAdmission = memo(() => {
         </CardHeader>
 
         <CardContent className="p-0">
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabValue)} className="w-full">
             <div className="p-4 sm:p-6">
               <div className="mb-6">
                 {isMobile ? (
                   <MobileTabs
                     activeTab={activeTab}
-                    onTabChange={handleTabChange}
+                    onTabChange={setActiveTab}
                     appointmentCounts={appointmentCounts}
                     isLoading={isLoadingAppointments}
                   />
                 ) : (
                   <TabsList className="grid w-full grid-cols-4 h-auto rounded-xl bg-slate-100 dark:bg-slate-800/50 p-1.5 border border-slate-200 dark:border-slate-700">
-                    {tabsConfig.map((tab) => (
+                    {TABS_CONFIG.map((tab) => (
                       <TabsTrigger
                         key={tab.value}
                         value={tab.value}
@@ -994,12 +839,12 @@ const PatientAdmission = memo(() => {
                           )}>
                             {tab.label}
                           </span>
-                          {tab.count !== null && tab.count > 0 && !isLoadingAppointments && (
+                          {tab.countKey && appointmentCounts[tab.countKey] > 0 && !isLoadingAppointments && (
                             <Badge 
                               variant="secondary" 
                               className="h-5 px-2 text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                             >
-                              {tab.count > 99 ? "99+" : tab.count}
+                              {appointmentCounts[tab.countKey] > 99 ? "99+" : appointmentCounts[tab.countKey]}
                             </Badge>
                           )}
                         </div>
@@ -1011,27 +856,20 @@ const PatientAdmission = memo(() => {
 
               {["today", "future", "past"].includes(activeTab) && (
                 <div className="mb-6">
-                  <Suspense fallback={<ComponentLoadingFallback />}>
-                    <FilterControlsAdapter
-                      filters={filters}
-                      onUpdateFilters={handleUpdateFilters}
-                      onClearFilters={handleClearFilters}
-                      onRefresh={handleRefresh}
-                      isLoading={isLoadingAppointments || isPending}
-                    />
-                  </Suspense>
+                  <FilterControls
+                    filters={filters}
+                    onUpdateFilters={handleUpdateFilters}
+                    onClearFilters={handleClearFilters}
+                    onRefresh={refetchAppointments}
+                    isLoading={isLoadingAppointments || isPending}
+                  />
                 </div>
               )}
             </div>
 
             <div className="px-4 sm:px-6 pb-6">
-              {/* ... */}
               <TabsContent value="newPatient" className="mt-0">
-                <Suspense fallback={<div className="p-6 flex justify-center">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-current border-t-transparent text-slate-600 dark:text-slate-400" />
-                </div>}>
-                  <NewPatientForm onSuccess={handleNewPatientSuccess} />
-                </Suspense>
+                <NewPatientForm onSuccess={handleNewPatientSuccess} />
               </TabsContent>
 
               <TabsContent value="today" className="mt-0">
@@ -1051,23 +889,21 @@ const PatientAdmission = memo(() => {
       </Card>
 
       {surveyDialog.isOpen && (
-        <Suspense fallback={<ComponentLoadingFallback />}>
-          <SurveyShareDialog
-            isOpen={surveyDialog.isOpen}
-            patient={{
-              id: surveyDialog.patientId,
-              nombre: surveyDialog.patientName,
-              apellidos: surveyDialog.patientLastName,
-              telefono: surveyDialog.patientPhone
-            }}
-            surveyLink={surveyDialog.surveyLink}
-            onStartInternal={() => {
-              toast.success(`Encuesta iniciada para ${surveyDialog.patientName}`)
-              setSurveyDialog(prev => ({ ...prev, isOpen: false }))
-            }}
-            onClose={() => setSurveyDialog(prev => ({ ...prev, isOpen: false }))}
-          />
-        </Suspense>
+        <SurveyShareDialog
+          isOpen={surveyDialog.isOpen}
+          patient={{
+            id: surveyDialog.patientId,
+            nombre: surveyDialog.patientName,
+            apellidos: surveyDialog.patientLastName,
+            telefono: surveyDialog.patientPhone
+          }}
+          surveyLink={surveyDialog.surveyLink}
+          onStartInternal={() => {
+            toast.success(`Encuesta iniciada para ${surveyDialog.patientName}`)
+            setSurveyDialog(prev => ({ ...prev, isOpen: false }))
+          }}
+          onClose={() => setSurveyDialog(prev => ({ ...prev, isOpen: false }))}
+        />
       )}
 
       <AlertDialog 
@@ -1086,7 +922,7 @@ const PatientAdmission = memo(() => {
               {confirmDialog.action === "cancel" && <XCircle className="h-6 w-6 text-red-600" />}
               {confirmDialog.action === "complete" && <ClipboardCheck className="h-6 w-6 text-green-600" />}
               {confirmDialog.action === "noShow" && <AlertCircle className="h-6 w-6 text-amber-600" />}
-              {confirmDialog.action === "reschedule" && <CalendarDaysIcon className="h-6 w-6 text-primary" />}
+              {confirmDialog.action === "reschedule" && <CalendarDays className="h-6 w-6 text-primary" />}
               
               <AlertDialogTitle className="text-lg font-semibold">
                 {confirmDialog.action === "checkIn" && "Registrar Llegada"}
@@ -1106,7 +942,7 @@ const PatientAdmission = memo(() => {
                     </p>
                     <div className="space-y-1 text-xs text-slate-600 dark:text-slate-400">
                       <p className="flex items-center gap-2">
-                        <CalendarIcon className="h-3 w-3" />
+                        <Calendar className="h-3 w-3" />
                         {dateUtils.formatDisplay(confirmDialog.appointmentData.dateTime)}
                       </p>
                       <p className="flex items-center gap-2">
@@ -1118,22 +954,16 @@ const PatientAdmission = memo(() => {
                 )}
                 
                 {confirmDialog.action === "reschedule" ? (
-                  <Suspense fallback={<ComponentLoadingFallback />}>
-                    <RescheduleDatePicker
-                      rescheduleState={rescheduleState}
-                      onStateChange={handleRescheduleStateChange}
-                    />
-                  </Suspense>
+                  <RescheduleDatePicker
+                    rescheduleState={rescheduleState}
+                    onStateChange={(update) => setRescheduleState(prev => ({ ...prev, ...update }))}
+                  />
                 ) : (
                   <p className="text-slate-600 dark:text-slate-400">
-                    {confirmDialog.action === "checkIn" && 
-                     "El paciente se marcará como presente."}
-                    {confirmDialog.action === "cancel" && 
-                     "Esta acción cancelará la cita. ¿Continuar?"}
-                    {confirmDialog.action === "complete" && 
-                     "La consulta se marcará como completada."}
-                    {confirmDialog.action === "noShow" && 
-                     "Se registrará que el paciente no asistió."}
+                    {confirmDialog.action === "checkIn" && "El paciente se marcará como presente."}
+                    {confirmDialog.action === "cancel" && "Esta acción cancelará la cita. ¿Continuar?"}
+                    {confirmDialog.action === "complete" && "La consulta se marcará como completada."}
+                    {confirmDialog.action === "noShow" && "Se registrará que el paciente no asistió."}
                   </p>
                 )}
               </div>
@@ -1166,8 +996,4 @@ const PatientAdmission = memo(() => {
       </AlertDialog>
     </div>
   )
-})
-
-PatientAdmission.displayName = "PatientAdmission"
-
-export default PatientAdmission
+}

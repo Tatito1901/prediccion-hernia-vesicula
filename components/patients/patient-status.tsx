@@ -5,285 +5,269 @@ import { PatientData, PatientStatusEnum } from "@/app/dashboard/data-model"
 import {
   CheckCircle2,
   XCircle,
-  Clock8,
-  UserCheck,
+  Clock,
   AlertTriangle,
   User,
   ClipboardList,
   Stethoscope,
   Activity,
-  Heart,
 } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
 
 interface PatientStatusProps {
   status: PatientData["estado_paciente"]
   surveyCompleted?: boolean
   size?: "sm" | "md" | "lg"
   showIcon?: boolean
-  animated?: boolean
+  className?: string
 }
 
-/**
- * Configuración mejorada de estilos con mejor contraste y diseño
- */
-const STATUS_CONFIG: Record<
-  PatientStatusEnum | "SURVEY_PENDING" | "DEFAULT",
-  { 
-    className: string
-    label: string
-    Icon: React.FC<{ className?: string }>
-    gradient?: string
-    pulse?: boolean
-  }
-> = {
+// Configuración simplificada y optimizada
+const STATUS_CONFIG = {
   [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: {
-    className: cn(
-      "bg-amber-50 text-amber-800 border-amber-200/80",
-      "dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800/50",
-      "shadow-amber-100/50 dark:shadow-amber-900/20"
-    ),
-    label: "Pendiente de consulta",
-    Icon: Clock8,
-    gradient: "from-amber-400 to-orange-400",
-    pulse: true,
+    label: "Pendiente",
+    icon: Clock,
+    style: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800/50 dark:hover:bg-amber-900/30",
+    dotColor: "bg-amber-500 dark:bg-amber-400",
+    priority: 1
   },
   [PatientStatusEnum.CONSULTADO]: {
-    className: cn(
-      "bg-blue-50 text-blue-800 border-blue-200/80",
-      "dark:bg-blue-950/20 dark:text-blue-300 dark:border-blue-800/50",
-      "shadow-blue-100/50 dark:shadow-blue-900/20"
-    ),
-    label: "Consultado",
-    Icon: Stethoscope,
-    gradient: "from-blue-400 to-indigo-400",
+    label: "Consultado", 
+    icon: Stethoscope,
+    style: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/20 dark:text-blue-300 dark:border-blue-800/50 dark:hover:bg-blue-900/30",
+    dotColor: "bg-blue-500 dark:bg-blue-400",
+    priority: 3
   },
   [PatientStatusEnum.EN_SEGUIMIENTO]: {
-    className: cn(
-      "bg-violet-50 text-violet-800 border-violet-200/80",
-      "dark:bg-violet-950/20 dark:text-violet-300 dark:border-violet-800/50",
-      "shadow-violet-100/50 dark:shadow-violet-900/20"
-    ),
-    label: "En seguimiento",
-    Icon: Activity,
-    gradient: "from-violet-400 to-purple-400",
+    label: "Seguimiento",
+    icon: Activity, 
+    style: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/20 dark:text-purple-300 dark:border-purple-800/50 dark:hover:bg-purple-900/30",
+    dotColor: "bg-purple-500 dark:bg-purple-400",
+    priority: 2
   },
   [PatientStatusEnum.OPERADO]: {
-    className: cn(
-      "bg-emerald-50 text-emerald-800 border-emerald-200/80",
-      "dark:bg-emerald-950/20 dark:text-emerald-300 dark:border-emerald-800/50",
-      "shadow-emerald-100/50 dark:shadow-emerald-900/20"
-    ),
     label: "Operado",
-    Icon: CheckCircle2,
-    gradient: "from-emerald-400 to-green-400",
+    icon: CheckCircle2,
+    style: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-300 dark:border-emerald-800/50 dark:hover:bg-emerald-900/30",
+    dotColor: "bg-emerald-500 dark:bg-emerald-400", 
+    priority: 5
   },
   [PatientStatusEnum.NO_OPERADO]: {
-    className: cn(
-      "bg-red-50 text-red-800 border-red-200/80",
-      "dark:bg-red-950/20 dark:text-red-300 dark:border-red-800/50",
-      "shadow-red-100/50 dark:shadow-red-900/20"
-    ),
     label: "No operado",
-    Icon: XCircle,
-    gradient: "from-red-400 to-rose-400",
+    icon: XCircle,
+    style: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-300 dark:border-red-800/50 dark:hover:bg-red-900/30",
+    dotColor: "bg-red-500 dark:bg-red-400",
+    priority: 4
   },
   [PatientStatusEnum.INDECISO]: {
-    className: cn(
-      "bg-orange-50 text-orange-800 border-orange-200/80",
-      "dark:bg-orange-950/20 dark:text-orange-300 dark:border-orange-800/50",
-      "shadow-orange-100/50 dark:shadow-orange-900/20"
-    ),
     label: "Indeciso",
-    Icon: AlertTriangle,
-    gradient: "from-orange-400 to-amber-400",
+    icon: AlertTriangle,
+    style: "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 dark:bg-orange-950/20 dark:text-orange-300 dark:border-orange-800/50 dark:hover:bg-orange-900/30", 
+    dotColor: "bg-orange-500 dark:bg-orange-400",
+    priority: 3
   },
   SURVEY_PENDING: {
-    className: cn(
-      "bg-yellow-50 text-yellow-800 border-yellow-200/80",
-      "dark:bg-yellow-950/20 dark:text-yellow-300 dark:border-yellow-800/50",
-      "shadow-yellow-100/50 dark:shadow-yellow-900/20"
-    ),
     label: "Encuesta pendiente",
-    Icon: ClipboardList,
-    gradient: "from-yellow-400 to-amber-400",
-    pulse: true,
+    icon: ClipboardList,
+    style: "bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-950/20 dark:text-yellow-300 dark:border-yellow-800/50 dark:hover:bg-yellow-900/30",
+    dotColor: "bg-yellow-500 dark:bg-yellow-400",
+    priority: 1
   },
   DEFAULT: {
-    className: cn(
-      "bg-slate-50 text-slate-700 border-slate-200/80",
-      "dark:bg-slate-900/20 dark:text-slate-300 dark:border-slate-700/50",
-      "shadow-slate-100/50 dark:shadow-slate-900/20"
-    ),
-    label: "Estado desconocido",
-    Icon: User,
-    gradient: "from-slate-400 to-gray-400",
-  },
-}
+    label: "Sin estado",
+    icon: User,
+    style: "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800",
+    dotColor: "bg-gray-500 dark:bg-gray-400",
+    priority: 0
+  }
+} as const
 
+// Tamaños simplificados
 const SIZE_VARIANTS = {
-  sm: {
-    badge: "px-2 py-0.5 text-xs",
-    icon: "h-3 w-3",
-    gap: "gap-1",
-  },
-  md: {
-    badge: "px-2.5 py-1 text-xs",
-    icon: "h-3.5 w-3.5",
-    gap: "gap-1.5",
-  },
-  lg: {
-    badge: "px-3 py-1.5 text-sm",
-    icon: "h-4 w-4",
-    gap: "gap-2",
-  },
-}
+  sm: "px-2 py-1 text-xs",
+  md: "px-2.5 py-1 text-xs", 
+  lg: "px-3 py-1.5 text-sm"
+} as const
 
-const PatientStatus: React.FC<PatientStatusProps> = React.memo(
-  ({ 
-    status, 
-    surveyCompleted = false, 
-    size = "md", 
-    showIcon = true,
-    animated = true 
-  }) => {
-    // Lógica de prioridad para mostrar el estado
-    let configKey: keyof typeof STATUS_CONFIG = "DEFAULT"
+const ICON_SIZES = {
+  sm: "h-3 w-3",
+  md: "h-3.5 w-3.5", 
+  lg: "h-4 w-4"
+} as const
 
-    if (status === PatientStatusEnum.PENDIENTE_DE_CONSULTA) {
-      configKey = PatientStatusEnum.PENDIENTE_DE_CONSULTA
-    } else if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
-      configKey = "SURVEY_PENDING"
-    } else if (status && status in STATUS_CONFIG) {
-      configKey = status as PatientStatusEnum
+const PatientStatus: React.FC<PatientStatusProps> = ({
+  status,
+  surveyCompleted = false,
+  size = "md",
+  showIcon = true,
+  className
+}) => {
+  // Lógica simplificada para determinar el estado a mostrar
+  const getStatusKey = (): keyof typeof STATUS_CONFIG => {
+    // Prioridad: Encuesta pendiente > Estado específico > Default
+    if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
+      return "SURVEY_PENDING"
     }
+    
+    if (status && status in STATUS_CONFIG) {
+      return status as PatientStatusEnum
+    }
+    
+    return "DEFAULT"
+  }
 
-    const { className, label, Icon, gradient, pulse } = STATUS_CONFIG[configKey]
-    const sizeVariant = SIZE_VARIANTS[size]
+  const statusKey = getStatusKey()
+  const config = STATUS_CONFIG[statusKey]
+  const Icon = config.icon
 
-    const content = (
+  const shouldShowActivityDot = 
+    statusKey === PatientStatusEnum.PENDIENTE_DE_CONSULTA || 
+    statusKey === PatientStatusEnum.EN_SEGUIMIENTO ||
+    statusKey === "SURVEY_PENDING"
+
+  return (
+    <div className="relative inline-flex">
       <Badge
         variant="outline"
         className={cn(
-          "relative overflow-hidden inline-flex items-center font-medium",
-          "whitespace-nowrap transition-all duration-300",
-          "hover:shadow-md hover:scale-105",
-          "backdrop-blur-sm",
-          sizeVariant.badge,
-          sizeVariant.gap,
+          "inline-flex items-center gap-1.5 font-medium border transition-all duration-200",
+          "relative overflow-hidden shadow-sm",
+          SIZE_VARIANTS[size],
+          config.style,
           className
         )}
       >
-        {/* Gradient overlay para efecto premium */}
-        {gradient && (
-          <div 
-            className={cn(
-              "absolute inset-0 opacity-10 bg-gradient-to-r",
-              gradient
-            )} 
-          />
-        )}
-        
-        {/* Efecto pulse para estados importantes */}
-        {pulse && animated && (
-          <div className="absolute inset-0">
-            <div className={cn(
-              "absolute inset-0 animate-pulse opacity-30 bg-gradient-to-r",
-              gradient
-            )} />
-          </div>
-        )}
-        
-        {/* Contenido */}
-        <div className={cn("relative flex items-center", sizeVariant.gap)}>
-          {showIcon && (
-            <Icon className={cn(
-              "flex-shrink-0 opacity-80",
-              sizeVariant.icon
-            )} />
-          )}
-          <span className="truncate">{label}</span>
-        </div>
-
-        {/* Indicador de actividad para ciertos estados */}
-        {(configKey === PatientStatusEnum.EN_SEGUIMIENTO || 
-          configKey === PatientStatusEnum.PENDIENTE_DE_CONSULTA) && 
-          animated && (
-          <div className="absolute -top-1 -right-1">
-            <span className="relative flex h-2 w-2">
-              <span className={cn(
-                "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
-                configKey === PatientStatusEnum.EN_SEGUIMIENTO 
-                  ? "bg-violet-400" 
-                  : "bg-amber-400"
-              )} />
-              <span className={cn(
-                "relative inline-flex rounded-full h-2 w-2",
-                configKey === PatientStatusEnum.EN_SEGUIMIENTO 
-                  ? "bg-violet-600 dark:bg-violet-400" 
-                  : "bg-amber-600 dark:bg-amber-400"
-              )} />
-            </span>
-          </div>
-        )}
+        {showIcon && <Icon className={cn("shrink-0", ICON_SIZES[size])} />}
+        <span className="truncate">{config.label}</span>
       </Badge>
-    )
+      
+      {/* Dot de actividad para estados importantes */}
+      {shouldShowActivityDot && (
+        <div className="absolute -top-1 -right-1 flex items-center justify-center">
+          <div className="relative">
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              config.dotColor
+            )} />
+            <div className={cn(
+              "absolute inset-0 w-2 h-2 rounded-full animate-ping opacity-75",
+              config.dotColor
+            )} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
-    if (!animated) {
-      return content
-    }
-
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={configKey}
-          initial={{ opacity: 0, scale: 0.9, y: -5 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 5 }}
-          transition={{ 
-            duration: 0.2,
-            ease: "easeOut"
-          }}
-        >
-          {content}
-        </motion.div>
-      </AnimatePresence>
-    )
-  }
-)
-
-PatientStatus.displayName = "PatientStatus"
-
-// Componente adicional para mostrar múltiples estados
+// Componente para mostrar múltiples estados (simplificado)
 export const PatientStatusGroup: React.FC<{
   statuses: Array<{
     status: PatientData["estado_paciente"]
     surveyCompleted?: boolean
   }>
   size?: "sm" | "md" | "lg"
-}> = ({ statuses, size = "sm" }) => {
+  className?: string
+}> = ({ statuses, size = "sm", className }) => {
+  if (!statuses.length) return null
+
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className={cn("flex flex-wrap gap-1.5", className)}>
       {statuses.map((statusInfo, index) => (
         <PatientStatus
-          key={index}
+          key={`${statusInfo.status}-${index}`}
           status={statusInfo.status}
           surveyCompleted={statusInfo.surveyCompleted}
           size={size}
-          animated={false}
         />
       ))}
     </div>
   )
 }
 
-// Hook para obtener configuración de estado
-export const useStatusConfig = (status: PatientData["estado_paciente"]) => {
-  const configKey = status && status in STATUS_CONFIG 
-    ? status as PatientStatusEnum 
-    : "DEFAULT"
-  
-  return STATUS_CONFIG[configKey]
+// Componente compacto para vista móvil
+export const PatientStatusCompact: React.FC<{
+  status: PatientData["estado_paciente"]
+  surveyCompleted?: boolean
+  className?: string
+}> = ({ status, surveyCompleted, className }) => {
+  const getStatusKey = (): keyof typeof STATUS_CONFIG => {
+    if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
+      return "SURVEY_PENDING"
+    }
+    if (status && status in STATUS_CONFIG) {
+      return status as PatientStatusEnum
+    }
+    return "DEFAULT"
+  }
+
+  const statusKey = getStatusKey()
+  const config = STATUS_CONFIG[statusKey]
+  const Icon = config.icon
+
+  return (
+    <div className={cn("flex items-center gap-2", className)}>
+      <div className={cn(
+        "w-2 h-2 rounded-full",
+        config.dotColor
+      )} />
+      <div className="flex items-center gap-1">
+        <Icon className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+        <span className="text-xs text-gray-600 dark:text-gray-300 truncate">
+          {config.label}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// Hook utilitario para obtener información del estado
+export const usePatientStatusInfo = (
+  status: PatientData["estado_paciente"],
+  surveyCompleted: boolean = false
+) => {
+  const getStatusKey = (): keyof typeof STATUS_CONFIG => {
+    if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
+      return "SURVEY_PENDING"
+    }
+    if (status && status in STATUS_CONFIG) {
+      return status as PatientStatusEnum
+    }
+    return "DEFAULT"
+  }
+
+  const statusKey = getStatusKey()
+  const config = STATUS_CONFIG[statusKey]
+
+  return {
+    label: config.label,
+    icon: config.icon,
+    style: config.style,
+    dotColor: config.dotColor,
+    priority: config.priority,
+    needsAttention: statusKey === "SURVEY_PENDING" || 
+                    statusKey === PatientStatusEnum.PENDIENTE_DE_CONSULTA,
+    isComplete: statusKey === PatientStatusEnum.OPERADO
+  }
+}
+
+// Función utilitaria para ordenar por prioridad de estado
+export const sortByStatusPriority = (
+  patients: Array<{ 
+    status: PatientData["estado_paciente"]
+    surveyCompleted?: boolean 
+  }>
+) => {
+  return patients.sort((a, b) => {
+    const aKey = !a.surveyCompleted && a.status !== PatientStatusEnum.OPERADO 
+      ? "SURVEY_PENDING" 
+      : (a.status in STATUS_CONFIG ? a.status as PatientStatusEnum : "DEFAULT")
+    
+    const bKey = !b.surveyCompleted && b.status !== PatientStatusEnum.OPERADO
+      ? "SURVEY_PENDING"
+      : (b.status in STATUS_CONFIG ? b.status as PatientStatusEnum : "DEFAULT")
+
+    return STATUS_CONFIG[bKey].priority - STATUS_CONFIG[aKey].priority
+  })
 }
 
 export default PatientStatus
