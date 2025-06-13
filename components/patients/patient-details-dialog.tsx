@@ -14,6 +14,7 @@ import type { PatientData } from "@/app/dashboard/data-model";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { PatientStatusEnum } from "@/app/dashboard/data-model";
+import { useMediaQuery } from "@/hooks/use-breakpoint";
 
 // Iconos para mejorar la visualización
 import { 
@@ -49,6 +50,11 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
 
   const fullName = `${nombre} ${apellidos}`;
 
+  // Hook for responsive drawer direction
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const isMobile = useMediaQuery("(max-width: 639px)");
+  const drawerDirection = isDesktop ? "right" : "bottom";
+
   // Calcular la clase de estado para el badge
   const getStatusClasses = (status: string) => {
     switch(status?.toLowerCase()) {
@@ -65,9 +71,9 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
   };
 
   return (
-    <Drawer open={isOpen} onOpenChange={onClose} direction="bottom">
-      <DrawerContent className="max-h-[90vh]">
-        <DrawerHeader className="border-b dark:border-slate-700 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-800 dark:to-blue-950">
+    <Drawer open={isOpen} onOpenChange={onClose} direction={drawerDirection}>
+      <DrawerContent className={cn(isDesktop ? "h-full max-w-lg md:max-w-xl ml-auto" : "max-h-[90vh]")}>
+        <DrawerHeader className="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
           <div className="flex items-center gap-4">
             <Avatar className="h-12 w-12 border-2 border-blue-100 dark:border-blue-800">
               <CircleUser className="h-10 w-10 text-blue-600 dark:text-blue-400" />
@@ -92,11 +98,11 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
             </TabsList>
           </div>
 
-          <ScrollArea className="flex-1 h-[50vh] md:h-[60vh] px-4">
+          <ScrollArea className={cn("flex-1 px-4", isDesktop ? "h-[calc(100vh-220px)]" : "h-[50vh] md:h-[60vh]")}> 
             <TabsContent value="info" className="pt-4 pb-6 space-y-6">
               {/* Información prioritaria del paciente */}
               <div className="bg-white dark:bg-slate-900 border border-blue-100 dark:border-slate-700 rounded-md overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-white dark:from-blue-950/50 dark:to-slate-900 border-b border-blue-100 dark:border-slate-800 py-3 px-4">
+                <div className="bg-blue-50 dark:bg-slate-800 border-b border-blue-100 dark:border-slate-800 py-3 px-4">
                   <h3 className="font-medium flex items-center gap-2 text-blue-800 dark:text-blue-300">
                     <User size={16} />
                     Información Principal
@@ -179,7 +185,7 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
               {/* Información clínica */}
               {(diagnostico_principal || notas_paciente) && (
                 <div className="bg-white dark:bg-slate-900 border border-blue-100 dark:border-slate-700 rounded-md overflow-hidden">
-                  <div className="bg-gradient-to-r from-blue-50 to-white dark:from-blue-950/50 dark:to-slate-900 border-b border-blue-100 dark:border-slate-800 py-3 px-4">
+                  <div className="bg-blue-50 dark:bg-slate-800 border-b border-blue-100 dark:border-slate-800 py-3 px-4">
                     <h3 className="font-medium flex items-center gap-2 text-blue-800 dark:text-blue-300">
                       <Stethoscope size={16} />
                       Información Médica
@@ -217,14 +223,18 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
 
             <TabsContent value="history" className="py-4">
               <div className="bg-white dark:bg-slate-900 border border-blue-100 dark:border-slate-700 rounded-md overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-white dark:from-blue-950/50 dark:to-slate-900 border-b border-blue-100 dark:border-slate-800 py-3 px-4">
+                <div className="bg-blue-50 dark:bg-slate-800 border-b border-blue-100 dark:border-slate-800 py-3 px-4">
                   <h3 className="font-medium flex items-center gap-2 text-blue-800 dark:text-blue-300">
                     <Calendar size={16} />
                     Historial de Citas
                   </h3>
                 </div>
                 <div className="p-4">
-                  <AppointmentHistory patientId={id} />
+                  <AppointmentHistory 
+                    patientId={id}
+                    showStats={!isMobile}
+                    maxItems={isMobile ? 5 : undefined}
+                  />
                 </div>
               </div>
             </TabsContent>

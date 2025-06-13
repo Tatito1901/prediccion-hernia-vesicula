@@ -76,6 +76,7 @@ export interface DiagnosisData {
   tipo: string
   cantidad: number
   porcentaje?: number
+  percentage?: number // Alias in English for uniform typing across components
   tendencia?: number
   descripcion?: string
   color?: string
@@ -723,7 +724,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
         name: 'name' in item ? item.name : titleCaseStatus(item.tipo),
         value: 'value' in item ? item.value : item.cantidad,
         color: item.color || colors[index % colors.length],
-        percentage: item.percentage || ('porcentaje' in item ? item.porcentaje : undefined),
+        percentage: 'percentage' in item && item.percentage !== undefined ? item.percentage : ('porcentaje' in item ? item.porcentaje : undefined),
         descripcion: 'descripcion' in item ? item.descripcion : undefined,
       }))
 
@@ -825,8 +826,8 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
       return (
         <div style={{ height: chartSize.height }} ref={chartRef}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={normalizedData}
+            <BarChart 
+              data={normalizedData} 
               margin={{ 
                 top: 20, 
                 right: breakpoint === 'mobile' ? 10 : 20, 
@@ -1207,3 +1208,5 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
 }
 
 export default useChartConfig
+
+export { LoadingSpinner, EmptyState, UniversalTooltip }

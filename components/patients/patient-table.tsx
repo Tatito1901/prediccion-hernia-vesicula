@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useCallback } from "react"
 import {
   Table,
   TableHeader,
@@ -32,19 +32,6 @@ import {
   ArrowUpDown,
   FileText,
   Activity,
-  User,
-  Briefcase,
-  Phone,
-  Mail,
-  MapPin,
-  Info,
-  XCircle,
-  Check,
-  X,
-  Plus,
-  Minus,
-  ArrowRight,
-  ArrowLeft,
 } from "lucide-react"
 import PatientStatus from "./patient-status"
 import { cn } from "@/lib/utils"
@@ -178,21 +165,23 @@ const PatientCard = ({
   onSelectPatient, 
   onShareSurvey, 
   onAnswerSurvey, 
-  onEditPatient 
+  onEditPatient,
+  onScheduleAppointment
 }: {
   patient: EnrichedPatientData
   onSelectPatient: (patient: PatientData) => void
   onShareSurvey?: (patient: PatientData) => void
   onAnswerSurvey?: (patient: PatientData) => void
   onEditPatient?: (patient: PatientData) => void
+  onScheduleAppointment?: (patient: PatientData) => void
 }) => {
   return (
     <div 
-      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
+      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 cursor-pointer shadow-sm"
       onClick={() => onSelectPatient(patient)}
     >
       {/* Header */}
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-sm font-medium">
             {patient.nombreCompleto.charAt(0).toUpperCase()}
@@ -219,12 +208,12 @@ const PatientCard = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-lg">
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
               <Eye className="h-4 w-4 mr-2 text-blue-500 dark:text-blue-400" />
               Ver detalles del paciente
             </DropdownMenuItem>
             {onEditPatient && (
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditPatient(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
                 <Edit className="h-4 w-4 mr-2 text-amber-500 dark:text-amber-400" />
                 Editar datos del paciente
               </DropdownMenuItem>
@@ -233,29 +222,30 @@ const PatientCard = ({
             {!patient.encuesta_completada ? (
               <>
                 {onAnswerSurvey && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAnswerSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAnswerSurvey(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
                     <ClipboardList className="h-4 w-4 mr-2 text-emerald-500 dark:text-emerald-400" />
                     Completar encuesta clínica
                   </DropdownMenuItem>
                 )}
                 {onShareSurvey && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareSurvey(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
                     <Share2 className="h-4 w-4 mr-2 text-purple-500 dark:text-purple-400" />
                     Enviar enlace de encuesta
                   </DropdownMenuItem>
                 )}
               </>
             ) : (
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
                 <FileText className="h-4 w-4 mr-2 text-emerald-500 dark:text-emerald-400" />
                 Ver resultados de encuesta
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
             <DropdownMenuItem onClick={(e) => { 
-              e.stopPropagation(); 
-              onScheduleAppointment?.(patient);
-            }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              e.stopPropagation();
+              // Solo llamamos si la función existe
+              if (onScheduleAppointment) onScheduleAppointment(patient);
+            }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
               <Calendar className="h-4 w-4 mr-2 text-indigo-500 dark:text-indigo-400" />
               Agendar cita
             </DropdownMenuItem>
@@ -263,7 +253,7 @@ const PatientCard = ({
               e.stopPropagation();
               const url = `/dashboard/patients/${patient.id}?tab=medical`; 
               onSelectPatient(patient);
-            }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+            }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
               <Activity className="h-4 w-4 mr-2 text-red-500 dark:text-red-400" />
               Ver historial médico
             </DropdownMenuItem>
@@ -272,7 +262,7 @@ const PatientCard = ({
       </div>
 
       {/* Content */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {/* Diagnóstico */}
         <div className="flex items-center gap-2">
           <Stethoscope className="h-4 w-4 text-slate-400 dark:text-slate-600" />
@@ -326,23 +316,25 @@ const PatientRow = ({
   onSelectPatient, 
   onShareSurvey, 
   onAnswerSurvey, 
-  onEditPatient 
+  onEditPatient,
+  onScheduleAppointment
 }: {
   patient: EnrichedPatientData
   onSelectPatient: (patient: PatientData) => void
   onShareSurvey?: (patient: PatientData) => void
   onAnswerSurvey?: (patient: PatientData) => void
   onEditPatient?: (patient: PatientData) => void
+  onScheduleAppointment?: (patient: PatientData) => void
 }) => {
   return (
     <TableRow 
-      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
       onClick={() => onSelectPatient(patient)}
     >
       {/* Paciente */}
-      <TableCell className="py-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-sm font-medium">
+      <TableCell className="py-3">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-sm font-medium">
             {patient.nombreCompleto.charAt(0).toUpperCase()}
           </div>
           <div>
@@ -400,7 +392,7 @@ const PatientRow = ({
       </TableCell>
 
       {/* Estado */}
-      <TableCell className="hidden xl:table-cell">
+      <TableCell className="py-3 hidden sm:table-cell">
         <PatientStatus
           status={patient.estado_paciente || PatientStatusEnum.PENDIENTE_DE_CONSULTA}
           surveyCompleted={patient.encuesta_completada}
@@ -437,12 +429,12 @@ const PatientRow = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-lg">
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
               <Eye className="h-4 w-4 mr-2 text-blue-500 dark:text-blue-400" />
               Ver detalles del paciente
             </DropdownMenuItem>
             {onEditPatient && (
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditPatient(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
                 <Edit className="h-4 w-4 mr-2 text-amber-500 dark:text-amber-400" />
                 Editar datos del paciente
               </DropdownMenuItem>
@@ -451,29 +443,30 @@ const PatientRow = ({
             {!patient.encuesta_completada ? (
               <>
                 {onAnswerSurvey && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAnswerSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAnswerSurvey(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
                     <ClipboardList className="h-4 w-4 mr-2 text-emerald-500 dark:text-emerald-400" />
                     Completar encuesta clínica
                   </DropdownMenuItem>
                 )}
                 {onShareSurvey && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareSurvey(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShareSurvey(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
                     <Share2 className="h-4 w-4 mr-2 text-purple-500 dark:text-purple-400" />
                     Enviar enlace de encuesta
                   </DropdownMenuItem>
                 )}
               </>
             ) : (
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSelectPatient(patient); }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
                 <FileText className="h-4 w-4 mr-2 text-emerald-500 dark:text-emerald-400" />
                 Ver resultados de encuesta
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
             <DropdownMenuItem onClick={(e) => { 
-              e.stopPropagation(); 
-              onScheduleAppointment?.(patient);
-            }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+              e.stopPropagation();
+              // Solo llamamos si la función existe
+              if (onScheduleAppointment) onScheduleAppointment(patient);
+            }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
               <Calendar className="h-4 w-4 mr-2 text-indigo-500 dark:text-indigo-400" />
               Agendar cita
             </DropdownMenuItem>
@@ -481,7 +474,7 @@ const PatientRow = ({
               e.stopPropagation();
               const url = `/dashboard/patients/${patient.id}?tab=medical`; 
               onSelectPatient(patient);
-            }} className="hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
+            }} className="text-slate-700 dark:text-slate-300 focus:bg-slate-100 dark:focus:bg-slate-800">
               <Activity className="h-4 w-4 mr-2 text-red-500 dark:text-red-400" />
               Ver historial médico
             </DropdownMenuItem>
@@ -508,48 +501,50 @@ const PatientTable: React.FC<PatientTableProps> = ({
   })
 
   // Simplificado: solo ordenar cuando sea necesario
+  // Sorting logic - memoized to avoid unnecessary re-sorts
   const sortedPatients = useMemo(() => {
-    if (!patients?.length) return []
+    if (!patients?.length) return [];
     
     return [...patients].sort((a, b) => {
-      const { key, direction } = sortConfig
-      const aVal = a[key]
-      const bVal = b[key]
+      const { key, direction } = sortConfig;
+      const aVal = a[key];
+      const bVal = b[key];
 
-      if (aVal == null && bVal == null) return 0
-      if (aVal == null) return direction === "asc" ? 1 : -1
-      if (bVal == null) return direction === "asc" ? -1 : 1
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return direction === "asc" ? 1 : -1;
+      if (bVal == null) return direction === "asc" ? -1 : 1;
 
       // Fechas
-      if (key.includes("fecha")) {
-        const aTime = new Date(aVal as string).getTime()
-        const bTime = new Date(bVal as string).getTime()
-        return direction === "asc" ? aTime - bTime : bTime - aTime
+      if (typeof aVal === "string" && typeof bVal === "string" && 
+          (key.toString().includes("fecha") || key.toString().includes("created"))) {
+        const aTime = new Date(aVal).getTime();
+        const bTime = new Date(bVal).getTime();
+        return direction === "asc" ? aTime - bTime : bTime - aTime;
       }
       
       // Booleanos
       if (typeof aVal === "boolean" && typeof bVal === "boolean") {
-        return direction === "asc" ? (aVal === bVal ? 0 : aVal ? 1 : -1) : (aVal === bVal ? 0 : aVal ? -1 : 1)
+        return direction === "asc" ? (aVal === bVal ? 0 : aVal ? 1 : -1) : (aVal === bVal ? 0 : aVal ? -1 : 1);
       }
       
       // Números
       if (typeof aVal === "number" && typeof bVal === "number") {
-        return direction === "asc" ? aVal - bVal : bVal - aVal
+        return direction === "asc" ? aVal - bVal : bVal - aVal;
       }
       
       // Strings
-      const aStr = String(aVal).toLowerCase()
-      const bStr = String(bVal).toLowerCase()
-      return direction === "asc" ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr)
-    })
-  }, [patients, sortConfig])
+      const aStr = String(aVal).toLowerCase();
+      const bStr = String(bVal).toLowerCase();
+      return direction === "asc" ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
+    });
+  }, [patients, sortConfig]);
 
-  const handleSort = (key: keyof EnrichedPatientData) => {
+  const handleSort = useCallback((key: keyof EnrichedPatientData) => {
     setSortConfig(prev => ({
       key,
-      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
-    }))
-  }
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc"
+    }));
+  }, []);
 
   if (loading) {
     return (
@@ -598,7 +593,7 @@ const PatientTable: React.FC<PatientTableProps> = ({
     <>
       {/* Vista móvil - Cards */}
       <div className="block lg:hidden">
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {sortedPatients.map((patient) => (
             <PatientCard
               key={patient.id}
@@ -607,6 +602,7 @@ const PatientTable: React.FC<PatientTableProps> = ({
               onShareSurvey={onShareSurvey}
               onAnswerSurvey={onAnswerSurvey}
               onEditPatient={onEditPatient}
+              onScheduleAppointment={onScheduleAppointment}
             />
           ))}
         </div>
