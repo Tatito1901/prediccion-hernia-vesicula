@@ -6,7 +6,7 @@ import { useIsMobile, useIsTablet, useMediaQuery } from "@/hooks/use-breakpoint"
 import { cn } from "@/lib/utils"
 
 import { AppSidebar } from "@/components/navigation/app-sidebar"
-import { SiteHeader } from "@/components/navigation/site-header"
+
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
 // Comentario: DashboardLayout.tsx
@@ -30,7 +30,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <SidebarProvider sidebarBehavior={isToggleableLayout ? "offcanvas" : "permanent"}>
       <AppSidebar variant="inset" />
       <SidebarInset>
-        <SiteHeader />
         <div className="flex flex-1 flex-col">
           {/* El uso de @container/main habilita las container queries para los hijos,
               lo cual es excelente para componentes que necesitan adaptarse a su propio tamaño

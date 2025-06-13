@@ -2,7 +2,6 @@
 
 import React, { useMemo, Suspense } from "react";
 import { AppSidebar } from "../../components/navigation/app-sidebar";
-import { SiteHeader } from "../../components/navigation/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { clinicMetrics } from "./mock-data";
 
@@ -30,8 +29,6 @@ export default function Page() {
       {/* AppSidebar probablemente maneja su propia responsividad y estado */}
       <AppSidebar variant="inset" />
       <SidebarInset>
-        {/* SiteHeader también debería ser un componente responsivo */}
-        <SiteHeader />
         <div className="flex flex-1 flex-col">
           {/* El contenedor principal para el contenido del dashboard */}
           {/* Usamos @container/main para consultas de contenedor en los hijos */}

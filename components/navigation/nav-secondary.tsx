@@ -19,9 +19,10 @@ interface NavSecondaryProps extends React.HTMLAttributes<HTMLDivElement> {
     icon: React.ElementType
   }[]
   pathname?: string
+  onNavigate?: () => void
 }
 
-export function NavSecondary({ items, pathname, className, ...props }: NavSecondaryProps) {
+export function NavSecondary({ items, pathname, className, onNavigate, ...props }: NavSecondaryProps) {
   // Function to close sidebar on mobile after navigation
   const closeSidebarOnMobile = useCallback(() => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {

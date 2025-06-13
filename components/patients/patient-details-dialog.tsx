@@ -80,12 +80,14 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
             </Avatar>
             <div>
               <DrawerTitle className="text-xl font-semibold text-slate-800 dark:text-slate-100">{fullName}</DrawerTitle>
-              <DrawerDescription className="flex items-center gap-2">
-                <span>ID: #{id}</span>
+              <DrawerDescription>
+                ID: #{id}
+              </DrawerDescription>
+              <div className="flex items-center mt-1">
                 <Badge className={cn("rounded-full font-medium", getStatusClasses(estado_paciente ?? PatientStatusEnum.PENDIENTE_DE_CONSULTA))}>
                   {estado_paciente ?? PatientStatusEnum.PENDIENTE_DE_CONSULTA}
                 </Badge>
-              </DrawerDescription>
+              </div>
             </div>
           </div>
         </DrawerHeader>

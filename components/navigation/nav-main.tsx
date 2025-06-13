@@ -19,9 +19,10 @@ interface NavMainProps extends React.HTMLAttributes<HTMLDivElement> {
     icon: React.ElementType
   }[]
   pathname?: string
+  onNavigate?: () => void
 }
 
-export function NavMain({ items, pathname, className, ...props }: NavMainProps) {
+export function NavMain({ items, pathname, className, onNavigate, ...props }: NavMainProps) {
   // Function to close sidebar on mobile after navigation
   const closeSidebarOnMobile = useCallback(() => {
     if (typeof window !== "undefined" && window.innerWidth < 768) {

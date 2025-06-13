@@ -85,6 +85,12 @@ export function AppSidebar({
   const [isMobileOpen, setIsMobileOpen]     = useState(false)
   const [isCollapsed,  setIsCollapsed]      = useState(collapsedProp ?? false)
   const { theme, setTheme }                 = useTheme()
+  const [mounted, setMounted]               = useState(false)
+  
+  // After mounting, we can render the theme-dependent UI
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   /* Mantener sincronía con prop controlada */
   useEffect(() => {
@@ -188,7 +194,7 @@ export function AppSidebar({
                 className="h-8 w-8 mx-auto"
                 onClick={toggleTheme}
               >
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {mounted && (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
               </Button>
             ) : (
               <div className="flex items-center justify-between px-2 py-1.5">
@@ -199,7 +205,7 @@ export function AppSidebar({
                   className="h-8 w-8"
                   onClick={toggleTheme}
                 >
-                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  {mounted && (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
                 </Button>
               </div>
             )}

@@ -521,46 +521,98 @@ export function PatientManagement() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-2 sm:p-3">
-        {/* Título de filtros */}
-        <div className="mb-1.5 sm:mb-2 flex items-center gap-2">
-          <SlidersHorizontal className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-          <h2 className="text-sm sm:text-base font-medium text-slate-800 dark:text-slate-200">Filtros</h2>
-        </div>
-        <div className="flex flex-col sm:flex-row items-center gap-2">
-          {/* Búsqueda */}
-          <div className="relative w-full sm:w-auto">
-            <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-            <Input
-              placeholder="Buscar pacientes..."
-              className="pl-9 h-8 sm:h-9 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:ring-slate-400 dark:focus-visible:ring-slate-500"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
-            {searchTerm && (
-              <Button 
-                variant="ghost" 
-                size="icon"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 hover:bg-slate-100 dark:hover:bg-slate-800"
+      <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 px-3 py-2">
+        {/* Contenedor de filtros mejorado */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Sección de búsqueda - priorizada */}
+          <div className="flex-grow max-w-md order-1">
+            <div className="relative">
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+              <Input
+                placeholder="Buscar pacientes..."
+                className="pl-9 h-9 text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus-visible:ring-slate-400 dark:focus-visible:ring-slate-500"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+              />
+              {searchTerm && (
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <X className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                </Button>
+              )}
+            </div>
+          </div>
+          
+          {/* Filtros desktop - alineados a la derecha */}
+          <div className="hidden sm:flex items-center gap-3 order-2">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                <h2 className="text-sm font-medium text-slate-800 dark:text-slate-200">Filtros:</h2>
+              </div>
+              
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => {
+                  setStatusFilter(value as PatientStatusEnum | "all");
+                  setCurrentPage(1);
+                }}
               >
-                <X className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-              </Button>
-            )}
+                <SelectTrigger className="h-9 text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 w-[180px]">
+                  <SelectValue placeholder="Filtrar por estado" className="text-slate-600 dark:text-slate-300" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
+                  <SelectItem value="all" className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
+                    <div className="flex items-center justify-between w-full">
+                      <span>Todos los estados</span>
+                      <Badge variant="secondary" className="ml-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                        {statusStats.all}
+                      </Badge>
+                    </div>
+                  </SelectItem>
+                  {Object.entries(STATUS_CONFIG).map(([status, config]) => (
+                    <SelectItem key={status} value={status} className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
+                      <div className="flex items-center justify-between w-full">
+                        <span>{config.label}</span>
+                        <Badge variant="outline" className={cn(
+                          "ml-2 shadow-sm font-medium", 
+                          status === statusFilter ? "ring-1 ring-offset-1 ring-slate-200 dark:ring-slate-700 dark:ring-offset-slate-900" : "",
+                          config.style
+                        )}>
+                          {statusStats[status as PatientStatusEnum]}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {hasActiveFilters && (
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 h-9"
+                >
+                  Limpiar Filtros
+                </Button>
+              )}
+            </div>
           </div>
-          {/* Filtros desktop */}
-          <div className="hidden sm:flex items-center gap-3">
-            <FilterContent />
-          </div>
+          
           {/* Filtros móvil */}
           <Sheet open={isMobileFiltersOpen} onOpenChange={setIsMobileFiltersOpen}>
-            <SheetTrigger asChild className="sm:hidden w-full">
+            <SheetTrigger asChild className="sm:hidden order-2">
               <Button 
                 variant="outline" 
-                className="h-8 w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70"
+                className="h-9 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70"
               >
                 <SlidersHorizontal className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" /> 
                 Filtros {hasActiveFilters && (
