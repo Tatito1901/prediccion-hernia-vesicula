@@ -1,6 +1,6 @@
 /* -------------------------------------------------------------------------- */
 /*  components/charts/diagnosis-chart.tsx                                     */
-/*  🎯 Gráfico de diagnósticos simplificado usando hook centralizador        */
+/*  🎯 Gráfico de diagnósticos optimizado usando hook centralizador          */
 /* -------------------------------------------------------------------------- */
 
 import { memo, useMemo, useCallback, useState, FC } from 'react';
@@ -25,22 +25,16 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import useChartConfig, { type StatusChartData } from '@/components/charts/use-chart-config';
-import { LocalDiagnosisCategory } from '@/components/charts/chart-diagnostic';
-import { DiagnosisEnum } from '@/app/dashboard/data-model';
+import useChartConfig, { 
+  type DiagnosisData,
+  type GeneralStats,
+  titleCaseStatus,
+  ABBR,
+} from '@/components/charts/use-chart-config';
 
 /* ============================================================================
  * TIPOS SIMPLIFICADOS
  * ========================================================================== */
-
-export interface DiagnosisData {
-  tipo: LocalDiagnosisCategory;
-  cantidad: number;
-  porcentaje?: number;
-  tendencia?: number;
-  color?: string;
-  descripcion?: string;
-}
 
 interface Props {
   data: readonly DiagnosisData[];
@@ -55,21 +49,7 @@ interface Props {
 }
 
 /* ============================================================================
- * FUNCIONES AUXILIARES
- * ========================================================================== */
-
-const titleCaseStatus = (status: string): string => {
-  if (status === "NO ASISTIO") return "No Asistió";
-  return status
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-};
-
-const ABBR = (s: string, n = 16) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-
-/* ============================================================================
- * COMPONENTE PRINCIPAL SIMPLIFICADO
+ * COMPONENTE PRINCIPAL OPTIMIZADO
  * ========================================================================== */
 
 const DiagnosisChart: FC<Props> = ({
@@ -88,30 +68,43 @@ const DiagnosisChart: FC<Props> = ({
   const [hiddenDiagnoses, setHiddenDiagnoses] = useState<Set<string>>(new Set());
 
   // Usar el hook centralizador para el renderizado
-  const { renderPieChart } = useChartConfig({
+  const { renderPieChart, EmptyState } = useChartConfig({
     showLegend: true,
     showTooltip: true,
     animation: true,
     interactive,
+    showLabels: showPercentages,
   });
 
-  // Procesar datos para el formato que espera el hook
-  const chartData = useMemo((): StatusChartData[] => {
-    if (!data?.length) return [];
+  // Procesar datos optimizado
+  const { processedData, generalStats } = useMemo(() => {
+    if (!data?.length) {
+      return { 
+        processedData: [], 
+        generalStats: {
+          total: 0, attendance: 100, cancellation: 0, pending: 0, present: 0,
+          completed: 0, cancelled: 0, pendingCount: 0, presentCount: 0,
+          period: "Actual", allStatusCounts: {}
+        }
+      };
+    }
 
-    // Manejar categorías en exceso
-    let processedData = [...data].sort((a, b) => b.cantidad - a.cantidad);
-    
-    if (processedData.length > maxCategories) {
-      const topItems = processedData.slice(0, maxCategories - 1);
-      const otherItems = processedData.slice(maxCategories - 1);
+    // Filtrar elementos ocultos y limitar categorías
+    let workingData = [...data]
+      .filter(d => !hiddenDiagnoses.has(d.tipo))
+      .sort((a, b) => b.cantidad - a.cantidad);
+
+    // Manejar exceso de categorías
+    if (workingData.length > maxCategories) {
+      const topItems = workingData.slice(0, maxCategories - 1);
+      const otherItems = workingData.slice(maxCategories - 1);
       const otherSum = otherItems.reduce((sum, d) => sum + d.cantidad, 0);
       
       if (otherSum > 0) {
-        processedData = [
+        workingData = [
           ...topItems,
           {
-            tipo: DiagnosisEnum.OTRO,
+            tipo: 'Otros',
             cantidad: otherSum,
             descripcion: `Incluye ${otherItems.length} diagnósticos adicionales`
           }
@@ -119,21 +112,9 @@ const DiagnosisChart: FC<Props> = ({
       }
     }
 
-    const total = processedData.reduce((sum, d) => sum + d.cantidad, 0);
+    const total = workingData.reduce((sum, d) => sum + d.cantidad, 0);
 
-    return processedData
-      .filter(d => !hiddenDiagnoses.has(d.tipo))
-      .map((item) => ({
-        name: titleCaseStatus(item.tipo),
-        value: item.cantidad,
-        color: item.color || `hsl(var(--chart-${Math.floor(Math.random() * 5) + 1}))`,
-        percentage: total > 0 ? Math.round((item.cantidad / total) * 100) : 0,
-      }));
-  }, [data, maxCategories, hiddenDiagnoses]);
-
-  const generalStats = useMemo(() => {
-    const total = data.reduce((sum, d) => sum + d.cantidad, 0);
-    return {
+    const stats: GeneralStats = {
       total,
       attendance: 100,
       cancellation: 0,
@@ -146,7 +127,9 @@ const DiagnosisChart: FC<Props> = ({
       period: "Actual",
       allStatusCounts: {}
     };
-  }, [data]);
+
+    return { processedData: workingData, generalStats: stats };
+  }, [data, hiddenDiagnoses, maxCategories]);
 
   const handleDiagnosisClick = useCallback((diagnosis: DiagnosisData | null) => {
     setSelectedDiagnosis(diagnosis?.tipo || null);
@@ -175,17 +158,17 @@ const DiagnosisChart: FC<Props> = ({
           </CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
-        <CardContent className="h-[300px] flex flex-col items-center justify-center space-y-4">
-          <Activity className="h-8 w-8 text-muted-foreground opacity-50" />
-          <p className="text-sm text-muted-foreground text-center">
-            No hay diagnósticos registrados para mostrar
-          </p>
+        <CardContent className="h-[300px]">
+          <EmptyState 
+            message="No hay diagnósticos registrados para mostrar"
+            icon={<Activity className="h-8 w-8 text-muted-foreground opacity-50" />}
+          />
         </CardContent>
       </Card>
     );
   }
 
-  const selectedData = data.find(d => d.tipo === selectedDiagnosis);
+  const selectedData = processedData.find(d => d.tipo === selectedDiagnosis);
 
   return (
     <Card className={cn('shadow-lg hover:shadow-xl transition-all duration-300 border overflow-hidden', className)}>
@@ -243,14 +226,14 @@ const DiagnosisChart: FC<Props> = ({
         )}
 
         {/* Gráfico usando el hook centralizador */}
-        {renderPieChart(chartData, generalStats, false)}
+        {renderPieChart(processedData, generalStats, false)}
 
         {/* Información detallada del diagnóstico seleccionado */}
         {selectedData && (
           <div className="mt-6 p-4 bg-gradient-to-r from-muted/30 to-muted/10 rounded-lg border animate-in slide-in-from-bottom-3 fade-in duration-300">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-lg">{selectedData.tipo}</h4>
+                <h4 className="font-semibold text-lg">{titleCaseStatus(selectedData.tipo)}</h4>
               </div>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -268,7 +251,7 @@ const DiagnosisChart: FC<Props> = ({
                 
                 <div className="text-center p-3 rounded bg-background border">
                   <div className="text-2xl font-bold text-primary">
-                    #{data.findIndex(d => d.tipo === selectedData.tipo) + 1}
+                    #{processedData.findIndex(d => d.tipo === selectedData.tipo) + 1}
                   </div>
                   <div className="text-xs text-muted-foreground">Ranking</div>
                 </div>
@@ -311,13 +294,15 @@ const DiagnosisChart: FC<Props> = ({
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
             <span className="text-muted-foreground">Más frecuente:</span>
-            <span className="font-medium">{data[0]?.tipo || 'N/A'}</span>
+            <span className="font-medium">
+              {processedData[0]?.tipo ? titleCaseStatus(processedData[0].tipo) : 'N/A'}
+            </span>
           </div>
           
           <div className="flex items-center gap-2">
             <Target className="h-4 w-4 text-primary" />
             <span className="text-muted-foreground">Categorías:</span>
-            <span className="font-bold">{chartData.length}</span>
+            <span className="font-bold">{processedData.length}</span>
           </div>
           
           <div className="flex items-center gap-2">

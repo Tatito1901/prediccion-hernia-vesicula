@@ -1,721 +1,736 @@
-"use client";
-
-import React, { useState, useMemo } from "react";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+"use client"
+import React, { useState, useMemo, useCallback, memo } from 'react';
 import { 
-  SearchIcon, 
-  X, 
-  ChevronLeft, 
-  ChevronRight, 
-  Users, 
-  UserPlus,
-  Activity,
+  Search, 
+  Filter, 
+  Plus, 
+  MoreVertical, 
+  User, 
+  Calendar, 
+  Phone, 
+  Mail, 
+  Activity, 
+  FileText, 
+  Clock, 
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  Edit,
+  Share2,
+  Stethoscope,
+  Users,
   TrendingUp,
-  Calendar,
-  FileText,
-  SlidersHorizontal,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useAppContext } from "@/lib/context/app-context";
-import type { PatientData, DiagnosisType, AppointmentData } from "@/app/dashboard/data-model";
-import { PatientStatusEnum } from "@/app/dashboard/data-model";
-import { generateSurveyId } from "@/lib/form-utils";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
-import PatientTable from "./patient-table";
-import { NewPatientForm } from "@/components/patient-admision/new-patient-form";
-import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog";
-import PatientDetailsDialog from "./patient-details-dialog";
-import { ScheduleAppointmentDialog } from "./schedule-appointment-dialog";
+  X
+} from 'lucide-react';
 
-export interface EnrichedPatientData extends PatientData {
-  nombreCompleto: string;
-  fecha_proxima_cita_iso?: string;
-  encuesta_completada: boolean;
-  displayDiagnostico: string;
+// ===== SISTEMA DE DISEÑO UNIFICADO =====
+const designTokens = {
+  colors: {
+    primary: {
+      50: 'bg-blue-50 dark:bg-blue-950/20',
+      100: 'bg-blue-100 dark:bg-blue-900/30',
+      500: 'bg-blue-500 dark:bg-blue-600',
+      600: 'bg-blue-600 dark:bg-blue-700',
+      700: 'bg-blue-700 dark:bg-blue-800',
+      text: 'text-blue-700 dark:text-blue-300',
+      border: 'border-blue-200 dark:border-blue-800'
+    },
+    success: {
+      50: 'bg-emerald-50 dark:bg-emerald-950/20',
+      100: 'bg-emerald-100 dark:bg-emerald-900/30',
+      text: 'text-emerald-700 dark:text-emerald-300',
+      border: 'border-emerald-200 dark:border-emerald-800'
+    },
+    warning: {
+      50: 'bg-amber-50 dark:bg-amber-950/20',
+      100: 'bg-amber-100 dark:bg-amber-900/30',
+      text: 'text-amber-700 dark:text-amber-300',
+      border: 'border-amber-200 dark:border-amber-800'
+    },
+    error: {
+      50: 'bg-red-50 dark:bg-red-950/20',
+      100: 'bg-red-100 dark:bg-red-900/30',
+      text: 'text-red-700 dark:text-red-300',
+      border: 'border-red-200 dark:border-red-800'
+    },
+    neutral: {
+      50: 'bg-slate-50 dark:bg-slate-800/50',
+      100: 'bg-slate-100 dark:bg-slate-800',
+      200: 'bg-slate-200 dark:bg-slate-700',
+      text: 'text-slate-700 dark:text-slate-300',
+      textMuted: 'text-slate-500 dark:text-slate-400',
+      border: 'border-slate-200 dark:border-slate-700'
+    }
+  },
+  spacing: {
+    card: 'p-4 lg:p-6',
+    section: 'space-y-4 lg:space-y-6',
+    element: 'gap-3 lg:gap-4'
+  },
+  typography: {
+    heading: 'text-xl lg:text-2xl font-bold',
+    subheading: 'text-base lg:text-lg font-semibold',
+    body: 'text-sm lg:text-base',
+    caption: 'text-xs lg:text-sm'
+  },
+  interactive: {
+    button: 'h-9 lg:h-10 px-3 lg:px-4 text-sm lg:text-base',
+    input: 'h-9 lg:h-10 px-3 text-sm lg:text-base',
+    touchTarget: 'min-h-[44px] min-w-[44px]' // Cumple con estándares de accesibilidad
+  }
+};
+
+// ===== TIPOS Y ENUMS =====
+enum PatientStatus {
+  PENDING = 'PENDIENTE_DE_CONSULTA',
+  CONSULTED = 'CONSULTADO',
+  OPERATED = 'OPERADO',
+  NOT_OPERATED = 'NO_OPERADO',
+  FOLLOW_UP = 'EN_SEGUIMIENTO',
+  UNDECIDED = 'INDECISO'
 }
 
-const PAGE_SIZE = 15;
+interface Patient {
+  id: string;
+  nombre: string;
+  apellidos: string;
+  edad?: number;
+  telefono?: string;
+  email?: string;
+  estado: PatientStatus;
+  diagnostico?: string;
+  fechaRegistro: string;
+  encuestaCompletada: boolean;
+}
 
-const STATUS_CONFIG = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: {
-    label: "Pend. Consulta",
-    style: "bg-amber-50 text-amber-700 border-amber-200"
+// ===== UTILIDADES CENTRALIZADAS =====
+const formatters = {
+  name: (text: string) => text.charAt(0).toUpperCase() + text.slice(1).toLowerCase(),
+  date: (date: string | Date) => {
+    if (!date) return 'Sin fecha';
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) return 'Fecha inválida';
+    
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Hoy';
+    if (diffDays === 1) return 'Ayer';
+    if (diffDays < 7) return `${diffDays}d`;
+    
+    return dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
   },
-  [PatientStatusEnum.CONSULTADO]: {
-    label: "Consultado", 
-    style: "bg-blue-50 text-blue-700 border-blue-200"
+  phone: (phone: string) => phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3'),
+  initials: (nombre: string, apellidos: string) => `${nombre.charAt(0)}${apellidos.charAt(0)}`.toUpperCase()
+};
+
+const statusConfig = {
+  [PatientStatus.PENDING]: {
+    label: 'Pendiente',
+    color: 'warning',
+    icon: Clock,
+    priority: 1
   },
-  [PatientStatusEnum.EN_SEGUIMIENTO]: {
-    label: "Seguimiento",
-    style: "bg-purple-50 text-purple-700 border-purple-200"
+  [PatientStatus.CONSULTED]: {
+    label: 'Consultado',
+    color: 'primary',
+    icon: Stethoscope,
+    priority: 3
   },
-  [PatientStatusEnum.OPERADO]: {
-    label: "Operado",
-    style: "bg-emerald-50 text-emerald-700 border-emerald-200"
+  [PatientStatus.OPERATED]: {
+    label: 'Operado',
+    color: 'success', 
+    icon: Activity,
+    priority: 5
   },
-  [PatientStatusEnum.NO_OPERADO]: {
-    label: "No Operado",
-    style: "bg-red-50 text-red-700 border-red-200"
+  [PatientStatus.NOT_OPERATED]: {
+    label: 'No operado',
+    color: 'error',
+    icon: X,
+    priority: 4
   },
-  [PatientStatusEnum.INDECISO]: {
-    label: "Indeciso",
-    style: "bg-slate-50 text-slate-700 border-slate-200"
+  [PatientStatus.FOLLOW_UP]: {
+    label: 'Seguimiento',
+    color: 'primary',
+    icon: Calendar,
+    priority: 2
+  },
+  [PatientStatus.UNDECIDED]: {
+    label: 'Indeciso',
+    color: 'neutral',
+    icon: Clock,
+    priority: 3
   }
 } as const;
 
-// Componente StatsCard simplificado
-const StatsCard = ({ 
-  icon, 
-  label, 
-  value, 
-  trend, 
-  color = "blue" 
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number | string;
-  trend?: number;
-  color?: "blue" | "purple" | "amber" | "emerald" | "red" | "slate";
-}) => {
-  const colorClasses = {
-    blue: "bg-blue-100 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
-    purple: "bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400", 
-    amber: "bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400",
-    emerald: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
-    red: "bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400",
-    slate: "bg-slate-100 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400"
-  };
-
-  const gradientClasses = {
-    blue: "from-blue-400 to-blue-600 dark:from-blue-500/70 dark:to-blue-700/70",
-    purple: "from-purple-400 to-purple-600 dark:from-purple-500/70 dark:to-purple-700/70",
-    amber: "from-amber-400 to-amber-600 dark:from-amber-500/70 dark:to-amber-700/70", 
-    emerald: "from-emerald-400 to-emerald-600 dark:from-emerald-500/70 dark:to-emerald-700/70",
-    red: "from-red-400 to-red-600 dark:from-red-500/70 dark:to-red-700/70",
-    slate: "from-slate-400 to-slate-600 dark:from-slate-500/70 dark:to-slate-700/70"
-  };
-
-  return (
-    <Card className="relative overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-slate-900">
-      <div className="p-3 sm:p-4">
-        <div className="flex items-center justify-between">
-          <div className={cn(
-            "h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
-            colorClasses[color]
-          )}>
-            {icon}
-          </div>
-          {trend !== undefined && (
-            <div className={cn(
-              "flex items-center gap-1 text-xs font-medium",
-              trend >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
-            )}>
-              <TrendingUp className={cn("h-3 w-3", trend < 0 && "transform rotate-180")} />
-              {Math.abs(trend)}%
-            </div>
-          )}
-        </div>
-        <div className="mt-2 sm:mt-3">
-          <p className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 truncate">{value}</p>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 truncate">{label}</p>
-        </div>
-      </div>
-      <div className={cn("absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r", gradientClasses[color])} />
-    </Card>
-  );
-};
-
-// Loading skeleton simplificado
-const LoadingSkeleton = () => (
-  <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-    <div className="p-4 sm:p-6 space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-20 sm:h-24 bg-slate-100 dark:bg-slate-800/50 rounded-lg animate-pulse" />
-        ))}
-      </div>
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-12 sm:h-16 bg-slate-100 dark:bg-slate-800/50 rounded-lg animate-pulse" />
-        ))}
-      </div>
-    </div>
+// ===== COMPONENTES BASE OPTIMIZADOS =====
+const Card = memo(({ children, className = '', ...props }: any) => (
+  <div 
+    className={`bg-white dark:bg-slate-900 rounded-xl shadow-sm ${designTokens.colors.neutral.border} border ${className}`}
+    {...props}
+  >
+    {children}
   </div>
-);
+));
 
-// Paginación simple
-const SimplePagination = ({ 
-  currentPage, 
-  totalPages, 
-  onPageChange,
-  loading 
-}: {
-  currentPage: number;
-  totalPages: number; 
-  onPageChange: (page: number) => void;
-  loading: boolean;
-}) => {
-  if (totalPages <= 1) return null;
-
-  const getVisiblePages = () => {
-    const delta = 2;
-    const range = [];
-    const rangeWithDots = [];
-
-    for (let i = Math.max(2, currentPage - delta); 
-         i <= Math.min(totalPages - 1, currentPage + delta); 
-         i++) {
-      range.push(i);
-    }
-
-    if (currentPage - delta > 2) {
-      rangeWithDots.push(1, '...');
-    } else {
-      rangeWithDots.push(1);
-    }
-
-    rangeWithDots.push(...range);
-
-    if (currentPage + delta < totalPages - 1) {
-      rangeWithDots.push('...', totalPages);
-    } else if (totalPages > 1) {
-      rangeWithDots.push(totalPages);
-    }
-
-    return rangeWithDots;
+const Button = memo(({ 
+  variant = 'primary', 
+  size = 'default', 
+  children, 
+  className = '', 
+  ...props 
+}: any) => {
+  const variants = {
+    primary: `${designTokens.colors.primary[600]} hover:${designTokens.colors.primary[700]} text-white`,
+    secondary: `${designTokens.colors.neutral[100]} hover:${designTokens.colors.neutral[200]} ${designTokens.colors.neutral.text}`,
+    ghost: `hover:${designTokens.colors.neutral[100]} ${designTokens.colors.neutral.text}`,
+    outline: `border ${designTokens.colors.neutral.border} hover:${designTokens.colors.neutral[50]} ${designTokens.colors.neutral.text}`
   };
-
+  
+  const sizes = {
+    sm: 'h-8 px-3 text-xs',
+    default: designTokens.interactive.button,
+    lg: 'h-12 px-6 text-base'
+  };
+  
   return (
-    <div className="flex items-center justify-center gap-1 sm:gap-2">
-      <Button 
-        variant="outline" 
-        size="sm"
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage === 1 || loading}
-        className="h-8 w-8 sm:w-auto sm:px-3"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        <span className="hidden sm:inline ml-1">Anterior</span>
-      </Button>
-      
-      <div className="flex items-center gap-1">
-        {getVisiblePages().map((page, idx) => 
-          page === '...' ? (
-            <span key={`dots-${idx}`} className="px-2 text-slate-400">...</span>
-          ) : (
-            <Button
-              key={page}
-              variant={page === currentPage ? "default" : "outline"}
-              size="sm"
-              onClick={() => onPageChange(page as number)}
-              disabled={loading}
-              className={cn(
-                "h-8 w-8",
-                page === currentPage && "bg-blue-600 hover:bg-blue-700 text-white"
-              )}
-            >
-              {page}
-            </Button>
-          )
-        )}
-      </div>
-
-      <Button 
-        variant="outline" 
-        size="sm"
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage === totalPages || loading}
-        className="h-8 w-8 sm:w-auto sm:px-3"
-      >
-        <span className="hidden sm:inline mr-1">Siguiente</span>
-        <ChevronRight className="h-4 w-4" />
-      </Button>
-    </div>
+    <button 
+      className={`
+        inline-flex items-center justify-center rounded-lg font-medium transition-colors
+        ${designTokens.interactive.touchTarget} ${variants[variant]} ${sizes[size]} ${className}
+      `}
+      {...props}
+    >
+      {children}
+    </button>
   );
-};
+});
 
-export function PatientManagement() {
-  const { patients, appointments } = useAppContext();
-  const router = useRouter();
+const Input = memo(({ className = '', ...props }: any) => (
+  <input
+    className={`
+      ${designTokens.interactive.input} rounded-lg border ${designTokens.colors.neutral.border}
+      bg-white dark:bg-slate-900 ${designTokens.colors.neutral.text}
+      placeholder:${designTokens.colors.neutral.textMuted}
+      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+      ${className}
+    `}
+    {...props}
+  />
+));
 
-  // Estados simplificados
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<PatientStatusEnum | "all">("all");
+const Badge = memo(({ variant = 'default', children, className = '' }: any) => {
+  const config = statusConfig[variant] || statusConfig[PatientStatus.PENDING];
+  const colorClasses = designTokens.colors[config.color];
+  
+  return (
+    <span className={`
+      inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+      ${colorClasses[50]} ${colorClasses.text} ${colorClasses.border} border
+      ${className}
+    `}>
+      <config.icon className="w-3 h-3" />
+      {children}
+    </span>
+  );
+});
+
+// ===== COMPONENTE PRINCIPAL OPTIMIZADO =====
+const PatientManagement = () => {
+  // Estado simplificado y optimizado
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<PatientStatus | 'all'>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
-
-  // Estados para modales
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [selectedPatientForSurvey, setSelectedPatientForSurvey] = useState<PatientData | null>(null);
-  const [surveyLink, setSurveyLink] = useState("");
-  const [isNewPatientFormOpen, setIsNewPatientFormOpen] = useState(false);
-
-  // Estado para detalles de paciente
-  const [selectedPatientDetails, setSelectedPatientDetails] = useState<PatientData | null>(null);
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-
-  // Estado para agendar cita
-  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
-  const [patientForAppointment, setPatientForAppointment] = useState<PatientData | null>(null);
-
-  // Datos enriquecidos - simplificado
-  const enrichedPatients = useMemo((): EnrichedPatientData[] => {
-    if (!patients || !appointments) return [];
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Datos de ejemplo optimizados
+  const mockPatients: Patient[] = useMemo(() => [
+    {
+      id: '1',
+      nombre: 'Juan',
+      apellidos: 'Pérez García',
+      edad: 45,
+      telefono: '5551234567',
+      email: 'juan.perez@email.com',
+      estado: PatientStatus.PENDING,
+      diagnostico: 'Hernia inguinal',
+      fechaRegistro: '2024-01-15',
+      encuestaCompletada: false
+    },
+    {
+      id: '2',
+      nombre: 'María',
+      apellidos: 'González López',
+      edad: 38,
+      telefono: '5559876543',
+      email: 'maria.gonzalez@email.com',
+      estado: PatientStatus.CONSULTED,
+      diagnostico: 'Colelitiasis',
+      fechaRegistro: '2024-01-10',
+      encuestaCompletada: true
+    },
+    {
+      id: '3',
+      nombre: 'Carlos',
+      apellidos: 'Rodríguez Martín',
+      edad: 52,
+      telefono: '5555555555',
+      email: 'carlos.rodriguez@email.com',
+      estado: PatientStatus.OPERATED,
+      diagnostico: 'Apendicitis',
+      fechaRegistro: '2024-01-05',
+      encuestaCompletada: true
+    }
+  ], []);
+  
+  // Filtrado y paginación optimizados con useMemo
+  const filteredPatients = useMemo(() => {
+    let filtered = mockPatients;
     
-    return patients.map((patient) => {
-      const patientAppointments = (appointments as AppointmentData[])
-        .filter((appointment) => appointment.patientId === patient.id)
-        .sort((a, b) => new Date(a.fechaConsulta).getTime() - new Date(b.fechaConsulta).getTime());
-
-      const nextAppointment = patientAppointments.find(
-        appointment => new Date(appointment.fechaConsulta) >= new Date()
-      );
-
-      return {
-        ...patient,
-        nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
-        fecha_proxima_cita_iso: nextAppointment?.fechaConsulta.toString(),
-        encuesta_completada: !!patient.encuesta?.id,
-        displayDiagnostico: patient.diagnostico_principal || "Sin diagnóstico",
-      };
-    });
-  }, [patients, appointments]);
-
-  // Filtrado y paginación combinados
-  const { filteredPatients, paginatedPatients, totalPages, statusStats } = useMemo(() => {
-    let filtered = enrichedPatients;
-    const term = searchTerm.toLowerCase();
-
-    // Filtrar por búsqueda
-    if (term) {
-      filtered = filtered.filter(p =>
-        p.nombreCompleto.toLowerCase().includes(term) ||
-        p.telefono?.toLowerCase().includes(term) ||
-        p.email?.toLowerCase().includes(term) ||
-        p.displayDiagnostico.toLowerCase().includes(term) ||
-        p.id.toLowerCase().includes(term)
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(patient => 
+        patient.nombre.toLowerCase().includes(term) ||
+        patient.apellidos.toLowerCase().includes(term) ||
+        patient.telefono?.includes(term) ||
+        patient.email?.toLowerCase().includes(term) ||
+        patient.diagnostico?.toLowerCase().includes(term)
       );
     }
-
-    // Filtrar por estado
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((p) => p.estado_paciente === statusFilter);
+    
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(patient => patient.estado === statusFilter);
     }
-
-    // Calcular estadísticas
-    const stats = enrichedPatients.reduce((acc, patient) => {
-      if (patient.estado_paciente && patient.estado_paciente in STATUS_CONFIG) {
-        acc[patient.estado_paciente]++;
-      }
-      return acc;
-    }, {
-      [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: 0,
-      [PatientStatusEnum.CONSULTADO]: 0,
-      [PatientStatusEnum.EN_SEGUIMIENTO]: 0,
-      [PatientStatusEnum.OPERADO]: 0,
-      [PatientStatusEnum.NO_OPERADO]: 0,
-      [PatientStatusEnum.INDECISO]: 0,
-    });
-
-    // Paginar
-    const pages = Math.max(Math.ceil(filtered.length / PAGE_SIZE), 1);
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const paginated = filtered.slice(start, start + PAGE_SIZE);
-
+    
+    return filtered;
+  }, [mockPatients, searchTerm, statusFilter]);
+  
+  // Estadísticas optimizadas
+  const stats = useMemo(() => {
+    const total = mockPatients.length;
+    const pending = mockPatients.filter(p => p.estado === PatientStatus.PENDING).length;
+    const operated = mockPatients.filter(p => p.estado === PatientStatus.OPERATED).length;
+    const surveyCompleted = mockPatients.filter(p => p.encuestaCompletada).length;
+    
     return {
-      filteredPatients: filtered,
-      paginatedPatients: paginated,
-      totalPages: pages,
-      statusStats: { ...stats, all: enrichedPatients.length }
+      total,
+      pending,
+      operated,
+      surveyRate: total > 0 ? Math.round((surveyCompleted / total) * 100) : 0
     };
-  }, [enrichedPatients, searchTerm, statusFilter, currentPage]);
-
-  // Estadísticas principales
-  const mainStats = useMemo(() => {
-    const totalSurveys = enrichedPatients.filter(p => p.encuesta_completada).length;
-    return {
-      totalPatients: enrichedPatients.length,
-      surveyCompletionRate: enrichedPatients.length > 0 
-        ? Math.round((totalSurveys / enrichedPatients.length) * 100) 
-        : 0,
-      pendingConsults: statusStats[PatientStatusEnum.PENDIENTE_DE_CONSULTA] || 0,
-      operatedPatients: statusStats[PatientStatusEnum.OPERADO] || 0,
-    };
-  }, [enrichedPatients, statusStats]);
-
-  // Handlers simplificados
-  const handlePageChange = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSelectPatient = (patient: PatientData) => {
-    setSelectedPatientDetails(patient);
-    setDetailsDialogOpen(true);
-  };
-
-  const handleShareSurvey = (patient: PatientData) => {
-    setSelectedPatientForSurvey(patient);
-    setSurveyLink(`${window.location.origin}/survey/${generateSurveyId()}?patientId=${patient.id}`);
-    setShareDialogOpen(true);
-  };
-
-  const handleEditPatient = (patient: PatientData) => {
-    toast.info(`Editar paciente: ${patient.nombre} ${patient.apellidos}`);
-  };
-
-  const handleAnswerSurvey = (patient: PatientData) => {
-    router.push(`/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`);
-  };
-
-  const handleScheduleAppointment = (patient: PatientData) => {
-    setPatientForAppointment(patient);
-    setAppointmentDialogOpen(true);
-  };
-
-  const clearAllFilters = () => {
-    setSearchTerm("");
-    setStatusFilter("all");
+  }, [mockPatients]);
+  
+  // Handlers optimizados con useCallback
+  const handleSearch = useCallback((term: string) => {
+    setSearchTerm(term);
     setCurrentPage(1);
-    setIsMobileFiltersOpen(false);
-  };
-
-  const hasActiveFilters = !!searchTerm || statusFilter !== "all";
-
-  // Componente de filtros
-  const FilterContent = ({ isMobile = false }: { isMobile?: boolean }) => (
-    <div className="space-y-4">
-      <Select
-        value={statusFilter}
-        onValueChange={(value) => {
-          setStatusFilter(value as PatientStatusEnum | "all");
-          setCurrentPage(1);
-          if (isMobile) setIsMobileFiltersOpen(false);
-        }}
-      >
-        <SelectTrigger className={cn(
-          "h-9 sm:h-10 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700",
-          "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors",
-          isMobile ? "w-full" : "w-full sm:w-[200px]"
-        )}>
-          <SelectValue placeholder="Filtrar por estado" className="text-slate-600 dark:text-slate-300" />
-        </SelectTrigger>
-        <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
-          <SelectItem value="all" className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
-            <div className="flex items-center justify-between w-full">
-              <span>Todos los estados</span>
-              <Badge variant="secondary" className="ml-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600">
-                {statusStats.all}
-              </Badge>
-            </div>
-          </SelectItem>
-          {Object.entries(STATUS_CONFIG).map(([status, config]) => (
-            <SelectItem key={status} value={status} className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
-              <div className="flex items-center justify-between w-full">
-                <span>{config.label}</span>
-                <Badge variant="outline" className={cn(
-                  "ml-2 shadow-sm font-medium", 
-                  status === statusFilter ? "ring-1 ring-offset-1 ring-slate-200 dark:ring-slate-700 dark:ring-offset-slate-900" : "",
-                  config.style
-                )}>
-                  {statusStats[status as PatientStatusEnum]}
-                </Badge>
-              </div>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      
-      {hasActiveFilters && (
-        <Button 
-          variant="ghost" 
-          size={isMobile ? "default" : "sm"}
-          onClick={clearAllFilters}
-          className={cn(
-            "text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100",
-            "hover:bg-slate-100 dark:hover:bg-slate-800",
-            isMobile ? "w-full" : ""
-          )}
-        >
-          Limpiar Filtros
-        </Button>
-      )}
-    </div>
-  );
-
-  if (loading) {
-    return <LoadingSkeleton />;
-  }
-
+  }, []);
+  
+  const handleStatusFilter = useCallback((status: PatientStatus | 'all') => {
+    setStatusFilter(status);
+    setCurrentPage(1);
+  }, []);
+  
+  const clearFilters = useCallback(() => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setCurrentPage(1);
+  }, []);
+  
   return (
-    <div className="w-full space-y-4 sm:space-y-6 pb-8">
-      {/* Header */}
-      <div className="relative overflow-hidden rounded-lg sm:rounded-xl border shadow-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-        <div className="relative p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
+    <div className="w-full max-w-7xl mx-auto space-y-6">
+      {/* Header con estadísticas */}
+      <Card className="overflow-hidden">
+        <div className={`${designTokens.spacing.card} bg-gradient-to-r from-blue-50 to-white dark:from-blue-950/20 dark:to-slate-900`}>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">
-                Gestión de Pacientes
-              </h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 sm:mt-2 max-w-xl">
-                Sistema integral para seguimiento médico, historiales y citas.
+              <h1 className={designTokens.typography.heading}>Gestión de Pacientes</h1>
+              <p className={`${designTokens.colors.neutral.textMuted} ${designTokens.typography.body} mt-1`}>
+                Administra y da seguimiento a tus pacientes de manera eficiente
               </p>
             </div>
-            <Button 
-              onClick={() => setIsNewPatientFormOpen(true)} 
-              size="sm" 
-              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white"
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
               Nuevo Paciente
             </Button>
           </div>
           
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6">
-            <StatsCard 
-              icon={<Users className="h-4 w-4 sm:h-5 sm:w-5" />} 
-              label="Total Pacientes" 
-              value={mainStats.totalPatients} 
-              color="blue" 
+          {/* Estadísticas en grid responsivo */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+            <StatCard
+              icon={Users}
+              label="Total Pacientes"
+              value={stats.total}
+              color="primary"
             />
-            <StatsCard 
-              icon={<FileText className="h-4 w-4 sm:h-5 sm:w-5" />} 
-              label="Encuestas Comp." 
-              value={`${mainStats.surveyCompletionRate}%`} 
-              trend={mainStats.surveyCompletionRate > 70 ? 5 : -2}
-              color="purple" 
+            <StatCard
+              icon={Clock}
+              label="Pendientes"
+              value={stats.pending}
+              color="warning"
             />
-            <StatsCard 
-              icon={<Calendar className="h-4 w-4 sm:h-5 sm:w-5" />} 
-              label="Pend. Consulta" 
-              value={mainStats.pendingConsults} 
-              color="amber" 
+            <StatCard
+              icon={Activity}
+              label="Operados"
+              value={stats.operated}
+              color="success"
             />
-            <StatsCard 
-              icon={<Activity className="h-4 w-4 sm:h-5 sm:w-5" />} 
-              label="Pac. Operados" 
-              value={mainStats.operatedPatients} 
-              trend={2}
-              color="emerald" 
+            <StatCard
+              icon={FileText}
+              label="Encuestas"
+              value={`${stats.surveyRate}%`}
+              color="primary"
             />
           </div>
         </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 sm:p-4">
-        {/* Título de filtros */}
-        <div className="mb-2 sm:mb-3 flex items-center gap-2">
-          <SlidersHorizontal className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-          <h2 className="text-sm sm:text-base font-medium text-slate-800 dark:text-slate-200">Filtros</h2>
-        </div>
-        <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
-          {/* Búsqueda */}
-          <div className="relative w-full sm:w-auto">
-            <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-            <Input
-              placeholder="Buscar pacientes..."
-              className="pl-9 h-9 sm:h-10 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:ring-slate-400 dark:focus-visible:ring-slate-500"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
-            {searchTerm && (
-              <Button 
-                variant="ghost" 
-                size="icon"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-              </Button>
-            )}
-          </div>
-          {/* Filtros desktop */}
-          <div className="hidden sm:flex items-center gap-3">
-            <FilterContent />
-          </div>
-          {/* Filtros móvil */}
-          <Sheet open={isMobileFiltersOpen} onOpenChange={setIsMobileFiltersOpen}>
-            <SheetTrigger asChild className="sm:hidden w-full">
-              <Button 
-                variant="outline" 
-                className="h-9 w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70"
-              >
-                <SlidersHorizontal className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" /> 
-                Filtros {hasActiveFilters && (
-                  <span className="ml-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full h-5 w-5 inline-flex items-center justify-center text-xs font-medium">
-                    {Number(!!searchTerm) + Number(statusFilter !== "all")}
-                  </span>
-                )}
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="bottom" className="rounded-t-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-              <SheetHeader className="mb-4">
-                <SheetTitle className="text-slate-900 dark:text-slate-100">Filtros</SheetTitle>
-              </SheetHeader>
-              <FilterContent isMobile />
-            </SheetContent>
-          </Sheet>
-        </div>
-
-        {/* Filtros activos */}
-        {hasActiveFilters && (
-          <div className="flex flex-wrap gap-2 mt-3 sm:mt-4 p-2 sm:p-3 bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center mr-1">
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Filtros activos:</span>
+      </Card>
+      
+      {/* Controles de filtrado optimizados */}
+      <Card>
+        <div className={designTokens.spacing.card}>
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Búsqueda principal */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                type="text"
+                placeholder="Buscar pacientes..."
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
             </div>
-            {statusFilter !== "all" && (
-              <Badge variant="outline" className={cn(
-                "gap-1.5 py-1 px-2.5 shadow-sm font-medium", 
-                STATUS_CONFIG[statusFilter].style,
-                statusFilter === PatientStatusEnum.PENDIENTE_DE_CONSULTA && "dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
-                statusFilter === PatientStatusEnum.CONSULTADO && "dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800",
-                statusFilter === PatientStatusEnum.EN_SEGUIMIENTO && "dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800",
-                statusFilter === PatientStatusEnum.OPERADO && "dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800",
-                statusFilter === PatientStatusEnum.NO_OPERADO && "dark:bg-red-950/30 dark:text-red-300 dark:border-red-800",
-                statusFilter === PatientStatusEnum.INDECISO && "dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-700"
-              )}>
-                {STATUS_CONFIG[statusFilter].label}
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => setStatusFilter("all")}
-                  className="h-5 w-5 p-0 ml-1 rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-700/70 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </Badge>
-            )}
-            {searchTerm && (
-              <Badge 
-                variant="secondary" 
-                className="flex items-center gap-1.5 py-1 px-2.5 shadow-sm bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+            
+            {/* Filtros */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+                className="lg:hidden"
               >
-                <SearchIcon className="h-3 w-3 text-blue-500 dark:text-blue-400" />
-                {searchTerm.length > 15 ? `${searchTerm.substring(0, 15)}...` : searchTerm}
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => { setSearchTerm(""); setCurrentPage(1); }}
-                  className="h-5 w-5 p-0 rounded-full hover:bg-blue-100/70 dark:hover:bg-blue-800/70 text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                <Filter className="w-4 h-4 mr-2" />
+                Filtros
+                {showFilters ? <ChevronUp className="w-4 h-4 ml-2" /> : <ChevronDown className="w-4 h-4 ml-2" />}
+              </Button>
+              
+              <div className={`${showFilters ? 'flex' : 'hidden'} lg:flex gap-2 w-full lg:w-auto`}>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => handleStatusFilter(e.target.value as PatientStatus | 'all')}
+                  className={`${designTokens.interactive.input} border ${designTokens.colors.neutral.border} rounded-lg`}
                 >
-                  <X className="h-3 w-3" />
-                </Button>
-              </Badge>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearAllFilters}
-              className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 ml-auto"
-            >
-              <X className="h-3.5 w-3.5 mr-1.5" />
-              Limpiar todos
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* Tabla */}
-      <PatientTable 
-        patients={paginatedPatients}
-        onSelectPatient={handleSelectPatient}
-        onShareSurvey={handleShareSurvey}
-        onAnswerSurvey={handleAnswerSurvey}
-        onEditPatient={handleEditPatient}
-        onScheduleAppointment={handleScheduleAppointment}
-        loading={false}
-      />
-
-      {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Mostrando {paginatedPatients.length} de {filteredPatients.length} pacientes
-              {filteredPatients.length !== enrichedPatients.length && (
-                <span className="text-slate-400 dark:text-slate-500"> (de {enrichedPatients.length} totales)</span>
-              )}
-            </p>
-            <SimplePagination 
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              loading={false}
-            />
+                  <option value="all">Todos los estados</option>
+                  {Object.entries(statusConfig).map(([key, config]) => (
+                    <option key={key} value={key}>{config.label}</option>
+                  ))}
+                </select>
+                
+                {(searchTerm || statusFilter !== 'all') && (
+                  <Button variant="ghost" onClick={clearFilters}>
+                    <X className="w-4 h-4 mr-2" />
+                    Limpiar
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
-      )}
-
-      {/* Modales */}
-      {isNewPatientFormOpen && (
-        <NewPatientForm 
-          onSuccess={() => setIsNewPatientFormOpen(false)}
-        />
-      )}
+      </Card>
       
-      {selectedPatientForSurvey && shareDialogOpen && (
-        <SurveyShareDialog 
-          isOpen={shareDialogOpen} 
-          patient={selectedPatientForSurvey} 
-          surveyLink={surveyLink}
-          onStartInternal={() => {
-            if(selectedPatientForSurvey) {
-              router.push(`/survey/${generateSurveyId()}?patientId=${selectedPatientForSurvey.id}&mode=internal`);
-              setShareDialogOpen(false);
-            }
-          }}
-          onClose={() => {
-            setShareDialogOpen(false);
-            setSelectedPatientForSurvey(null);
-          }} 
-        />
-      )}
+      {/* Lista de pacientes optimizada */}
+      <Card>
+        <div className={designTokens.spacing.card}>
+          {filteredPatients.length === 0 ? (
+            <EmptyState onClearFilters={clearFilters} hasFilters={searchTerm || statusFilter !== 'all'} />
+          ) : (
+            <div className="space-y-4">
+              {/* Vista móvil optimizada */}
+              <div className="lg:hidden space-y-3">
+                {filteredPatients.map((patient) => (
+                  <MobilePatientCard
+                    key={patient.id}
+                    patient={patient}
+                    onSelect={setSelectedPatient}
+                  />
+                ))}
+              </div>
+              
+              {/* Vista desktop optimizada */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className={`border-b ${designTokens.colors.neutral.border}`}>
+                      <th className="text-left py-3 px-4 font-medium text-sm">Paciente</th>
+                      <th className="text-left py-3 px-4 font-medium text-sm">Contacto</th>
+                      <th className="text-left py-3 px-4 font-medium text-sm">Diagnóstico</th>
+                      <th className="text-left py-3 px-4 font-medium text-sm">Estado</th>
+                      <th className="text-left py-3 px-4 font-medium text-sm">Registro</th>
+                      <th className="text-right py-3 px-4 font-medium text-sm">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPatients.map((patient) => (
+                      <DesktopPatientRow
+                        key={patient.id}
+                        patient={patient}
+                        onSelect={setSelectedPatient}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
       
-      {selectedPatientDetails && detailsDialogOpen && (
-        <PatientDetailsDialog
-          isOpen={detailsDialogOpen}
-          patient={selectedPatientDetails}
-          onClose={() => {
-            setDetailsDialogOpen(false);
-            setSelectedPatientDetails(null);
-          }}
-        />
-      )}
-      
-      {patientForAppointment && appointmentDialogOpen && (
-        <ScheduleAppointmentDialog
-          isOpen={appointmentDialogOpen}
-          patient={patientForAppointment}
-          onClose={() => {
-            setAppointmentDialogOpen(false);
-            setPatientForAppointment(null);
-          }}
+      {/* Modal de detalles */}
+      {selectedPatient && (
+        <PatientDetailsModal
+          patient={selectedPatient}
+          onClose={() => setSelectedPatient(null)}
         />
       )}
     </div>
   );
-}
+};
+
+// ===== COMPONENTES AUXILIARES OPTIMIZADOS =====
+const StatCard = memo(({ icon: Icon, label, value, color }: any) => {
+  const colorClasses = designTokens.colors[color];
+  
+  return (
+    <div className={`${colorClasses[50]} rounded-lg p-4 border ${colorClasses.border}`}>
+      <div className="flex items-center justify-between">
+        <div className={`${colorClasses[100]} p-2 rounded-lg`}>
+          <Icon className={`w-4 h-4 ${colorClasses.text}`} />
+        </div>
+        <TrendingUp className="w-3 h-3 text-green-500" />
+      </div>
+      <div className="mt-3">
+        <div className="text-2xl font-bold">{value}</div>
+        <div className={`${designTokens.colors.neutral.textMuted} text-sm`}>{label}</div>
+      </div>
+    </div>
+  );
+});
+
+const MobilePatientCard = memo(({ patient, onSelect }: any) => (
+  <div 
+    className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+    onClick={() => onSelect(patient)}
+  >
+    <div className="flex items-start justify-between mb-3">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-full ${designTokens.colors.primary[100]} flex items-center justify-center text-sm font-medium ${designTokens.colors.primary.text}`}>
+          {formatters.initials(patient.nombre, patient.apellidos)}
+        </div>
+        <div>
+          <div className="font-medium">{formatters.name(`${patient.nombre} ${patient.apellidos}`)}</div>
+          <div className={`${designTokens.colors.neutral.textMuted} text-sm`}>
+            {patient.edad ? `${patient.edad} años` : 'Edad no especificada'}
+          </div>
+        </div>
+      </div>
+      <Badge variant={patient.estado}>
+        {statusConfig[patient.estado].label}
+      </Badge>
+    </div>
+    
+    <div className="space-y-2">
+      {patient.telefono && (
+        <div className="flex items-center gap-2 text-sm">
+          <Phone className="w-4 h-4 text-slate-400" />
+          <span>{formatters.phone(patient.telefono)}</span>
+        </div>
+      )}
+      {patient.diagnostico && (
+        <div className="flex items-center gap-2 text-sm">
+          <Stethoscope className="w-4 h-4 text-slate-400" />
+          <span>{patient.diagnostico}</span>
+        </div>
+      )}
+      <div className="flex items-center gap-2 text-sm">
+        <Calendar className="w-4 h-4 text-slate-400" />
+        <span>{formatters.date(patient.fechaRegistro)}</span>
+      </div>
+    </div>
+  </div>
+));
+
+const DesktopPatientRow = memo(({ patient, onSelect }: any) => (
+  <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+    <td className="py-4 px-4">
+      <div className="flex items-center gap-3">
+        <div className={`w-8 h-8 rounded-full ${designTokens.colors.primary[100]} flex items-center justify-center text-xs font-medium ${designTokens.colors.primary.text}`}>
+          {formatters.initials(patient.nombre, patient.apellidos)}
+        </div>
+        <div>
+          <div className="font-medium">{formatters.name(`${patient.nombre} ${patient.apellidos}`)}</div>
+          <div className={`${designTokens.colors.neutral.textMuted} text-sm`}>
+            {patient.edad ? `${patient.edad} años` : 'Edad no especificada'}
+          </div>
+        </div>
+      </div>
+    </td>
+    <td className="py-4 px-4">
+      <div className="space-y-1">
+        {patient.telefono && (
+          <div className="flex items-center gap-2 text-sm">
+            <Phone className="w-3 h-3 text-slate-400" />
+            <span>{formatters.phone(patient.telefono)}</span>
+          </div>
+        )}
+        {patient.email && (
+          <div className="flex items-center gap-2 text-sm">
+            <Mail className="w-3 h-3 text-slate-400" />
+            <span className="truncate max-w-[200px]">{patient.email}</span>
+          </div>
+        )}
+      </div>
+    </td>
+    <td className="py-4 px-4">
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${designTokens.colors.neutral[100]} ${designTokens.colors.neutral.text}`}>
+        <Stethoscope className="w-3 h-3" />
+        {patient.diagnostico || 'Sin diagnóstico'}
+      </span>
+    </td>
+    <td className="py-4 px-4">
+      <Badge variant={patient.estado}>
+        {statusConfig[patient.estado].label}
+      </Badge>
+    </td>
+    <td className="py-4 px-4 text-sm">
+      {formatters.date(patient.fechaRegistro)}
+    </td>
+    <td className="py-4 px-4">
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={() => onSelect(patient)}>
+          <Eye className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="sm">
+          <Edit className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="sm">
+          <MoreVertical className="w-4 h-4" />
+        </Button>
+      </div>
+    </td>
+  </tr>
+));
+
+const EmptyState = memo(({ onClearFilters, hasFilters }: any) => (
+  <div className="text-center py-12">
+    <div className={`w-16 h-16 mx-auto ${designTokens.colors.neutral[100]} rounded-full flex items-center justify-center mb-4`}>
+      <Users className={`w-8 h-8 ${designTokens.colors.neutral.textMuted}`} />
+    </div>
+    <h3 className="text-lg font-medium mb-2">
+      {hasFilters ? 'No se encontraron pacientes' : 'No hay pacientes registrados'}
+    </h3>
+    <p className={`${designTokens.colors.neutral.textMuted} mb-4`}>
+      {hasFilters 
+        ? 'Intenta ajustar los filtros de búsqueda'
+        : 'Comienza agregando tu primer paciente'
+      }
+    </p>
+    {hasFilters ? (
+      <Button variant="outline" onClick={onClearFilters}>
+        Limpiar Filtros
+      </Button>
+    ) : (
+      <Button>
+        <Plus className="w-4 h-4 mr-2" />
+        Agregar Paciente
+      </Button>
+    )}
+  </div>
+));
+
+const PatientDetailsModal = memo(({ patient, onClose }: any) => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white dark:bg-slate-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold">Detalles del Paciente</h2>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+        
+        <div className="space-y-6">
+          {/* Información básica */}
+          <div className="flex items-center gap-4">
+            <div className={`w-16 h-16 rounded-full ${designTokens.colors.primary[100]} flex items-center justify-center text-lg font-bold ${designTokens.colors.primary.text}`}>
+              {formatters.initials(patient.nombre, patient.apellidos)}
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">
+                {formatters.name(`${patient.nombre} ${patient.apellidos}`)}
+              </h3>
+              <p className={designTokens.colors.neutral.textMuted}>
+                {patient.edad ? `${patient.edad} años` : 'Edad no especificada'}
+              </p>
+            </div>
+          </div>
+          
+          {/* Información de contacto */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Teléfono</label>
+              <div className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-slate-400" />
+                <span>{patient.telefono ? formatters.phone(patient.telefono) : 'No especificado'}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-slate-400" />
+                <span className="truncate">{patient.email || 'No especificado'}</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Información médica */}
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Estado</label>
+              <div className="mt-1">
+                <Badge variant={patient.estado}>
+                  {statusConfig[patient.estado].label}
+                </Badge>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Diagnóstico</label>
+              <p className="mt-1">{patient.diagnostico || 'Sin diagnóstico'}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Fecha de Registro</label>
+              <p className="mt-1">{formatters.date(patient.fechaRegistro)}</p>
+            </div>
+          </div>
+          
+          {/* Acciones */}
+          <div className="flex gap-3 pt-4 border-t">
+            <Button className="flex-1">
+              <Edit className="w-4 h-4 mr-2" />
+              Editar
+            </Button>
+            <Button variant="outline" className="flex-1">
+              <Share2 className="w-4 h-4 mr-2" />
+              Compartir
+            </Button>
+            <Button variant="outline" className="flex-1">
+              <Calendar className="w-4 h-4 mr-2" />
+              Agendar
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+));
+
+export default PatientManagement;

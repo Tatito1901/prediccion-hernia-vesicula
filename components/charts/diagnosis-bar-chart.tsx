@@ -1,6 +1,6 @@
 /* -------------------------------------------------------------------------- */
 /*  components/charts/diagnosis-bar-chart.tsx                                */
-/*  🎯 Gráfico de barras simplificado usando hook centralizador             */
+/*  🎯 Gráfico de barras optimizado usando hook centralizador               */
 /* -------------------------------------------------------------------------- */
 
 import { memo, useMemo, FC } from 'react';
@@ -20,22 +20,18 @@ import {
   Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import useChartConfig, { type MotiveChartData } from '@/components/charts/use-chart-config';
+import useChartConfig, { 
+  type DiagnosisData,
+  type MotiveChartData,
+  EmptyState
+} from '@/components/charts/use-chart-config';
 
 /* ============================================================================
  * TIPOS SIMPLIFICADOS
  * ========================================================================== */
 
-export interface DiagnosisDataInput {
-  tipo: string;
-  cantidad: number;
-  porcentaje?: number;
-  tendencia?: number;
-  descripcion?: string;
-}
-
 interface Props {
-  data: readonly DiagnosisDataInput[];
+  data: readonly DiagnosisData[];
   title?: string;
   description?: string;
   className?: string;
@@ -44,7 +40,7 @@ interface Props {
 }
 
 /* ============================================================================
- * COMPONENTE PRINCIPAL SIMPLIFICADO
+ * COMPONENTE PRINCIPAL OPTIMIZADO
  * ========================================================================== */
 
 const DiagnosisBarChart: FC<Props> = ({
@@ -66,8 +62,8 @@ const DiagnosisBarChart: FC<Props> = ({
   });
 
   // Procesar datos para el formato que espera el hook
-  const chartData = useMemo((): MotiveChartData[] => {
-    if (!data?.length) return [];
+  const { chartData, stats } = useMemo(() => {
+    if (!data?.length) return { chartData: [], stats: { total: 0, categories: 0, mostCommon: 'N/A', maxValue: 0 } };
 
     let sortedData = [...data];
     
@@ -81,26 +77,25 @@ const DiagnosisBarChart: FC<Props> = ({
     }
 
     const total = sortedData.reduce((sum, d) => sum + d.cantidad, 0);
+    const maxValue = Math.max(...sortedData.map(d => d.cantidad));
+    const mostCommon = sortedData.find(d => d.cantidad === maxValue);
 
-    return sortedData.map((item) => ({
+    const motiveData: MotiveChartData[] = sortedData.map((item) => ({
       motive: item.tipo,
       count: item.cantidad,
       percentage: total > 0 ? Math.round((item.cantidad / total) * 100) : 0,
     }));
-  }, [data, sortBy]);
 
-  const stats = useMemo(() => {
-    const total = data.reduce((sum, d) => sum + d.cantidad, 0);
-    const maxValue = Math.max(...data.map(d => d.cantidad));
-    const mostCommon = data.find(d => d.cantidad === maxValue);
-    
     return {
-      total,
-      categories: data.length,
-      mostCommon: mostCommon?.tipo || 'N/A',
-      maxValue,
+      chartData: motiveData,
+      stats: {
+        total,
+        categories: data.length,
+        mostCommon: mostCommon?.tipo || 'N/A',
+        maxValue,
+      }
     };
-  }, [data]);
+  }, [data, sortBy]);
 
   if (!data?.length) {
     return (
@@ -112,11 +107,11 @@ const DiagnosisBarChart: FC<Props> = ({
           </CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
-        <CardContent className="h-[300px] flex flex-col items-center justify-center space-y-4">
-          <BarChart3 className="h-8 w-8 text-muted-foreground opacity-50" />
-          <p className="text-sm text-muted-foreground text-center">
-            No hay datos disponibles para el análisis comparativo
-          </p>
+        <CardContent className="h-[300px]">
+          <EmptyState 
+            message="No hay datos disponibles para el análisis comparativo"
+            icon={<BarChart3 className="h-8 w-8 text-muted-foreground opacity-50" />}
+          />
         </CardContent>
       </Card>
     );

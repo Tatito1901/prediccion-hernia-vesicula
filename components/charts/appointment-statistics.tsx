@@ -1,6 +1,6 @@
 /* -------------------------------------------------------------------------- */
 /*  components/charts/appointment-statistics.tsx                             */
-/*  🎯 Estadísticas de citas simplificadas usando hook centralizador        */
+/*  🎯 Estadísticas de citas optimizadas usando hook centralizador          */
 /* -------------------------------------------------------------------------- */
 
 import React, { useState, useMemo, useCallback, memo } from "react"
@@ -19,8 +19,6 @@ import {
 } from "@/components/ui/tabs"
 import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, isSameDay, subDays } from "date-fns"
 import { es } from "date-fns/locale/es"
-import { DayPicker, type SelectRangeEventHandler, type DateRange as DayPickerDateRange } from "react-day-picker"
-import "react-day-picker/dist/style.css"
 import { Button } from "@/components/ui/button"
 import { useAppContext, type AppointmentData } from "@/lib/context/app-context"
 import { AppointmentStatusEnum, type AppointmentStatus } from "@/app/dashboard/data-model"
@@ -28,23 +26,10 @@ import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import {
   FileBarChart,
   RefreshCw,
   AlertCircle,
-  Filter,
   X,
-  ChevronDown,
-  ChevronUp,
   Users,
   TrendingUp,
   Calendar,
@@ -60,8 +45,16 @@ import useChartConfig, {
   type TrendChartData,
   type WeekdayChartData,
   type ScatterData,
+  type PatientData,
   WEEKDAYS,
-} from "@/components/charts/use-chart-config"
+  WEEKDAYS_SHORT,
+  formatDateUtil,
+  titleCaseStatus,
+  hourToDecimal,
+  StatCard,
+  LoadingSpinner,
+  EmptyState,
+} from '@/components/charts/use-chart-config'
 
 /* ============================================================================
  * TIPOS SIMPLIFICADOS
@@ -79,27 +72,6 @@ export interface AppointmentFilters {
   sortBy: 'fechaConsulta' | 'horaConsulta' | 'nombre' | 'motivoConsulta'
   sortOrder: 'asc' | 'desc'
   timeRange: readonly [number, number]
-  showDatePickerAdvanced?: boolean
-}
-
-interface ProcessedAppointment {
-  readonly id: string
-  readonly nombre: string
-  readonly apellidos: string
-  readonly fechaConsulta: Date | null
-  readonly horaConsulta: string
-  readonly motivoConsulta: string
-  readonly estado: AppointmentStatus
-  readonly notas: string
-  readonly duracion?: number
-  readonly costoConsulta?: number
-  readonly seguroMedico?: string
-  readonly telefono?: string
-  readonly email?: string
-  readonly dateObj: Date | null
-  readonly dateStr?: string
-  readonly dayOfWeek?: number
-  readonly hourDecimal?: number
 }
 
 /* ============================================================================
@@ -118,7 +90,6 @@ const INITIAL_FILTERS: AppointmentFilters = {
   sortBy: "fechaConsulta",
   sortOrder: "desc",
   timeRange: [0, 24] as const,
-  showDatePickerAdvanced: false,
 }
 
 const ALLOWED_MOTIVES: readonly string[] = [
@@ -127,45 +98,9 @@ const ALLOWED_MOTIVES: readonly string[] = [
   "Consulta General", "Revisión Postoperatoria"
 ]
 
-const formatDateUtil = (
-  date: Date | string | undefined | null,
-  formatStr = "dd/MM/yyyy"
-): string => {
-  if (!date) return "Fecha no definida"
-  try {
-    const dateObj = typeof date === "string" ? parseISO(date) : date
-    if (!isValid(dateObj)) {
-      const fallbackDateObj = new Date(date as string)
-      if (isValid(fallbackDateObj)) return format(fallbackDateObj, formatStr, { locale: es })
-      return "Fecha inválida"
-    }
-    return format(dateObj, formatStr, { locale: es })
-  } catch {
-    return "Error de formato"
-  }
-}
-
-const hourToDecimal = (timeStr: string | undefined): number | null => {
-  if (!timeStr || typeof timeStr !== "string") return null
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/)
-  if (!match) return null
-  const hours = Number.parseInt(match[1], 10)
-  const minutes = Number.parseInt(match[2], 10)
-  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
-  return hours + minutes / 60
-}
-
-const titleCaseStatus = (status: AppointmentStatus): string => {
-  if (status === "NO ASISTIO") return "No Asistió"
-  return status
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-}
-
 /* ============================================================================
- * COMPONENTES AUXILIARES SIMPLIFICADOS
- * ============================================================================ */
+ * COMPONENTES AUXILIARES OPTIMIZADOS
+ * ========================================================================== */
 
 interface FilterSummaryProps {
   filters: AppointmentFilters
@@ -245,13 +180,8 @@ const FilterSummary = memo<FilterSummaryProps>(({ filters, updateFilter, classNa
 })
 FilterSummary.displayName = "FilterSummary"
 
-interface StatCardsProps {
-  generalStats: GeneralStats
-  isLoading: boolean
-}
-
-const StatCards = memo<StatCardsProps>(({ generalStats, isLoading }) => {
-  const stats = useMemo(() => [
+const StatCards = memo<{ generalStats: GeneralStats; isLoading: boolean }>(({ generalStats, isLoading }) => {
+  const statCardsData = useMemo(() => [
     { 
       title: "Total de Citas", 
       value: generalStats.total.toLocaleString(), 
@@ -296,13 +226,13 @@ const StatCards = memo<StatCardsProps>(({ generalStats, isLoading }) => {
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {stats.map((stat, idx) => (
+      {statCardsData.map((stat, idx) => (
         <div 
           key={stat.title} 
           className="animate-in fade-in slide-in-from-bottom-4" 
           style={{ animationDelay: `${idx * 100}ms` }}
         >
-          <useChartConfig.StatCard 
+          <StatCard 
             {...stat} 
             isLoading={isLoading} 
             className="hover:scale-[1.02] transition-transform duration-200" 
@@ -315,88 +245,81 @@ const StatCards = memo<StatCardsProps>(({ generalStats, isLoading }) => {
 StatCards.displayName = "StatCards"
 
 /* ============================================================================
- * HOOK DE PROCESAMIENTO DE DATOS
+ * HOOK DE PROCESAMIENTO OPTIMIZADO
  * ============================================================================ */
 
 const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], filters: AppointmentFilters) => {
   return useMemo(() => {
-    // Mapear datos crudos a formato procesado
-    const mappedAppointments: ProcessedAppointment[] = appointmentsFromContext.map((appt: AppointmentData) => {
+    // Convertir a formato PatientData para compatibilidad
+    const mappedAppointments: PatientData[] = appointmentsFromContext.map((appt: AppointmentData) => {
       const nameParts = appt.paciente?.split(' ') || ['Desconocido']
       const nombre = nameParts[0]
       const apellidos = nameParts.slice(1).join(' ')
-      const localStatus = appt.estado || AppointmentStatusEnum.PROGRAMADA
-
+      
       let dateObj: Date | null = null
-      let dateStr: string | undefined = undefined
-      let dayOfWeek: number | undefined = undefined
-      let hourDecimalVal: number | null = null
-
       try {
         if (appt.fechaConsulta) {
           const parsedDate = typeof appt.fechaConsulta === 'string' ? parseISO(appt.fechaConsulta) : appt.fechaConsulta
           if (isValid(parsedDate)) {
             dateObj = parsedDate
-            dateStr = format(dateObj, "yyyy-MM-dd")
-            dayOfWeek = dateObj.getDay()
           }
         }
-        hourDecimalVal = hourToDecimal(appt.horaConsulta)
       } catch (error) {
-        console.error("Error procesando fecha/hora para cita ID:", appt.id, error)
+        console.error("Error procesando fecha para cita ID:", appt.id, error)
       }
 
       return {
         id: appt.id,
-        nombre,
-        apellidos,
+        paciente: `${nombre} ${apellidos}`.trim(),
         fechaConsulta: dateObj,
         horaConsulta: appt.horaConsulta || "00:00",
         motivoConsulta: appt.motivoConsulta || "No especificado",
-        estado: localStatus,
+        estado: appt.estado || AppointmentStatusEnum.PROGRAMADA,
         notas: appt.notas || "",
         telefono: appt.telefono || "",
         email: appt.email || "",
-        dateObj,
-        dateStr,
-        dayOfWeek,
-        hourDecimal: hourDecimalVal === null ? undefined : hourDecimalVal,
       }
     })
 
     // Aplicar filtros
     const filteredAppointments = mappedAppointments
-      .filter((appt): appt is ProcessedAppointment & { dateObj: Date } => appt.dateObj !== null && isValid(appt.dateObj))
-      .filter((appt) => ALLOWED_MOTIVES.includes(appt.motivoConsulta))
+      .filter((appt) => appt.fechaConsulta !== null && isValid(appt.fechaConsulta!))
+      .filter((appt) => ALLOWED_MOTIVES.includes(appt.motivoConsulta!))
       .filter((appt) => {
         const { from, to } = filters.dateRange || {}
         if (from || to) {
-          const dateObj = appt.dateObj
+          const dateObj = appt.fechaConsulta!
           const fromDate = from ? startOfDay(from) : null
           const toDate = to ? endOfDay(to) : null
           if (fromDate && !isSameDay(dateObj, fromDate) && isBefore(dateObj, fromDate)) return false
           if (toDate && !isSameDay(dateObj, toDate) && isAfter(dateObj, toDate)) return false
         }
         if (filters.motiveFilter !== "all" && appt.motivoConsulta !== filters.motiveFilter) return false
-        if (!filters.statusFilter.includes(appt.estado)) return false
-        const hourDecimalValue = appt.hourDecimal
-        if (hourDecimalValue !== undefined && (hourDecimalValue < filters.timeRange[0] || hourDecimalValue > filters.timeRange[1])) return false
+        if (!filters.statusFilter.includes(appt.estado!)) return false
+        
+        const hourDecimalValue = hourToDecimal(appt.horaConsulta)
+        if (hourDecimalValue !== null && (hourDecimalValue < filters.timeRange[0] || hourDecimalValue > filters.timeRange[1])) return false
+        
         return true
       })
       .sort((a, b) => {
         let comp = 0
         if (filters.sortBy === "fechaConsulta") {
-          comp = (a.dateObj as Date).getTime() - (b.dateObj as Date).getTime()
-          if (comp === 0 && a.hourDecimal !== undefined && b.hourDecimal !== undefined) {
-            comp = a.hourDecimal - b.hourDecimal
+          comp = (a.fechaConsulta as Date).getTime() - (b.fechaConsulta as Date).getTime()
+          if (comp === 0) {
+            const hourA = hourToDecimal(a.horaConsulta)
+            const hourB = hourToDecimal(b.horaConsulta)
+            if (hourA !== null && hourB !== null) {
+              comp = hourA - hourB
+            }
           }
         } else if (filters.sortBy === "nombre") {
-          const nameA = `${a.nombre} ${a.apellidos}`.trim().toLowerCase()
-          const nameB = `${b.nombre} ${b.apellidos}`.trim().toLowerCase()
+          const nameA = a.paciente?.toLowerCase() || ""
+          const nameB = b.paciente?.toLowerCase() || ""
           comp = nameA.localeCompare(nameB)
         } else {
-          const valA = a[filters.sortBy as keyof Pick<ProcessedAppointment, 'motivoConsulta' | 'horaConsulta'>]
-          const valB = b[filters.sortBy as keyof Pick<ProcessedAppointment, 'motivoConsulta' | 'horaConsulta'>]
+          const valA = a[filters.sortBy as keyof PatientData] as string
+          const valB = b[filters.sortBy as keyof PatientData] as string
           if (typeof valA === "string" && typeof valB === "string") comp = valA.localeCompare(valB)
         }
         return filters.sortOrder === "asc" ? comp : -comp
@@ -406,13 +329,8 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
   }, [appointmentsFromContext, filters])
 }
 
-/* ============================================================================
- * HOOK DE PROCESAMIENTO DE DATOS PARA GRÁFICOS
- * ============================================================================ */
-
-const useChartData = (filteredAppointments: ProcessedAppointment[], filters: AppointmentFilters) => {
+const useChartData = (filteredAppointments: PatientData[], filters: AppointmentFilters) => {
   return useMemo(() => {
-    // Estadísticas generales
     const total = filteredAppointments.length
     const initialCounts = Object.values(AppointmentStatusEnum).reduce((acc, status) => { 
       acc[status] = 0
@@ -444,18 +362,16 @@ const useChartData = (filteredAppointments: ProcessedAppointment[], filters: App
       allStatusCounts,
     }
 
-    // Datos para gráfico de estado
     const statusChartData: StatusChartData[] = Object.values(AppointmentStatusEnum).map(status => ({
       name: titleCaseStatus(status),
       value: generalStats.allStatusCounts?.[status] || 0,
-      color: useChartConfig.STATUS_COLORS[status] || '#8884d8'
+      color: `hsl(var(--chart-${status === AppointmentStatusEnum.COMPLETADA ? '1' : status === AppointmentStatusEnum.CANCELADA ? '2' : status === AppointmentStatusEnum.PROGRAMADA ? '3' : '4'}))`
     }))
 
-    // Datos para gráfico de motivos
     const motiveChartData: MotiveChartData[] = (() => {
       const cM: Record<string, number> = {}
       filteredAppointments.forEach(a => { 
-        cM[a.motivoConsulta] = (cM[a.motivoConsulta] || 0) + 1 
+        cM[a.motivoConsulta!] = (cM[a.motivoConsulta!] || 0) + 1 
       })
       return Object.entries(cM).map(([motive, count]) => ({ 
         motive, 
@@ -463,19 +379,18 @@ const useChartData = (filteredAppointments: ProcessedAppointment[], filters: App
       })).sort((a, b) => b.count - a.count)
     })()
 
-    // Datos para gráfico de tendencias
     const trendChartData: TrendChartData[] = (() => {
       const bD: Record<string, Record<AppointmentStatus | "total", number>> = {}
       filteredAppointments.forEach(a => { 
-        if (!a.dateStr) return
-        if (!bD[a.dateStr]) {
-          bD[a.dateStr] = Object.values(AppointmentStatusEnum).reduce((ac, s) => { 
+        const dateStr = format(a.fechaConsulta!, "yyyy-MM-dd")
+        if (!bD[dateStr]) {
+          bD[dateStr] = Object.values(AppointmentStatusEnum).reduce((ac, s) => { 
             ac[s] = 0
             return ac 
           }, { total: 0 } as any)
         }
-        if (bD[a.dateStr].hasOwnProperty(a.estado)) bD[a.dateStr][a.estado]++
-        bD[a.dateStr].total++
+        if (bD[dateStr].hasOwnProperty(a.estado!)) bD[dateStr][a.estado!]++
+        bD[dateStr].total++
       })
       return Object.entries(bD).map(([date, counts]) => ({ 
         date, 
@@ -485,7 +400,6 @@ const useChartData = (filteredAppointments: ProcessedAppointment[], filters: App
       })).sort((a, b) => a.date.localeCompare(b.date))
     })()
 
-    // Datos para gráfico de días de la semana
     const weekdayChartData: WeekdayChartData[] = (() => {
       const weekdayData: Record<number, { name: string; total: number; attended: number }> = WEEKDAYS.reduce((acc, name, idx) => { 
         acc[idx] = { name, total: 0, attended: 0 }
@@ -493,11 +407,11 @@ const useChartData = (filteredAppointments: ProcessedAppointment[], filters: App
       }, {} as any)
 
       filteredAppointments.forEach(a => { 
-        if (a.dayOfWeek === undefined) return
-        if (weekdayData[a.dayOfWeek]) { 
-          weekdayData[a.dayOfWeek].total++
+        const dayOfWeek = a.fechaConsulta!.getDay()
+        if (weekdayData[dayOfWeek]) { 
+          weekdayData[dayOfWeek].total++
           if (a.estado === AppointmentStatusEnum.COMPLETADA || a.estado === AppointmentStatusEnum.PRESENTE) {
-            weekdayData[a.dayOfWeek].attended++
+            weekdayData[dayOfWeek].attended++
           }
         } 
       })
@@ -508,25 +422,27 @@ const useChartData = (filteredAppointments: ProcessedAppointment[], filters: App
       }))
     })()
 
-    // Datos para gráfico scatter
     const scatterData: ScatterData = (() => {
       const scatterByStatus = Object.fromEntries(
         Object.values(AppointmentStatusEnum).map(s => [s, {} as Record<string, any>])
       ) as Record<AppointmentStatus, Record<string, any>>
 
       filteredAppointments.forEach(a => { 
-        if (a.dayOfWeek === undefined || a.hourDecimal === undefined) return
-        const hour = Math.floor(a.hourDecimal)
-        const key = `${a.dayOfWeek}-${hour}`
-        const currentStatus = a.estado
+        const dayOfWeek = a.fechaConsulta!.getDay()
+        const hourDecimal = hourToDecimal(a.horaConsulta)
+        if (dayOfWeek === undefined || hourDecimal === null) return
+        
+        const hour = Math.floor(hourDecimal)
+        const key = `${dayOfWeek}-${hour}`
+        const currentStatus = a.estado!
 
         if (Object.values(AppointmentStatusEnum).includes(currentStatus)) { 
           if (!scatterByStatus[currentStatus][key]) {
             scatterByStatus[currentStatus][key] = { 
-              day: a.dayOfWeek, 
+              day: dayOfWeek, 
               hour, 
               count: 0, 
-              dayName: WEEKDAYS[a.dayOfWeek] || `Día ${a.dayOfWeek}` 
+              dayName: WEEKDAYS[dayOfWeek] || `Día ${dayOfWeek}` 
             }
           }
           scatterByStatus[currentStatus][key].count++
@@ -552,7 +468,7 @@ const useChartData = (filteredAppointments: ProcessedAppointment[], filters: App
 }
 
 /* ============================================================================
- * COMPONENTE PRINCIPAL SIMPLIFICADO
+ * COMPONENTE PRINCIPAL OPTIMIZADO
  * ============================================================================ */
 
 export const AppointmentStatistics: React.FC = () => {
@@ -563,8 +479,6 @@ export const AppointmentStatistics: React.FC = () => {
     mounted: false,
     progress: 0,
     isFirstLoad: true,
-    isAdvancedFilterOpen: false,
-    isMobile: false,
   })
   
   const [filters, setFilters] = useState<AppointmentFilters>(INITIAL_FILTERS)
@@ -577,7 +491,6 @@ export const AppointmentStatistics: React.FC = () => {
     renderLineChart, 
     renderWeekdayChart, 
     renderScatterChart,
-    StatCard 
   } = useChartConfig({
     showLegend: true,
     showTooltip: true,
@@ -590,7 +503,7 @@ export const AppointmentStatistics: React.FC = () => {
     setUiState(prev => ({ ...prev, ...partialState }))
   }, [])
 
-  // Procesamiento de datos usando hooks personalizados
+  // Procesamiento de datos usando hooks optimizados
   const { mappedAppointments, filteredAppointments } = useProcessedAppointments(appointmentsFromContext, filters)
   const { 
     generalStats, 
@@ -640,34 +553,16 @@ export const AppointmentStatistics: React.FC = () => {
     updateUiState({ isLoading: true })
   }, [updateUiState])
 
-  const toggleAdvancedFilter = useCallback(() => {
-    updateUiState({ isAdvancedFilterOpen: !uiState.isAdvancedFilterOpen })
-  }, [uiState.isAdvancedFilterOpen, updateUiState])
-
   const handleRefresh = useCallback(() => {
     if (uiState.isLoading) return
     updateUiState({ isLoading: true, progress: 0, dataError: null })
   }, [uiState.isLoading, updateUiState])
 
-  const uniqueMotives = useMemo(() => {
-    const motiveSet = new Set<string>()
-    mappedAppointments.forEach((appt) => { 
-      if (appt.motivoConsulta && ALLOWED_MOTIVES.includes(appt.motivoConsulta)) {
-        motiveSet.add(appt.motivoConsulta)
-      }
-    })
-    return Array.from(motiveSet).sort()
-  }, [mappedAppointments])
-
   if (!uiState.mounted) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
+    return <LoadingSpinner className="h-screen" />
   }
 
-  const { isLoading, activeTab, dataError, progress, isAdvancedFilterOpen } = uiState
+  const { isLoading, activeTab, dataError, progress } = uiState
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20 transition-all duration-500">

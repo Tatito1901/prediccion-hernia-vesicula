@@ -1,6 +1,6 @@
 /* -------------------------------------------------------------------------- */
 /*  components/charts/diagnosis-timeline-chart.tsx                           */
-/*  🎯 Gráfico de timeline simplificado usando hook centralizador           */
+/*  🎯 Gráfico de timeline optimizado usando hook centralizador             */
 /* -------------------------------------------------------------------------- */
 
 import { memo, useMemo, useCallback, useState, FC } from 'react';
@@ -33,23 +33,18 @@ import {
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
-import { format, parseISO } from 'date-fns';
-import { es } from 'date-fns/locale/es';
 import { cn } from '@/lib/utils';
-import useChartConfig, { type TrendChartData } from '@/components/charts/use-chart-config';
+import useChartConfig, { 
+  type PatientData,
+  type TrendChartData,
+  categorizeMainDiagnosis,
+  MAIN_DIAGNOSES,
+  formatDateUtil,
+} from '@/components/charts/use-chart-config';
 
 /* ============================================================================
- * TIPOS SIMPLIFICADOS
+ * TIPOS Y CONFIGURACIÓN
  * ========================================================================== */
-
-export interface PatientData {
-  id: string;
-  diagnostico_principal?: string;
-  fecha_primera_consulta?: string;
-  fecha_registro?: string;
-  edad?: number;
-  genero?: 'M' | 'F';
-}
 
 type ChartView = 'line' | 'bar';
 type ChartPeriod = 'weekly' | 'monthly' | 'quarterly';
@@ -69,10 +64,6 @@ interface Props {
   onConfigChange?: (config: ChartConfig) => void;
 }
 
-/* ============================================================================
- * CONSTANTES Y UTILIDADES
- * ========================================================================== */
-
 const DEFAULT_CONFIG: ChartConfig = {
   view: 'line',
   period: 'monthly',
@@ -81,17 +72,9 @@ const DEFAULT_CONFIG: ChartConfig = {
   showTrend: true,
 };
 
-const MAIN_DIAGNOSES = [
-  'Hernia Inguinal',
-  'Hernia Umbilical', 
-  'Hernia Incisional',
-  'Vesícula',
-  'Colelitiasis',
-  'Apendicitis',
-  'Colecistitis',
-] as const;
-
-type MainDiagnosis = (typeof MAIN_DIAGNOSES)[number] | 'Otro';
+/* ============================================================================
+ * UTILIDADES CENTRALIZADAS
+ * ========================================================================== */
 
 const getQuarter = (d: Date): string => `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
 const getMonthKey = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -115,29 +98,16 @@ const formatPeriodLabel = (key: string, period: ChartPeriod): string => {
   }
 };
 
-const classifyDiagnosis = (diagnosis?: string): MainDiagnosis => {
-  if (!diagnosis) return 'Otro';
-  
-  const lower = diagnosis.toLowerCase();
-  for (const mainDiag of MAIN_DIAGNOSES) {
-    if (lower.includes(mainDiag.toLowerCase())) {
-      return mainDiag;
-    }
-  }
-  return 'Otro';
-};
-
 /* ============================================================================
- * HOOK DE PROCESAMIENTO
+ * HOOK DE PROCESAMIENTO OPTIMIZADO
  * ========================================================================== */
 
-const useProcessedData = (patients: PatientData[], config: ChartConfig) => {
+const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) => {
   return useMemo(() => {
     if (!patients?.length) {
       return { 
         timelineData: [], 
         diagnosisMetrics: [], 
-        chartColors: {}, 
         maxY: 10 
       };
     }
@@ -146,10 +116,11 @@ const useProcessedData = (patients: PatientData[], config: ChartConfig) => {
                        config.period === 'weekly' ? getWeekKey : 
                        getMonthKey;
 
-    const totals = new Map<MainDiagnosis, number>();
-    const grouped = new Map<string, Record<MainDiagnosis, number>>();
+    const totals = new Map<string, number>();
+    const grouped = new Map<string, Record<string, number>>();
 
-    [...MAIN_DIAGNOSES, 'Otro' as const].forEach(d => totals.set(d, 0));
+    // Inicializar con diagnósticos principales
+    [...MAIN_DIAGNOSES, 'Otro'].forEach(d => totals.set(d, 0));
 
     patients.forEach(p => {
       const date = p.fecha_primera_consulta ? 
@@ -159,11 +130,11 @@ const useProcessedData = (patients: PatientData[], config: ChartConfig) => {
       if (!date || isNaN(date.getTime())) return;
 
       const key = getGroupKey(date);
-      const diagnosis = classifyDiagnosis(p.diagnostico_principal);
+      const diagnosis = categorizeMainDiagnosis(p.diagnostico_principal || p.diagnostico);
 
       if (!grouped.has(key)) {
-        const baseEntry = {} as Record<MainDiagnosis, number>;
-        [...MAIN_DIAGNOSES, 'Otro' as const].forEach(d => baseEntry[d] = 0);
+        const baseEntry = {} as Record<string, number>;
+        [...MAIN_DIAGNOSES, 'Otro'].forEach(d => baseEntry[d] = 0);
         grouped.set(key, baseEntry);
       }
 
@@ -176,38 +147,27 @@ const useProcessedData = (patients: PatientData[], config: ChartConfig) => {
       .slice(0, config.topN)
       .map(([diag]) => diag);
 
-    // Convertir a formato TrendChartData para el hook
+    // Convertir a formato TrendChartData
     const timelineArray: TrendChartData[] = Array.from(grouped.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, counts]) => {
         const total = Object.values(counts).reduce((sum, val) => sum + val, 0);
-        const dataPoint: any = {
+        const dataPoint: TrendChartData = {
           date: key,
           formattedDate: formatPeriodLabel(key, config.period),
           total,
         };
         
-        // Mapear diagnósticos a estados para compatibilidad con el hook
-        topDiagnoses.forEach((diag, index) => {
-          const statusKey = index === 0 ? 'COMPLETADA' : 
-                           index === 1 ? 'PROGRAMADA' : 
-                           index === 2 ? 'CANCELADA' : 
-                           'PRESENTE';
-          dataPoint[statusKey] = counts[diag] || 0;
+        // Mapear diagnósticos principales
+        topDiagnoses.forEach((diag) => {
+          (dataPoint as any)[diag] = counts[diag] || 0;
         });
 
         return dataPoint;
       });
 
     const metrics = topDiagnoses.map(diag => {
-      const values = timelineArray.map(d => {
-        const statusKey = topDiagnoses.indexOf(diag) === 0 ? 'COMPLETADA' : 
-                         topDiagnoses.indexOf(diag) === 1 ? 'PROGRAMADA' : 
-                         topDiagnoses.indexOf(diag) === 2 ? 'CANCELADA' : 
-                         'PRESENTE';
-        return (d as any)[statusKey] || 0;
-      });
-      
+      const values = timelineArray.map(d => (d as any)[diag] || 0);
       const total = values.reduce((sum, val) => sum + val, 0);
       const growth = values.length >= 2 ? 
         ((values[values.length - 1] - values[0]) / Math.max(values[0], 1)) * 100 : 0;
@@ -220,14 +180,13 @@ const useProcessedData = (patients: PatientData[], config: ChartConfig) => {
     return {
       timelineData: timelineArray,
       diagnosisMetrics: metrics,
-      chartColors: {},
       maxY: peak
     };
   }, [patients, config]);
 };
 
 /* ============================================================================
- * COMPONENTE PRINCIPAL SIMPLIFICADO
+ * COMPONENTE PRINCIPAL OPTIMIZADO
  * ========================================================================== */
 
 const DiagnosisTimelineChart: FC<Props> = ({ 
@@ -243,7 +202,7 @@ const DiagnosisTimelineChart: FC<Props> = ({
   });
 
   // Usar el hook centralizador para el renderizado
-  const { renderLineChart } = useChartConfig({
+  const { renderLineChart, EmptyState } = useChartConfig({
     showLegend: true,
     showTooltip: true,
     showGrid: true,
@@ -259,7 +218,7 @@ const DiagnosisTimelineChart: FC<Props> = ({
     });
   }, [onConfigChange]);
 
-  const { timelineData, diagnosisMetrics } = useProcessedData(patients, config);
+  const { timelineData, diagnosisMetrics } = useProcessedTimelineData(patients, config);
 
   if (!patients?.length) {
     return (
@@ -271,11 +230,11 @@ const DiagnosisTimelineChart: FC<Props> = ({
           </CardTitle>
           <CardDescription>No hay datos disponibles</CardDescription>
         </CardHeader>
-        <CardContent className="h-[400px] flex items-center justify-center">
-          <div className="text-center text-muted-foreground">
-            <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Agregue pacientes para ver el análisis temporal</p>
-          </div>
+        <CardContent className="h-[400px]">
+          <EmptyState 
+            message="Agregue pacientes para ver el análisis temporal"
+            icon={<Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />}
+          />
         </CardContent>
       </Card>
     );
