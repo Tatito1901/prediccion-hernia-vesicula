@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { PatientData, PatientStatusEnum } from "@/app/dashboard/data-model"
@@ -15,6 +15,86 @@ import {
   Stethoscope,
   Activity,
 } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+
+// Configuración optimizada con colores más accesibles
+const STATUS_CONFIG = {
+  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: {
+    label: "Pendiente",
+    icon: Clock,
+    style: "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/40 dark:text-amber-100 dark:border-amber-700",
+    dotColor: "bg-amber-500",
+    priority: 1
+  },
+  [PatientStatusEnum.CONSULTADO]: {
+    label: "Consultado", 
+    icon: Stethoscope,
+    style: "bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-900/40 dark:text-blue-100 dark:border-blue-700",
+    dotColor: "bg-blue-500",
+    priority: 3
+  },
+  [PatientStatusEnum.EN_SEGUIMIENTO]: {
+    label: "Seguimiento",
+    icon: Activity, 
+    style: "bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-900/40 dark:text-purple-100 dark:border-purple-700",
+    dotColor: "bg-purple-500",
+    priority: 2
+  },
+  [PatientStatusEnum.OPERADO]: {
+    label: "Operado",
+    icon: CheckCircle2,
+    style: "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-100 dark:border-emerald-700",
+    dotColor: "bg-emerald-500", 
+    priority: 5
+  },
+  [PatientStatusEnum.NO_OPERADO]: {
+    label: "No operado",
+    icon: XCircle,
+    style: "bg-red-100 text-red-900 border-red-300 dark:bg-red-900/40 dark:text-red-100 dark:border-red-700",
+    dotColor: "bg-red-500",
+    priority: 4
+  },
+  [PatientStatusEnum.INDECISO]: {
+    label: "Indeciso",
+    icon: AlertTriangle,
+    style: "bg-orange-100 text-orange-900 border-orange-300 dark:bg-orange-900/40 dark:text-orange-100 dark:border-orange-700", 
+    dotColor: "bg-orange-500",
+    priority: 3
+  },
+  SURVEY_PENDING: {
+    label: "Encuesta pendiente",
+    icon: ClipboardList,
+    style: "bg-yellow-100 text-yellow-900 border-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-100 dark:border-yellow-700",
+    dotColor: "bg-yellow-500",
+    priority: 1
+  },
+  DEFAULT: {
+    label: "Sin estado",
+    icon: User,
+    style: "bg-gray-100 text-gray-900 border-gray-300 dark:bg-slate-800/50 dark:text-slate-200 dark:border-slate-700",
+    dotColor: "bg-gray-500",
+    priority: 0
+  }
+} as const
+
+// Tamaños simplificados
+const SIZE_VARIANTS = {
+  sm: "px-2.5 py-0.5 text-xs h-6",
+  md: "px-3 py-1 text-xs h-7", 
+  lg: "px-3.5 py-1.5 text-sm h-8"
+} as const
+
+const ICON_SIZES = {
+  sm: "h-3 w-3",
+  md: "h-3.5 w-3.5", 
+  lg: "h-4 w-4"
+} as const
+
+const DOT_SIZES = {
+  sm: "w-1.5 h-1.5",
+  md: "w-2 h-2",
+  lg: "w-2.5 h-2.5"
+} as const
 
 interface PatientStatusProps {
   status: PatientData["estado_paciente"]
@@ -24,106 +104,55 @@ interface PatientStatusProps {
   className?: string
 }
 
-// Configuración simplificada y optimizada
-const STATUS_CONFIG = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: {
-    label: "Pendiente",
-    icon: Clock,
-    style: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800/50 dark:hover:bg-amber-900/30",
-    dotColor: "bg-amber-500 dark:bg-amber-400",
-    priority: 1
-  },
-  [PatientStatusEnum.CONSULTADO]: {
-    label: "Consultado", 
-    icon: Stethoscope,
-    style: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/20 dark:text-blue-300 dark:border-blue-800/50 dark:hover:bg-blue-900/30",
-    dotColor: "bg-blue-500 dark:bg-blue-400",
-    priority: 3
-  },
-  [PatientStatusEnum.EN_SEGUIMIENTO]: {
-    label: "Seguimiento",
-    icon: Activity, 
-    style: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/20 dark:text-purple-300 dark:border-purple-800/50 dark:hover:bg-purple-900/30",
-    dotColor: "bg-purple-500 dark:bg-purple-400",
-    priority: 2
-  },
-  [PatientStatusEnum.OPERADO]: {
-    label: "Operado",
-    icon: CheckCircle2,
-    style: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-300 dark:border-emerald-800/50 dark:hover:bg-emerald-900/30",
-    dotColor: "bg-emerald-500 dark:bg-emerald-400", 
-    priority: 5
-  },
-  [PatientStatusEnum.NO_OPERADO]: {
-    label: "No operado",
-    icon: XCircle,
-    style: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-300 dark:border-red-800/50 dark:hover:bg-red-900/30",
-    dotColor: "bg-red-500 dark:bg-red-400",
-    priority: 4
-  },
-  [PatientStatusEnum.INDECISO]: {
-    label: "Indeciso",
-    icon: AlertTriangle,
-    style: "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 dark:bg-orange-950/20 dark:text-orange-300 dark:border-orange-800/50 dark:hover:bg-orange-900/30", 
-    dotColor: "bg-orange-500 dark:bg-orange-400",
-    priority: 3
-  },
-  SURVEY_PENDING: {
-    label: "Encuesta pendiente",
-    icon: ClipboardList,
-    style: "bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-950/20 dark:text-yellow-300 dark:border-yellow-800/50 dark:hover:bg-yellow-900/30",
-    dotColor: "bg-yellow-500 dark:bg-yellow-400",
-    priority: 1
-  },
-  DEFAULT: {
-    label: "Sin estado",
-    icon: User,
-    style: "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800",
-    dotColor: "bg-gray-500 dark:bg-gray-400",
-    priority: 0
+// Función utilitaria para obtener la configuración del estado
+const getStatusConfig = (status: PatientData["estado_paciente"], surveyCompleted: boolean) => {
+  if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
+    return STATUS_CONFIG.SURVEY_PENDING;
   }
-} as const
+  
+  if (status && status in STATUS_CONFIG) {
+    return STATUS_CONFIG[status as PatientStatusEnum];
+  }
+  
+  return STATUS_CONFIG.DEFAULT;
+};
 
-// Tamaños simplificados
-const SIZE_VARIANTS = {
-  sm: "px-2 py-1 text-xs",
-  md: "px-2.5 py-1 text-xs", 
-  lg: "px-3 py-1.5 text-sm"
-} as const
-
-const ICON_SIZES = {
-  sm: "h-3 w-3",
-  md: "h-3.5 w-3.5", 
-  lg: "h-4 w-4"
-} as const
-
-function PatientStatus({
+// Componente principal memoizado
+const PatientStatus = React.memo(function PatientStatus({
   status,
   surveyCompleted = false,
   size = "md",
   showIcon = true,
   className
 }: PatientStatusProps) {
-  // Lógica simplificada para determinar el estado a mostrar
-  const getStatusKey = (): keyof typeof STATUS_CONFIG => {
-    // Prioridad: Encuesta pendiente > Estado específico > Default
-    if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
-      return "SURVEY_PENDING"
-    }
-    
-    if (status && status in STATUS_CONFIG) {
-      return status as PatientStatusEnum
-    }
-    
-    return "DEFAULT"
-  }
+  const config = useMemo(() => 
+    getStatusConfig(status, surveyCompleted), 
+    [status, surveyCompleted]
+  );
+  
+  const Icon = config.icon;
+  const shouldShowActivityDot = config.priority <= 2;
+  const isMobile = useIsMobile();
 
-  const statusKey = getStatusKey()
-  const config = STATUS_CONFIG[statusKey]
-  const Icon = config.icon
-  const shouldShowActivityDot = statusKey === PatientStatusEnum.PENDIENTE_DE_CONSULTA || 
-                               statusKey === PatientStatusEnum.EN_SEGUIMIENTO ||
-                               statusKey === "SURVEY_PENDING"
+  // Versión ultra compacta para móviles
+  if (isMobile && size === "sm") {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className={cn(
+              "rounded-full flex items-center justify-center",
+              DOT_SIZES[size],
+              config.dotColor
+            )} />
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p className="text-xs font-medium">{config.label}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
 
   return (
     <div className="relative inline-flex">
@@ -131,142 +160,185 @@ function PatientStatus({
         variant="outline"
         className={cn(
           "inline-flex items-center gap-1.5 font-medium border transition-all duration-200",
-          "relative overflow-hidden shadow-sm",
+          "relative overflow-hidden shadow-sm hover:shadow-md",
           SIZE_VARIANTS[size],
           config.style,
           className
         )}
+        aria-label={`Estado: ${config.label}`}
       >
         {showIcon && <Icon className={cn("shrink-0", ICON_SIZES[size])} />}
-        <span className="truncate">{config.label}</span>
+        <span className="truncate max-w-[120px]">{config.label}</span>
       </Badge>
       
       {/* Dot de actividad para estados importantes */}
       {shouldShowActivityDot && (
-        <div className="absolute -top-1 -right-1 flex items-center justify-center">
-          <div className="relative">
-            <div className={cn(
-              "w-2 h-2 rounded-full",
-              config.dotColor
-            )} />
-            <div className={cn(
-              "absolute inset-0 w-2 h-2 rounded-full animate-ping opacity-75",
-              config.dotColor
-            )} />
-          </div>
+        <div className="absolute -top-0.5 -right-0.5 flex items-center justify-center">
+          <div className={cn(
+            "rounded-full animate-ping absolute opacity-75",
+            config.dotColor,
+            DOT_SIZES[size]
+          )} />
+          <div className={cn(
+            "rounded-full",
+            config.dotColor,
+            DOT_SIZES[size]
+          )} />
         </div>
       )}
     </div>
-  )
-}
+  );
+});
 
-// Componente para mostrar múltiples estados (ya no optimizado con memo)
-const PatientStatusGroup = ({
-  statuses,
-  size = "sm",
-  className
-}: {
+// Componente para mostrar múltiples estados (memoizado)
+interface PatientStatusGroupProps {
   statuses: Array<{
     status: PatientData["estado_paciente"]
     surveyCompleted?: boolean
   }>
   size?: "sm" | "md" | "lg"
   className?: string
-}) => {
+  maxVisible?: number
+}
+
+const PatientStatusGroup = React.memo(function PatientStatusGroup({
+  statuses,
+  size = "sm",
+  className,
+  maxVisible = 3
+}: PatientStatusGroupProps) {
   const isMobile = useIsMobile();
   
-  if (!statuses.length) return null
+  if (!statuses.length) return null;
+
+  // Para móviles, mostrar solo el estado más importante
+  if (isMobile) {
+    const highestPriorityStatus = statuses.reduce((prev, current) => {
+      const prevConfig = getStatusConfig(prev.status, prev.surveyCompleted ?? false);
+      const currentConfig = getStatusConfig(current.status, current.surveyCompleted ?? false);
+      return currentConfig.priority > prevConfig.priority ? current : prev;
+    }, statuses[0]);
+    
+    return (
+      <div className={className}>
+        <PatientStatus
+          status={highestPriorityStatus.status}
+          surveyCompleted={highestPriorityStatus.surveyCompleted}
+          size={size}
+        />
+      </div>
+    );
+  }
+
+  // Para desktop, mostrar varios estados con límite
+  const visibleStatuses = statuses.slice(0, maxVisible);
+  const hiddenCount = statuses.length - maxVisible;
 
   return (
     <div className={cn("flex flex-wrap gap-1.5", className)}>
-      {statuses.map((statusInfo, index) => (
-        isMobile ? (
-          <PatientStatusCompact
-            key={`${statusInfo.status}-${index}`}
-            status={statusInfo.status}
-            surveyCompleted={statusInfo.surveyCompleted}
-          />
-        ) : (
-          <PatientStatus
-            key={`${statusInfo.status}-${index}`}
-            status={statusInfo.status}
-            surveyCompleted={statusInfo.surveyCompleted}
-            size={size}
-          />
-        )
+      {visibleStatuses.map((statusInfo, index) => (
+        <PatientStatus
+          key={`${statusInfo.status}-${index}`}
+          status={statusInfo.status}
+          surveyCompleted={statusInfo.surveyCompleted}
+          size={size}
+        />
       ))}
+      
+      {hiddenCount > 0 && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge 
+                variant="outline" 
+                className={cn(
+                  "bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-300",
+                  SIZE_VARIANTS[size]
+                )}
+              >
+                +{hiddenCount}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="flex flex-col gap-1">
+                {statuses.slice(maxVisible).map((statusInfo, index) => {
+                  const config = getStatusConfig(statusInfo.status, statusInfo.surveyCompleted ?? false);
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <div className={cn("w-2 h-2 rounded-full", config.dotColor)} />
+                      <span className="text-sm">{config.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
-  )
-};
+  );
+});
 
 // Componente compacto optimizado para vista móvil
-const PatientStatusCompact = ({
-  status,
-  surveyCompleted,
-  className
-}: {
+interface PatientStatusCompactProps {
   status: PatientData["estado_paciente"]
   surveyCompleted?: boolean
+  size?: "sm" | "md" | "lg"
   className?: string
-}) => {
-  const getStatusKey = (): keyof typeof STATUS_CONFIG => {
-    if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
-      return "SURVEY_PENDING"
-    }
-    if (status && status in STATUS_CONFIG) {
-      return status as PatientStatusEnum
-    }
-    return "DEFAULT"
-  }
+}
 
-  const statusKey = getStatusKey()
-  const config = STATUS_CONFIG[statusKey]
-  const Icon = config.icon
+const PatientStatusCompact = React.memo(function PatientStatusCompact({
+  status,
+  surveyCompleted,
+  size = "md",
+  className
+}: PatientStatusCompactProps) {
+  const config = useMemo(
+    () => getStatusConfig(status, surveyCompleted ?? false), 
+    [status, surveyCompleted]
+  );
+  
+  const Icon = config.icon;
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <Badge
+      variant="outline"
+      className={cn(
+        "inline-flex items-center gap-1 font-medium border px-2 py-0.5",
+        SIZE_VARIANTS[size],
+        config.style,
+        className
+      )}
+      aria-label={config.label}
+    >
+      <Icon className={cn(ICON_SIZES[size])} />
       <div className={cn(
-        "w-2 h-2 rounded-full",
+        "rounded-full",
+        DOT_SIZES[size],
         config.dotColor
       )} />
-      <div className="flex items-center gap-1">
-        <Icon className="h-3 w-3 text-gray-500 dark:text-gray-400" />
-        <span className="text-xs text-gray-600 dark:text-gray-300 truncate">
-          {config.label}
-        </span>
-      </div>
-    </div>
-  )
-};
+    </Badge>
+  );
+});
 
 // Hook utilitario para obtener información del estado
 export const usePatientStatusInfo = (
   status: PatientData["estado_paciente"],
   surveyCompleted: boolean = false
 ) => {
-  const getStatusKey = (): keyof typeof STATUS_CONFIG => {
-    if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
-      return "SURVEY_PENDING"
-    }
-    if (status && status in STATUS_CONFIG) {
-      return status as PatientStatusEnum
-    }
-    return "DEFAULT"
-  }
-
-  const statusKey = getStatusKey()
-  const config = STATUS_CONFIG[statusKey]
-
-  return {
-    label: config.label,
-    icon: config.icon,
-    style: config.style,
-    dotColor: config.dotColor,
-    priority: config.priority,
-    needsAttention: statusKey === "SURVEY_PENDING" || 
-                    statusKey === PatientStatusEnum.PENDIENTE_DE_CONSULTA,
-    isComplete: statusKey === PatientStatusEnum.OPERADO
-  }
+  return useMemo(() => {
+    const config = getStatusConfig(status, surveyCompleted);
+    
+    return {
+      label: config.label,
+      icon: config.icon,
+      style: config.style,
+      dotColor: config.dotColor,
+      priority: config.priority,
+      needsAttention: config.priority <= 2,
+      isComplete: config.priority >= 4
+    };
+  }, [status, surveyCompleted]);
 }
 
 // Función utilitaria para ordenar por prioridad de estado
@@ -276,46 +348,13 @@ export const sortByStatusPriority = (
     surveyCompleted?: boolean 
   }>
 ) => {
-  return patients.sort((a, b) => {
-    const aKey = !a.surveyCompleted && a.status !== PatientStatusEnum.OPERADO 
-      ? "SURVEY_PENDING" 
-      : (a.status in STATUS_CONFIG ? a.status as PatientStatusEnum : "DEFAULT")
-    
-    const bKey = !b.surveyCompleted && b.status !== PatientStatusEnum.OPERADO
-      ? "SURVEY_PENDING"
-      : (b.status in STATUS_CONFIG ? b.status as PatientStatusEnum : "DEFAULT")
-
-    return STATUS_CONFIG[bKey].priority - STATUS_CONFIG[aKey].priority
-  })
+  return [...patients].sort((a, b) => {
+    const aConfig = getStatusConfig(a.status, a.surveyCompleted ?? false);
+    const bConfig = getStatusConfig(b.status, b.surveyCompleted ?? false);
+    return bConfig.priority - aConfig.priority;
+  });
 }
 
-// Función para elegir entre los modos de visualización según el dispositivo
-const ResponsivePatientStatus = ({
-  status,
-  surveyCompleted = false,
-  size = "md",
-  showIcon = true,
-  className
-}: PatientStatusProps) => {
-  const isMobile = useIsMobile();
-  
-  return isMobile ? (
-    <PatientStatusCompact 
-      status={status}
-      surveyCompleted={surveyCompleted}
-      className={className}
-    />
-  ) : (
-    <PatientStatus
-      status={status}
-      surveyCompleted={surveyCompleted}
-      size={size}
-      showIcon={showIcon}
-      className={className}
-    />
-  );
-};
-
-// Exportar componentes adicionales
+// Exportar componentes
 export default PatientStatus;
-export { PatientStatusGroup, PatientStatusCompact, ResponsivePatientStatus }
+export { PatientStatusGroup, PatientStatusCompact };

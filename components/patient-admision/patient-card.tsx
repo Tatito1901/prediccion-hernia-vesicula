@@ -19,7 +19,6 @@ import {
 import {
   Clock,
   MoreHorizontal,
-  CheckCircle,
   XCircle,
   MessageSquare,
   History,
@@ -28,7 +27,6 @@ import {
   CalendarX,
   Repeat,
   Phone,
-  FileText,
   LucideProps,
 } from "lucide-react"
 import type { Appointment, ConfirmAction } from "./patient-admission"

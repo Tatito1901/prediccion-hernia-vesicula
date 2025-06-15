@@ -1,6 +1,7 @@
 // lib/stores/appointmentStore.ts
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { parseISO, isValid, format } from 'date-fns';
 
 import { 
@@ -173,9 +174,11 @@ interface AppointmentStore {
   appointments: AppointmentData[];
   isLoading: boolean;
   error: Error | null;
+  lastFetched: number | null; // Timestamp de la última carga exitosa
+  isStale: boolean; // Indica si los datos podrían estar obsoletos
   
   // Acciones
-  fetchAppointments: () => Promise<void>;
+  fetchAppointments: (force?: boolean) => Promise<void>;
   addAppointment: (data: AddAppointmentInput) => Promise<AppointmentData>;
   updateAppointment: (input: UpdateAppointmentInput) => Promise<AppointmentData>;
   updateAppointmentStatus: (
@@ -187,21 +190,64 @@ interface AppointmentStore {
   getAppointmentHistory: (appointmentId: string) => Promise<AppointmentHistoryItem[]>;
 }
 
-// Creación del store con Zustand + immer para actualizaciones inmutables
+// Duración máxima de la caché en milisegundos (5 minutos)
+const CACHE_MAX_AGE = 5 * 60 * 1000;
+
+// Creación del store con Zustand + immer para actualizaciones inmutables + persist para caché local
 export const useAppointmentStore = create<AppointmentStore>()(
-  immer((set, get) => ({
+  persist(
+    immer((set, get) => ({
     appointments: [],
     isLoading: false,
     error: null,
+    lastFetched: null,
+    isStale: true,
     
-    fetchAppointments: async () => {
+    fetchAppointments: async (force = false) => {
+      const state = get();
+      const now = Date.now();
+      
+      // Verificar si tenemos datos en caché válidos
+      const cacheValid = 
+        !force && 
+        state.lastFetched && 
+        state.appointments.length > 0 && 
+        now - state.lastFetched < CACHE_MAX_AGE;
+      
+      // Si hay una solicitud en curso y no estamos forzando, no hacer nada
+      if (state.isLoading && !force) return;
+      
+      // Si los datos en caché son válidos y no estamos forzando, usar los datos en caché
+      if (cacheValid) {
+        set((state) => {
+          state.isStale = false;
+        });
+        return;
+      }
+      
+      // Si los datos están obsoletos pero tenemos datos, marcarlos como obsoletos
+      // pero no bloquear la UI mientras se recargan
+      const shouldBlockUI = state.appointments.length === 0;
+      
       set((state) => {
-        state.isLoading = true;
+        state.isLoading = shouldBlockUI;
+        state.isStale = state.appointments.length > 0;
         state.error = null;
       });
       
       try {
-        const response = await fetchWithRetry('/api/appointments');
+        // Usar AbortController para cancelar peticiones pendientes si se hace una nueva
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const response = await fetch('/api/appointments', {
+          method: 'GET',
+          headers: { 'Cache-Control': 'no-cache' },
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
         const data = await response.json();
         
         if (response.ok) {
@@ -209,15 +255,20 @@ export const useAppointmentStore = create<AppointmentStore>()(
           set((state) => {
             state.appointments = transformedAppointments;
             state.isLoading = false;
+            state.isStale = false;
+            state.lastFetched = Date.now();
           });
         } else {
           throw new Error(data.message || 'Error fetching appointments');
         }
       } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error('Unknown error');
-          state.isLoading = false;
-        });
+        // Solo actualizar el estado de error si no fue por aborto de la petición
+        if (error instanceof Error && error.name !== 'AbortError') {
+          set((state) => {
+            state.error = error instanceof Error ? error : new Error('Unknown error');
+            state.isLoading = false;
+          });
+        }
       }
     },
     
@@ -396,7 +447,16 @@ export const useAppointmentStore = create<AppointmentStore>()(
         throw error;
       }
     },
-  }))
+  })),
+    {
+      name: 'appointment-storage',
+      partialize: (state) => ({
+        appointments: state.appointments,
+        lastFetched: state.lastFetched
+      }),
+      storage: createJSONStorage(() => localStorage)
+    }
+  )
 );
 
 // Tipo para usar con appointmentStore

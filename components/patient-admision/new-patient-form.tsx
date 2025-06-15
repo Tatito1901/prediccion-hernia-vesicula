@@ -303,7 +303,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
           <Button
             variant="default"
             size="sm"
-            className="bg-gradient-to-r from-sky-600 to-teal-500 hover:from-sky-700 hover:to-teal-600 text-white shadow-md"
+            className="bg-blue-600 hover:bg-blue-700 text-white shadow-md dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             <UserPlus className="mr-2 h-4 w-4" />
             Nuevo Paciente
@@ -315,7 +315,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
         className="sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90dvh] flex flex-col p-0 rounded-lg shadow-2xl border-0"
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-sky-50 to-sky-100 dark:from-slate-900 dark:to-slate-950 border-slate-200 dark:border-slate-800 rounded-t-lg">
+        <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-white dark:from-slate-800 dark:to-blue-950 border-slate-200 dark:border-slate-700 rounded-t-lg">
           <DialogTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">
             Registrar Nuevo Paciente
           </DialogTitle>
@@ -330,7 +330,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
               {/* Datos del Paciente */}
               <section className="space-y-4 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
                 <h3 className="text-base font-medium text-slate-800 dark:text-slate-100 flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
-                  <span className="bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 p-1 rounded">
+                  <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 p-1 rounded">
                     <UserPlus size={16} />
                   </span>
                   Datos del Paciente
@@ -349,7 +349,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                           <Input 
                             placeholder="Ej: Ana Sofía" 
                             {...field} 
-                            className="h-9 text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-sky-500"
+                            className="h-9 text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-blue-500"
                           />
                         </FormControl>
                         <FormMessage className="text-xs mt-1" />
@@ -369,7 +369,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                           <Input 
                             placeholder="Ej: García Rodríguez" 
                             {...field} 
-                            className="h-9 text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-sky-500"
+                            className="h-9 text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-blue-500"
                           />
                         </FormControl>
                         <FormMessage className="text-xs mt-1" />
@@ -390,7 +390,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                             type="tel" 
                             placeholder="Ej: 55 1234 5678" 
                             {...field} 
-                            className="h-9 text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-sky-500"
+                            className="h-9 text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-blue-500"
                           />
                         </FormControl>
                         <FormMessage className="text-xs mt-1" />
@@ -412,7 +412,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                             placeholder="Ej: 35" 
                             value={field.value === undefined ? '' : String(field.value)}
                             onChange={handleAgeChange}
-                            className="h-9 text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-sky-500"
+                            className="h-9 text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-blue-500"
                           />
                         </FormControl>
                         <FormMessage className="text-xs mt-1" />
@@ -425,7 +425,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
               {/* Información de la Consulta */}
               <section className="space-y-4 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
                 <h3 className="text-base font-medium text-slate-800 dark:text-slate-100 flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
-                  <span className="bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 p-1 rounded">
+                  <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 p-1 rounded">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                       <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -446,7 +446,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                       </FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-9 text-sm border-slate-300 dark:border-slate-700 focus:ring-sky-500">
+                          <SelectTrigger className="h-9 text-sm border-slate-300 dark:border-slate-700 focus:ring-blue-500">
                             <SelectValue placeholder="Seleccione un motivo..." />
                           </SelectTrigger>
                         </FormControl>
@@ -460,7 +460,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                                 <SelectItem 
                                   key={diag} 
                                   value={diag} 
-                                  className="text-sm pl-8 hover:bg-sky-50 dark:hover:bg-sky-900/20"
+                                  className="text-sm pl-8 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                 >
                                   {formatDiagnosis(diag)}
                                 </SelectItem>
@@ -514,7 +514,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                           <FormControl>
                             <SelectTrigger
                               className={cn(
-                                "h-9 text-sm border-slate-300 dark:border-slate-700 focus:ring-sky-500", 
+                                "h-9 text-sm border-slate-300 dark:border-slate-700 focus:ring-blue-500", 
                                 !selectedDate && "text-slate-400 dark:text-slate-500"
                               )}
                             >
@@ -528,7 +528,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                           <SelectContent className="max-h-60 border-slate-200 dark:border-slate-700">
                             {isLoading ? (
                               <div className="flex items-center justify-center py-4">
-                                <Loader2 className="h-5 w-5 animate-spin text-sky-500" />
+                                <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
                               </div>
                             ) : timeSlots.length > 0 ? (
                               timeSlots.map((slot) => (
@@ -542,7 +542,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                                       ? "text-red-500 line-through data-[disabled]:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/10" 
                                       : slot.disabled 
                                         ? "text-slate-400 dark:text-slate-600" 
-                                        : "hover:bg-sky-50 dark:hover:bg-sky-900/20"
+                                        : "hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                   )}
                                 >
                                   {slot.label} {slot.booked && "(Ocupado)"}
@@ -565,7 +565,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
               {/* Notas Adicionales */}
               <section className="space-y-2 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
                 <h3 className="text-base font-medium text-slate-800 dark:text-slate-100 flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
-                  <span className="bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 p-1 rounded">
+                  <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 p-1 rounded">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                       <polyline points="14 2 14 8 20 8"></polyline>
@@ -584,7 +584,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                       <FormControl>
                         <Textarea
                           placeholder="Información relevante sobre el paciente, alergias, etc."
-                          className="resize-none min-h-[80px] text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-sky-500"
+                          className="resize-none min-h-[80px] text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-blue-500"
                           {...field}
                         />
                       </FormControl>
@@ -615,7 +615,7 @@ export const NewPatientForm = React.memo(({ onSuccess, triggerButton }: NewPatie
                   type="submit"
                   disabled={isLoading || !form.formState.isValid}
                   size="sm"
-                  className="bg-gradient-to-r from-sky-600 to-teal-500 hover:from-sky-700 hover:to-teal-600 text-white shadow-md disabled:opacity-70"
+                  className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white shadow-md disabled:opacity-70"
                 >
                   {isLoading ? (
                     <>
