@@ -20,7 +20,8 @@ import {
 import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, isSameDay, subDays } from "date-fns"
 import { es } from "date-fns/locale/es"
 import { Button } from "@/components/ui/button"
-import { useAppContext, type AppointmentData } from "@/lib/context/app-context"
+import { useAppointmentStore } from "@/lib/stores/appointment-store"
+import type { AppointmentData, PatientData as PatientDataModel } from "@/app/dashboard/data-model"
 import { AppointmentStatusEnum, type AppointmentStatus } from "@/app/dashboard/data-model"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -250,8 +251,10 @@ StatCards.displayName = "StatCards"
 
 const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], filters: AppointmentFilters) => {
   return useMemo(() => {
-    // Convertir a formato PatientData para compatibilidad
-    const mappedAppointments: PatientData[] = appointmentsFromContext.map((appt: AppointmentData) => {
+    // Ya no necesitamos convertir a PatientData, usamos AppointmentData directamente
+    // Usamos any temporalmente para evitar problemas de tipado durante la migración
+    // Más adelante podemos refinarlos con interfaces adecuadas
+    const mappedAppointments: any[] = appointmentsFromContext.map((appt: AppointmentData) => {
       const nameParts = appt.paciente?.split(' ') || ['Desconocido']
       const nombre = nameParts[0]
       const apellidos = nameParts.slice(1).join(' ')
@@ -395,7 +398,6 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
       return Object.entries(bD).map(([date, counts]) => ({ 
         date, 
         formattedDate: format(parseISO(date), "dd/MM", { locale: es }), 
-        total: counts.total, 
         ...counts 
       })).sort((a, b) => a.date.localeCompare(b.date))
     })()
@@ -407,7 +409,12 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
       }, {} as any)
 
       filteredAppointments.forEach(a => { 
-        const dayOfWeek = a.fechaConsulta!.getDay()
+        // Aseguramos que fechaConsulta sea Date antes de llamar a getDay()
+        const fechaDate = a.fechaConsulta instanceof Date ? a.fechaConsulta : 
+                         (typeof a.fechaConsulta === 'string' ? parseISO(a.fechaConsulta) : null)
+        if (!fechaDate) return
+        
+        const dayOfWeek = fechaDate.getDay()
         if (weekdayData[dayOfWeek]) { 
           weekdayData[dayOfWeek].total++
           if (a.estado === AppointmentStatusEnum.COMPLETADA || a.estado === AppointmentStatusEnum.PRESENTE) {
@@ -428,7 +435,12 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
       ) as Record<AppointmentStatus, Record<string, any>>
 
       filteredAppointments.forEach(a => { 
-        const dayOfWeek = a.fechaConsulta!.getDay()
+        // Aseguramos que fechaConsulta sea Date antes de llamar a getDay()
+        const fechaDate = a.fechaConsulta instanceof Date ? a.fechaConsulta : 
+                         (typeof a.fechaConsulta === 'string' ? parseISO(a.fechaConsulta) : null)
+        if (!fechaDate) return
+        
+        const dayOfWeek = fechaDate.getDay()
         const hourDecimal = hourToDecimal(a.horaConsulta)
         if (dayOfWeek === undefined || hourDecimal === null) return
         
@@ -436,7 +448,8 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
         const key = `${dayOfWeek}-${hour}`
         const currentStatus = a.estado!
 
-        if (Object.values(AppointmentStatusEnum).includes(currentStatus)) { 
+        // Verificamos que currentStatus sea un valor válido del enum
+        if (Object.values(AppointmentStatusEnum).some(status => status === currentStatus)) { 
           if (!scatterByStatus[currentStatus][key]) {
             scatterByStatus[currentStatus][key] = { 
               day: dayOfWeek, 
@@ -482,7 +495,16 @@ export const AppointmentStatistics: React.FC = () => {
   })
   
   const [filters, setFilters] = useState<AppointmentFilters>(INITIAL_FILTERS)
-  const { appointments: appointmentsFromContext = [], isLoadingAppointments, errorAppointments } = useAppContext()
+  // Utilizamos el store de Zustand en lugar de useAppContext
+  const appointmentsFromContext = useAppointmentStore(state => state.appointments);
+  const isLoadingAppointments = useAppointmentStore(state => state.isLoading);
+  const errorAppointments = useAppointmentStore(state => state.error);
+  const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
+  
+  // Efecto para cargar las citas al montar el componente
+  React.useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
 
   // Usar el hook centralizador para renderizado
   const { 

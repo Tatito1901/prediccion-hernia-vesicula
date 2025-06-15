@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -23,7 +23,8 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useAppContext } from "@/lib/context/app-context";
+import { usePatientStore } from "@/lib/stores/patient-store";
+import { useAppointmentStore } from "@/lib/stores/appointment-store";
 import type { PatientData, DiagnosisType, AppointmentData } from "@/app/dashboard/data-model";
 import { PatientStatusEnum } from "@/app/dashboard/data-model";
 import { generateSurveyId } from "@/lib/form-utils";
@@ -253,7 +254,19 @@ const SimplePagination = ({
 };
 
 export function PatientManagement() {
-  const { patients, appointments } = useAppContext();
+  // Utilizamos los stores de Zustand en lugar de useAppContext
+  const patients = usePatientStore(state => state.patients);
+  const isLoadingPatients = usePatientStore(state => state.isLoading);
+  const fetchPatients = usePatientStore(state => state.fetchPatients);
+  
+  const appointments = useAppointmentStore(state => state.appointments);
+  const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
+  
+  // Efecto para cargar los datos al montar el componente
+  useEffect(() => {
+    fetchPatients();
+    fetchAppointments();
+  }, [fetchPatients, fetchAppointments]);
   const router = useRouter();
 
   // Estados simplificados

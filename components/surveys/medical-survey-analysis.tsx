@@ -18,7 +18,7 @@ import {
   Download, Filter, Search, Calendar as CalendarIcon, TrendingUp, Users,
   FileText, BarChart3, Activity, AlertTriangle, CheckCircle2, MessageSquare, ListChecks, HelpCircle
 } from "lucide-react";
-import { useAppContext } from "@/lib/context/app-context"; // Asegúrate que la ruta sea correcta
+import { usePatientStore } from "@/lib/stores/patient-store"; // Importación directa del store
 import type { 
   PatientWithSurveyData, ChartDataItem, RadarPoint, TrendPoint, 
   PriorityPatientDisplay, CommentDisplay, ProcessedDashboardData 
@@ -108,7 +108,7 @@ export default function MedicalSurveyAnalysis({
   description = "Visualización y análisis de datos de encuestas de pacientes",
   // externalPatientsData
 }: MedicalSurveyAnalysisProps) {
-  const { patients: patientsFromContext } = useAppContext();
+  const { patients: patientsFromContext } = usePatientStore();
   // const surveyDataSource = externalPatientsData || patientsFromContext || [];
   // Para este ejemplo, asumimos que patientsFromContext es PatientWithSurveyData[]
   const surveyDataSource: PatientWithSurveyData[] = (patientsFromContext || []) as PatientWithSurveyData[];

@@ -1,7 +1,10 @@
+"use client"
+
 import React from "react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { PatientData, PatientStatusEnum } from "@/app/dashboard/data-model"
+import { useIsMobile } from "@/hooks/use-breakpoint"
 import {
   CheckCircle2,
   XCircle,
@@ -94,13 +97,13 @@ const ICON_SIZES = {
   lg: "h-4 w-4"
 } as const
 
-const PatientStatus: React.FC<PatientStatusProps> = ({
+function PatientStatus({
   status,
   surveyCompleted = false,
   size = "md",
   showIcon = true,
   className
-}) => {
+}: PatientStatusProps) {
   // Lógica simplificada para determinar el estado a mostrar
   const getStatusKey = (): keyof typeof STATUS_CONFIG => {
     // Prioridad: Encuesta pendiente > Estado específico > Default
@@ -118,11 +121,9 @@ const PatientStatus: React.FC<PatientStatusProps> = ({
   const statusKey = getStatusKey()
   const config = STATUS_CONFIG[statusKey]
   const Icon = config.icon
-
-  const shouldShowActivityDot = 
-    statusKey === PatientStatusEnum.PENDIENTE_DE_CONSULTA || 
-    statusKey === PatientStatusEnum.EN_SEGUIMIENTO ||
-    statusKey === "SURVEY_PENDING"
+  const shouldShowActivityDot = statusKey === PatientStatusEnum.PENDIENTE_DE_CONSULTA || 
+                               statusKey === PatientStatusEnum.EN_SEGUIMIENTO ||
+                               statusKey === "SURVEY_PENDING"
 
   return (
     <div className="relative inline-flex">
@@ -159,37 +160,55 @@ const PatientStatus: React.FC<PatientStatusProps> = ({
   )
 }
 
-// Componente para mostrar múltiples estados (simplificado)
-export const PatientStatusGroup: React.FC<{
+// Componente para mostrar múltiples estados (ya no optimizado con memo)
+const PatientStatusGroup = ({
+  statuses,
+  size = "sm",
+  className
+}: {
   statuses: Array<{
     status: PatientData["estado_paciente"]
     surveyCompleted?: boolean
   }>
   size?: "sm" | "md" | "lg"
   className?: string
-}> = ({ statuses, size = "sm", className }) => {
+}) => {
+  const isMobile = useIsMobile();
+  
   if (!statuses.length) return null
 
   return (
     <div className={cn("flex flex-wrap gap-1.5", className)}>
       {statuses.map((statusInfo, index) => (
-        <PatientStatus
-          key={`${statusInfo.status}-${index}`}
-          status={statusInfo.status}
-          surveyCompleted={statusInfo.surveyCompleted}
-          size={size}
-        />
+        isMobile ? (
+          <PatientStatusCompact
+            key={`${statusInfo.status}-${index}`}
+            status={statusInfo.status}
+            surveyCompleted={statusInfo.surveyCompleted}
+          />
+        ) : (
+          <PatientStatus
+            key={`${statusInfo.status}-${index}`}
+            status={statusInfo.status}
+            surveyCompleted={statusInfo.surveyCompleted}
+            size={size}
+          />
+        )
       ))}
     </div>
   )
-}
+};
 
-// Componente compacto para vista móvil
-export const PatientStatusCompact: React.FC<{
+// Componente compacto optimizado para vista móvil
+const PatientStatusCompact = ({
+  status,
+  surveyCompleted,
+  className
+}: {
   status: PatientData["estado_paciente"]
   surveyCompleted?: boolean
   className?: string
-}> = ({ status, surveyCompleted, className }) => {
+}) => {
   const getStatusKey = (): keyof typeof STATUS_CONFIG => {
     if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
       return "SURVEY_PENDING"
@@ -218,7 +237,7 @@ export const PatientStatusCompact: React.FC<{
       </div>
     </div>
   )
-}
+};
 
 // Hook utilitario para obtener información del estado
 export const usePatientStatusInfo = (
@@ -270,4 +289,33 @@ export const sortByStatusPriority = (
   })
 }
 
-export default PatientStatus
+// Función para elegir entre los modos de visualización según el dispositivo
+const ResponsivePatientStatus = ({
+  status,
+  surveyCompleted = false,
+  size = "md",
+  showIcon = true,
+  className
+}: PatientStatusProps) => {
+  const isMobile = useIsMobile();
+  
+  return isMobile ? (
+    <PatientStatusCompact 
+      status={status}
+      surveyCompleted={surveyCompleted}
+      className={className}
+    />
+  ) : (
+    <PatientStatus
+      status={status}
+      surveyCompleted={surveyCompleted}
+      size={size}
+      showIcon={showIcon}
+      className={className}
+    />
+  );
+};
+
+// Exportar componentes adicionales
+export default PatientStatus;
+export { PatientStatusGroup, PatientStatusCompact, ResponsivePatientStatus }

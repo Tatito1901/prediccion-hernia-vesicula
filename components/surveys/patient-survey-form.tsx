@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation" // Import useRouter hook for navigat
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { useIsMobile } from "@/hooks/use-breakpoint"
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
@@ -36,27 +37,11 @@ import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
-// Mock useAppContext si no está disponible
-const useAppContext = () => ({
-  updatePatient: (patientId: number, data: any) => {
-    console.log("Mock updatePatient called with:", patientId, data)
-    return Promise.resolve()
-  },
-})
+// Importar directamente del store de Zustand
+import { usePatientStore } from "@/lib/stores/patient-store"
 
-// Hook para detectar dispositivos móviles optimizado
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false)
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768)
-    checkMobile()
-    window.addEventListener("resize", checkMobile)
-    return () => window.removeEventListener("resize", checkMobile)
-  }, [])
-
-  return isMobile
-}
+// Ya no necesitamos esta implementación personalizada porque estamos usando el hook centralizado
+// de @/hooks/use-breakpoint
 
 // Definición del tipo para los síntomas
 export type Symptom = string
@@ -583,7 +568,7 @@ export default function PatientSurveyForm({
   initialData,
 }: PatientSurveyFormProps) {
   const router = useRouter() // Initialize the router
-  const { updatePatient } = useAppContext()
+  const { updatePatient } = usePatientStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)

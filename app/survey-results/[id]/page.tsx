@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { SurveyResultsAnalyzer } from "@/components/surveys/survey-results-analyzer"
+import SurveyResultsAnalyzer from "@/components/surveys/survey-results-analyzer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Loader2, ClipboardCheck, AlertCircle } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { toast } from "sonner"
-import { useAppContext } from "@/lib/context/app-context"
+import { usePatientStore } from "@/lib/stores/patient-store"
 import { generateSurveyId } from "@/lib/form-utils"
 import type { PatientData } from "@/app/dashboard/data-model"
 
@@ -15,10 +15,11 @@ export default function SurveyResultsPage() {
   const router = useRouter()
   const params = useParams();
   const patientIdFromParams = params.id as string;
-  const patientId = parseInt(patientIdFromParams, 10);
+  // Mantener patientId como string para usar con getPatientById que espera un string
+  const patientId = patientIdFromParams;
   
-  // Obtenemos los datos de los pacientes desde el contexto de la aplicación
-  const { patients } = useAppContext();
+  // Obtenemos los datos de los pacientes directamente desde el Zustand store
+  const { patients, getPatientById } = usePatientStore();
 
   const [isLoading, setIsLoading] = useState(true)
   const [patientData, setPatientData] = useState<PatientData | null>(null)
@@ -36,18 +37,18 @@ export default function SurveyResultsPage() {
         // Simular una pequeña demora para dar feedback visual
         await new Promise((resolve) => setTimeout(resolve, 500))
         
-        // Buscar el paciente en nuestro contexto de aplicación
-        const patient = patients.find(p => p.id === patientId);
+        // Usar la función getPatientById del store de Zustand
+        const patient = await getPatientById(patientId);
         
         if (!patient) {
           throw new Error(`No se encontró un paciente con ID ${patientId}`);
         }
         
         // Verificar si el paciente tiene encuesta completada
-        if (!patient.encuesta) {
-          setSurveyNotCompleted(true);
+        if (patient && patient.encuesta) {
           setPatientData(patient);
         } else {
+          setSurveyNotCompleted(true);
           setPatientData(patient);
         }
       } catch (error) {
@@ -173,10 +174,7 @@ export default function SurveyResultsPage() {
       </div>
 
       <SurveyResultsAnalyzer
-        patientId={patientIdFromParams}
-        patient={patientData ?? undefined}
-        onGeneratePDF={handleGeneratePDF}
-        onShare={handleShare}
+        patient_id={patientIdFromParams}
       />
     </div>
   )

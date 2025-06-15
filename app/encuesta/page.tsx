@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tablet, Smartphone, ArrowLeft } from "lucide-react"
-import { useAppContext } from "@/lib/context/app-context"
+import { usePatientStore } from "@/lib/stores/patient-store"
 import MedicalSurveyAnalysis from "@/components/surveys/medical-survey-analysis"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"
 import { toast } from "sonner"
@@ -17,7 +17,7 @@ import { toast } from "sonner"
 export default function EncuestaPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { getPatientById, updatePatient } = useAppContext()
+  const { getPatientById, updatePatient } = usePatientStore()
 
   // Obtener parámetros de la URL
   const patientId = searchParams.get("patientId") ? Number.parseInt(searchParams.get("patientId") || "0") : undefined
@@ -31,18 +31,29 @@ export default function EncuestaPage() {
   // Estado para el modo de visualización (encuesta o análisis)
   const [viewMode, setViewMode] = useState<"survey" | "analysis">("survey")
 
-  // Obtener datos del paciente si existe
-  const patient = patientId ? getPatientById(patientId) : undefined
+  // Estado local para almacenar los datos del paciente
+  const [patient, setPatient] = useState<any>(null)
+  const [initialData, setInitialData] = useState<any>(undefined)
 
-  // Datos iniciales para la encuesta
-  const initialData = patient
-    ? {
-        nombre: patient.nombre,
-        apellidos: patient.apellidos,
-        edad: patient.edad,
-        // Otros campos que podamos pre-llenar
+  // Cargar datos del paciente cuando cambia el ID
+  useEffect(() => {
+    const loadPatient = async () => {
+      if (patientId) {
+        const patientData = await getPatientById(patientId)
+        setPatient(patientData)
+        if (patientData) {
+          setInitialData({
+            nombre: patientData.nombre,
+            apellidos: patientData.apellidos,
+            edad: patientData.edad,
+            // Otros campos que podamos pre-llenar
+          })
+        }
       }
-    : undefined
+    }
+    
+    loadPatient()
+  }, [patientId, getPatientById])
 
   // Manejar la finalización de la encuesta
   const handleSurveyComplete = (data: any) => {

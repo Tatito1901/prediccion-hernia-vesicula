@@ -1,6 +1,7 @@
 // appointment-history.tsx - Versión mejorada eliminando redundancias
-import { useMemo, memo } from "react";
-import { useAppContext } from "@/lib/context/app-context";
+import { useMemo, memo, useEffect } from "react";
+// Reemplazando useAppContext con el store de Zustand
+import { useAppointmentStore } from "@/lib/stores/appointment-store";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -326,11 +327,16 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
   maxItems,
   className
 }) => {
-  const {
-    appointments,
-    isLoadingAppointments,
-    errorAppointments,
-  } = useAppContext();
+  // Utilizamos el store de Zustand para citas
+  const appointments = useAppointmentStore(state => state.appointments);
+  const isLoadingAppointments = useAppointmentStore(state => state.isLoading);
+  const errorAppointments = useAppointmentStore(state => state.error);
+  const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
+  
+  // Cargamos las citas al montar el componente
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
 
   // Filtrar y procesar citas del paciente con mejor rendimiento
   const patientAppointments = useMemo<AppointmentData[]>(() => {

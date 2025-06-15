@@ -1,14 +1,11 @@
-// PatientAdmission.tsx - Versión mejorada eliminando redundancias
-"use client";
-
+// PatientAdmission.tsx - Versión optimizada
 import React, { 
   useState, 
   useMemo, 
   useCallback, 
   useTransition, 
-  useEffect, 
-  Suspense,
-  lazy 
+  memo,
+  Suspense
 } from "react";
 import {
   Search,
@@ -17,7 +14,6 @@ import {
   XCircle,
   Clock,
   CalendarDays,
-  Users,
   ClipboardCheck,
   AlertCircle,
   CalendarClock,
@@ -27,12 +23,13 @@ import {
   UserRoundPlus,
   CalendarHeart,
   CalendarX2,
+  CalendarRange,
   History,
   SlidersHorizontal,
   Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -53,10 +50,15 @@ import { cn } from "@/lib/utils";
 import { useBreakpointStore } from "@/hooks/use-breakpoint";
 import { toast } from "sonner";
 
-// Imports optimizados
+// Imports principales
 import { AppointmentCard } from "./patient-card";
 import { RescheduleDatePicker } from "./patient-admission.reschedule";
-import { useAppContext } from "@/lib/context/app-context";
+import { NewPatientForm } from "./new-patient-form";
+import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog";
+import { SurveySelector } from "@/components/surveys/survey-selector";
+import { usePatientStore } from "@/lib/stores/patient-store";
+import { useAppointmentStore } from "@/lib/stores/appointment-store";
+import { useSurveyStore } from "@/lib/stores/survey-store";
 import { usePatientAdmissionFlow } from "./use-patient-admission-flow";
 import {
   AppointmentStatusEnum,
@@ -64,90 +66,78 @@ import {
   type AppointmentStatus as AppointmentStatusType,
 } from "@/app/dashboard/data-model";
 
-// Lazy loading consolidado
-const LazyNewPatientForm = lazy(() => 
-  import("./new-patient-form").then(module => ({ default: module.NewPatientForm }))
-);
-
-const LazySurveyShareDialog = lazy(() => 
-  import("@/components/surveys/survey-share-dialog").then(module => ({ 
-    default: module.SurveyShareDialog 
-  }))
-);
-
-// =================================================================
-// CONFIGURACIONES CONSOLIDADAS PARA ELIMINAR REDUNDANCIAS
-// =================================================================
-type EntityId = string;
-type ISODateString = string;
-type FormattedTimeString = `${number}:${number}`;
+// ============================================================================
+// TIPOS Y CONFIGURACIONES CONSOLIDADAS
+// ============================================================================
 type TabValue = "newPatient" | "today" | "future" | "past";
 export type ConfirmAction = "checkIn" | "cancel" | "complete" | "noShow" | "reschedule";
 
+// Interfaz para datos adaptados (con propiedades necesarias para compatibilidad)
 export interface Appointment {
-  readonly id: EntityId;
+  readonly id: string;
   readonly nombre: string;
   readonly apellidos: string;
   readonly telefono: string;
-  readonly fechaConsulta: ISODateString | Date;
-  readonly horaConsulta: FormattedTimeString;
+  readonly fechaConsulta: Date;
+  readonly horaConsulta: `${number}:${number}`; // Tipado correcto para compatibilidad
   readonly dateTime: Date;
   readonly motivoConsulta?: string;
   readonly estado: AppointmentStatusEnum;
-  readonly patientId?: EntityId;
+  readonly patientId?: string;
+  readonly paciente: string; 
+  readonly doctor: string; 
 }
 
 interface FilterState {
   readonly searchTerm: string;
   readonly statusFilter: AppointmentStatusType | "all";
-  readonly sortField: string | null;
 }
 
-// Configuraciones consolidadas
+// Configuraciones estáticas - memo para evitar recreaciones
 const STATUS_CONFIG = {
   [AppointmentStatusEnum.PRESENTE]: {
-    className: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-700",
+    className: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300",
     icon: CheckCircle,
     label: "En espera",
   },
   [AppointmentStatusEnum.CANCELADA]: {
-    className: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/50 dark:text-red-300 dark:border-red-700",
+    className: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/50 dark:text-red-300",
     icon: XCircle,
     label: "Cancelada",
   },
   [AppointmentStatusEnum.COMPLETADA]: {
-    className: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/50 dark:text-green-300 dark:border-green-700",
+    className: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/50 dark:text-green-300",
     icon: ClipboardCheck,
     label: "Completada",
   },
   [AppointmentStatusEnum.PROGRAMADA]: {
-    className: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700",
+    className: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300",
     icon: Clock,
     label: "Programada",
   },
   [AppointmentStatusEnum.NO_ASISTIO]: {
-    className: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-700",
+    className: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/50 dark:text-amber-300",
     icon: AlertCircle,
     label: "No Asistió",
   },
   [AppointmentStatusEnum.REAGENDADA]: {
-    className: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/50 dark:text-purple-300 dark:border-purple-700",
+    className: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/50 dark:text-purple-300",
     icon: CalendarDays,
     label: "Reagendada",
   },
   [AppointmentStatusEnum.CONFIRMADA]: {
-    className: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-700",
+    className: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/50 dark:text-blue-300",
     icon: CalendarClock,
     label: "Confirmada",
   },
 } as const;
 
 const TABS_CONFIG = [
-  { value: "newPatient" as TabValue, label: "Nuevo Paciente", icon: UserRoundPlus, countKey: null, shortLabel: "Nuevo" },
-  { value: "today" as TabValue, label: "Hoy", icon: Clock, countKey: "today" as const, shortLabel: "Hoy" },
-  { value: "future" as TabValue, label: "Futuras", icon: CalendarHeart, countKey: "future" as const, shortLabel: "Futuras" },
-  { value: "past" as TabValue, label: "Historial", icon: History, countKey: "past" as const, shortLabel: "Historial" },
-];
+  { value: "newPatient" as const, label: "Nuevo Paciente", icon: UserRoundPlus, shortLabel: "Nuevo" },
+  { value: "today" as const, label: "Hoy", icon: Clock, shortLabel: "Hoy" },
+  { value: "future" as const, label: "Futuras", icon: CalendarHeart, shortLabel: "Futuras" },
+  { value: "past" as const, label: "Historial", icon: History, shortLabel: "Historial" },
+] as const;
 
 const DIALOG_CONFIG = {
   checkIn: { title: "Registrar Llegada", description: "El paciente se marcará como presente.", icon: CheckCircle },
@@ -155,33 +145,24 @@ const DIALOG_CONFIG = {
   complete: { title: "Completar Consulta", description: "La consulta se marcará como completada.", icon: ClipboardCheck },
   noShow: { title: "Marcar No Asistió", description: "Se registrará que el paciente no asistió.", icon: AlertCircle },
   reschedule: { title: "Reagendar Cita", description: "Seleccione la nueva fecha y hora.", icon: CalendarDays }
-};
+} as const;
 
-// =================================================================
-// UTILIDADES CONSOLIDADAS PARA EVITAR DUPLICACIÓN
-// =================================================================
-const parseToDate = (dateInput: string | Date | undefined | null): Date | null => {
+// ============================================================================
+// UTILIDADES OPTIMIZADAS
+// ============================================================================
+const parseToDate = (dateInput: string | Date | null | undefined): Date | null => {
   if (!dateInput) return null;
-  try {
-    const date = dateInput instanceof Date ? dateInput : new Date(String(dateInput));
-    return !isNaN(date.getTime()) ? date : null;
-  } catch {
-    return null;
-  }
+  const date = dateInput instanceof Date ? dateInput : new Date(String(dateInput));
+  return isNaN(date.getTime()) ? null : date;
 };
 
 const formatDisplay = (date: Date | string | null | undefined): string => {
   const parsedDate = parseToDate(date);
-  if (!parsedDate) return "Fecha inválida";
-  try {
-    return parsedDate.toLocaleDateString("es-ES", { 
-      weekday: "long", 
-      day: "numeric", 
-      month: "long" 
-    });
-  } catch {
-    return "Error de formato";
-  }
+  return parsedDate?.toLocaleDateString("es-ES", { 
+    weekday: "long", 
+    day: "numeric", 
+    month: "long" 
+  }) || "Fecha inválida";
 };
 
 const isToday = (date: Date | string | null | undefined): boolean => {
@@ -191,95 +172,154 @@ const isToday = (date: Date | string | null | undefined): boolean => {
   return parsedDate.toDateString() === today.toDateString();
 };
 
-const isPast = (date: Date | string | null | undefined): boolean => {
-  const parsedDate = parseToDate(date);
-  if (!parsedDate) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const compareDate = new Date(parsedDate);
-  compareDate.setHours(0, 0, 0, 0);
-  return compareDate < today;
-};
-
-const isFuture = (date: Date | string | null | undefined): boolean => {
-  const parsedDate = parseToDate(date);
-  if (!parsedDate) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const compareDate = new Date(parsedDate);
-  compareDate.setHours(0, 0, 0, 0);
-  return compareDate > today;
-};
-
+// Función optimizada para adaptar los datos de cita
 const adaptAppointmentData = (appointment: AppointmentData): Appointment => {
-  let nombre = "N/A";
-  let apellidos = "";
+  // Extraer nombre y apellidos del nombre completo
+  const nombreCompleto = appointment.paciente?.trim() || "";
+  const [nombre = "N/A", ...apellidosParts] = nombreCompleto.split(" ");
+  const apellidos = apellidosParts.join(" ");
   
-  if (appointment.paciente?.trim()) {
-    const nombreCompleto = appointment.paciente.trim();
-    const primerEspacio = nombreCompleto.indexOf(" ");
-    if (primerEspacio > 0) {
-      nombre = nombreCompleto.substring(0, primerEspacio);
-      apellidos = nombreCompleto.substring(primerEspacio + 1);
-    } else {
-      nombre = nombreCompleto;
-    }
-  }
+  // Asegurar que tenemos una fecha válida
+  const fecha = parseToDate(appointment.fechaConsulta) || new Date();
   
-  const fecha = parseToDate(appointment.fechaConsulta);
-  const hora = appointment.horaConsulta as FormattedTimeString;
-  let combinedDateTime = new Date(0);
+  // Asegurar que hora tiene el formato correcto 
+  const hora = (/^\d{2}:\d{2}$/.test(appointment.horaConsulta || "")) 
+    ? appointment.horaConsulta as `${number}:${number}` 
+    : "00:00" as `${number}:${number}`;
   
-  if (fecha && hora && /^\d{2}:\d{2}$/.test(hora)) {
-    const [hours, minutes] = hora.split(":").map(Number);
-    combinedDateTime = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate(), hours, minutes);
-  }
+  // Crear dateTime combinando fecha y hora
+  let combinedDateTime = new Date(fecha.getTime()); // Clone
+  const [hours, minutes] = hora.split(":").map(Number);
+  combinedDateTime.setHours(hours, minutes, 0, 0);
   
   return {
     id: appointment.id,
     nombre,
     apellidos,
     telefono: appointment.telefono || "N/A",
-    fechaConsulta: appointment.fechaConsulta,
-    horaConsulta: hora,
+    fechaConsulta: fecha, // Usamos el Date parseado
+    horaConsulta: hora, // Ya está como `${number}:${number}`
     dateTime: combinedDateTime,
     motivoConsulta: appointment.motivoConsulta || "N/A",
     estado: appointment.estado as AppointmentStatusEnum,
     patientId: appointment.patientId,
+    // Garantizar que paciente y doctor nunca sean undefined
+    paciente: appointment.paciente || '',
+    doctor: appointment.doctor || ''
   };
 };
 
-// =================================================================
+// ============================================================================
 // COMPONENTES UI OPTIMIZADOS
-// =================================================================
-const AppointmentCardSkeleton = () => (
-  <Card className="p-4 shadow-sm bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 animate-pulse">
+// ============================================================================
+const AppointmentCardSkeleton = memo(() => (
+  <Card className="p-4 shadow-sm animate-pulse">
     <div className="space-y-3">
       <div className="flex items-center gap-3">
-        <Skeleton className="h-11 w-11 rounded-full bg-slate-200 dark:bg-slate-700" />
+        <Skeleton className="h-11 w-11 rounded-full" />
         <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-32 bg-slate-200 dark:bg-slate-700" />
-          <Skeleton className="h-3 w-20 bg-slate-200 dark:bg-slate-700" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-3 w-20" />
         </div>
-        <Skeleton className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700" />
+        <Skeleton className="h-8 w-8 rounded-full" />
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Skeleton className="h-8 bg-slate-200 dark:bg-slate-700" />
-        <Skeleton className="h-8 bg-slate-200 dark:bg-slate-700" />
+        <Skeleton className="h-8" />
+        <Skeleton className="h-8" />
       </div>
     </div>
   </Card>
-);
+));
 
-const LoadingSkeleton = () => (
+const LoadingSkeleton = memo(() => (
   <div className="space-y-4">
     {Array.from({ length: 3 }, (_, i) => (
       <AppointmentCardSkeleton key={i} />
     ))}
   </div>
-);
+));
 
-const FilterControls = ({ 
+// Interfaz para estado vacío (para TypeScript)
+type EmptyStateProps = {
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+// Componente reutilizado para mostrar lista de citas (con memoización para evitar rerenders)
+const AppointmentsList = memo(({ 
+  appointments, 
+  isLoading,
+  emptyState,
+  onAction,
+  onStartSurvey,
+  onViewHistory,
+}: { 
+  appointments: Appointment[];
+  isLoading: boolean;
+  emptyState: EmptyStateProps;
+  onAction: (action: ConfirmAction, id: string, appointment: Appointment) => void;
+  onStartSurvey: (appointmentId: string, patientId?: string, appointment?: Appointment) => void;
+  onViewHistory: (patientId: string) => void;
+}) => {
+  if (isLoading) return <LoadingSkeleton />;
+  
+  if (!appointments || appointments.length === 0) {
+    return (
+      <EmptyState
+        title={emptyState.title}
+        description={emptyState.description}
+        icon={emptyState.icon}
+      />
+    );
+  }
+  
+  return (
+    <div className="space-y-4 dark:space-y-6">
+      {appointments.map((appointment) => (
+        <AppointmentCard
+          key={appointment.id}
+          appointment={appointment}
+          onAction={onAction}
+          onStartSurvey={onStartSurvey}
+          onViewHistory={onViewHistory}
+        />
+      ))}
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparator for AppointmentsList memoization
+  return (
+    prevProps.isLoading === nextProps.isLoading &&
+    prevProps.appointments === nextProps.appointments && // Assumes appointments list is immutable
+    prevProps.emptyState.title === nextProps.emptyState.title &&
+    prevProps.emptyState.description === nextProps.emptyState.description &&
+    prevProps.emptyState.icon === nextProps.emptyState.icon &&
+    prevProps.onAction === nextProps.onAction &&
+    prevProps.onStartSurvey === nextProps.onStartSurvey &&
+    prevProps.onViewHistory === nextProps.onViewHistory
+  );
+});
+
+const EmptyState = memo(({ 
+  title, 
+  description, 
+  icon: IconComponent 
+}: EmptyStateProps) => (
+  <div className="text-center p-16 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 min-h-[400px] flex flex-col items-center justify-center">
+    <div className="relative mb-6">
+      <div className="h-20 w-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+        <IconComponent className="h-10 w-10 text-slate-500 dark:text-slate-400" />
+      </div>
+    </div>
+    <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-3">{title}</h3>
+    <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+      {description}
+    </p>
+  </div>
+));
+
+const FilterControls = memo(({ 
   filters, 
   onUpdateFilters, 
   onClearFilters, 
@@ -295,33 +335,24 @@ const FilterControls = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const { mobile: isMobile } = useBreakpointStore();
   
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onUpdateFilters({ searchTerm: e.target.value });
-  };
-  
-  const handleStatusChange = (value: string) => {
-    onUpdateFilters({ statusFilter: value as AppointmentStatusType | "all" });
-  };
-  
   const hasActiveFilters = filters.searchTerm !== "" || filters.statusFilter !== "all";
   
   const MainControls = () => (
     <div className="flex flex-col sm:flex-row gap-3 w-full">
       <div className="relative flex-1 min-w-0">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 dark:text-slate-400 pointer-events-none" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
         <Input 
           type="text" 
           placeholder="Buscar paciente..." 
-          className="pl-10 h-11 text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-400 transition-colors" 
+          className="pl-10 h-11" 
           value={filters.searchTerm} 
-          onChange={handleSearchChange} 
-          aria-label="Buscar paciente"
+          onChange={(e) => onUpdateFilters({ searchTerm: e.target.value })} 
         />
       </div>
       
-      <Select value={filters.statusFilter} onValueChange={handleStatusChange}>
-        <SelectTrigger className="w-full sm:w-48 h-11 text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 gap-2">
-          <Filter size={16} className="text-slate-500 dark:text-slate-400" />
+      <Select value={filters.statusFilter} onValueChange={(value) => onUpdateFilters({ statusFilter: value as AppointmentStatusType | "all" })}>
+        <SelectTrigger className="w-full sm:w-48 h-11 gap-2">
+          <Filter size={16} className="text-slate-500" />
           <SelectValue placeholder="Estado" />
         </SelectTrigger>
         <SelectContent>
@@ -342,7 +373,7 @@ const FilterControls = ({
           size="icon" 
           onClick={onClearFilters} 
           title="Limpiar filtros" 
-          className="h-11 w-11 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 dark:hover:text-red-400 transition-colors"
+          className="h-11 w-11 hover:bg-red-50 hover:text-red-600"
         >
           <X className="h-4 w-4" />
         </Button>
@@ -352,10 +383,10 @@ const FilterControls = ({
         size="icon" 
         onClick={onRefresh} 
         title="Actualizar citas" 
-        className="h-11 w-11 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" 
+        className="h-11 w-11" 
         disabled={isLoading}
       >
-        <RefreshCcw className={cn("h-4 w-4 transition-transform", isLoading && "animate-spin")} />
+        <RefreshCcw className={cn("h-4 w-4", isLoading && "animate-spin")} />
       </Button>
     </div>
   );
@@ -363,9 +394,8 @@ const FilterControls = ({
   if (!isMobile) {
     return (
       <div className={cn(
-        "flex items-center gap-4 p-4 rounded-xl border transition-all duration-200",
-        "bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700",
-        hasActiveFilters && "ring-2 ring-blue-500/10 border-blue-200 dark:border-blue-800"
+        "flex items-center gap-4 p-4 rounded-xl border bg-slate-50 dark:bg-slate-800/30",
+        hasActiveFilters && "ring-2 ring-blue-500/10 border-blue-200"
       )}>
         <MainControls />
         <ActionButtons />
@@ -376,20 +406,17 @@ const FilterControls = ({
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded} className="space-y-3">
       <div className={cn(
-        "flex items-center justify-between p-4 rounded-xl border transition-all duration-200",
-        "bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700",
-        hasActiveFilters && "ring-2 ring-blue-500/10 border-blue-200 dark:border-blue-800"
+        "flex items-center justify-between p-4 rounded-xl border bg-slate-50 dark:bg-slate-800/30",
+        hasActiveFilters && "ring-2 ring-blue-500/10 border-blue-200"
       )}>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+          <div className="flex items-center gap-2 text-sm font-medium">
             <SlidersHorizontal className="h-4 w-4" />
             <span>Filtros</span>
           </div>
           
           {hasActiveFilters && (
-            <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-              Activos
-            </Badge>
+            <Badge variant="secondary" className="text-xs">Activos</Badge>
           )}
         </div>
         
@@ -397,50 +424,23 @@ const FilterControls = ({
           <ActionButtons />
           
           <CollapsibleTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="gap-2 hover:bg-slate-100 dark:hover:bg-slate-700"
-            >
-              <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isExpanded && "rotate-180")} />
+            <Button variant="ghost" size="sm" className="gap-2">
+              <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
             </Button>
           </CollapsibleTrigger>
         </div>
       </div>
       
-      <CollapsibleContent className="space-y-3 animate-in slide-in-from-top-2 fade-in-0">
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-200 dark:border-slate-700">
+      <CollapsibleContent>
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl border">
           <MainControls />
         </div>
       </CollapsibleContent>
     </Collapsible>
   );
-};
+});
 
-const EmptyState = ({ 
-  title, 
-  description, 
-  icon: IconComponent 
-}: {
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-}) => (
-  <div className="text-center p-16 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 min-h-[400px] flex flex-col items-center justify-center animate-in fade-in-0 slide-in-from-bottom-4">
-    <div className="relative mb-6">
-      <div className="h-20 w-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-        <IconComponent className="h-10 w-10 text-slate-500 dark:text-slate-400" />
-      </div>
-      <div className="absolute -inset-4 bg-slate-200/50 dark:bg-slate-600/50 rounded-full animate-ping opacity-20" />
-    </div>
-    <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-3">{title}</h3>
-    <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
-      {description}
-    </p>
-  </div>
-);
-
-const MobileTabs = ({ 
+const MobileTabs = memo(({ 
   activeTab, 
   onTabChange, 
   appointmentCounts, 
@@ -451,10 +451,12 @@ const MobileTabs = ({
   appointmentCounts: { today: number; future: number; past: number };
   isLoading: boolean;
 }) => (
-  <div className="grid grid-cols-4 gap-2 p-2 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+  <div className="grid grid-cols-4 gap-2 p-2 bg-slate-100 dark:bg-slate-800/50 rounded-xl border mb-4">
     {TABS_CONFIG.map((tab) => {
       const Icon = tab.icon;
-      const count = tab.countKey ? appointmentCounts[tab.countKey] : 0;
+      const count = tab.value === "today" ? appointmentCounts.today : 
+                    tab.value === "future" ? appointmentCounts.future : 
+                    tab.value === "past" ? appointmentCounts.past : 0;
       const isActive = activeTab === tab.value;
       
       return (
@@ -463,10 +465,10 @@ const MobileTabs = ({
             variant={isActive ? "secondary" : "ghost"} 
             size="sm" 
             className={cn(
-              "flex flex-col items-center justify-center gap-1 h-auto py-3 px-2 text-xs font-medium w-full transition-all",
+              "flex flex-col items-center justify-center gap-1 h-auto py-3 px-2 text-xs font-medium w-full",
               isActive 
-                ? "bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-100" 
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                ? "bg-white dark:bg-slate-900 shadow-sm" 
+                : "hover:bg-slate-200 dark:hover:bg-slate-700"
             )} 
             onClick={() => onTabChange(tab.value)}
           >
@@ -474,10 +476,10 @@ const MobileTabs = ({
             <span className="truncate w-full">{tab.shortLabel}</span>
           </Button>
           
-          {tab.countKey && count > 0 && !isLoading && (
+          {tab.value !== "newPatient" && count > 0 && !isLoading && (
             <Badge 
               variant="default" 
-              className="absolute -top-1 -right-1 h-5 min-w-[1.25rem] text-[10px] px-1 rounded-full bg-slate-700 dark:bg-slate-300 text-white dark:text-slate-900"
+              className="absolute -top-1 -right-1 h-5 min-w-[1.25rem] text-[10px] px-1 rounded-full bg-slate-700 text-white"
             >
               {count > 99 ? "99+" : count}
             </Badge>
@@ -486,28 +488,32 @@ const MobileTabs = ({
       );
     })}
   </div>
-);
+));
 
-// =================================================================
-// COMPONENTE PRINCIPAL CONSOLIDADO
-// =================================================================
+// ============================================================================
+// COMPONENTE PRINCIPAL OPTIMIZADO
+// ============================================================================
 export default function PatientAdmission() {
   const {
-    appointments: rawAppointments = [], 
-    isLoadingAppointments,
-    errorAppointments,
+    appointments, // Raw appointments list from the hook
+    isLoading: isLoadingAppointments,
     activeTab,
     setActiveTab,
-    filters,
-    setFilters,
+    // todayAppointments, // We will derive today's list from raw 'appointments'
+    // upcomingAppointments, // We will derive future's list from raw 'appointments'
     refetchAppointments,
   } = usePatientAdmissionFlow();
 
-  const { patients, updateAppointmentStatus } = useAppContext();
-  const breakpoints = useBreakpointStore();
-  const isMobile = breakpoints.mobile;
+  const { patients } = usePatientStore();
+  const { updateAppointmentStatus } = useAppointmentStore();
+  const { mobile: isMobile } = useBreakpointStore();
 
-  // Estados consolidados
+  // Estados consolidados y optimizados
+  const [filters, setFilters] = useState<FilterState>({
+    searchTerm: "",
+    statusFilter: "all"
+  });
+  
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
     action: null as ConfirmAction | null,
@@ -515,13 +521,21 @@ export default function PatientAdmission() {
     appointmentData: null as Appointment | null
   });
   
-  const [surveyDialog, setSurveyDialog] = useState({
+  const [surveySelectorDialog, setSurveySelectorDialog] = useState({
+    isOpen: false,
+    patientId: "",
+    appointmentId: "",
+    patientName: "",
+  });
+  
+  const [surveyShareDialog, setSurveyShareDialog] = useState({
     isOpen: false,
     patientId: "",
     patientName: "",
     patientLastName: "",
     patientPhone: "",
-    surveyLink: ""
+    surveyLink: "",
+    assignmentId: "",
   });
   
   const [rescheduleState, setRescheduleState] = useState<{
@@ -536,91 +550,140 @@ export default function PatientAdmission() {
   
   const [isPending, startTransition] = useTransition();
 
-  // Procesamiento optimizado
-  const processedAppointments = useMemo(
-    () => (rawAppointments || []).map(adaptAppointmentData),
-    [rawAppointments]
-  );
+  // 1. Categorize raw appointments and adapt their data structure
+  const categorizedAndAdaptedAppointments = useMemo(() => {
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
 
-  const classifiedAndFilteredAppointments = useMemo(() => {
-    const today: Appointment[] = [];
-    const future: Appointment[] = [];
-    const past: Appointment[] = [];
-    
-    const searchTermLower = filters.searchTerm.toLowerCase();
-    
-    for (const appt of processedAppointments) {
-      const matchesSearch = !filters.searchTerm || 
-        appt.nombre.toLowerCase().includes(searchTermLower) || 
-        appt.apellidos.toLowerCase().includes(searchTermLower) || 
-        (appt.motivoConsulta || "").toLowerCase().includes(searchTermLower);
-      
-      const matchesStatus = filters.statusFilter === "all" || appt.estado === filters.statusFilter;
-      
-      if (matchesSearch && matchesStatus) {
-        if (isToday(appt.dateTime)) {
-          today.push(appt);
-        } else if (isFuture(appt.dateTime)) {
-          future.push(appt);
-        } else {
-          past.push(appt);
-        }
-      }
-    }
-    
-    const sortByDateTimeAsc = (a: Appointment, b: Appointment) => a.dateTime.getTime() - b.dateTime.getTime();
-    const sortByDateTimeDesc = (a: Appointment, b: Appointment) => b.dateTime.getTime() - a.dateTime.getTime();
-    
-    return {
-      today: today.sort(sortByDateTimeAsc),
-      future: future.sort(sortByDateTimeAsc),
-      past: past.sort(sortByDateTimeDesc),
+    const result = {
+      today: [] as Appointment[],
+      future: [] as Appointment[],
+      past: [] as Appointment[],
     };
-  }, [processedAppointments, filters]);
 
+    if (!appointments) return result; // Handle case where appointments might be undefined initially
+
+    appointments.forEach(rawAppointment => {
+      const date = parseToDate(rawAppointment.fechaConsulta);
+      if (!date) return;
+
+      const compareDate = new Date(date);
+      compareDate.setHours(0, 0, 0, 0);
+
+      const adapted = adaptAppointmentData(rawAppointment);
+
+      if (compareDate.getTime() === todayDate.getTime()) {
+        result.today.push(adapted);
+      } else if (compareDate > todayDate) {
+        result.future.push(adapted);
+      } else {
+        result.past.push(adapted);
+      }
+    });
+    return result;
+  }, [appointments]);
+
+  // 2. Calculate appointment counts based on categorized (pre-filter) lists
   const appointmentCounts = useMemo(() => ({
-    today: classifiedAndFilteredAppointments.today.length,
-    future: classifiedAndFilteredAppointments.future.length,
-    past: classifiedAndFilteredAppointments.past.length,
-  }), [classifiedAndFilteredAppointments]);
+    today: categorizedAndAdaptedAppointments.today.length,
+    future: categorizedAndAdaptedAppointments.future.length,
+    past: categorizedAndAdaptedAppointments.past.length
+  }), [categorizedAndAdaptedAppointments]);
 
-  // Handlers optimizados
-  const handleUpdateFilters = useCallback((newFilters: Partial<FilterState>) => {
-    startTransition(() => {
-      setFilters(prev => ({ ...prev, ...newFilters }));
-    });
-  }, [setFilters]);
+  // 3. Callback to apply local filters (search term and status)
+  const applyFiltersToList = useCallback((appointmentsToFilter: Appointment[]) => {
+    let filteredResult = appointmentsToFilter;
+    const searchLower = filters.searchTerm.toLowerCase().trim();
 
-  const handleClearFilters = useCallback(() => {
-    startTransition(() => {
-      setFilters({ searchTerm: "", statusFilter: "all", sortField: null });
-    });
-  }, [setFilters]);
-
-  const handleAction = useCallback((action: ConfirmAction, appointment: Appointment) => {
-    setConfirmDialog({
-      isOpen: true,
-      action,
-      appointmentId: appointment.id,
-      appointmentData: appointment
-    });
-    
-    if (action === "reschedule") {
-      setRescheduleState({
-        appointmentId: appointment.id,
-        date: parseToDate(appointment.fechaConsulta),
-        time: appointment.horaConsulta
+    if (searchLower) {
+      filteredResult = filteredResult.filter(appointment => {
+        const fullName = `${appointment.nombre} ${appointment.apellidos}`.toLowerCase();
+        const patientNameInCard = appointment.paciente.toLowerCase(); // 'paciente' in Appointment is the full name string
+        return fullName.includes(searchLower) || patientNameInCard.includes(searchLower);
       });
     }
+
+    if (filters.statusFilter !== "all") {
+      filteredResult = filteredResult.filter(appointment => appointment.estado === filters.statusFilter);
+    }
+    return filteredResult;
+  }, [filters.searchTerm, filters.statusFilter]);
+
+  // 4. Generate final lists for display by applying filters
+  const todayListFinal = useMemo(() => {
+    return applyFiltersToList(categorizedAndAdaptedAppointments.today);
+  }, [categorizedAndAdaptedAppointments.today, applyFiltersToList]);
+
+  const futureListFinal = useMemo(() => {
+    return applyFiltersToList(categorizedAndAdaptedAppointments.future);
+  }, [categorizedAndAdaptedAppointments.future, applyFiltersToList]);
+
+  const pastListFinal = useMemo(() => {
+    return applyFiltersToList(categorizedAndAdaptedAppointments.past);
+  }, [categorizedAndAdaptedAppointments.past, applyFiltersToList]);
+
+  // Callbacks memoizados para evitar recreaciones
+  const handleUpdateFilters = useCallback((newFilters: Partial<FilterState>) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
   }, []);
 
-  const handleConfirmAction = useCallback(async () => {
-    if (!confirmDialog.action || !confirmDialog.appointmentId) return;
+  const handleClearFilters = useCallback(() => {
+    setFilters({ searchTerm: "", statusFilter: "all" });
+  }, []);
+
+  const handleOpenSurveySelector = useCallback((appointment: Appointment) => {
+    const patient = patients?.find(p => p.id === (appointment.patientId || appointment.id));
     
-    const { action, appointmentId } = confirmDialog;
-    let promise: Promise<any> | undefined;
+    if (!patient) {
+      toast.error("No se encontró el paciente para esta cita.");
+      return;
+    }
+    
+    setSurveySelectorDialog({
+      isOpen: true,
+      patientId: patient.id,
+      appointmentId: appointment.id,
+      patientName: `${patient.nombre || ''} ${patient.apellidos || ''}`,
+    });
+  }, [patients]);
+
+  const handleSurveyAssigned = useCallback((assignmentId: string, surveyId: string) => {
+    setSurveySelectorDialog(prev => ({ ...prev, isOpen: false }));
+    
+    const patientId = surveySelectorDialog.patientId;
+    const patient = patients?.find(p => p.id === patientId);
+    
+    if (!patient) {
+      toast.error("No se pudo recuperar la información del paciente");
+      return;
+    }
+    
+    const { getAssignmentById } = useSurveyStore.getState();
+    const assignment = getAssignmentById(assignmentId);
+    
+    if (!assignment?.shareUrl) {
+      toast.error("No se pudo generar el enlace para compartir la encuesta");
+      return;
+    }
+    
+    setSurveyShareDialog({
+      isOpen: true,
+      patientId: patient.id,
+      patientName: patient.nombre || '',
+      patientLastName: patient.apellidos || '',
+      patientPhone: patient.telefono || '',
+      surveyLink: assignment.shareUrl,
+      assignmentId: assignmentId,
+    });
+  }, [patients, surveySelectorDialog.patientId]);
+
+  const handleConfirmAction = useCallback(async () => {
+    const { action, appointmentId, appointmentData } = confirmDialog;
+    if (!action || !appointmentId) return;
 
     try {
+      let promise: Promise<any> | undefined;
+
       switch (action) {
         case "checkIn":
           promise = updateAppointmentStatus(appointmentId, AppointmentStatusEnum.PRESENTE, "Check-in manual");
@@ -640,7 +703,7 @@ export default function PatientAdmission() {
             return;
           }
           const [hours, minutes] = rescheduleState.time.split(':').map(Number);
-          const baseDate = rescheduleState.date instanceof Date ? rescheduleState.date : new Date(rescheduleState.date!);
+          const baseDate = new Date(rescheduleState.date);
           const newDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hours, minutes);
           
           promise = updateAppointmentStatus(
@@ -660,6 +723,10 @@ export default function PatientAdmission() {
         });
         await promise;
         refetchAppointments();
+        
+        if (action === "checkIn" && appointmentData) {
+          setTimeout(() => handleOpenSurveySelector(appointmentData), 300);
+        }
       }
     } catch (error) {
       console.error("Error en handleConfirmAction:", error);
@@ -669,228 +736,243 @@ export default function PatientAdmission() {
         setRescheduleState({ appointmentId: null, date: null, time: null });
       }
     }
-  }, [confirmDialog, rescheduleState, refetchAppointments, updateAppointmentStatus]);
+  }, [confirmDialog, rescheduleState, refetchAppointments, updateAppointmentStatus, handleOpenSurveySelector]);
 
-  const handleOpenSurveyDialog = useCallback((appointment: Appointment) => {
-    const patient = patients?.find(p => p.id === (appointment.patientId || appointment.id));
-    
-    if (!patient) {
-      toast.error("No se encontró el paciente para esta cita.");
-      return;
-    }
-
-    const surveyLink = `/surveys/start?patientId=${patient.id}&appointmentId=${appointment.id}`;
-    
-    setSurveyDialog({
+  const handleAppointmentAction = useCallback((action: ConfirmAction, id: string, appointment: Appointment) => {
+    setConfirmDialog({
       isOpen: true,
-      patientId: patient.id,
-      patientName: patient.nombre || '',
-      patientLastName: patient.apellidos || '',
-      patientPhone: patient.telefono || '',
-      surveyLink,
+      action,
+      appointmentId: id,
+      appointmentData: appointment // Ya es un objeto adaptado
     });
-  }, [patients]);
+  }, []);
 
-  const renderAppointmentsContent = useCallback((appointmentsToRender: Appointment[], tabKey: TabValue) => {
-    if (isLoadingAppointments || isPending) {
-      return <LoadingSkeleton />;
+  const handleStartSurvey = useCallback((appointmentId: string, patientId?: string, appointment?: Appointment) => {
+    if (appointment) {
+      // El objeto ya viene adaptado desde los componentes AppointmentCard
+      handleOpenSurveySelector(appointment);
     }
+  }, [handleOpenSurveySelector]);
 
-    if (appointmentsToRender.length === 0) {
-      const titles: Record<TabValue, string> = {
-        today: "No hay citas para hoy",
-        future: "No hay citas futuras", 
-        past: "No hay citas pasadas",
-        newPatient: ""
-      };
-      
-      const descriptions: Record<TabValue, string> = {
-        today: "Cuando se agenden citas para hoy, aparecerán aquí con toda la información detallada.",
-        future: "Las próximas citas programadas se mostrarán en esta sección para una mejor organización.",
-        past: "El historial completo de citas anteriores estará disponible aquí para consulta.",
-        newPatient: ""
-      };
-      
-      return (
-        <EmptyState
-          title={titles[tabKey] || "No hay citas"}
-          description={descriptions[tabKey] || "Cuando haya citas disponibles, aparecerán aquí."}
-          icon={CalendarX2}
-        />
-      );
+  const handleViewHistory = useCallback((patientId: string) => {
+    if (patientId) {
+      window.open(`/pacientes/historial/${patientId}`, "_blank");
     }
+  }, []);
 
-    return (
-      <div className="space-y-4">
-        {appointmentsToRender.map((cita) => {
-          const patientId = cita.patientId || cita.id;
-          const patient = patients?.find(p => p.id === patientId);
-          
-          const surveyCompleted = Boolean(patient?.encuesta?.id && patient?.encuesta?.submitted_at);
-          const requireSurvey = [
-            AppointmentStatusEnum.PRESENTE, 
-            AppointmentStatusEnum.CONFIRMADA,
-            AppointmentStatusEnum.PROGRAMADA
-          ].includes(cita.estado);
-          const disableActions = requireSurvey && !surveyCompleted;
-          
-          return (
-            <AppointmentCard
-              key={cita.id}
-              appointment={cita}
-              onAction={(action, appointmentId) => {
-                const appointment = appointmentsToRender.find(apt => apt.id === appointmentId);
-                if (appointment) {
-                  handleAction(action as ConfirmAction, appointment);
-                }
-              }}
-              onStartSurvey={(appointmentId) => {
-                const appointment = appointmentsToRender.find(apt => apt.id === appointmentId);
-                if (appointment) {
-                  handleOpenSurveyDialog(appointment);
-                }
-              }}
-              onViewHistory={(patientId) => toast.info(`Ver historial del paciente ${patientId}`)}
-              disableActions={disableActions}
-              surveyCompleted={surveyCompleted}
-            />
-          );
-        })}
-      </div>
-    );
-  }, [isLoadingAppointments, isPending, handleAction, handleOpenSurveyDialog, patients]);
+  const closeDialogs = useCallback(() => {
+    setSurveySelectorDialog(prev => ({ ...prev, isOpen: false }));
+    setSurveyShareDialog(prev => ({ ...prev, isOpen: false }));
+  }, []);
 
-  const handleNewPatientSuccess = () => {
-    refetchAppointments();
-    setActiveTab("today");
-    toast.success("Paciente agregado exitosamente");
-  };
-
-  useEffect(() => {
-    if (errorAppointments) {
-      toast.error(`Error al cargar las citas: ${errorAppointments.message || 'Error desconocido'}`);
-    }
-  }, [errorAppointments]);
+  const handleShareSuccess = useCallback(() => {
+    setSurveyShareDialog(prev => ({ ...prev, isOpen: false }));
+    toast.success("Encuesta compartida correctamente");
+  }, []);
 
   const dialogConfig = confirmDialog.action ? DIALOG_CONFIG[confirmDialog.action] : null;
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-3 sm:p-4 lg:p-6 space-y-6 bg-slate-50 dark:bg-slate-950 min-h-screen">
+    <div className="w-full max-w-7xl mx-auto p-3 sm:p-4 lg:p-6 space-y-6 min-h-screen">
       <Card className="w-full overflow-hidden shadow-xl border-0 bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950">
-        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-800/50 dark:to-slate-800/30 border-b border-slate-200 dark:border-slate-700">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
-            <div className="space-y-2">
-              <CardTitle className="flex items-center gap-3 text-2xl text-slate-900 dark:text-slate-100">
-                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
-                  <Users className="h-6 w-6 text-white" />
-                </div>
-                <span className="font-bold">Gestión de Citas</span>
-                {(isLoadingAppointments || isPending) && (
-                  <div className="ml-2 h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent text-slate-600 dark:text-slate-400" />
-                )}
-              </CardTitle>
-              <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
-                Sistema integral de control de admisión y seguimiento de pacientes
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-
         <CardContent className="p-0">
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabValue)} className="w-full">
+          <div className="flex flex-col">
+            {/* Header */}
+            <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800">
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <CalendarRange className="h-6 w-6 text-indigo-500" />
+                <span>Admisión de Pacientes</span>
+              </h1>
+            </div>
+            
+            {/* Main Content */}
             <div className="p-4 sm:p-6">
-              <div className="mb-6">
-                {isMobile ? (
-                  <MobileTabs
-                    activeTab={activeTab}
-                    onTabChange={setActiveTab}
-                    appointmentCounts={appointmentCounts}
-                    isLoading={isLoadingAppointments || isPending}
-                  />
-                ) : (
-                  <TabsList className="grid w-full grid-cols-4 h-auto rounded-xl bg-slate-100 dark:bg-slate-800/50 p-1.5 border border-slate-200 dark:border-slate-700">
-                    {TABS_CONFIG.map((tab) => (
-                      <TabsTrigger
-                        key={tab.value}
-                        value={tab.value}
-                        className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm py-3 px-4 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100 transition-all"
-                      >
-                        <div className="flex items-center justify-center gap-2.5">
-                          <tab.icon className="h-4 w-4 sm:h-5 sm:w-5" />
-                          <span>{tab.label}</span>
-                          {tab.countKey && appointmentCounts[tab.countKey] > 0 && !(isLoadingAppointments || isPending) && (
-                            <Badge 
-                              variant="secondary" 
-                              className="h-5 px-2 text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                            >
-                              {appointmentCounts[tab.countKey] > 99 ? "99+" : appointmentCounts[tab.countKey]}
-                            </Badge>
-                          )}
-                        </div>
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                )}
-              </div>
-
-              {["today", "future", "past"].includes(activeTab) && (
-                <div className="mb-6">
-                  <FilterControls
-                    filters={filters}
-                    onUpdateFilters={handleUpdateFilters}
-                    onClearFilters={handleClearFilters}
-                    onRefresh={refetchAppointments}
-                    isLoading={isLoadingAppointments || isPending}
-                  />
-                </div>
+              {isMobile && (
+                <MobileTabs
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                  appointmentCounts={appointmentCounts}
+                  isLoading={isLoadingAppointments}
+                />
               )}
-            </div>
-
-            <div className="px-4 sm:px-6 pb-6">
-              <TabsContent value="newPatient" className="mt-0">
-                <Suspense fallback={<LoadingSkeleton />}>
-                  <LazyNewPatientForm onSuccess={handleNewPatientSuccess} />
-                </Suspense>
-              </TabsContent>
-
-              <TabsContent value="today" className="mt-0">
-                {renderAppointmentsContent(classifiedAndFilteredAppointments.today, "today")}
-              </TabsContent>
-
-              <TabsContent value="future" className="mt-0">
-                {renderAppointmentsContent(classifiedAndFilteredAppointments.future, "future")}
-              </TabsContent>
-
-              <TabsContent value="past" className="mt-0">
-                {renderAppointmentsContent(classifiedAndFilteredAppointments.past, "past")}
-              </TabsContent>
-            </div>
-          </Tabs>
+              
+              <FilterControls
+                filters={filters}
+                onUpdateFilters={handleUpdateFilters}
+                onClearFilters={handleClearFilters}
+                onRefresh={refetchAppointments}
+                isLoading={isLoadingAppointments}
+              />
+              
+              {/* Content Area for Tabs or Mobile View */}
+              <div className="mt-6">
+                {!isMobile ? (
+                  <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabValue)} className="w-full">
+                    <TabsList className="grid grid-cols-4 w-full max-w-2xl">
+                      {TABS_CONFIG.map((tab) => {
+                        const Icon = tab.icon;
+                        const count = tab.value === "today" ? appointmentCounts.today :
+                                      tab.value === "future" ? appointmentCounts.future :
+                                      tab.value === "past" ? appointmentCounts.past : 0;
+                        return (
+                          <TabsTrigger key={tab.value} value={tab.value} className="flex items-center gap-2">
+                            <Icon className="h-4 w-4" />
+                            <span>{tab.label}</span>
+                            {tab.value !== "newPatient" && count > 0 && !isLoadingAppointments && (
+                              <Badge variant="secondary" className="ml-1">{count}</Badge>
+                            )}
+                          </TabsTrigger>
+                        );
+                      })}
+                    </TabsList>
+                    <TabsContent value="newPatient" className="mt-6">
+                      <div className="bg-white dark:bg-slate-800 rounded-lg p-4 sm:p-6">
+                        <NewPatientForm />
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="today" className="mt-6">
+                      <AppointmentsList
+                        appointments={todayListFinal}
+                        isLoading={isLoadingAppointments}
+                        emptyState={{
+                          title: "No hay citas para hoy",
+                          description: "No hay citas programadas para el día de hoy o que coincidan con los filtros.",
+                          icon: Calendar
+                        }}
+                        onAction={handleAppointmentAction}
+                        onStartSurvey={handleStartSurvey}
+                        onViewHistory={handleViewHistory}
+                      />
+                    </TabsContent>
+                    <TabsContent value="future" className="mt-6">
+                      <AppointmentsList
+                        appointments={futureListFinal}
+                        isLoading={isLoadingAppointments}
+                        emptyState={{
+                          title: "No hay citas futuras",
+                          description: "No hay citas programadas para los próximos días o que coincidan con los filtros.",
+                          icon: Calendar
+                        }}
+                        onAction={handleAppointmentAction}
+                        onStartSurvey={handleStartSurvey}
+                        onViewHistory={handleViewHistory}
+                      />
+                    </TabsContent>
+                    <TabsContent value="past" className="mt-6">
+                      <AppointmentsList
+                        appointments={pastListFinal}
+                        isLoading={isLoadingAppointments}
+                        emptyState={{
+                          title: "No hay citas pasadas",
+                          description: "No hay registros de citas anteriores que coincidan con los filtros.",
+                          icon: Calendar
+                        }}
+                        onAction={handleAppointmentAction}
+                        onStartSurvey={handleStartSurvey}
+                        onViewHistory={handleViewHistory}
+                      />
+                    </TabsContent>
+                  </Tabs>
+                ) : (
+                  // Mobile content without Tabs wrapper
+                  <div>
+                    {isLoadingAppointments ? (
+                      <LoadingSkeleton />
+                    ) : (
+                      <>
+                        {activeTab === "newPatient" && (
+                          <div className="bg-white dark:bg-slate-800 rounded-lg p-4 sm:p-6">
+                            <NewPatientForm />
+                          </div>
+                        )}
+                        {activeTab === "today" && (
+                          <AppointmentsList
+                            appointments={todayListFinal}
+                            isLoading={isLoadingAppointments}
+                            emptyState={{
+                              title: "No hay citas para hoy",
+                              description: "No hay citas programadas para el día de hoy o que coincidan con los filtros.",
+                              icon: Calendar
+                            }}
+                            onAction={handleAppointmentAction}
+                            onStartSurvey={handleStartSurvey}
+                            onViewHistory={handleViewHistory}
+                          />
+                        )}
+                        {activeTab === "future" && (
+                          <AppointmentsList
+                            appointments={futureListFinal}
+                            isLoading={isLoadingAppointments}
+                            emptyState={{
+                              title: "No hay citas futuras",
+                              description: "No hay citas programadas para los próximos días o que coincidan con los filtros.",
+                              icon: Calendar
+                            }}
+                            onAction={handleAppointmentAction}
+                            onStartSurvey={handleStartSurvey}
+                            onViewHistory={handleViewHistory}
+                          />
+                        )}
+                        {activeTab === "past" && (
+                          <AppointmentsList
+                            appointments={pastListFinal}
+                            isLoading={isLoadingAppointments}
+                            emptyState={{
+                              title: "No hay citas pasadas",
+                              description: "No hay registros de citas anteriores que coincidan con los filtros.",
+                              icon: Calendar
+                            }}
+                            onAction={handleAppointmentAction}
+                            onStartSurvey={handleStartSurvey}
+                            onViewHistory={handleViewHistory}
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div> {/* Closes <div className="mt-6"> (Content Area for Tabs or Mobile View) */}
+            </div>   {/* Closes <div className="p-4 sm:p-6"> (Main Content wrapper) */}
+          </div>     {/* Closes <div className="flex flex-col"> */}
         </CardContent>
       </Card>
 
-      {/* Survey Dialog */}
-      {surveyDialog.isOpen && (
-        <Suspense fallback={null}>
-          <LazySurveyShareDialog
-            isOpen={surveyDialog.isOpen}
-            patient={{
-              id: surveyDialog.patientId,
-              nombre: surveyDialog.patientName,
-              apellidos: surveyDialog.patientLastName,
-              telefono: surveyDialog.patientPhone
-            }}
-            surveyLink={surveyDialog.surveyLink}
-            onStartInternal={() => {
-              toast.success(`Encuesta iniciada para ${surveyDialog.patientName}`);
-              setSurveyDialog(prev => ({ ...prev, isOpen: false }));
-            }}
-            onClose={() => setSurveyDialog(prev => ({ ...prev, isOpen: false }))}
+      {/* Survey Selector Dialog */}
+      <Suspense fallback={<div className="p-4">Cargando...</div>}> 
+        {surveySelectorDialog.isOpen && (
+          <SurveySelector
+            isOpen={surveySelectorDialog.isOpen}
+            patientId={surveySelectorDialog.patientId ?? ''} // Ensure patientId is always string
+            appointmentId={surveySelectorDialog.appointmentId}
+            patientName={surveySelectorDialog.patientName}
+            onClose={closeDialogs}
+            onAssigned={handleSurveyAssigned}
           />
-        </Suspense>
-      )}
+        )}
+      </Suspense>
 
-      {/* Alert Dialog Mejorado */}
+      {/* Survey Share Dialog */}
+      <Suspense fallback={<div className="p-4">Cargando...</div>}> 
+        {surveyShareDialog.isOpen && (
+          <SurveyShareDialog
+            isOpen={surveyShareDialog.isOpen}
+            patient={{
+              id: surveyShareDialog.patientId ?? '', // Ensure patientId is always string
+              nombre: surveyShareDialog.patientName,
+              apellidos: surveyShareDialog.patientLastName,
+              telefono: surveyShareDialog.patientPhone
+            }}
+            surveyLink={surveyShareDialog.surveyLink}
+            onStartInternal={() => {
+              toast.success(`Encuesta iniciada para ${surveyShareDialog.patientName}`);
+              setSurveyShareDialog(prev => ({ ...prev, isOpen: false }));
+            }}
+            onClose={closeDialogs}
+          />
+        )}
+      </Suspense>
+
+      {/* Confirmation Dialog */}
       <AlertDialog 
         open={confirmDialog.isOpen} 
         onOpenChange={(open) => {
@@ -917,14 +999,14 @@ export default function PatientAdmission() {
                     confirmDialog.action === "cancel" && "bg-red-100 dark:bg-red-900/50",
                     confirmDialog.action === "complete" && "bg-green-100 dark:bg-green-900/50",
                     confirmDialog.action === "noShow" && "bg-amber-100 dark:bg-amber-900/50",
-                    (!confirmDialog.action || !["cancel", "complete", "noShow"].includes(confirmDialog.action)) && "bg-blue-100 dark:bg-blue-900/50"
+                    (!confirmDialog.action || !["cancel", "complete", "noShow"].includes(confirmDialog.action ?? '')) && "bg-blue-100 dark:bg-blue-900/50"
                   )}>
                     <dialogConfig.icon className={cn(
                       "h-6 w-6",
-                      confirmDialog.action === "cancel" && "text-red-600 dark:text-red-400",
-                      confirmDialog.action === "complete" && "text-green-600 dark:text-green-400",
-                      confirmDialog.action === "noShow" && "text-amber-600 dark:text-amber-400",
-                      (!confirmDialog.action || !["cancel", "complete", "noShow"].includes(confirmDialog.action)) && "text-blue-600 dark:text-blue-400"
+                      confirmDialog.action === "cancel" && "text-red-600",
+                      confirmDialog.action === "complete" && "text-green-600",
+                      confirmDialog.action === "noShow" && "text-amber-600",
+                      (!confirmDialog.action || !["cancel", "complete", "noShow"].includes(confirmDialog.action ?? '')) && "text-blue-600"
                     )} />
                   </div>
                   
@@ -936,8 +1018,8 @@ export default function PatientAdmission() {
                 <AlertDialogDescription asChild>
                   <div className="pt-2 space-y-4 text-sm">
                     {confirmDialog.appointmentData && (
-                      <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                        <p className="font-semibold mb-3 text-slate-900 dark:text-slate-100">
+                      <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border">
+                        <p className="font-semibold mb-3">
                           {confirmDialog.appointmentData.nombre} {confirmDialog.appointmentData.apellidos}
                         </p>
                         <div className="grid grid-cols-2 gap-3 text-sm text-slate-600 dark:text-slate-400">

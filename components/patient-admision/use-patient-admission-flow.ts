@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { useAppContext } from '@/lib/context/app-context'
+import { usePatientStore } from '@/lib/stores/patient-store'
+import { useAppointmentStore } from '@/lib/stores/appointment-store'
 import type { AppointmentData, AppointmentStatus, AppointmentStatusEnum } from '@/app/dashboard/data-model'
 import { startOfDay, isToday, isBefore, isAfter } from 'date-fns'
 
@@ -21,14 +22,13 @@ export interface AppointmentLists {
 
 export interface UsePatientAdmissionFlowReturn {
   appointments: AppointmentData[]
-  isLoadingAppointments: boolean
-  errorAppointments: string | null
+  isLoading: boolean
+  error: string | null
   activeTab: AdmissionTab
   setActiveTab: (value: AdmissionTab) => void
-  filters: AdmissionFilterState
-  setFilters: Dispatch<SetStateAction<AdmissionFilterState>>
-  classifiedAppointments: AppointmentLists
   filteredAppointments: AppointmentLists
+  todayAppointments: AppointmentData[]
+  upcomingAppointments: AppointmentData[]
   refetchAppointments: () => void
 }
 
@@ -37,12 +37,14 @@ export interface UsePatientAdmissionFlowReturn {
  * Incluye clasificación por fecha, filtrado y ordenamiento
  */
 export function usePatientAdmissionFlow(): UsePatientAdmissionFlowReturn {
+  const { patients } = usePatientStore()
+  
   const {
-    appointments = [],
-    isLoadingAppointments = false,
-    errorAppointments = null,
-    refetchAppointments,
-  } = useAppContext()
+    appointments,
+    isLoading: isLoadingAppointments = false,
+    error: errorAppointments = null,
+    fetchAppointments
+  } = useAppointmentStore()
 
   // Estados locales optimizados
   const [activeTab, setActiveTab] = useState<AdmissionTab>('today')
@@ -145,25 +147,23 @@ export function usePatientAdmissionFlow(): UsePatientAdmissionFlowReturn {
       future: applyFilters(classifiedAppointments.future),
       past: applyFilters(classifiedAppointments.past)
     }
-  }, [classifiedAppointments, filters])
+  }, [classifiedAppointments])
 
-  // Función de refetch optimizada
-  const handleRefetchAppointments = useCallback(() => {
-    if (refetchAppointments) {
-      refetchAppointments()
-    }
-  }, [refetchAppointments])
+  // Cleanup y re-fetching en el montaje inicial
+  useEffect(() => {
+    // Inicializar las citas al montar el componente
+    fetchAppointments()
+  }, [fetchAppointments])
 
   return {
     appointments,
-    isLoadingAppointments,
-    errorAppointments,
+    isLoading: isLoadingAppointments,
+    error: errorAppointments as unknown as string | null, // Cast para compatibilidad
     activeTab,
     setActiveTab,
-    filters,
-    setFilters,
-    classifiedAppointments,
     filteredAppointments,
-    refetchAppointments: handleRefetchAppointments,
+    todayAppointments: filteredAppointments.today,
+    upcomingAppointments: filteredAppointments.future,
+    refetchAppointments: fetchAppointments // Alias para mantener compatibilidad
   }
 }

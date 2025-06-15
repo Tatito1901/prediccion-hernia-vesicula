@@ -13,7 +13,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useAppContext, type AddAppointmentInput } from "@/lib/context/app-context";
+import { useAppointmentStore, type AddAppointmentInput } from "@/lib/stores/appointment-store";
 import type { PatientData } from "@/app/dashboard/data-model";
 import { AppointmentStatusEnum } from "@/app/dashboard/data-model";
 import { toast } from "sonner";
@@ -34,7 +34,7 @@ interface ScheduleAppointmentDialogProps {
 }
 
 export function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppointmentDialogProps) {
-  const { addAppointment } = useAppContext();
+  const addAppointment = useAppointmentStore(state => state.addAppointment);
   const form = useForm<FormValues>({
     resolver: zodResolver(FORM_SCHEMA),
     defaultValues: {
