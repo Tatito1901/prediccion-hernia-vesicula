@@ -23,13 +23,13 @@ import {
   CalendarRange,
   History,
   Filter,
+  CalendarCheck,
+  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,7 +41,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useBreakpointStore } from "@/hooks/use-breakpoint";
 import { toast } from "sonner";
@@ -97,9 +96,9 @@ interface OptimizedAppointment {
 
 const TABS_CONFIG = [
   { value: "newPatient" as const, label: "Nuevo Paciente", icon: UserRoundPlus, shortLabel: "Nuevo" },
-  { value: "today" as const, label: "Hoy", icon: Clock, shortLabel: "Hoy" },
-  { value: "future" as const, label: "Futuras", icon: Calendar, shortLabel: "Futuras" },
-  { value: "past" as const, label: "Historial", icon: History, shortLabel: "Historial" },
+  { value: "today" as const, label: "Citas de Hoy", icon: CalendarCheck, shortLabel: "Hoy" },
+  { value: "future" as const, label: "Citas Futuras", icon: CalendarClock, shortLabel: "Futuras" },
+  { value: "past" as const, label: "Historial", icon: History, shortLabel: "Pasadas" },
 ] as const;
 
 const DIALOG_CONFIG = {
@@ -709,7 +708,7 @@ export default function PatientAdmission() {
               
               {/* Content Area */}
               <div className="mt-6">
-                {!isMobile ? (
+                {!isMobile && (
                   <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabValue)} className="w-full">
                     <TabsList className="grid grid-cols-4 w-full max-w-2xl">
                       {TABS_CONFIG.map((tab: typeof TABS_CONFIG[number]) => (
@@ -720,23 +719,16 @@ export default function PatientAdmission() {
                       ))}
                     </TabsList>
 
-                    <TabsContent value="newPatient">
+                    <TabsContent value="newPatient" className="mt-6">
                       <Card>
                         <CardContent className="p-6">
                           <LazyComponentErrorBoundary>
                             <Suspense fallback={<LoadingSkeleton />}>
-                              <NewPatientForm onSuccess={handleRefreshAfterChanges} />
+                              <NewPatientForm />
                             </Suspense>
                           </LazyComponentErrorBoundary>
                         </CardContent>
                       </Card>
-                      <div className="bg-white dark:bg-slate-800 rounded-lg p-4 sm:p-6">
-                        <LazyComponentErrorBoundary>
-                          <Suspense fallback={<LoadingSkeleton />}>
-                            <NewPatientForm onSuccess={handleRefreshAfterChanges} />
-                          </Suspense>
-                        </LazyComponentErrorBoundary>
-                      </div>
                     </TabsContent>
                     <TabsContent value="today" className="mt-6">
                       <AppointmentsList
@@ -781,7 +773,7 @@ export default function PatientAdmission() {
                       />
                     </TabsContent>
                   </Tabs>
-                ) : null}
+                )}
               </div>
             </div>
           </div>

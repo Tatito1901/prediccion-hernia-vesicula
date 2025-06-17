@@ -1,22 +1,19 @@
 /* -------------------------------------------------------------------------- */
-/*  components/charts/diagnosis-type-distribution.tsx                         */
-/*  🎯 Distribución especializada de hernias optimizada                      */
+/*  components/charts/diagnosis-type-distribution.tsx - OPTIMIZADO           */
 /* -------------------------------------------------------------------------- */
 
-import { memo, useMemo, useCallback, useState, useEffect, FC } from 'react';
+import { memo, useMemo, FC } from 'react';
 import {
   Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import {
-  Activity, Info, Users, Loader2, LucideIcon, 
+  Activity, Info, Users, LucideIcon, 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import useChartConfig, { 
   type PatientData, 
   type GeneralStats,
-  processPatientData,
   LoadingSpinner,
 } from '@/components/charts/use-chart-config';
 
@@ -37,6 +34,7 @@ interface Props {
   className?: string;
   showStats?: boolean;
   showTrends?: boolean;
+  isLoading?: boolean;
 }
 
 /* ============================================================================
@@ -58,7 +56,7 @@ const HERNIA_TYPE_DETAILS: Readonly<Record<string, {
 };
 
 /* ============================================================================
- * FUNCIONES AUXILIARES CENTRALIZADAS
+ * FUNCIONES AUXILIARES OPTIMIZADAS
  * ========================================================================== */
 
 const categorizeHerniaType = (diagnosis?: string): string => {
@@ -66,63 +64,37 @@ const categorizeHerniaType = (diagnosis?: string): string => {
   const lower = diagnosis.toLowerCase();
   if (!lower.includes('hernia')) return 'no hernia';
 
-  if (lower.includes('inguinal')) return 'hernia inguinal';
-  if (lower.includes('umbilical')) return 'hernia umbilical';
-  if (lower.includes('incisional') || lower.includes('eventración')) return 'hernia incisional';
-  if (lower.includes('hiatal') || lower.includes('hiato')) return 'hernia hiatal';
-  if (lower.includes('ventral')) return 'hernia ventral';
-  if (lower.includes('epigástrica')) return 'hernia epigástrica';
-  if (lower.includes('femoral')) return 'hernia femoral';
+  // Usar un array para hacer un solo recorrido
+  const herniaTypes = [
+    { keyword: 'inguinal', type: 'hernia inguinal' },
+    { keyword: 'umbilical', type: 'hernia umbilical' },
+    { keyword: 'incisional', type: 'hernia incisional' },
+    { keyword: 'eventración', type: 'hernia incisional' },
+    { keyword: 'hiatal', type: 'hernia hiatal' },
+    { keyword: 'hiato', type: 'hernia hiatal' },
+    { keyword: 'ventral', type: 'hernia ventral' },
+    { keyword: 'epigástrica', type: 'hernia epigástrica' },
+    { keyword: 'femoral', type: 'hernia femoral' },
+  ];
+
+  for (const { keyword, type } of herniaTypes) {
+    if (lower.includes(keyword)) return type;
+  }
+
   return 'hernia (otro tipo)';
-};
-
-const processHerniaData = (patients: ReadonlyArray<PatientData>) => {
-  const herniaCounts = new Map<string, number>();
-  let totalAgeSum = 0;
-  let patientsWithAge = 0;
-  let maleHerniaCount = 0;
-  let femaleHerniaCount = 0;
-  let totalHerniaCases = 0;
-
-  patients.forEach(p => {
-    const herniaType = categorizeHerniaType(p.diagnostico_principal || p.diagnostico);
-    if (herniaType !== 'no hernia') {
-      totalHerniaCases++;
-      herniaCounts.set(herniaType, (herniaCounts.get(herniaType) || 0) + 1);
-      
-      if (p.edad != null) {
-        totalAgeSum += p.edad;
-        patientsWithAge++;
-      }
-      
-      if (p.genero === 'M') maleHerniaCount++;
-      else if (p.genero === 'F') femaleHerniaCount++;
-    }
-  });
-
-  return {
-    herniaCounts,
-    totalHerniaCases,
-    averageAge: patientsWithAge > 0 ? Math.round(totalAgeSum / patientsWithAge) : undefined,
-    genderStats: { male: maleHerniaCount, female: femaleHerniaCount },
-  };
 };
 
 /* ============================================================================
  * COMPONENTE PRINCIPAL OPTIMIZADO
- * ========================================================================== */
+ * ============================================================================ */
 
-const DiagnosisTypeDistribution: FC<Props> = ({
+const DiagnosisTypeDistribution: FC<Props> = memo(({
   patients,
   className,
   showStats = true,
-  showTrends = true,
+  isLoading = false,
 }) => {
   
-  const [selectedTypeName, setSelectedTypeName] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Usar el hook centralizador para el renderizado
   const { renderPieChart } = useChartConfig({
     showLegend: true,
     showTooltip: true,
@@ -130,26 +102,51 @@ const DiagnosisTypeDistribution: FC<Props> = ({
     interactive: true,
   });
 
-  useEffect(() => {
-    setIsLoading(true);
-    const timer = setTimeout(() => setIsLoading(false), 250);
-    return () => clearTimeout(timer);
-  }, [patients]);
-
-  // Procesamiento de datos optimizado usando funciones centralizadas
-  const { chartData, herniaStats } = useMemo(() => {
+  // Procesamiento de datos optimizado con un solo useMemo
+  const { chartData, herniaStats, generalStats } = useMemo(() => {
     if (!patients?.length) {
       return { 
         chartData: [], 
         herniaStats: { 
           totalHernias: 0, 
           mostCommonType: 'N/A', 
-          overallRiskLevel: 'low' as const 
-        } 
+          overallRiskLevel: 'low' as const,
+          averageAge: undefined,
+          genderDistribution: undefined,
+          malePercentage: 0,
+          femalePercentage: 0
+        },
+        generalStats: {
+          total: 0, attendance: 100, cancellation: 0, pending: 0, present: 0,
+          completed: 0, cancelled: 0, pendingCount: 0, presentCount: 0,
+          period: "Actual", allStatusCounts: {}
+        }
       };
     }
 
-    const { herniaCounts, totalHerniaCases, averageAge, genderStats } = processHerniaData(patients);
+    const herniaCounts = new Map<string, number>();
+    let totalAgeSum = 0;
+    let patientsWithAge = 0;
+    let maleHerniaCount = 0;
+    let femaleHerniaCount = 0;
+    let totalHerniaCases = 0;
+
+    // Un solo recorrido por todos los pacientes
+    patients.forEach(p => {
+      const herniaType = categorizeHerniaType(p.diagnostico_principal || p.diagnostico);
+      if (herniaType !== 'no hernia') {
+        totalHerniaCases++;
+        herniaCounts.set(herniaType, (herniaCounts.get(herniaType) || 0) + 1);
+        
+        if (p.edad != null) {
+          totalAgeSum += p.edad;
+          patientsWithAge++;
+        }
+        
+        if (p.genero === 'M') maleHerniaCount++;
+        else if (p.genero === 'F') femaleHerniaCount++;
+      }
+    });
 
     if (totalHerniaCases === 0) {
       return { 
@@ -157,12 +154,21 @@ const DiagnosisTypeDistribution: FC<Props> = ({
         herniaStats: { 
           totalHernias: 0, 
           mostCommonType: 'N/A', 
-          overallRiskLevel: 'low' as const 
-        } 
+          overallRiskLevel: 'low' as const,
+          averageAge: undefined,
+          genderDistribution: undefined,
+          malePercentage: 0,
+          femalePercentage: 0
+        },
+        generalStats: {
+          total: 0, attendance: 100, cancellation: 0, pending: 0, present: 0,
+          completed: 0, cancelled: 0, pendingCount: 0, presentCount: 0,
+          period: "Actual", allStatusCounts: {}
+        }
       };
     }
 
-    // Convertir a formato para el hook centralizador
+    // Convertir a formato para el gráfico
     const statusChartData = Array.from(herniaCounts.entries())
       .map(([name, value]) => ({
         name: name.charAt(0).toUpperCase() + name.slice(1),
@@ -172,13 +178,15 @@ const DiagnosisTypeDistribution: FC<Props> = ({
       }))
       .sort((a, b) => b.value - a.value);
 
-    // Calcular nivel de riesgo general
+    // Calcular nivel de riesgo general de manera optimizada
     const riskScores = { low: 1, medium: 2, high: 3 };
-    const weightedRiskSum = Array.from(herniaCounts.entries()).reduce((sum, [name, count]) => {
+    let weightedRiskSum = 0;
+    herniaCounts.forEach((count, name) => {
       const details = HERNIA_TYPE_DETAILS[name] || HERNIA_TYPE_DETAILS['hernia (otro tipo)'];
-      return sum + riskScores[details.riskLevel] * count;
-    }, 0);
-    const averageRiskScore = totalHerniaCases > 0 ? weightedRiskSum / totalHerniaCases : 1;
+      weightedRiskSum += riskScores[details.riskLevel] * count;
+    });
+    
+    const averageRiskScore = weightedRiskSum / totalHerniaCases;
     const overallRisk: 'low' | 'medium' | 'high' = 
       averageRiskScore < 1.7 ? 'low' : averageRiskScore < 2.5 ? 'medium' : 'high';
 
@@ -186,114 +194,85 @@ const DiagnosisTypeDistribution: FC<Props> = ({
       totalHernias: totalHerniaCases,
       mostCommonType: statusChartData[0]?.name || 'N/A',
       overallRiskLevel: overallRisk,
-      averageAge,
-      genderDistribution: (genderStats.male + genderStats.female > 0) ? {
-        malePercentage: Math.round((genderStats.male / (genderStats.male + genderStats.female)) * 100),
-        femalePercentage: Math.round((genderStats.female / (genderStats.male + genderStats.female)) * 100),
+      averageAge: patientsWithAge > 0 ? Math.round(totalAgeSum / patientsWithAge) : undefined,
+      genderDistribution: (maleHerniaCount + femaleHerniaCount > 0) ? {
+        malePercentage: Math.round((maleHerniaCount / (maleHerniaCount + femaleHerniaCount)) * 100),
+        femalePercentage: Math.round((femaleHerniaCount / (maleHerniaCount + femaleHerniaCount)) * 100),
       } : undefined,
     };
 
-    return { chartData: statusChartData, herniaStats: stats };
+    const generalStatsData: GeneralStats = {
+      total: totalHerniaCases,
+      attendance: 100,
+      cancellation: 0,
+      pending: 0,
+      present: 0,
+      completed: totalHerniaCases,
+      cancelled: 0,
+      pendingCount: 0,
+      presentCount: 0,
+      period: "Actual",
+      allStatusCounts: {
+        PROGRAMADA: 0,
+        CONFIRMADA: 0,
+        CANCELADA: 0,
+        COMPLETADA: totalHerniaCases,
+        "NO ASISTIO": 0,
+        PRESENTE: 0,
+        REAGENDADA: 0
+      }
+    };
+
+    return { chartData: statusChartData, herniaStats: stats, generalStats: generalStatsData };
   }, [patients]);
 
-  const handleCellClick = useCallback((payload: any) => {
-    if (!payload || typeof payload.name !== 'string') return;
-    setSelectedTypeName(prev => (prev === payload.name ? null : payload.name));
-  }, []);
-
-  // Estado de carga
-  if (isLoading && !chartData.length) {
-    return <LoadingSpinner />;
+  // Estado vacío
+  if (isLoading) {
+    return (
+      <Card className={cn('shadow-md', className)}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Info className="h-5 w-5 text-muted-foreground" />
+            Distribución de Tipos de Hernia
+          </CardTitle>
+          <CardDescription>
+            Cargando datos de diagnósticos...
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="h-[260px] flex items-center justify-center">
+          <LoadingSpinner className="[&_svg]:h-10 [&_svg]:w-10" />
+        </CardContent>
+      </Card>
+    );
   }
 
-  // Estado vacío
   if (!chartData.length) {
     return (
       <Card className={cn('shadow-md', className)}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
-            <Activity className="h-5 w-5 text-primary" />
-            Distribución de Hernias
+            <Info className="h-5 w-5 text-muted-foreground" />
+            Distribución de Tipos de Hernia
           </CardTitle>
-          <CardDescription className="text-sm">
-            No se encontraron casos de hernia en los datos proporcionados.
+          <CardDescription>
+            No se han encontrado datos de diagnósticos de hernias
           </CardDescription>
         </CardHeader>
-        <CardContent className="h-[320px] flex flex-col items-center justify-center text-center">
-          <Activity className="h-10 w-10 text-muted-foreground mb-3 opacity-50" />
-          <p className="font-medium text-muted-foreground">Sin Datos de Hernias</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Verifique los datos de pacientes o los filtros aplicados.
+        <CardContent className="h-[260px] flex items-center justify-center">
+          <p className="text-center text-muted-foreground">
+            No hay suficientes datos para mostrar la distribución de tipos de hernias.
+            <br />Por favor, añada pacientes con diagnósticos relacionados con hernias.
           </p>
         </CardContent>
       </Card>
     );
   }
 
-  // Generar estadísticas mock para el hook
-  const generalStats: GeneralStats = {
-    total: herniaStats.totalHernias,
-    attendance: 100,
-    cancellation: 0,
-    pending: 0,
-    present: 0,
-    completed: herniaStats.totalHernias,
-    cancelled: 0,
-    pendingCount: 0,
-    presentCount: 0,
-    period: "Actual",
-    allStatusCounts: {}
-  };
-
-  const renderDetailedInfo = () => {
-    if (!selectedTypeName) return null;
-    const selectedData = chartData.find(d => d.name === selectedTypeName);
-    if (!selectedData) return null;
-
-    const originalName = selectedData.name.toLowerCase();
-    const details = HERNIA_TYPE_DETAILS[originalName] || HERNIA_TYPE_DETAILS['hernia (otro tipo)'];
-
-    const detailItems: { label: string; value: string | number; color?: string; }[] = [
-      { label: 'Casos', value: selectedData.value },
-      { label: '% del Total', value: `${selectedData.percentage}%` },
-      { label: 'Riesgo', value: details.riskLevel === 'low' ? 'Bajo' : details.riskLevel === 'medium' ? 'Medio' : 'Alto', 
-        color: details.riskLevel === 'low' ? "text-green-600" : details.riskLevel === 'medium' ? "text-yellow-600" : "text-red-600" },
-    ];
-
-    return (
-      <div className="mt-4 p-3 bg-muted/30 rounded-lg border animate-in slide-in-from-top-2 fade-in duration-200">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="font-semibold capitalize">{selectedData.name}</h4>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-          {detailItems.map(item => (
-            <div key={item.label} className="p-1.5 rounded-md bg-background border text-center">
-              <div className="text-muted-foreground mb-0.5 text-[10px] sm:text-xs">{item.label}</div>
-              <div className={cn("font-semibold text-sm sm:text-base", item.color)}>
-                {item.value}
-              </div>
-            </div>
-          ))}
-        </div>
-        {details.description && (
-          <div className="mt-2 pt-2 border-t border-border/50">
-            <div className="flex items-start gap-1.5 text-blue-700 dark:text-blue-300">
-              <Info size={14} className="mt-0.5 shrink-0" />
-              <p className="text-xs">{details.description}</p>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const footerStats: {icon: LucideIcon, label: string, value: string | number}[] = [
     {
       icon: Users, 
       label: "Más Común:", 
-      value: herniaStats.mostCommonType ? 
-        herniaStats.mostCommonType.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 
-        'N/A'
+      value: herniaStats.mostCommonType
     },
     ...(herniaStats.averageAge ? [{
       icon: Activity, 
@@ -328,16 +307,14 @@ const DiagnosisTypeDistribution: FC<Props> = ({
         
         {/* Badges de tipos principales */}
         <div className="flex flex-wrap gap-1.5 mb-3 justify-center">
-          {chartData.slice(0, 5).map((item, index) => (
+          {chartData.slice(0, 5).map((item) => (
             <Badge
               key={item.name}
-              variant={selectedTypeName === item.name ? "default" : "outline"}
+              variant="outline"
               className={cn(
-                "px-2 py-1 text-[10px] sm:text-xs font-medium border-l-2 cursor-pointer transition-all hover:scale-105", 
-                selectedTypeName === item.name && "shadow-md"
+                "px-2 py-1 text-[10px] sm:text-xs font-medium border-l-2"
               )}
               style={{ borderLeftColor: item.color }}
-              onClick={() => handleCellClick(item)}
             >
               <span className="capitalize">{item.name}</span>
               <span className="font-semibold ml-1.5">({item.percentage}%)</span>
@@ -346,11 +323,10 @@ const DiagnosisTypeDistribution: FC<Props> = ({
         </div>
 
         {/* Gráfico usando el hook centralizador */}
-        <div className={cn("h-[280px] sm:h-[320px] transition-opacity duration-300", isLoading ? "opacity-60" : "opacity-100")}>
+        <div className="h-[280px] sm:h-[320px]">
           {renderPieChart(chartData, generalStats, false)}
         </div>
 
-        {renderDetailedInfo()}
       </CardContent>
 
       {showStats && (
@@ -368,6 +344,8 @@ const DiagnosisTypeDistribution: FC<Props> = ({
       )}
     </Card>
   );
-};
+});
 
-export default memo(DiagnosisTypeDistribution);
+DiagnosisTypeDistribution.displayName = 'DiagnosisTypeDistribution';
+
+export default DiagnosisTypeDistribution;

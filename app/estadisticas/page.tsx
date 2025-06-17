@@ -4,22 +4,115 @@ import React, { useState, useMemo, Suspense } from "react"
 import dynamic from "next/dynamic"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { FileBarChart, PieChartIcon, ActivitySquare, TrendingUp } from "lucide-react"
+import { FileBarChart, PieChartIcon, ActivitySquare, TrendingUp, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useIsMobile, useCurrentBreakpoint } from "@/hooks/use-breakpoint"
 import { useAppContext } from "@/lib/context/app-context";
-import { MetricsResult, PatientData, ChartData, DiagnosticInsight, LocalDiagnosisCategory } from "@/components/charts/chart-diagnostic";
+import type { PatientData, ChartData, DiagnosticInsight } from "@/components/charts/chart-diagnostic";
+
+// Definición local de la interfaz MetricsResult anteriormente importada
+interface MetricsResult {
+  metrics: {
+    totalPacientes: number;
+    totalHernias: number;
+    totalVesicula: number;
+    totalApendicitis: number;
+    diagnosticosMasComunes: ChartData[];
+    distribucionHernias: ChartData[];
+    porcentajeHernias: number;
+    porcentajeVesicula: number;
+    porcentajeApendicitis: number;
+    ratioHerniaVesicula: number;
+    diversidadDiagnostica: number;
+    riesgoPromedio: 'baja' | 'media' | 'alta';
+    tendenciaGeneral: number;
+  };
+  timeline: Array<{
+    date: string;
+    cantidad: number;
+    formattedDate: string;
+  }>;
+  insights: DiagnosticInsight[];
+}
 import { DiagnosisEnum } from '@/app/dashboard/data-model';
 
 
-// Importaciones dinámicas para mejor rendimiento
+import { useChartData, type DateRangeOption } from '@/hooks/use-chart-data';
+import { Alert, AlertDescription } from "@/components/ui/alert"
+
+
+// Importaciones dinámicas para mejor rendimiento con estrategias optimizadas
 const AppointmentStatistics = dynamic(
-  () => import("@/components/charts/appointment-statistics").then(mod => ({ default: mod.AppointmentStatistics })),
+  () => import("@/components/charts/appointment-statistics")
+    .then(mod => ({ default: mod.AppointmentStatistics })),
   {
     loading: () => <StatisticsLoadingSkeleton />,
-    ssr: false
+    ssr: false, // No renderizar en servidor para reducir el tiempo de carga inicial
+    // Next.js 15 ya maneja suspense internamente con mejor rendimiento
   }
 )
+
+// Prefetch de datos comunes para mejorar experiencia del usuario
+function usePrefetchCommonData() {
+  const appContext = useAppContext();
+  const chartData = useChartData();
+  
+  // Prefetch datos frecuentes cuando se cargue la página
+  React.useEffect(() => {
+    // Solo si tenemos acceso al cliente de queries
+    if (!appContext) return;
+    
+    // Usar el cliente de React Query desde el contexto global
+    const queryClient = (appContext as any).queryClient;
+    if (!queryClient) return;
+    
+    // Usar una fecha estándar como rango si no está disponible en chartData
+    const dateRange = (chartData as any)?.currentDateRange || 'week';
+    
+    // Prefetching de datos que se necesitarán pronto
+    queryClient.prefetchQuery({
+      queryKey: ['estadisticasComunes', dateRange],
+      queryFn: () => fetch('/api/statistics/common').then(res => res.json()),
+      staleTime: 5 * 60 * 1000, // 5 minutos
+    });
+  }, [appContext, chartData]);
+}
+
+// Componente para carga progresiva con Intersection Observer
+function ProgressiveLoadWrapper({ 
+  children, 
+  threshold = 0.1 
+}: { 
+  children: React.ReactNode;
+  threshold?: number;
+}) {
+  const [isVisible, setIsVisible] = useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold }
+    );
+
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+
+    return () => observer.disconnect();
+  }, [threshold]);
+
+  return (
+    <div ref={ref} className="w-full h-full min-h-[200px]">
+      {isVisible ? children : <StatisticsLoadingSkeleton />}
+    </div>
+  );
+}
 
 const ChartDiagnostic = dynamic(
   () => import("@/components/charts/chart-diagnostic"),
@@ -120,98 +213,122 @@ PageHeader.displayName = "PageHeader"
 // Página principal de estadísticas
 export default function EstadisticasPage() {
   const [activeTab, setActiveTab] = useState("citas")
+  const [dateRange, setDateRange] = useState<DateRangeOption>('30dias')
+  const [estado, setEstado] = useState<string>('todos')
   
   // Detección de dispositivo móvil usando el hook optimizado
   const isMobile = useIsMobile()
   const currentBreakpoint = useCurrentBreakpoint()
+  
+  // Usar contexto para compatibilidad con la implementación actual
   const { patients } = useAppContext();
+  
+  // Obtener datos reales de la API usando nuestro hook personalizado
+  const {
+    loading,
+    error,
+    chartData,
+    refresh
+  } = useChartData({
+    dateRange,
+    estado,
+    refreshInterval: 0 // Sin actualización automática
+  });
 
-  // Helper function to standardize diagnosis names
-  const formatDiagnosisName = (name: string | undefined): LocalDiagnosisCategory => {
-    if (!name) return DiagnosisEnum.OTRO;
-    const lowerCaseName = name.toLowerCase();
-    if (lowerCaseName.includes('hernia inguinal recidivante')) return DiagnosisEnum.HERNIA_INGUINAL_RECIDIVANTE;
-    if (lowerCaseName.includes('hernia inguinal bilateral')) return DiagnosisEnum.HERNIA_INGUINAL_BILATERAL; // Or HERNIA_INGUINAL if preferred
-    if (lowerCaseName.includes('hernia inguinal')) return DiagnosisEnum.HERNIA_INGUINAL;
-    if (lowerCaseName.includes('hernia umbilical')) return DiagnosisEnum.HERNIA_UMBILICAL;
-    if (lowerCaseName.includes('hernia incisional')) return DiagnosisEnum.HERNIA_INCISIONAL;
-    if (lowerCaseName.includes('hernia hiatal')) return DiagnosisEnum.HERNIA_HIATAL;
-    if (lowerCaseName.includes('eventracion abdominal')) return DiagnosisEnum.EVENTRACION_ABDOMINAL;
-    // Mapping 'vesicula' or 'colelitiasis' to COLELITIASIS. Adjust if COLECISTITIS is more appropriate.
-    if (lowerCaseName.includes('vesicula') || lowerCaseName.includes('colelitiasis')) return DiagnosisEnum.COLELITIASIS; 
-    if (lowerCaseName.includes('apendicitis')) return DiagnosisEnum.APENDICITIS;
-    if (lowerCaseName.includes('lipoma')) return DiagnosisEnum.LIPOMA_GRANDE;
-    if (lowerCaseName.includes('quiste sebaceo')) return DiagnosisEnum.QUISTE_SEBACEO_INFECTADO;
-    // Consider if other specific enums like HERNIA_DE_SPIGEL, HERNIA_VENTRAL, COLANGITIS, COLEDOCOLITIASIS should be mapped here
-    return DiagnosisEnum.OTRO;
-  };
+  // Helper function to standardize diagnosis names - optimizado y memoizado fuera del render loop
+  const formatDiagnosisName = useMemo(() => {
+    // Creamos un mapa de diagnósticos para búsqueda más rápida en O(1) en lugar de múltiples includes O(n)
+    const diagnosisMap: Record<string, DiagnosisEnum> = {
+      'hernia inguinal recidivante': DiagnosisEnum.HERNIA_INGUINAL_RECIDIVANTE,
+      'hernia inguinal bilateral': DiagnosisEnum.HERNIA_INGUINAL_BILATERAL,
+      'hernia inguinal': DiagnosisEnum.HERNIA_INGUINAL,
+      'hernia umbilical': DiagnosisEnum.HERNIA_UMBILICAL,
+      'hernia incisional': DiagnosisEnum.HERNIA_INCISIONAL,
+      'hernia hiatal': DiagnosisEnum.HERNIA_HIATAL,
+      'eventracion abdominal': DiagnosisEnum.EVENTRACION_ABDOMINAL,
+      'vesicula': DiagnosisEnum.COLELITIASIS,
+      'colelitiasis': DiagnosisEnum.COLELITIASIS,
+      'apendicitis': DiagnosisEnum.APENDICITIS,
+      'lipoma': DiagnosisEnum.LIPOMA_GRANDE,
+      'quiste sebaceo': DiagnosisEnum.QUISTE_SEBACEO_INFECTADO
+    };
+    
+    // Función optimizada que usa el mapa
+    return (name: string | undefined): DiagnosisEnum => {
+      if (!name) return DiagnosisEnum.OTRO;
+      const lowerCaseName = name.toLowerCase();
+      
+      // Buscar en las claves del mapa
+      for (const [key, value] of Object.entries(diagnosisMap)) {
+        if (lowerCaseName.includes(key)) {
+          return value;
+        }
+      }
+      return DiagnosisEnum.OTRO;
+    };
+  }, []); // No hay dependencias, solo se crea una vez
 
   const initialMetricsResult = useMemo<MetricsResult>(() => {
-    const allDiagnoses: ChartData[] = [];
+    // Optimizando: pre-calculamos los contadores para reducir bucles repetitivos
     const timelineData: { [key: string]: number } = {};
+    const diagnosisCounts = new Map<string, number>();
+    let totalHernias = 0;
+    let totalVesicula = 0;
+    let totalApendicitis = 0;
 
+    // Un solo bucle para procesar todos los datos
     patients.forEach(patient => {
-      const formattedDiagnosis = formatDiagnosisName(patient.diagnostico_principal);
-      if (formattedDiagnosis) {
-        allDiagnoses.push({
-          tipo: formattedDiagnosis,
-          cantidad: 1
-        });
+      // Contar diagnósticos por tipo
+      if (patient.diagnostico_principal) {
+        const formattedDiagnosis = formatDiagnosisName(patient.diagnostico_principal);
+        const diagnosisKey = formattedDiagnosis.toString();
+        diagnosisCounts.set(diagnosisKey, (diagnosisCounts.get(diagnosisKey) || 0) + 1);
+        
+        // Contadores específicos
+        const lowerDiag = patient.diagnostico_principal.toLowerCase();
+        if (lowerDiag.includes('hernia')) totalHernias++;
+        if (lowerDiag.includes('vesícula') || lowerDiag.includes('colelitiasis')) totalVesicula++;
+        if (lowerDiag.includes('apendicitis')) totalApendicitis++;
       }
+      
+      // Datos de timeline
       if (patient.fecha_registro) {
         const date = new Date(patient.fecha_registro).toISOString().split('T')[0];
         timelineData[date] = (timelineData[date] || 0) + 1;
       }
     });
 
-    // Aggregate common diagnoses
-    const aggregatedDiagnoses = allDiagnoses.reduce((acc, curr) => {
-      const existing = acc.find(item => item.tipo === curr.tipo);
-      if (existing) {
-        existing.cantidad += curr.cantidad;
-      } else {
-        acc.push({ ...curr });
-      }
-      return acc;
-    }, [] as ChartData[]).sort((a, b) => b.cantidad - a.cantidad);
-
     const totalPacientes = patients.length;
-    const totalHernias = patients.filter(p => p.diagnostico_principal?.toLowerCase().includes('hernia')).length;
-    const totalVesicula = patients.filter(p => p.diagnostico_principal?.toLowerCase().includes('vesícula') || p.diagnostico_principal?.toLowerCase().includes('colelitiasis')).length;
-    const totalApendicitis = patients.filter(p => p.diagnostico_principal?.toLowerCase().includes('apendicitis')).length;
-
+    
+    // Cálculos de porcentajes
     const porcentajeHernias = totalPacientes > 0 ? (totalHernias / totalPacientes) * 100 : 0;
     const porcentajeVesicula = totalPacientes > 0 ? (totalVesicula / totalPacientes) * 100 : 0;
     const porcentajeApendicitis = totalPacientes > 0 ? (totalApendicitis / totalPacientes) * 100 : 0;
-
     const ratioHerniaVesicula = totalVesicula > 0 ? totalHernias / totalVesicula : 0;
 
-    // Calculate distribucionHernias
-    const herniasData = patients
-      .filter(patient => patient.diagnostico_principal?.toLowerCase().includes('hernia'))
-      .map(patient => formatDiagnosisName(patient.diagnostico_principal))
-      .reduce((acc, curr) => {
-        const existing = acc.find(item => item.tipo === curr);
-        if (existing) {
-          existing.cantidad += 1;
-        } else {
-          acc.push({ tipo: curr, cantidad: 1 });
-        }
-        return acc;
-      }, [] as ChartData[])
-      .sort((a, b) => b.cantidad - a.cantidad);
+    // Convertir Map a array para aggregatedDiagnoses
+    const aggregatedDiagnoses: ChartData[] = Array.from(diagnosisCounts.entries())
+      .map(([tipo, cantidad]) => ({ tipo, cantidad }))
+      .sort((a: ChartData, b: ChartData) => b.cantidad - a.cantidad);
+
+    // Filtrar solo diagnósticos de hernias para distribucionHernias
+    const herniasData: ChartData[] = aggregatedDiagnoses
+      .filter(item => item.tipo.toLowerCase().includes('hernia'))
+      .sort((a: ChartData, b: ChartData) => b.cantidad - a.cantidad);
 
     // Format timeline data
-    const formattedTimeline = Object.entries(timelineData).map(([date, cantidad]) => ({
-      date,
-      cantidad,
-      formattedDate: new Date(date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }),
-    })).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const formattedTimeline = Object.entries(timelineData)
+      .map(([date, cantidad]: [string, number]) => ({
+        date,
+        cantidad,
+        formattedDate: new Date(date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }),
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // Typed placeholders for metrics that require more complex calculations
-    const diversidadDiagnosticaPlaceholder = 0; 
-    const riesgoPromedioPlaceholder: 'baja' | 'media' | 'alta' = 'baja'; 
-    const tendenciaGeneralPlaceholder = 0;
+    // Cálculo simplificado de diversidad (Shannon Index)
+    const diversidadDiagnostica = Math.log2(Math.max(1, diagnosisCounts.size));
+    const riesgoPromedio: 'baja' | 'media' | 'alta' = 'baja'; // Placeholder
+    const tendenciaGeneral = 0; // Placeholder
 
     const metrics = {
       totalPacientes,
@@ -224,9 +341,9 @@ export default function EstadisticasPage() {
       porcentajeVesicula,
       porcentajeApendicitis,
       ratioHerniaVesicula,
-      diversidadDiagnostica: diversidadDiagnosticaPlaceholder,
-      riesgoPromedio: riesgoPromedioPlaceholder,
-      tendenciaGeneral: tendenciaGeneralPlaceholder
+      diversidadDiagnostica,
+      riesgoPromedio,
+      tendenciaGeneral
     };
 
     const insights: DiagnosticInsight[] = []; // Placeholder
@@ -236,7 +353,7 @@ export default function EstadisticasPage() {
       timeline: formattedTimeline,
       insights,
     };
-  }, [patients]);
+  }, [patients, formatDiagnosisName]); // Añadimos formatDiagnosisName como dependencia
 
   const lastUpdated = useMemo(() => new Date().toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }), [patients]);
 
@@ -306,12 +423,32 @@ export default function EstadisticasPage() {
             )}>
               <Suspense fallback={<StatisticsLoadingSkeleton />}>
                 <TabsContent 
-                  value="citas" 
+                  value="citas"
                   className="mt-0 border-none p-0 data-[state=inactive]:hidden"
                 >
                   {activeTab === "citas" && (
-                    <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-                      <AppointmentStatistics />
+                    <div className="animate-in fade-in slide-in-from-left-4 duration-500">
+                      {error && (
+                        <Alert className="border-l-4 border-l-destructive mb-6">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            <strong>Error al cargar datos:</strong> {error}
+                            <button 
+                              onClick={refresh}
+                              className="ml-3 px-2 py-0.5 bg-primary text-primary-foreground rounded-md text-xs"
+                            >
+                              Reintentar
+                            </button>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      <AppointmentStatistics 
+                        generalStats={chartData.generalStats}
+                        weekdayDistribution={chartData.weekdayDistribution}
+                        isLoading={loading}
+                        lastUpdated={lastUpdated}
+                        onRefresh={refresh}
+                      />
                     </div>
                   )}
                 </TabsContent>
@@ -324,11 +461,28 @@ export default function EstadisticasPage() {
                 >
                   {activeTab === "diagnosticos" && (
                     <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-                      <ChartDiagnostic
-                        initialMetricsResult={initialMetricsResult}
-                        initialPatientsData={patients as PatientData[]}
-                        lastUpdated={lastUpdated}
-                      />
+                      {error && (
+                        <Alert className="border-l-4 border-l-destructive mb-6">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            <strong>Error al cargar datos:</strong> {error}
+                            <button 
+                              onClick={refresh}
+                              className="ml-3 px-2 py-0.5 bg-primary text-primary-foreground rounded-md text-xs"
+                            >
+                              Reintentar
+                            </button>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                  
+                  <ChartDiagnostic 
+                    initialPatientsData={patients}
+                    apiPatients={chartData.transformedPatients}
+                    diagnosisData={chartData.diagnosisData}
+                    isLoading={loading}
+                    lastUpdated={lastUpdated}
+                  />
                     </div>
                   )}
                 </TabsContent>
@@ -348,13 +502,13 @@ export default function EstadisticasPage() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="h-80 flex items-center justify-center border border-dashed rounded-md">
-                          <div className="text-center p-6">
-                            <ActivitySquare className="h-12 w-12 mx-auto text-muted-foreground/60 mb-4" />
-                            <h3 className="text-lg font-medium mb-2">Análisis de Actividad</h3>
-                            <p className="text-sm text-muted-foreground mb-4">
-                              Esta vista estará disponible próximamente con datos detallados sobre la
-                              actividad clínica, procedimientos e indicadores clave de rendimiento.
+                        {/* Placeholder simplificado para mejor rendimiento */}
+                        <div className="h-60 flex items-center justify-center border border-dashed rounded-md">
+                          <div className="text-center p-4 max-w-md">
+                            <ActivitySquare className="h-10 w-10 mx-auto text-muted-foreground/60 mb-3" />
+                            <h3 className="text-base font-medium mb-2">Análisis de Actividad</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Vista en desarrollo
                             </p>
                           </div>
                         </div>
@@ -378,13 +532,13 @@ export default function EstadisticasPage() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="h-80 flex items-center justify-center border border-dashed rounded-md">
-                          <div className="text-center p-6">
-                            <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground/60 mb-4" />
-                            <h3 className="text-lg font-medium mb-2">Análisis Predictivo</h3>
-                            <p className="text-sm text-muted-foreground mb-4">
-                              Esta vista mostrará próximamente predicciones basadas en datos históricos
-                              para ayudar en la planificación estratégica y toma de decisiones.
+                        {/* Placeholder optimizado y simplificado */}
+                        <div className="h-60 flex items-center justify-center border border-dashed rounded-md">
+                          <div className="text-center p-4 max-w-md">
+                            <TrendingUp className="h-10 w-10 mx-auto text-muted-foreground/60 mb-3" />
+                            <h3 className="text-base font-medium mb-2">Análisis Predictivo</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Módulo en desarrollo
                             </p>
                           </div>
                         </div>

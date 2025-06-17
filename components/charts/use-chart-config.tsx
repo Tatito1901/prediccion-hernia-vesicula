@@ -50,7 +50,7 @@ export interface ChartOptions {
   colorScheme?: 'medical' | 'diagnosis' | 'patients' | 'trends' | 'comparison'
   innerRadius?: number
   outerRadius?: number
-  responsive?: boolean // Nueva opción para responsividad
+  responsive?: boolean
 }
 
 // TIPOS UNIFICADOS PARA TODOS LOS COMPONENTES
@@ -76,7 +76,7 @@ export interface DiagnosisData {
   tipo: string
   cantidad: number
   porcentaje?: number
-  percentage?: number // Alias in English for uniform typing across components
+  percentage?: number
   tendencia?: number
   descripcion?: string
   color?: string
@@ -158,7 +158,6 @@ export interface StatCardProps {
   size?: 'sm' | 'md' | 'lg'
 }
 
-// Nuevos tipos para responsividad
 export interface ResponsiveConfig {
   breakpoints: {
     mobile: number
@@ -185,8 +184,8 @@ export const MAIN_DIAGNOSES = [
   'Consulta General', 'Revisión Postoperatoria', 'Apendicitis'
 ] as const
 
-// Cache para funciones pesadas (nuevo)
-const utilsCache = new Map<string, any>()
+// Cache global para funciones pesadas
+const globalUtilsCache = new Map<string, any>()
 
 // Función unificada y optimizada para formateo de fechas
 export const formatDateUtil = (
@@ -195,8 +194,9 @@ export const formatDateUtil = (
 ): string => {
   if (!date) return "Fecha no definida"
   
-  const cacheKey = `${date}-${formatStr}`
-  if (utilsCache.has(cacheKey)) return utilsCache.get(cacheKey)
+  const cacheKey = `date-${date}-${formatStr}`
+  const cached = globalUtilsCache.get(cacheKey)
+  if (cached) return cached
   
   try {
     const dateObj = typeof date === "string" ? parseISO(date) : date
@@ -204,13 +204,13 @@ export const formatDateUtil = (
       const fallbackDateObj = new Date(date as string)
       if (isValid(fallbackDateObj)) {
         const result = format(fallbackDateObj, formatStr, { locale: es })
-        utilsCache.set(cacheKey, result)
+        globalUtilsCache.set(cacheKey, result)
         return result
       }
       return "Fecha inválida"
     }
     const result = format(dateObj, formatStr, { locale: es })
-    utilsCache.set(cacheKey, result)
+    globalUtilsCache.set(cacheKey, result)
     return result
   } catch {
     return "Error de formato"
@@ -229,11 +229,12 @@ export const titleCaseStatus = (status: string): string => {
 // Función unificada para abreviar texto con cache
 export const ABBR = (s: string, n = 16) => {
   if (s.length <= n) return s
-  const cacheKey = `${s}-${n}`
-  if (utilsCache.has(cacheKey)) return utilsCache.get(cacheKey)
+  const cacheKey = `abbr-${s}-${n}`
+  const cached = globalUtilsCache.get(cacheKey)
+  if (cached) return cached
   
   const result = `${s.slice(0, n - 1)}…`
-  utilsCache.set(cacheKey, result)
+  globalUtilsCache.set(cacheKey, result)
   return result
 }
 
@@ -241,7 +242,8 @@ export const ABBR = (s: string, n = 16) => {
 export const hourToDecimal = (timeStr: string | undefined): number | null => {
   if (!timeStr || typeof timeStr !== "string") return null
   
-  if (utilsCache.has(timeStr)) return utilsCache.get(timeStr)
+  const cached = globalUtilsCache.get(`hour-${timeStr}`)
+  if (cached !== undefined) return cached
   
   const match = timeStr.match(/^(\d{1,2}):(\d{2})$/)
   if (!match) return null
@@ -250,7 +252,7 @@ export const hourToDecimal = (timeStr: string | undefined): number | null => {
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
   
   const result = hours + minutes / 60
-  utilsCache.set(timeStr, result)
+  globalUtilsCache.set(`hour-${timeStr}`, result)
   return result
 }
 
@@ -258,24 +260,26 @@ export const hourToDecimal = (timeStr: string | undefined): number | null => {
 export const categorizeMainDiagnosis = (diagnosis?: string): string => {
   if (!diagnosis) return 'Otro'
   
-  if (utilsCache.has(diagnosis)) return utilsCache.get(diagnosis)
+  const cached = globalUtilsCache.get(`cat-${diagnosis}`)
+  if (cached) return cached
   
   const lower = diagnosis.toLowerCase()
   
   for (const mainDiag of MAIN_DIAGNOSES) {
     if (lower.includes(mainDiag.toLowerCase())) {
-      utilsCache.set(diagnosis, mainDiag)
+      globalUtilsCache.set(`cat-${diagnosis}`, mainDiag)
       return mainDiag
     }
   }
   
-  utilsCache.set(diagnosis, 'Otro')
+  globalUtilsCache.set(`cat-${diagnosis}`, 'Otro')
   return 'Otro'
 }
 
 // Función unificada para obtener categoría médica con color
 export const getMedicalCategory = (tipo: string): { categoria: string; color: number } => {
-  if (utilsCache.has(tipo)) return utilsCache.get(tipo)
+  const cached = globalUtilsCache.get(`medcat-${tipo}`)
+  if (cached) return cached
   
   const lower = tipo.toLowerCase()
   
@@ -288,7 +292,7 @@ export const getMedicalCategory = (tipo: string): { categoria: string; color: nu
   else if (lower.includes("apendicitis")) result = { categoria: 'Cirugía General', color: 1 }
   else result = { categoria: 'Medicina General', color: 4 }
   
-  utilsCache.set(tipo, result)
+  globalUtilsCache.set(`medcat-${tipo}`, result)
   return result
 }
 
@@ -317,25 +321,20 @@ export const processPatientData = (patients: PatientData[]): {
   let maleCount = 0
   let femaleCount = 0
 
-  // Usar for loop para mejor performance
   for (let i = 0; i < patients.length; i++) {
     const p = patients[i]
     
-    // Diagnóstico
     const diagnosis = p.diagnostico_principal || p.diagnostico || p.motivoConsulta || 'Sin diagnóstico'
     diagnosisCounts.set(diagnosis, (diagnosisCounts.get(diagnosis) || 0) + 1)
     
-    // Categoría médica
     const { categoria } = getMedicalCategory(diagnosis)
     medicalCategories.set(categoria, (medicalCategories.get(categoria) || 0) + 1)
     
-    // Estadísticas de edad
     if (p.edad != null) {
       totalAge += p.edad
       ageCount++
     }
     
-    // Estadísticas de género
     if (p.genero === 'M') maleCount++
     else if (p.genero === 'F') femaleCount++
   }
@@ -363,7 +362,6 @@ export const useResponsiveBreakpoint = () => {
 
     updateBreakpoint()
     
-    // Throttle resize events
     let timeoutId: NodeJS.Timeout
     const throttledUpdate = () => {
       clearTimeout(timeoutId)
@@ -585,8 +583,6 @@ const UniversalTooltip = memo<TooltipProps<number, string> & {
 
   const data = payload[0].payload
   const isPrediction = data?.periodKey?.startsWith?.('pred-') || false
-
-  // Ajustar tamaño según dispositivo
   const tooltipSize = responsive && breakpoint === 'mobile' ? 'compact' : 'full'
 
   return (
@@ -654,8 +650,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
   }), [options])
 
   const chartRef = useRef<HTMLDivElement>(null)
-  const observerRef = useRef<IntersectionObserver | null>(null)
-  const [isVisible, setIsVisible] = useState(false)
+  const [isVisible, setIsVisible] = useState(true) // Simplificado, asume visible por defecto
   const isDark = isDarkTheme()
   const breakpoint = useResponsiveBreakpoint()
 
@@ -672,32 +667,6 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
       }
     }
   }, [chartOptions.responsive, chartOptions.showLegend])
-
-  useEffect(() => {
-    if (!observerRef.current) {
-      observerRef.current = new IntersectionObserver(
-        ([entry]) => {
-          if (entry.isIntersecting) {
-            setIsVisible(true)
-          }
-        },
-        { threshold: 0.1 }
-      )
-    }
-
-    const currentRef = chartRef.current
-    const observer = observerRef.current
-
-    if (currentRef && observer) {
-      observer.observe(currentRef)
-    }
-
-    return () => {
-      if (currentRef && observer) {
-        observer.unobserve(currentRef)
-      }
-    }
-  }, [])
 
   /* ============================================================================
    * RENDERIZADORES DE GRÁFICOS ULTRA-OPTIMIZADOS
@@ -1153,13 +1122,9 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
   // Cleanup optimizado
   useEffect(() => {
     return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect()
-        observerRef.current = null
-      }
-      // Limpiar cache cuando el componente se desmonta
-      if (utilsCache.size > 100) {
-        utilsCache.clear()
+      // Limpiar cache cuando el componente se desmonta si crece demasiado
+      if (globalUtilsCache.size > 1000) {
+        globalUtilsCache.clear()
       }
     }
   }, [])

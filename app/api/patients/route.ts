@@ -2,6 +2,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server'; // O tu ruta al cliente Supabase del lado del servidor
 
+// Configuración de cache para las rutas GET de la API
+const cacheConfig = {
+  // Tiempo de validez de la caché del navegador (60 segundos)
+  'Cache-Control': 'max-age=60, s-maxage=60, stale-while-revalidate=300',
+};
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { searchParams } = new URL(request.url);
@@ -47,7 +53,7 @@ export async function GET(request: Request) {
       console.error('Supabase error fetching patients:', error);
       throw error;
     }
-    return NextResponse.json(patients);
+    return NextResponse.json(patients, { headers: cacheConfig });
   } catch (error: any) {
     return NextResponse.json({ message: 'Error al obtener pacientes', error: error.message }, { status: 500 });
   }

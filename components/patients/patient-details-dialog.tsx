@@ -1,8 +1,15 @@
 "use client"
 
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
+import { 
+  Drawer, 
+  DrawerContent, 
+  DrawerHeader, 
+  DrawerTitle, 
+  DrawerDescription, 
+  DrawerFooter, 
+  DrawerClose 
+} from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AppointmentHistory } from "@/components/patient-admision/appointment-history";
@@ -25,7 +32,8 @@ import {
   Clock, 
   Stethoscope, 
   FileText, 
-  CircleUser
+  CircleUser,
+  X
 } from "lucide-react";
 
 interface PatientDetailsDialogProps {
@@ -55,6 +63,14 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
   const isMobile = useMediaQuery("(max-width: 639px)");
   const drawerDirection = isDesktop ? "right" : "bottom";
 
+  // Estilos del contenedor según dirección
+  const contentClasses = cn(
+    "flex flex-col bg-background shadow-lg",
+    isDesktop
+      ? "h-full max-w-lg md:max-w-xl ml-auto"
+      : "max-h-[90vh] rounded-t-lg"
+  );
+
   // Calcular la clase de estado para el badge
   const getStatusClasses = (status: string) => {
     switch(status?.toLowerCase()) {
@@ -72,8 +88,8 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
 
   return (
     <Drawer open={isOpen} onOpenChange={onClose} direction={drawerDirection}>
-      <DrawerContent className={cn(isDesktop ? "h-full max-w-lg md:max-w-xl ml-auto" : "max-h-[90vh]")}>
-        <DrawerHeader className="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+      <DrawerContent className={contentClasses}>
+        <DrawerHeader className="relative border-b dark:border-slate-700 bg-gradient-to-r from-blue-50 to-white dark:from-slate-800 dark:to-blue-950">
           <div className="flex items-center gap-4">
             <Avatar className="h-12 w-12 border-2 border-blue-100 dark:border-blue-800">
               <CircleUser className="h-10 w-10 text-blue-600 dark:text-blue-400" />
@@ -90,7 +106,14 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
               </div>
             </div>
           </div>
-        </DrawerHeader>
+          {/* Botón de cierre */}
+        <DrawerClose asChild>
+          <Button size="icon" variant="ghost" className="absolute top-2 right-2">
+            <X className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+            <span className="sr-only">Cerrar</span>
+          </Button>
+        </DrawerClose>
+      </DrawerHeader>
 
         <Tabs defaultValue="info" className="w-full">
           <div className="px-4 py-2 border-b dark:border-slate-700">

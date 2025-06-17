@@ -1,25 +1,25 @@
 /* -------------------------------------------------------------------------- */
-/*  components/chart-theme.tsx                                                */
-/*  🎨 Sistema de temas mejorado para charts con mejor performance y UX       */
+/*  components/chart-theme.tsx - OPTIMIZADO                                   */
 /* -------------------------------------------------------------------------- */
 
 import type { CSSProperties } from 'react';
 
-/** Mapea un nombre de CSS-var a su string HSL con cache para performance */
-const varCache = new Map<string, string>();
-// No hay cambios necesarios aquí, es eficiente.
+/** Cache global para valores CSS var */
+const cssVarCache = new Map<string, string>();
+
+/** Mapea un nombre de CSS-var a su string HSL con cache */
 const cssVar = (name: string): string => {
-  if (varCache.has(name)) return varCache.get(name)!;
-  // Pequeña optimización: construir el string una sola vez.
+  const cached = cssVarCache.get(name);
+  if (cached) return cached;
+  
   const value = `hsl(var(${name}))`;
-  varCache.set(name, value);
+  cssVarCache.set(name, value);
   return value;
 };
 
 /* ----------------------------------------------------------------------------
  * 1. VARIABLES BASE EXPANDIDAS
  * -------------------------------------------------------------------------- */
-// Sin cambios, es una estructura de datos constante.
 const vars = {
   primary: [
     '--primary-50','--primary-100','--primary-200','--primary-300','--primary-400',
@@ -67,20 +67,16 @@ const vars = {
 /* ----------------------------------------------------------------------------
  * 2. GENERADORES DE PALETA OPTIMIZADOS
  * -------------------------------------------------------------------------- */
-const paletteCache = new Map<string, readonly string[] | Record<string, string>>(); // Tipo de valor de caché más preciso
+const paletteCache = new Map<string, any>();
 
-// createPalette es eficiente. El uso de `as any` es para sortear la complejidad del tipado con `readonly [K in keyof T]: string`.
-// Podríamos intentar un tipado más estricto, pero no afectaría el rendimiento.
 const createPalette = <T extends readonly string[]>(
   list: T,
   cacheKey?: string
-): Readonly<{ [K in keyof T]: string }> => { // Más preciso el Readonly en el tipo de retorno
-  const key = cacheKey || list.join(','); // list.join es eficiente para arrays de strings pequeños.
-  if (paletteCache.has(key)) {
-    return paletteCache.get(key) as Readonly<{ [K in keyof T]: string }>;
-  }
+): Readonly<{ [K in keyof T]: string }> => {
+  const key = cacheKey || list.join(',');
+  const cached = paletteCache.get(key);
+  if (cached) return cached;
 
-  // La transformación es directa.
   const result = list.map(cssVar) as unknown as Readonly<{ [K in keyof T]: string }>;
   paletteCache.set(key, result);
   return result;
@@ -90,20 +86,13 @@ const createRecordPalette = <T extends Record<string, string>>(
   rec: T,
   cacheKey?: string
 ): Readonly<{ [K in keyof T]: string }> => {
-  const key = cacheKey || Object.values(rec).join(','); // Object.values().join() es razonable.
-  if (paletteCache.has(key)) {
-    return paletteCache.get(key) as Readonly<{ [K in keyof T]: string }>;
-  }
+  const key = cacheKey || Object.values(rec).join(',');
+  const cached = paletteCache.get(key);
+  if (cached) return cached;
 
-  // Usar Object.entries para evitar múltiples búsquedas de `k in rec` si fuera una preocupación (no lo es aquí).
-  // Pero la forma actual es clara y el motor JS es bueno optimizando bucles for...in en objetos.
-  const out: Partial<Record<keyof T, string>> = {};
+  const out: Record<keyof T, string> = {} as any;
   for (const k in rec) {
-    // hasOwnProperty check es buena práctica si el objeto pudiera tener propiedades heredadas,
-    // pero para objetos literales como `vars.clinical`, no es estrictamente necesario para el rendimiento.
-    if (Object.prototype.hasOwnProperty.call(rec, k)) {
-      out[k] = cssVar(rec[k]);
-    }
+    out[k] = cssVar(rec[k]);
   }
   const result = out as Readonly<{ [K in keyof T]: string }>;
   paletteCache.set(key, result);
@@ -113,7 +102,6 @@ const createRecordPalette = <T extends Record<string, string>>(
 /* ----------------------------------------------------------------------------
  * 3. PALETAS GENERALES MEJORADAS
  * -------------------------------------------------------------------------- */
-// Sin cambios, es una estructura de datos constante.
 export const PALETTE = {
   primary:   createPalette(vars.primary, 'primary'),
   secondary: createPalette(vars.secondary, 'secondary'),
@@ -128,7 +116,6 @@ export type PaletteKey = keyof typeof PALETTE;
 /* ----------------------------------------------------------------------------
  * 4. PALETAS ESPECIALIZADAS POR CONTEXTO MÉDICO
  * -------------------------------------------------------------------------- */
-// Sin cambios, es una estructura de datos constante.
 export const CHART_PALETTES = {
   medical:      ['--chart-1','--chart-2','--chart-green','--chart-purple','--chart-3','--chart-6','--chart-blue','--chart-4','--chart-5','--chart-yellow'] as const,
   diagnosis:    ['--chart-1','--chart-2','--chart-6','--chart-yellow','--chart-blue','--chart-purple','--chart-4','--chart-3','--chart-red','--chart-5'] as const,
@@ -142,7 +129,7 @@ export const CHART_PALETTES = {
 } as const;
 
 export type ChartPaletteKey = keyof typeof CHART_PALETTES;
-export type ChartColorSet = readonly string[]; // Ya es readonly
+export type ChartColorSet = readonly string[];
 
 const chartPaletteCache = new Map<string, ChartColorSet>();
 
@@ -152,40 +139,20 @@ export function getChartColors(
   startIndex = 0
 ): ChartColorSet {
   const cacheKey = `${palette}-${count}-${startIndex}`;
-  if (chartPaletteCache.has(cacheKey)) {
-    return chartPaletteCache.get(cacheKey)!;
-  }
+  const cached = chartPaletteCache.get(cacheKey);
+  if (cached) return cached;
 
-  // `CHART_PALETTES[palette]` ya es un array (o tupla). No es necesario `Array.from`.
   const basePalette = CHART_PALETTES[palette];
   const paletteLength = basePalette.length;
-
-  // Asegurar que startIndex sea válido para evitar errores con slice.
   const actualStartIndex = startIndex % paletteLength;
 
-  let selectedVars: readonly string[];
-
-  if (count <= paletteLength) {
-    // Si no necesitamos más colores que los disponibles y la rotación es simple
-    if (actualStartIndex + count <= paletteLength) {
-      selectedVars = basePalette.slice(actualStartIndex, actualStartIndex + count);
-    } else {
-      // Rotación necesaria
-      selectedVars = [
-        ...basePalette.slice(actualStartIndex),
-        ...basePalette.slice(0, (actualStartIndex + count) % paletteLength),
-      ];
-    }
-  } else {
-    // Necesitamos más colores que los disponibles, repetimos con rotación.
-    const tempSelected: string[] = [];
-    for (let i = 0; i < count; i++) {
-      tempSelected.push(basePalette[(actualStartIndex + i) % paletteLength]);
-    }
-    selectedVars = tempSelected;
+  const selectedVars: string[] = [];
+  
+  for (let i = 0; i < count; i++) {
+    selectedVars.push(basePalette[(actualStartIndex + i) % paletteLength]);
   }
 
-  const result = selectedVars.map(cssVar) as ChartColorSet; // `map` devuelve `string[]`, castear a `readonly string[]`
+  const result = selectedVars.map(cssVar) as ChartColorSet;
   chartPaletteCache.set(cacheKey, result);
   return result;
 }
@@ -193,7 +160,6 @@ export function getChartColors(
 /* ----------------------------------------------------------------------------
  * 5. HELPERS SEMÁNTICOS MEJORADOS
  * -------------------------------------------------------------------------- */
-// STATUS_COLORS ya usa createRecordPalette, que está cacheado.
 export const STATUS_COLORS = createRecordPalette({
   COMPLETADA:   '--chart-green',
   CANCELADA:    '--chart-red',
@@ -214,51 +180,38 @@ export const STATUS_COLORS = createRecordPalette({
   diferido:     '--chart-purple',
 }, 'status-colors');
 
-// getStatusColor es una búsqueda directa en un objeto, muy rápido.
-// El fallback a cssVar('--chart-gray') solo ocurre si el status no existe.
+const defaultStatusColor = cssVar('--chart-gray'); // Pre-cacheado
 export const getStatusColor = (status: keyof typeof STATUS_COLORS): string =>
-  STATUS_COLORS[status] || cssVar('--chart-gray'); // Considerar un default pre-cacheado si es común.
+  STATUS_COLORS[status] || defaultStatusColor;
 
 // Cache para getSequentialScale
 const sequentialScaleCache = new Map<string, readonly string[]>();
 
 export function getSequentialScale(
-  baseColorVarName: string = '--chart-1', // Renombrado para claridad que es el nombre de la var
+  baseColorVarName: string = '--chart-1',
   steps = 6,
   direction: 'lighter' | 'darker' | 'both' = 'lighter'
-): readonly string[] { // Retorno Readonly
+): readonly string[] {
   const cacheKey = `sequential-${baseColorVarName}-${steps}-${direction}`;
-  if (sequentialScaleCache.has(cacheKey)) {
-    return sequentialScaleCache.get(cacheKey)!;
-  }
+  const cached = sequentialScaleCache.get(cacheKey);
+  if (cached) return cached;
 
-  const baseHslColor = cssVar(baseColorVarName); // Obtener el HSL una vez
-  const variations: string[] = []; // Usar string[] para push
+  const baseHslColor = cssVar(baseColorVarName);
+  const variations: string[] = [];
 
-  // La lógica de opacidad es simple, no hay mucha optimización posible aquí
-  // más que asegurar que Math.max/min se usen correctamente.
   for (let i = 0; i < steps; i++) {
     let opacity: number;
     if (direction === 'lighter') {
-      opacity = 1 - (i / (steps -1)) * 0.85; // Escala de 1 a ~0.15
+      opacity = 1 - (i / (steps - 1)) * 0.85;
     } else if (direction === 'darker') {
-      // Para 'darker', la opacidad no es la forma usual de oscurecer HSL.
-      // Normalmente se ajustaría la Luminosidad (L de HSL).
-      // Manteniendo la lógica de opacidad por consistencia con el original:
-      opacity = 1; // O quizás una ligera variación si se desea, pero oscurecer por opacidad no es estándar.
-                   // Si la intención es oscurecer, se debería modificar el HSL, no la opacidad.
-                   // Por ahora, lo dejo como 1 para 'darker' si se usa opacidad.
-                   // Si la intención era, por ejemplo, para un gradiente donde colores más oscuros tienen MENOS opacidad:
-                   // opacity = 0.2 + (i / (steps -1)) * 0.8; // Escala de 0.2 a 1
+      opacity = 1;
     } else { // 'both'
       const midPoint = (steps - 1) / 2;
-      // Ejemplo: más opaco en el centro, menos en los extremos
       opacity = 1 - (Math.abs(i - midPoint) / midPoint) * 0.8;
     }
     variations.push(`${baseHslColor}/${Math.max(0.1, Math.min(1, opacity))}`);
   }
   
-  // Guardar como readonly string[]
   const result = variations as readonly string[];
   sequentialScaleCache.set(cacheKey, result);
   return result;
@@ -267,21 +220,19 @@ export function getSequentialScale(
 /* ----------------------------------------------------------------------------
  * 6. ESTILOS GLOBALES MEJORADOS CON ANIMACIONES
  * -------------------------------------------------------------------------- */
-// CHART_STYLES es una estructura de datos constante, ya optimizada para lectura.
-// El uso de `cssVar` dentro asegura que los valores HSL se cachean.
 export const CHART_STYLES = {
   tooltip: {
     background: cssVar('--chart-tooltip-bg'),
-    borderRadius: 12, // px no necesario para React styles numéricos
+    borderRadius: 12,
     boxShadow: '0 8px 32px rgba(0,0,0,.12), 0 4px 16px rgba(0,0,0,.08)',
-    padding: '12px 16px', // Mantener como string si se prefiere
+    padding: '12px 16px',
     fontSize: 13,
-    fontWeight: 500, // fontWeight puede ser string o number
+    fontWeight: 500,
     color: cssVar('--chart-tooltip-text'),
     backdropFilter: 'blur(8px)',
     border: `1px solid ${cssVar('--border')}`,
-    transition: 'all 0.2s ease-in-out', // CSSProperties acepta esto
-  } as const satisfies CSSProperties, // `as const` para inmutabilidad profunda, `satisfies` para chequeo de tipo
+    transition: 'all 0.2s ease-in-out',
+  } as const satisfies CSSProperties,
   
   legend: {
     fontSize: 13,
@@ -308,7 +259,7 @@ export const CHART_STYLES = {
     lineColor: cssVar('--chart-grid'),
     labelColor: cssVar('--muted-foreground'),
     labelFontSize: 12,
-    labelFontWeight: 500, // O '500'
+    labelFontWeight: 500,
   } as const,
   
   grid: {
@@ -320,22 +271,22 @@ export const CHART_STYLES = {
   
   animation: {
     duration: 1000,
-    easing: 'easeOutCubic', // String para CSS easing
+    easing: 'easeOutCubic',
     delay: 0,
     stagger: 100,
   } as const,
   
   interactions: {
     hover: {
-      scale: 1.05, // Transform scale
+      scale: 1.05,
       transition: 'all 0.2s ease-out',
-      shadowElevation: '0 8px 25px rgba(0,0,0,0.15)', // Esto sería para `boxShadow`
+      shadowElevation: '0 8px 25px rgba(0,0,0,0.15)',
     },
     active: {
       scale: 0.98,
       transition: 'all 0.1s ease-in',
     },
-    focus: { // Esto se aplicaría a través de :focus-visible pseudo-clase o JS
+    focus: {
       outline: `2px solid ${cssVar('--primary')}`,
       outlineOffset: 2,
     },
@@ -346,12 +297,12 @@ export const CHART_STYLES = {
     strokeWidth: 2.5,
     activeDotSize: 8,
     dotSize: 5,
-    gradient: true, // Booleano para indicar si se debe aplicar un gradiente
+    gradient: true,
   } as const,
   
   bar: {
-    radius: 6, // Para borderRadius
-    barGap: 6, // Estos son más para configuración de la librería de gráficos
+    radius: 6,
+    barGap: 6,
     barCategoryGap: 20,
     minHeight: 4,
     hoverOpacity: 0.8,
@@ -366,13 +317,13 @@ export const CHART_STYLES = {
   } as const,
   
   pie: {
-    innerRadius: 0.55, // Como proporción del radio exterior, o en px si la librería lo soporta
-    outerRadius: 0.90, // Como proporción
-    paddingAngle: 3, // En grados
-    labelOffset: 15, // En px
-    cornerRadius: 6, // En px
+    innerRadius: 0.55,
+    outerRadius: 0.90,
+    paddingAngle: 3,
+    labelOffset: 15,
+    cornerRadius: 6,
     strokeWidth: 2,
-    hoverOffset: 8, // En px
+    hoverOffset: 8,
   } as const,
   
   radar: {
@@ -392,37 +343,34 @@ export const CHART_STYLES = {
  * 7. UTILIDADES PARA TEMAS Y ACCESIBILIDAD
  * -------------------------------------------------------------------------- */
 
-// `isDarkTheme` es una lectura del DOM. Si se llama muy a menudo en un ciclo de renderizado caliente,
-// podría ser un cuello de botella menor. Para temas, usualmente es aceptable.
-// Si se usa en un componente React, pasar el tema como prop o desde contexto es mejor.
-let currentIsDark: boolean | undefined = undefined;
+// Cache para isDarkTheme con throttling
+let isDarkCached: boolean | undefined = undefined;
 let lastChecked = 0;
-const CHECK_INTERVAL = 1000; // Re-chequear el DOM cada segundo como máximo si se llama repetidamente
+const CHECK_INTERVAL = 1000;
 
 export const isDarkTheme = (): boolean => {
-  if (typeof window === 'undefined') return false; // SSR guard
+  if (typeof window === 'undefined') return false;
 
   const now = Date.now();
-  if (currentIsDark === undefined || now - lastChecked > CHECK_INTERVAL) {
-    currentIsDark = document.documentElement.classList.contains('dark');
-    lastChecked = now;
+  if (isDarkCached !== undefined && now - lastChecked < CHECK_INTERVAL) {
+    return isDarkCached;
   }
-  return currentIsDark;
+
+  isDarkCached = document.documentElement.classList.contains('dark');
+  lastChecked = now;
+  return isDarkCached;
 };
 
-
-// `getContrastColor` y `getAdaptiveBackground` usan `color-mix` y `rgba`, que son eficientes.
-// Su rendimiento depende de `isDarkTheme`.
-// Cachear estas también podría ser una opción si los baseColor/opacity son limitados y se repiten.
+// Cache para funciones de color
 const contrastColorCache = new Map<string, string>();
 export const getContrastColor = (baseColorHslVar: string): string => {
-  const isDark = isDarkTheme(); // Llama a la versión optimizada de isDarkTheme
+  const isDark = isDarkTheme();
   const cacheKey = `${baseColorHslVar}-${isDark}`;
-  if (contrastColorCache.has(cacheKey)) return contrastColorCache.get(cacheKey)!;
+  const cached = contrastColorCache.get(cacheKey);
+  if (cached) return cached;
 
-  // `baseColorHslVar` ya es `hsl(var(...))`
   const result = isDark
-    ? `color-mix(in srgb, ${baseColorHslVar} 80%, white)` // Usar srgb que es más común para color-mix
+    ? `color-mix(in srgb, ${baseColorHslVar} 80%, white)`
     : `color-mix(in srgb, ${baseColorHslVar} 80%, black)`;
   contrastColorCache.set(cacheKey, result);
   return result;
@@ -432,14 +380,12 @@ const adaptiveBgCache = new Map<string, string>();
 export const getAdaptiveBackground = (opacity = 0.9): string => {
   const isDark = isDarkTheme();
   const cacheKey = `${opacity}-${isDark}`;
-  if (adaptiveBgCache.has(cacheKey)) return adaptiveBgCache.get(cacheKey)!;
+  const cached = adaptiveBgCache.get(cacheKey);
+  if (cached) return cached;
 
-  // Usar directamente los valores HSL de las variables de Tailwind si están disponibles
-  // o los valores RGB si los conoces.
-  // Ejemplo con valores de Tailwind Slate (aproximados):
   const result = isDark
-    ? `hsla(var(--slate-900-hsl, 222.2 84% 4.9%) / ${opacity})` // Fallback si --slate-900-hsl no está
-    : `hsla(var(--slate-50-hsl, 210 40% 98%) / ${opacity})`;   // Fallback si --slate-50-hsl no está
+    ? `hsla(var(--slate-900-hsl, 222.2 84% 4.9%) / ${opacity})`
+    : `hsla(var(--slate-50-hsl, 210 40% 98%) / ${opacity})`;
   adaptiveBgCache.set(cacheKey, result);
   return result;
 };
@@ -447,7 +393,6 @@ export const getAdaptiveBackground = (opacity = 0.9): string => {
 /* ----------------------------------------------------------------------------
  * 8. PRESETS PARA CASOS COMUNES
  * -------------------------------------------------------------------------- */
-// CHART_PRESETS es una estructura constante. Las funciones dentro (getChartColors) ya están cacheadas.
 export const CHART_PRESETS = {
   medical: {
     colors: getChartColors('medical', 8),
@@ -460,7 +405,7 @@ export const CHART_PRESETS = {
     colors: getChartColors('patients', 6),
     styles: {
       ...CHART_STYLES,
-      pie: { ...CHART_STYLES.pie, innerRadius: 0.45 }, // Usar proporción si es posible
+      pie: { ...CHART_STYLES.pie, innerRadius: 0.45 },
     },
   },
   comparison: {
@@ -472,12 +417,10 @@ export const CHART_PRESETS = {
   },
 } as const;
 
-export type ChartPresetKey = keyof typeof CHART_PRESETS; // Renombrado de ChartPreset a ChartPresetKey
+export type ChartPresetKey = keyof typeof CHART_PRESETS;
 
-// getChartPreset es una búsqueda directa, muy rápida.
 export const getChartPreset = (preset: ChartPresetKey) => CHART_PRESETS[preset];
 
-// El export default está bien.
 export default {
   PALETTE,
   CHART_PALETTES,

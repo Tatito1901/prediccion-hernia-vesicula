@@ -2,6 +2,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 
+// Configuración de cache para las rutas GET de la API
+const cacheConfig = {
+  // Tiempo de validez de la caché del navegador (60 segundos)
+  'Cache-Control': 'max-age=60, s-maxage=60, stale-while-revalidate=300',
+};
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { searchParams } = new URL(request.url);
@@ -36,7 +42,7 @@ export async function GET(request: Request) {
     const { data: appointments, error } = await query;
 
     if (error) throw error;
-    return NextResponse.json(appointments);
+    return NextResponse.json(appointments, { headers: cacheConfig });
   } catch (error: any) {
     return NextResponse.json({ message: 'Error al obtener citas', error: error.message }, { status: 500 });
   }

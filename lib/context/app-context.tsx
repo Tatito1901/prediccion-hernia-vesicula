@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, HydrationBoundary } from '@tanstack/react-query';
 import { PatientData, AppointmentDataAPI } from '@/app/dashboard/data-model';
 
 // Definición de la interfaz para el contexto
@@ -29,12 +29,20 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // Proveedor del contexto
 export function AppProvider({ children }: { children: ReactNode }) {
-  // Crear instancia de QueryClient
+  // Crear instancia de QueryClient con configuración optimizada
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 60000, // 1 minuto
+        staleTime: 5 * 60 * 1000, // 5 minutos - más agresivo para reducir solicitudes innecesarias
+        gcTime: 10 * 60 * 1000,   // 10 minutos - mantener en cache más tiempo
         refetchOnWindowFocus: false,
+        refetchOnReconnect: 'always',
+        retry: (failureCount, error: any) => {
+          // No reintentar en errores 4xx (cliente)
+          if (error?.status >= 400 && error?.status < 500) return false;
+          return failureCount < 2; // Máximo 2 reintentos para otros errores
+        },
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
       },
     },
   }));
@@ -97,9 +105,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContext.Provider value={contextValue}>
-        {children}
-      </AppContext.Provider>
+      <HydrationBoundary>
+        <AppContext.Provider value={contextValue}>
+          {children}
+        </AppContext.Provider>
+      </HydrationBoundary>
     </QueryClientProvider>
   );
 }

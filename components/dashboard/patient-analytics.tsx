@@ -1,35 +1,86 @@
 "use client"
 
-import React from "react"; // Importar React.memo
+import React, { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"; // Asumo que estos componentes de ui son de shadcn/ui o similar
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { useChartData } from "@/hooks/use-chart-data";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Datos de ejemplo para el gráfico.
-// Si estos datos vinieran de props o estado, considera usar React.useMemo para optimizar.
-const chartData = [
-  { name: "Ene", pacientes: 12, operados: 8 },
-  { name: "Feb", pacientes: 19, operados: 12 },
-  { name: "Mar", pacientes: 15, operados: 10 },
-  { name: "Abr", pacientes: 22, operados: 15 },
-  { name: "May", pacientes: 28, operados: 20 },
-  { name: "Jun", pacientes: 25, operados: 18 },
-  // Podrías añadir más meses para ver mejor el comportamiento del gráfico
-  { name: "Jul", pacientes: 30, operados: 22 },
-  { name: "Ago", pacientes: 27, operados: 19 },
-  { name: "Sep", pacientes: 35, operados: 25 },
-  { name: "Oct", pacientes: 32, operados: 24 },
-  { name: "Nov", pacientes: 40, operados: 30 },
-  { name: "Dic", pacientes: 38, operados: 28 },
-];
 
-// Props para el componente PatientAnalytics, si fueran necesarias en el futuro.
-interface PatientAnalyticsProps {
-  // Ejemplo: data?: typeof chartData; si los datos fueran dinámicos.
-}
+
+
 
 // El componente PatientAnalytics, envuelto en React.memo para optimización.
 // React.memo previene re-renderizados si las props no cambian.
-export const PatientAnalytics: React.FC<PatientAnalyticsProps> = React.memo(() => {
+export const PatientAnalytics: React.FC = React.memo(() => {
+  // Obtener datos desde el API
+  const { rawData: { patients }, loading, error } = useChartData({ dateRange: 'ytd' });
+
+  // Calcular los datos mensuales para los últimos 12 meses
+  const chartData = useMemo(() => {
+    const today = new Date();
+
+    // Construir array base con los últimos 12 meses
+    const months = Array.from({ length: 12 }).map((_, idx) => {
+      const date = new Date(today.getFullYear(), today.getMonth() - (11 - idx), 1);
+      return {
+        key: `${date.getFullYear()}-${date.getMonth()}`,
+        name: date.toLocaleString('es-ES', { month: 'short' }),
+        pacientes: 0,
+        operados: 0,
+      };
+    });
+
+    // Contar pacientes nuevos y operados en cada mes
+    patients.forEach((p: any) => {
+      if (!p.fecha_registro) return;
+      const fechaRegistro = new Date(p.fecha_registro);
+      const key = `${fechaRegistro.getFullYear()}-${fechaRegistro.getMonth()}`;
+      const monthEntry = months.find(m => m.key === key);
+      if (monthEntry) {
+        monthEntry.pacientes += 1;
+        // Consideramos operado si el estado del paciente es "OPERADO"
+        if (p.estado === 'OPERADO' || p.estado_paciente === 'OPERADO') {
+          monthEntry.operados += 1;
+        }
+      }
+    });
+
+    // Formatear la salida para el gráfico
+    return months.map(({ name, pacientes, operados }) => ({ name, pacientes, operados }));
+  }, [patients]);
+
+  // Estado de carga
+  if (loading) {
+    return (
+      <div className="grid gap-4 md:gap-6">
+        <Card className="shadow-lg rounded-xl">
+          <CardHeader className="pb-4 pt-5 px-5 md:px-6">
+            <CardTitle className="text-lg md:text-xl">Tendencia de Pacientes</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground">Cargando datos...</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4">
+            <Skeleton className="h-[250px] sm:h-[300px] md:h-[350px] lg:h-[400px] w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Estado de error
+  if (error) {
+    return (
+      <div className="grid gap-4 md:gap-6">
+        <Card className="shadow-lg rounded-xl">
+          <CardHeader className="pb-4 pt-5 px-5 md:px-6">
+            <CardTitle className="text-lg md:text-xl">Tendencia de Pacientes</CardTitle>
+            <CardDescription className="text-sm text-destructive">{error}</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4 md:gap-6"> {/* Espaciado responsivo */}
       <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-xl">

@@ -1,6 +1,5 @@
 /* -------------------------------------------------------------------------- */
-/*  components/charts/diagnosis-timeline-chart.tsx                           */
-/*  🎯 Gráfico de timeline optimizado usando hook centralizador             */
+/*  components/charts/diagnosis-timeline-chart.tsx - OPTIMIZADO              */
 /* -------------------------------------------------------------------------- */
 
 import { memo, useMemo, useCallback, useState, FC } from 'react';
@@ -39,7 +38,6 @@ import useChartConfig, {
   type TrendChartData,
   categorizeMainDiagnosis,
   MAIN_DIAGNOSES,
-  formatDateUtil,
 } from '@/components/charts/use-chart-config';
 
 /* ============================================================================
@@ -73,15 +71,42 @@ const DEFAULT_CONFIG: ChartConfig = {
 };
 
 /* ============================================================================
- * UTILIDADES CENTRALIZADAS
+ * UTILIDADES OPTIMIZADAS
  * ========================================================================== */
 
-const getQuarter = (d: Date): string => `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
-const getMonthKey = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+// Cache para funciones de fecha
+const dateKeyCache = new Map<string, string>();
+
+const getQuarter = (d: Date): string => {
+  const key = d.toISOString();
+  const cached = dateKeyCache.get(`q-${key}`);
+  if (cached) return cached;
+  
+  const result = `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
+  dateKeyCache.set(`q-${key}`, result);
+  return result;
+};
+
+const getMonthKey = (d: Date): string => {
+  const key = d.toISOString();
+  const cached = dateKeyCache.get(`m-${key}`);
+  if (cached) return cached;
+  
+  const result = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  dateKeyCache.set(`m-${key}`, result);
+  return result;
+};
+
 const getWeekKey = (d: Date): string => {
+  const key = d.toISOString();
+  const cached = dateKeyCache.get(`w-${key}`);
+  if (cached) return cached;
+  
   const startOfWeek = new Date(d);
   startOfWeek.setDate(d.getDate() - d.getDay());
-  return `${startOfWeek.getFullYear()}-W${Math.ceil(startOfWeek.getDate() / 7)}`;
+  const result = `${startOfWeek.getFullYear()}-W${Math.ceil(startOfWeek.getDate() / 7)}`;
+  dateKeyCache.set(`w-${key}`, result);
+  return result;
 };
 
 const formatPeriodLabel = (key: string, period: ChartPeriod): string => {
@@ -119,9 +144,7 @@ const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) 
     const totals = new Map<string, number>();
     const grouped = new Map<string, Record<string, number>>();
 
-    // Inicializar con diagnósticos principales
-    [...MAIN_DIAGNOSES, 'Otro'].forEach(d => totals.set(d, 0));
-
+    // Procesar datos en una sola pasada
     patients.forEach(p => {
       const date = p.fecha_primera_consulta ? 
         new Date(p.fecha_primera_consulta) : 
@@ -133,15 +156,16 @@ const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) 
       const diagnosis = categorizeMainDiagnosis(p.diagnostico_principal || p.diagnostico);
 
       if (!grouped.has(key)) {
-        const baseEntry = {} as Record<string, number>;
+        const baseEntry: Record<string, number> = {};
         [...MAIN_DIAGNOSES, 'Otro'].forEach(d => baseEntry[d] = 0);
         grouped.set(key, baseEntry);
       }
 
-      grouped.get(key)![diagnosis] += 1;
+      grouped.get(key)![diagnosis]++;
       totals.set(diagnosis, (totals.get(diagnosis) || 0) + 1);
     });
 
+    // Obtener top diagnósticos
     const topDiagnoses = Array.from(totals.entries())
       .sort(([,a], [,b]) => b - a)
       .slice(0, config.topN)
@@ -158,7 +182,6 @@ const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) 
           total,
         };
         
-        // Mapear diagnósticos principales
         topDiagnoses.forEach((diag) => {
           (dataPoint as any)[diag] = counts[diag] || 0;
         });
@@ -166,6 +189,7 @@ const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) 
         return dataPoint;
       });
 
+    // Calcular métricas
     const metrics = topDiagnoses.map(diag => {
       const values = timelineArray.map(d => (d as any)[diag] || 0);
       const total = values.reduce((sum, val) => sum + val, 0);
@@ -175,7 +199,7 @@ const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) 
       return { name: diag, total, growth };
     });
 
-    const peak = Math.max(...timelineArray.map(d => d.total)) * 1.1;
+    const peak = Math.max(...timelineArray.map(d => d.total || 0)) * 1.1;
 
     return {
       timelineData: timelineArray,
@@ -187,9 +211,9 @@ const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) 
 
 /* ============================================================================
  * COMPONENTE PRINCIPAL OPTIMIZADO
- * ========================================================================== */
+ * ============================================================================ */
 
-const DiagnosisTimelineChart: FC<Props> = ({ 
+const DiagnosisTimelineChart: FC<Props> = memo(({ 
   patients, 
   className,
   defaultConfig,
@@ -201,7 +225,6 @@ const DiagnosisTimelineChart: FC<Props> = ({
     ...defaultConfig,
   });
 
-  // Usar el hook centralizador para el renderizado
   const { renderLineChart, EmptyState } = useChartConfig({
     showLegend: true,
     showTooltip: true,
@@ -392,6 +415,8 @@ const DiagnosisTimelineChart: FC<Props> = ({
       </CardFooter>
     </Card>
   );
-};
+});
 
-export default memo(DiagnosisTimelineChart);
+DiagnosisTimelineChart.displayName = 'DiagnosisTimelineChart';
+
+export default DiagnosisTimelineChart;

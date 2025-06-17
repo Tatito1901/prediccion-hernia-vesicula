@@ -38,7 +38,7 @@ import { AppointmentStatusEnum, type AppointmentData } from "@/app/dashboard/dat
 const STATUS_CONFIG = {
   [AppointmentStatusEnum.PROGRAMADA]: {
     label: "Programada",
-    className: "bg-slate-100 text-slate-700 dark:bg-slate-800/50 dark:text-slate-300",
+    className: "bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300",
     icon: Clock,
     color: "slate"
   },
@@ -50,31 +50,31 @@ const STATUS_CONFIG = {
   },
   [AppointmentStatusEnum.PRESENTE]: {
     label: "En espera",
-    className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300",
+    className: "bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300",
     icon: Users,
     color: "emerald"
   },
   [AppointmentStatusEnum.COMPLETADA]: {
     label: "Completada",
-    className: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300",
+    className: "bg-white dark:bg-slate-900 border border-green-300 dark:border-green-700 text-green-700 dark:text-green-300",
     icon: CheckCircle2,
     color: "green"
   },
   [AppointmentStatusEnum.CANCELADA]: {
     label: "Cancelada",
-    className: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
+    className: "bg-white dark:bg-slate-900 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300",
     icon: AlertCircle,
     color: "red"
   },
   [AppointmentStatusEnum.NO_ASISTIO]: {
     label: "No asistió",
-    className: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
+    className: "bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300",
     icon: AlertCircle,
     color: "amber"
   },
   [AppointmentStatusEnum.REAGENDADA]: {
     label: "Reagendada",
-    className: "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300",
+    className: "bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300",
     icon: Calendar,
     color: "purple"
   },
@@ -156,16 +156,15 @@ const StatCard = memo(({
   className?: string;
 }) => (
   <div className={cn(
-    "p-4 rounded-xl border shadow-sm",
-    `bg-${color}-50 dark:bg-${color}-900/20 border-${color}-200 dark:border-${color}-800`,
+    "p-4 rounded-xl border shadow-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
     className
   )}>
     <div className="flex items-start justify-between">
       <div className="space-y-2 flex-1">
-        <p className={cn("text-xs font-semibold uppercase tracking-wide", `text-${color}-700 dark:text-${color}-300`)}>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
           {title}
         </p>
-        <p className={cn("text-2xl font-bold", `text-${color}-900 dark:text-${color}-100`)}>
+        <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {value}
         </p>
         {subtitle && (
@@ -175,11 +174,8 @@ const StatCard = memo(({
         )}
       </div>
       
-      <div className={cn(
-        "h-12 w-12 rounded-xl flex items-center justify-center",
-        `bg-${color}-100 dark:bg-${color}-900/50`
-      )}>
-        <Icon className={cn("h-6 w-6", `text-${color}-600 dark:text-${color}-400`)} />
+      <div className="h-12 w-12 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-slate-800/60">
+        <Icon className="h-6 w-6 text-slate-600 dark:text-slate-300" />
       </div>
     </div>
     
@@ -237,7 +233,7 @@ const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData })
           </div>
           
           <Badge className={cn(
-            "text-xs font-medium px-3 py-1.5 rounded-full border-0 flex items-center gap-1.5 shadow-sm",
+            "text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1.5",
             statusConfig.className
           )}>
             <StatusIcon size={12} />
@@ -249,8 +245,8 @@ const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData })
       <CardContent className="pt-0 space-y-4">
         {appointment.motivoConsulta && appointment.motivoConsulta !== "N/A" && (
           <div className="flex gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-            <div className="h-9 w-9 rounded-lg bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center shrink-0">
-              <FileText size={16} className="text-purple-600 dark:text-purple-400" />
+            <div className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800/60 flex items-center justify-center shrink-0">
+              <FileText size={16} className="text-slate-600 dark:text-slate-300" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide font-medium mb-1">
@@ -429,10 +425,10 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
     <div className={cn("space-y-6", className)}>
       {/* Estadísticas mejoradas */}
       {showStats && (
-        <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950">
+        <Card className="shadow-lg border bg-white dark:bg-slate-900">
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
+              <div className="h-12 w-12 rounded-xl bg-blue-600/10 dark:bg-blue-600/20 flex items-center justify-center">
                 <Activity className="h-6 w-6 text-white" />
               </div>
               <div>
@@ -452,7 +448,7 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
             {statistics.total <= 1 && (
               <div className={cn(
                 "rounded-xl border p-4 flex flex-col justify-between",
-                "bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20",
+                "bg-slate-50 dark:bg-slate-800/50",
                 "border-blue-200 dark:border-blue-800",
                 "md:col-span-3"
               )}>
@@ -546,7 +542,7 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
 
       {/* Lista de citas */}
       {patientAppointments.length === 0 ? (
-        <Card className="text-center py-16 shadow-lg bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950">
+        <Card className="text-center py-16 shadow-lg bg-white dark:bg-slate-900">
           <CardContent className="space-y-6">
             <div className="relative">
               <div className="h-20 w-20 mx-auto rounded-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center">

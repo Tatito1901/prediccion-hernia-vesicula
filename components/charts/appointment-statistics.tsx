@@ -1,6 +1,5 @@
 /* -------------------------------------------------------------------------- */
-/*  components/charts/appointment-statistics.tsx                             */
-/*  🎯 Estadísticas de citas optimizadas usando hook centralizador          */
+/*  components/charts/appointment-statistics.tsx - OPTIMIZADO                */
 /* -------------------------------------------------------------------------- */
 
 import React, { useState, useMemo, useCallback, memo } from "react"
@@ -21,7 +20,7 @@ import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, isS
 import { es } from "date-fns/locale/es"
 import { Button } from "@/components/ui/button"
 import { useAppointmentStore } from "@/lib/stores/appointment-store"
-import type { AppointmentData, PatientData as PatientDataModel } from "@/app/dashboard/data-model"
+import type { AppointmentData } from "@/app/dashboard/data-model"
 import { AppointmentStatusEnum, type AppointmentStatus } from "@/app/dashboard/data-model"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -31,12 +30,9 @@ import {
   RefreshCw,
   AlertCircle,
   X,
-  Users,
   TrendingUp,
   Calendar,
   Clock,
-  Target,
-  Activity,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import useChartConfig, {
@@ -48,13 +44,11 @@ import useChartConfig, {
   type ScatterData,
   type PatientData,
   WEEKDAYS,
-  WEEKDAYS_SHORT,
   formatDateUtil,
   titleCaseStatus,
   hourToDecimal,
   StatCard,
   LoadingSpinner,
-  EmptyState,
 } from '@/components/charts/use-chart-config'
 
 /* ============================================================================
@@ -79,10 +73,8 @@ export interface AppointmentFilters {
  * CONSTANTES Y UTILIDADES
  * ========================================================================== */
 
-const INITIAL_DATE_RANGE: DateRange = {
-  from: subDays(new Date(), 30),
-  to: new Date(),
-}
+// Sin filtro de fechas por defecto para mostrar todas las citas al cargar
+const INITIAL_DATE_RANGE: DateRange | undefined = undefined
 
 const INITIAL_FILTERS: AppointmentFilters = {
   dateRange: INITIAL_DATE_RANGE,
@@ -103,16 +95,11 @@ const ALLOWED_MOTIVES: readonly string[] = [
  * COMPONENTES AUXILIARES OPTIMIZADOS
  * ========================================================================== */
 
-interface FilterSummaryProps {
+const FilterSummary = memo<{
   filters: AppointmentFilters
-  updateFilter: <K extends keyof AppointmentFilters>(
-    key: K,
-    value: AppointmentFilters[K]
-  ) => void
+  updateFilter: <K extends keyof AppointmentFilters>(key: K, value: AppointmentFilters[K]) => void
   className?: string
-}
-
-const FilterSummary = memo<FilterSummaryProps>(({ filters, updateFilter, className = "" }) => {
+}>(({ filters, updateFilter, className = "" }) => {
   const activeFiltersCount = useMemo(() => {
     const allStatusesSelected = filters.statusFilter.length === Object.keys(AppointmentStatusEnum).length || filters.statusFilter.length === 0
     return (
@@ -120,7 +107,7 @@ const FilterSummary = memo<FilterSummaryProps>(({ filters, updateFilter, classNa
       (filters.motiveFilter !== "all" ? 1 : 0) +
       (!allStatusesSelected ? 1 : 0)
     )
-  }, [filters.dateRange, filters.motiveFilter, filters.statusFilter])
+  }, [filters])
 
   if (activeFiltersCount === 0) return null
 
@@ -179,6 +166,7 @@ const FilterSummary = memo<FilterSummaryProps>(({ filters, updateFilter, classNa
     </div>
   )
 })
+
 FilterSummary.displayName = "FilterSummary"
 
 const StatCards = memo<{ generalStats: GeneralStats; isLoading: boolean }>(({ generalStats, isLoading }) => {
@@ -186,7 +174,7 @@ const StatCards = memo<{ generalStats: GeneralStats; isLoading: boolean }>(({ ge
     { 
       title: "Total de Citas", 
       value: generalStats.total.toLocaleString(), 
-      icon: <Users className="h-4 w-4" />, 
+      icon: <FileBarChart className="h-4 w-4" />, 
       description: "Número total de citas en el período seleccionado", 
       color: "bg-primary", 
       trendPercent: 12, 
@@ -196,7 +184,7 @@ const StatCards = memo<{ generalStats: GeneralStats; isLoading: boolean }>(({ ge
     { 
       title: "Tasa de Asistencia", 
       value: `${generalStats.attendance.toFixed(1)}%`, 
-      icon: <Target className="h-4 w-4" />, 
+      icon: <Calendar className="h-4 w-4" />, 
       description: "Porcentaje de citas completadas exitosamente", 
       color: "bg-green-500", 
       trendPercent: 5, 
@@ -216,7 +204,7 @@ const StatCards = memo<{ generalStats: GeneralStats; isLoading: boolean }>(({ ge
     { 
       title: "Citas Pendientes", 
       value: generalStats.pendingCount.toLocaleString(), 
-      icon: <Activity className="h-4 w-4" />, 
+      icon: <Clock className="h-4 w-4" />, 
       description: "Número de citas aún pendientes por realizar", 
       color: "bg-amber-500", 
       trendPercent: -8, 
@@ -243,6 +231,7 @@ const StatCards = memo<{ generalStats: GeneralStats; isLoading: boolean }>(({ ge
     </div>
   )
 })
+
 StatCards.displayName = "StatCards"
 
 /* ============================================================================
@@ -251,13 +240,8 @@ StatCards.displayName = "StatCards"
 
 const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], filters: AppointmentFilters) => {
   return useMemo(() => {
-    // Ya no necesitamos convertir a PatientData, usamos AppointmentData directamente
-    // Usamos any temporalmente para evitar problemas de tipado durante la migración
-    // Más adelante podemos refinarlos con interfaces adecuadas
     const mappedAppointments: any[] = appointmentsFromContext.map((appt: AppointmentData) => {
       const nameParts = appt.paciente?.split(' ') || ['Desconocido']
-      const nombre = nameParts[0]
-      const apellidos = nameParts.slice(1).join(' ')
       
       let dateObj: Date | null = null
       try {
@@ -273,7 +257,7 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
 
       return {
         id: appt.id,
-        paciente: `${nombre} ${apellidos}`.trim(),
+        paciente: nameParts.join(' ').trim(),
         fechaConsulta: dateObj,
         horaConsulta: appt.horaConsulta || "00:00",
         motivoConsulta: appt.motivoConsulta || "No especificado",
@@ -284,49 +268,50 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
       }
     })
 
-    // Aplicar filtros
-    const filteredAppointments = mappedAppointments
-      .filter((appt) => appt.fechaConsulta !== null && isValid(appt.fechaConsulta!))
-      .filter((appt) => ALLOWED_MOTIVES.includes(appt.motivoConsulta!))
-      .filter((appt) => {
-        const { from, to } = filters.dateRange || {}
-        if (from || to) {
-          const dateObj = appt.fechaConsulta!
-          const fromDate = from ? startOfDay(from) : null
-          const toDate = to ? endOfDay(to) : null
-          if (fromDate && !isSameDay(dateObj, fromDate) && isBefore(dateObj, fromDate)) return false
-          if (toDate && !isSameDay(dateObj, toDate) && isAfter(dateObj, toDate)) return false
-        }
-        if (filters.motiveFilter !== "all" && appt.motivoConsulta !== filters.motiveFilter) return false
-        if (!filters.statusFilter.includes(appt.estado!)) return false
-        
-        const hourDecimalValue = hourToDecimal(appt.horaConsulta)
-        if (hourDecimalValue !== null && (hourDecimalValue < filters.timeRange[0] || hourDecimalValue > filters.timeRange[1])) return false
-        
-        return true
-      })
-      .sort((a, b) => {
-        let comp = 0
-        if (filters.sortBy === "fechaConsulta") {
-          comp = (a.fechaConsulta as Date).getTime() - (b.fechaConsulta as Date).getTime()
-          if (comp === 0) {
-            const hourA = hourToDecimal(a.horaConsulta)
-            const hourB = hourToDecimal(b.horaConsulta)
-            if (hourA !== null && hourB !== null) {
-              comp = hourA - hourB
-            }
+    // Aplicar filtros en una sola pasada
+    const filteredAppointments = mappedAppointments.filter((appt) => {
+      if (!appt.fechaConsulta || !isValid(appt.fechaConsulta)) return false
+      
+      
+      const { from, to } = filters.dateRange || {}
+      if (from || to) {
+        const dateObj = appt.fechaConsulta
+        const fromDate = from ? startOfDay(from) : null
+        const toDate = to ? endOfDay(to) : null
+        if (fromDate && !isSameDay(dateObj, fromDate) && isBefore(dateObj, fromDate)) return false
+        if (toDate && !isSameDay(dateObj, toDate) && isAfter(dateObj, toDate)) return false
+      }
+      
+      if (filters.motiveFilter !== "all" && appt.motivoConsulta !== filters.motiveFilter) return false
+      if (!filters.statusFilter.includes(appt.estado)) return false
+      
+      const hourDecimalValue = hourToDecimal(appt.horaConsulta)
+      if (hourDecimalValue !== null && (hourDecimalValue < filters.timeRange[0] || hourDecimalValue > filters.timeRange[1])) return false
+      
+      return true
+    })
+    
+    // Ordenar según filtros
+    filteredAppointments.sort((a, b) => {
+      let comp = 0
+      if (filters.sortBy === "fechaConsulta") {
+        comp = (a.fechaConsulta as Date).getTime() - (b.fechaConsulta as Date).getTime()
+        if (comp === 0) {
+          const hourA = hourToDecimal(a.horaConsulta)
+          const hourB = hourToDecimal(b.horaConsulta)
+          if (hourA !== null && hourB !== null) {
+            comp = hourA - hourB
           }
-        } else if (filters.sortBy === "nombre") {
-          const nameA = a.paciente?.toLowerCase() || ""
-          const nameB = b.paciente?.toLowerCase() || ""
-          comp = nameA.localeCompare(nameB)
-        } else {
-          const valA = a[filters.sortBy as keyof PatientData] as string
-          const valB = b[filters.sortBy as keyof PatientData] as string
-          if (typeof valA === "string" && typeof valB === "string") comp = valA.localeCompare(valB)
         }
-        return filters.sortOrder === "asc" ? comp : -comp
-      })
+      } else if (filters.sortBy === "nombre") {
+        comp = (a.paciente || "").localeCompare(b.paciente || "")
+      } else {
+        const valA = a[filters.sortBy as keyof PatientData] as string
+        const valB = b[filters.sortBy as keyof PatientData] as string
+        if (typeof valA === "string" && typeof valB === "string") comp = valA.localeCompare(valB)
+      }
+      return filters.sortOrder === "asc" ? comp : -comp
+    })
 
     return { mappedAppointments, filteredAppointments }
   }, [appointmentsFromContext, filters])
@@ -409,7 +394,6 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
       }, {} as any)
 
       filteredAppointments.forEach(a => { 
-        // Aseguramos que fechaConsulta sea Date antes de llamar a getDay()
         const fechaDate = a.fechaConsulta instanceof Date ? a.fechaConsulta : 
                          (typeof a.fechaConsulta === 'string' ? parseISO(a.fechaConsulta) : null)
         if (!fechaDate) return
@@ -435,7 +419,6 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
       ) as Record<AppointmentStatus, Record<string, any>>
 
       filteredAppointments.forEach(a => { 
-        // Aseguramos que fechaConsulta sea Date antes de llamar a getDay()
         const fechaDate = a.fechaConsulta instanceof Date ? a.fechaConsulta : 
                          (typeof a.fechaConsulta === 'string' ? parseISO(a.fechaConsulta) : null)
         if (!fechaDate) return
@@ -448,7 +431,6 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
         const key = `${dayOfWeek}-${hour}`
         const currentStatus = a.estado!
 
-        // Verificamos que currentStatus sea un valor válido del enum
         if (Object.values(AppointmentStatusEnum).some(status => status === currentStatus)) { 
           if (!scatterByStatus[currentStatus][key]) {
             scatterByStatus[currentStatus][key] = { 
@@ -484,29 +466,41 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
  * COMPONENTE PRINCIPAL OPTIMIZADO
  * ============================================================================ */
 
-export const AppointmentStatistics: React.FC = () => {
-  const [uiState, setUiState] = useState({
-    isLoading: true,
-    activeTab: "general",
-    dataError: null as string | null,
-    mounted: false,
-    progress: 0,
-    isFirstLoad: true,
-  })
-  
-  const [filters, setFilters] = useState<AppointmentFilters>(INITIAL_FILTERS)
-  // Utilizamos el store de Zustand en lugar de useAppContext
-  const appointmentsFromContext = useAppointmentStore(state => state.appointments);
-  const isLoadingAppointments = useAppointmentStore(state => state.isLoading);
-  const errorAppointments = useAppointmentStore(state => state.error);
-  const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
-  
-  // Efecto para cargar las citas al montar el componente
-  React.useEffect(() => {
-    fetchAppointments();
-  }, [fetchAppointments]);
+interface AppointmentStatisticsProps {
+  /** Datos generales de estadísticas de citas desde la API */
+  generalStats?: GeneralStats;
+  /** Distribución de citas por día de la semana desde la API */
+  weekdayDistribution?: WeekdayChartData[];
+  /** Estado de carga de los datos */
+  isLoading?: boolean;
+  /** Última actualización de datos */
+  lastUpdated?: string;
+  /** Función para refrescar los datos */
+  onRefresh?: () => void;
+}
 
-  // Usar el hook centralizador para renderizado
+export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
+  generalStats: apiGeneralStats,
+  weekdayDistribution: apiWeekdayDistribution,
+  isLoading: apiLoading = false,
+  lastUpdated,
+  onRefresh
+}) => {
+  const [activeTab, setActiveTab] = useState("general")
+  const [isLoading, setIsLoading] = useState(false)
+  const [filters, setFilters] = useState<AppointmentFilters>(INITIAL_FILTERS)
+  
+  // Mantener compatibilidad con la implementación actual usando datos del contexto como fallback
+  const appointmentsFromContext = useAppointmentStore(state => state.appointments)
+  const fetchAppointments = useAppointmentStore(state => state.fetchAppointments)
+  
+  // Solo usar fetchAppointments si no se proporciona onRefresh
+  React.useEffect(() => {
+    if (!apiGeneralStats && !onRefresh) {
+      fetchAppointments()
+    }
+  }, [fetchAppointments, apiGeneralStats, onRefresh])
+
   const { 
     renderPieChart, 
     renderBarChart, 
@@ -521,70 +515,39 @@ export const AppointmentStatistics: React.FC = () => {
     interactive: true,
   })
 
-  const updateUiState = useCallback((partialState: Partial<typeof uiState>) => {
-    setUiState(prev => ({ ...prev, ...partialState }))
-  }, [])
-
-  // Procesamiento de datos usando hooks optimizados
-  const { mappedAppointments, filteredAppointments } = useProcessedAppointments(appointmentsFromContext, filters)
+  const { filteredAppointments } = useProcessedAppointments(appointmentsFromContext, filters)
+  
+  // Usar datos de la API si están disponibles, o los datos locales como fallback
   const { 
-    generalStats, 
+    generalStats: localGeneralStats, 
     statusChartData, 
     motiveChartData, 
     trendChartData, 
-    weekdayChartData, 
+    weekdayChartData: localWeekdayChartData, 
     scatterData 
   } = useChartData(filteredAppointments, filters)
-
-  // Efectos de carga y montaje
-  React.useEffect(() => { 
-    updateUiState({ mounted: true, isLoading: true }) 
-  }, [updateUiState])
-
-  React.useEffect(() => {
-    if (!uiState.isLoading || !uiState.mounted) return
-    let currentProgress = 0
-    let animationId: number
-    const updateProgress = () => {
-      currentProgress += 2
-      if (currentProgress >= 100) {
-        updateUiState({ progress: 100 })
-        setTimeout(() => { 
-          updateUiState({ 
-            isLoading: false, 
-            isFirstLoad: uiState.isFirstLoad ? false : uiState.isFirstLoad 
-          }) 
-        }, 200)
-      } else {
-        updateUiState({ progress: currentProgress })
-        animationId = requestAnimationFrame(updateProgress)
-      }
-    }
-    updateUiState({ progress: 0 })
-    animationId = requestAnimationFrame(updateProgress)
-    return () => cancelAnimationFrame(animationId)
-  }, [uiState.isLoading, uiState.mounted, uiState.isFirstLoad, updateUiState])
+  
+  // Priorizar datos de la API sobre datos locales
+  const generalStats = apiGeneralStats || localGeneralStats
+  const weekdayChartData = apiWeekdayDistribution || localWeekdayChartData
+  
+  // Usar loading state de la API o local
+  const loading = apiLoading || isLoading
 
   const updateFilter = useCallback(<K extends keyof AppointmentFilters>(key: K, value: AppointmentFilters[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
-    updateUiState({ isLoading: true })
-  }, [updateUiState])
-
-  const resetFilters = useCallback(() => {
-    setFilters(INITIAL_FILTERS)
-    updateUiState({ isLoading: true })
-  }, [updateUiState])
+  }, [])
 
   const handleRefresh = useCallback(() => {
-    if (uiState.isLoading) return
-    updateUiState({ isLoading: true, progress: 0, dataError: null })
-  }, [uiState.isLoading, updateUiState])
-
-  if (!uiState.mounted) {
-    return <LoadingSpinner className="h-screen" />
-  }
-
-  const { isLoading, activeTab, dataError, progress } = uiState
+    if (onRefresh) {
+      // Usar la función de refresco proporcionada por props
+      onRefresh()
+    } else {
+      // Fallback al comportamiento tradicional
+      setIsLoading(true)
+      fetchAppointments().finally(() => setIsLoading(false))
+    }
+  }, [onRefresh, fetchAppointments])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20 transition-all duration-500">
@@ -611,7 +574,7 @@ export const AppointmentStatistics: React.FC = () => {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(value) => updateUiState({ activeTab: value })} className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           
           {/* Tabs Header */}
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -636,26 +599,6 @@ export const AppointmentStatistics: React.FC = () => {
 
           {/* Filter Summary */}
           <FilterSummary filters={filters} updateFilter={updateFilter} />
-
-          {/* Error Alert */}
-          {dataError && (
-            <Alert variant="destructive" className="animate-in slide-in-from-top-3 duration-300">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error en los Datos</AlertTitle>
-              <AlertDescription>{dataError}</AlertDescription>
-            </Alert>
-          )}
-
-          {/* Loading Progress */}
-          {isLoading && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-muted-foreground">Cargando datos...</span>
-                <span className="text-sm font-medium">{progress}%</span>
-              </div>
-              <Progress value={progress} className="h-2" />
-            </div>
-          )}
 
           {/* Content Tabs */}
           <div className="min-h-[400px]">

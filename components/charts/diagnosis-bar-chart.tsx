@@ -1,6 +1,5 @@
 /* -------------------------------------------------------------------------- */
-/*  components/charts/diagnosis-bar-chart.tsx                                */
-/*  🎯 Gráfico de barras optimizado usando hook centralizador               */
+/*  components/charts/diagnosis-bar-chart.tsx - OPTIMIZADO                   */
 /* -------------------------------------------------------------------------- */
 
 import { memo, useMemo, FC } from 'react';
@@ -43,7 +42,7 @@ interface Props {
  * COMPONENTE PRINCIPAL OPTIMIZADO
  * ========================================================================== */
 
-const DiagnosisBarChart: FC<Props> = ({
+const DiagnosisBarChart: FC<Props> = memo(({
   data,
   title = 'Análisis Comparativo de Frecuencias',
   description = 'Distribución de diagnósticos por cantidad',
@@ -52,7 +51,6 @@ const DiagnosisBarChart: FC<Props> = ({
   sortBy = 'cantidad',
 }) => {
   
-  // Usar el hook centralizador para el renderizado
   const { renderBarChart } = useChartConfig({
     showLegend: false,
     showTooltip: true,
@@ -61,24 +59,23 @@ const DiagnosisBarChart: FC<Props> = ({
     showLabels,
   });
 
-  // Procesar datos para el formato que espera el hook
+  // Procesar datos con memoización optimizada
   const { chartData, stats } = useMemo(() => {
-    if (!data?.length) return { chartData: [], stats: { total: 0, categories: 0, mostCommon: 'N/A', maxValue: 0 } };
+    if (!data?.length) return { 
+      chartData: [], 
+      stats: { total: 0, categories: 0, mostCommon: 'N/A', maxValue: 0 } 
+    };
 
-    let sortedData = [...data];
-    
-    switch (sortBy) {
-      case 'cantidad':
-        sortedData.sort((a, b) => b.cantidad - a.cantidad);
-        break;
-      case 'alfabetico':
-        sortedData.sort((a, b) => a.tipo.localeCompare(b.tipo));
-        break;
-    }
+    // Clonar y ordenar solo si es necesario
+    const sortedData = sortBy === 'cantidad' 
+      ? [...data].sort((a, b) => b.cantidad - a.cantidad)
+      : sortBy === 'alfabetico'
+      ? [...data].sort((a, b) => a.tipo.localeCompare(b.tipo))
+      : data;
 
     const total = sortedData.reduce((sum, d) => sum + d.cantidad, 0);
     const maxValue = Math.max(...sortedData.map(d => d.cantidad));
-    const mostCommon = sortedData.find(d => d.cantidad === maxValue);
+    const mostCommon = sortedData[0]?.tipo || 'N/A';
 
     const motiveData: MotiveChartData[] = sortedData.map((item) => ({
       motive: item.tipo,
@@ -91,7 +88,7 @@ const DiagnosisBarChart: FC<Props> = ({
       stats: {
         total,
         categories: data.length,
-        mostCommon: mostCommon?.tipo || 'N/A',
+        mostCommon,
         maxValue,
       }
     };
@@ -116,6 +113,9 @@ const DiagnosisBarChart: FC<Props> = ({
       </Card>
     );
   }
+
+  const concentration = stats.total > 0 ? Math.round((stats.maxValue / stats.total) * 100) : 0;
+  const average = stats.categories > 0 ? Math.round(stats.total / stats.categories) : 0;
 
   return (
     <Card className={cn('shadow-lg hover:shadow-xl transition-all duration-300 border overflow-hidden', className)}>
@@ -155,9 +155,7 @@ const DiagnosisBarChart: FC<Props> = ({
           </div>
           
           <div className="text-center p-3 rounded-lg bg-muted/30">
-            <div className="text-lg font-bold">
-              {stats.total > 0 ? Math.round((stats.maxValue / stats.total) * 100) : 0}%
-            </div>
+            <div className="text-lg font-bold">{concentration}%</div>
             <div className="text-xs text-muted-foreground">Concentración</div>
           </div>
         </div>
@@ -184,14 +182,14 @@ const DiagnosisBarChart: FC<Props> = ({
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-primary" />
             <span className="text-muted-foreground">Promedio:</span>
-            <span className="font-bold">
-              {stats.categories > 0 ? Math.round(stats.total / stats.categories) : 0}
-            </span>
+            <span className="font-bold">{average}</span>
           </div>
         </div>
       </CardFooter>
     </Card>
   );
-};
+});
 
-export default memo(DiagnosisBarChart);
+DiagnosisBarChart.displayName = 'DiagnosisBarChart';
+
+export default DiagnosisBarChart;

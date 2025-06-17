@@ -1,6 +1,5 @@
 /* -------------------------------------------------------------------------- */
-/*  components/charts/diagnosis-pie-chart.tsx                                */
-/*  🎯 Gráfico de pie simplificado usando hook centralizador                */
+/*  components/charts/diagnosis-pie-chart.tsx - OPTIMIZADO                   */
 /* -------------------------------------------------------------------------- */
 
 import { memo, useMemo, useCallback, useState, FC } from 'react';
@@ -21,7 +20,6 @@ import {
   Target,
   Settings,
   Download,
-  Maximize2,
   Info,
   TrendingUp,
   TrendingDown,
@@ -74,10 +72,6 @@ interface Props {
   onExport?: (format: 'png' | 'svg' | 'json') => void;
 }
 
-/* ============================================================================
- * CONFIGURACIÓN POR DEFECTO
- * ========================================================================== */
-
 const DEFAULT_CONFIG: ChartConfig = {
   showPercentages: true,
   showLabels: true,
@@ -92,7 +86,7 @@ const DEFAULT_CONFIG: ChartConfig = {
  * COMPONENTE PRINCIPAL SIMPLIFICADO
  * ============================================================================ */
 
-const DiagnosisPieChart: FC<Props> = ({
+const DiagnosisPieChart: FC<Props> = memo(({
   data,
   title = "Distribución de Diagnósticos",
   description = "Análisis detallado con métricas avanzadas",
@@ -105,8 +99,6 @@ const DiagnosisPieChart: FC<Props> = ({
   onExport,
 }) => {
   
-  /* ============================== ESTADO =============================== */
-  
   const [config, setConfig] = useState<ChartConfig>({
     ...DEFAULT_CONFIG,
     maxCategories,
@@ -115,8 +107,7 @@ const DiagnosisPieChart: FC<Props> = ({
   const [hiddenSegments, setHiddenSegments] = useState<Set<string>>(new Set());
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
 
-  // Usar el hook centralizador para renderizado
-  const { renderPieChart, LoadingSpinner, EmptyState } = useChartConfig({
+  const { renderPieChart, EmptyState } = useChartConfig({
     showLegend: true,
     showTooltip: true,
     animation: true,
@@ -127,27 +118,26 @@ const DiagnosisPieChart: FC<Props> = ({
     colorScheme: config.colorScheme,
   });
 
-  /* ======================== PROCESAMIENTO DE DATOS ====================== */
-  
+  // Procesamiento de datos optimizado con un solo useMemo
   const { processedData, chartStats, visibleData } = useMemo(() => {
     if (!data?.length) {
       return { 
         processedData: [], 
-        chartStats: { total: 0, attendance: 100, cancellation: 0, pending: 0, present: 0, completed: 0, cancelled: 0, pendingCount: 0, presentCount: 0, period: "Actual", allStatusCounts: {} },
+        chartStats: { 
+          total: 0, attendance: 100, cancellation: 0, pending: 0, present: 0, 
+          completed: 0, cancelled: 0, pendingCount: 0, presentCount: 0, 
+          period: "Actual", allStatusCounts: {} 
+        },
         visibleData: []
       };
     }
 
-    // Ordenar datos según configuración
-    let sortedData = [...data];
-    switch (config.sortBy) {
-      case 'valor':
-        sortedData.sort((a, b) => b.cantidad - a.cantidad);
-        break;
-      case 'alfabetico':
-        sortedData.sort((a, b) => a.tipo.localeCompare(b.tipo));
-        break;
-    }
+    // Clonar y ordenar solo si es necesario
+    const sortedData = config.sortBy === 'valor' 
+      ? [...data].sort((a, b) => b.cantidad - a.cantidad)
+      : config.sortBy === 'alfabetico'
+      ? [...data].sort((a, b) => a.tipo.localeCompare(b.tipo))
+      : [...data];
 
     const total = sortedData.reduce((sum, d) => sum + d.cantidad, 0);
 
@@ -187,20 +177,29 @@ const DiagnosisPieChart: FC<Props> = ({
 
     // Datos visibles para el gráfico
     const visible = processed.filter(d => d.isVisible);
+    const visibleTotal = visible.reduce((sum, d) => sum + d.cantidad, 0);
 
     // Estadísticas para el hook
     const stats: GeneralStats = {
-      total: visible.reduce((sum, d) => sum + d.cantidad, 0),
+      total: visibleTotal,
       attendance: 100,
       cancellation: 0,
       pending: 0,
       present: 0,
-      completed: visible.reduce((sum, d) => sum + d.cantidad, 0),
+      completed: visibleTotal,
       cancelled: 0,
       pendingCount: 0,
       presentCount: 0,
       period: "Actual",
-      allStatusCounts: {}
+      allStatusCounts: {
+        "PROGRAMADA": 0,
+        "CONFIRMADA": 0,
+        "CANCELADA": 0,
+        "COMPLETADA": visibleTotal,
+        "NO ASISTIO": 0,
+        "PRESENTE": 0,
+        "REAGENDADA": 0
+      }
     };
 
     return {
@@ -210,22 +209,9 @@ const DiagnosisPieChart: FC<Props> = ({
     };
   }, [data, config, hiddenSegments]);
 
-  /* ======================= MANEJADORES DE EVENTOS ======================= */
-  
   const updateConfig = useCallback((updates: Partial<ChartConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));
   }, []);
-
-  const handleSegmentClick = useCallback((payload: any) => {
-    if (!interactive) return;
-    
-    const segmentData = processedData.find(d => d.tipo === payload.name);
-    if (segmentData) {
-      const newSelected = selectedSegment === segmentData.tipo ? null : segmentData.tipo;
-      setSelectedSegment(newSelected);
-      onSegmentClick?.(segmentData);
-    }
-  }, [interactive, selectedSegment, onSegmentClick, processedData]);
 
   const toggleSegmentVisibility = useCallback((tipo: string) => {
     setHiddenSegments(prev => {
@@ -243,8 +229,6 @@ const DiagnosisPieChart: FC<Props> = ({
     onExport?.(format);
   }, [onExport]);
 
-  /* ========================== ESTADO VACÍO ============================ */
-  
   if (!processedData.length) {
     return (
       <Card className={cn('shadow-lg hover:shadow-xl transition-all duration-300', className)}>
@@ -265,77 +249,13 @@ const DiagnosisPieChart: FC<Props> = ({
     );
   }
 
-  /* ========================== INFORMACIÓN DETALLADA ======================== */
-  
-  const renderDetailedInfo = () => {
-    if (!selectedSegment) return null;
-    
-    const selectedData = processedData.find(d => d.tipo === selectedSegment);
-    if (!selectedData) return null;
+  const selectedData = selectedSegment ? processedData.find(d => d.tipo === selectedSegment) : null;
 
-    return (
-      <div className="mt-4 p-4 bg-muted/30 rounded-lg border animate-in slide-in-from-top-2 fade-in duration-200">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="font-semibold capitalize">{selectedData.tipo}</h4>
-          <Badge variant="outline">#{selectedData.rank}</Badge>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-          <div className="text-center p-3 rounded bg-background border">
-            <div className="text-2xl font-bold text-primary">{selectedData.cantidad}</div>
-            <div className="text-xs text-muted-foreground">Casos Totales</div>
-          </div>
-          
-          <div className="text-center p-3 rounded bg-background border">
-            <div className="text-2xl font-bold text-primary">{selectedData.porcentaje}%</div>
-            <div className="text-xs text-muted-foreground">Del Total</div>
-          </div>
-          
-          <div className="text-center p-3 rounded bg-background border">
-            <div className="text-lg font-bold text-primary">{selectedData.categoria}</div>
-            <div className="text-xs text-muted-foreground">Especialidad</div>
-          </div>
-          
-          {selectedData.tendencia !== undefined && (
-            <div className="text-center p-3 rounded bg-background border">
-              <div className={cn(
-                "text-2xl font-bold flex items-center justify-center gap-1",
-                selectedData.tendencia > 0 ? "text-red-500" : "text-green-500"
-              )}>
-                {selectedData.tendencia > 0 ? 
-                  <TrendingUp className="h-5 w-5" /> : 
-                  <TrendingDown className="h-5 w-5" />
-                }
-                {Math.abs(selectedData.tendencia).toFixed(1)}%
-              </div>
-              <div className="text-xs text-muted-foreground">Tendencia</div>
-            </div>
-          )}
-        </div>
-        
-        {selectedData.descripcion && (
-          <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                {selectedData.descripcion}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  /* ========================== RENDERIZADO PRINCIPAL ======================== */
-  
   return (
     <Card className={cn(
       'shadow-lg hover:shadow-xl transition-all duration-300 border overflow-hidden',
       className
     )}>
-      
-      {/* ==================== HEADER CON CONTROLES ==================== */}
       
       <CardHeader className="bg-gradient-to-r from-muted/30 to-muted/10 border-b">
         <div className="flex items-center justify-between gap-4">
@@ -433,8 +353,7 @@ const DiagnosisPieChart: FC<Props> = ({
 
       <CardContent className="p-6">
         
-        {/* ================== CONTROLES DE VISIBILIDAD ================== */}
-        
+        {/* Controles de visibilidad */}
         {interactive && processedData.length > 4 && (
           <div className="mb-6 space-y-3">
             <div className="flex items-center gap-2">
@@ -462,18 +381,65 @@ const DiagnosisPieChart: FC<Props> = ({
           </div>
         )}
 
-        {/* ==================== GRÁFICO USANDO HOOK CENTRALIZADOR ==================== */}
-        
+        {/* Gráfico usando hook centralizador */}
         {renderPieChart(visibleData, chartStats, false)}
 
-        {/* ================ INFORMACIÓN DETALLADA ================= */}
-        
-        {renderDetailedInfo()}
+        {/* Información detallada del segmento seleccionado */}
+        {selectedData && (
+          <div className="mt-4 p-4 bg-muted/30 rounded-lg border animate-in slide-in-from-top-2 fade-in duration-200">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-semibold capitalize">{selectedData.tipo}</h4>
+              <Badge variant="outline">#{selectedData.rank}</Badge>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <div className="text-center p-3 rounded bg-background border">
+                <div className="text-2xl font-bold text-primary">{selectedData.cantidad}</div>
+                <div className="text-xs text-muted-foreground">Casos Totales</div>
+              </div>
+              
+              <div className="text-center p-3 rounded bg-background border">
+                <div className="text-2xl font-bold text-primary">{selectedData.porcentaje}%</div>
+                <div className="text-xs text-muted-foreground">Del Total</div>
+              </div>
+              
+              <div className="text-center p-3 rounded bg-background border">
+                <div className="text-lg font-bold text-primary">{selectedData.categoria}</div>
+                <div className="text-xs text-muted-foreground">Especialidad</div>
+              </div>
+              
+              {selectedData.tendencia !== undefined && (
+                <div className="text-center p-3 rounded bg-background border">
+                  <div className={cn(
+                    "text-2xl font-bold flex items-center justify-center gap-1",
+                    selectedData.tendencia > 0 ? "text-red-500" : "text-green-500"
+                  )}>
+                    {selectedData.tendencia > 0 ? 
+                      <TrendingUp className="h-5 w-5" /> : 
+                      <TrendingDown className="h-5 w-5" />
+                    }
+                    {Math.abs(selectedData.tendencia).toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground">Tendencia</div>
+                </div>
+              )}
+            </div>
+            
+            {selectedData.descripcion && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    {selectedData.descripcion}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
       </CardContent>
 
-      {/* ===================== FOOTER CON ESTADÍSTICAS ===================== */}
-      
       {showStats && (
         <CardFooter className="bg-muted/20 border-t">
           <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -500,6 +466,8 @@ const DiagnosisPieChart: FC<Props> = ({
       )}
     </Card>
   );
-};
+});
 
-export default memo(DiagnosisPieChart);
+DiagnosisPieChart.displayName = 'DiagnosisPieChart';
+
+export default DiagnosisPieChart;
