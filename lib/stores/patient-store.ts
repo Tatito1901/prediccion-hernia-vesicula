@@ -1,6 +1,7 @@
-// lib/stores/patientStore.ts
+// lib/stores/patientStore.ts - Optimizado con React Query
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { parseISO, isValid, format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -8,12 +9,6 @@ import {
   PatientData, PatientStatusEnum, DiagnosisEnum, 
   PatientOriginEnum, FollowUpData, FollowUpStatusEnum
 } from '@/app/dashboard/data-model';
-
-// Definiendo interfaces que antes venían de data-model pero que ahora definimos localmente
-type AddPatientInput = Omit<PatientData, 'id' | 'fecha_creacion' | 'fecha_actualizacion' | 'created_at' | 
-  'updated_at' | 'historial_cambios' | 'estado_paciente_info' | 'proxima_cita' | 'ultima_cita' | 'fecha_registro'>;
-
-type UpdatePatientInput = { id: string } & Partial<PatientData>;
 
 // Tipos
 interface ApiPatient {
@@ -42,7 +37,6 @@ interface ApiPatient {
   direccion?: string;
   historial_medico_relevante?: string;
   notas_paciente?: string;
-  // Relaciones de Supabase
   doctor?: {
     id: string;
     full_name: string;
@@ -53,17 +47,25 @@ interface ApiPatient {
   };
 }
 
-interface ApiError extends Error {
-  status?: number;
-  code?: string;
-  details?: any;
+// Store simplificado solo para estado UI
+interface PatientUIStore {
+  selectedPatientId: string | null;
+  setSelectedPatientId: (id: string | null) => void;
 }
 
-// Funciones auxiliares
+export const usePatientUIStore = create<PatientUIStore>()(
+  immer((set) => ({
+    selectedPatientId: null,
+    setSelectedPatientId: (id) => set((state) => {
+      state.selectedPatientId = id;
+    }),
+  }))
+);
+
+// Funciones de transformación
 const normalizeId = (id: string | number | null | undefined): string => {
   if (id === null || id === undefined) return '';
-  const stringId = String(id);
-  return stringId.trim();
+  return String(id).trim();
 };
 
 const safeParseDate = (dateString: string | null | undefined): Date | null => {
@@ -76,49 +78,6 @@ const safeParseDate = (dateString: string | null | undefined): Date | null => {
   }
 };
 
-const fetchWithRetry = async (
-  input: RequestInfo,
-  init: RequestInit = {},
-  retries = 2
-): Promise<Response> => {
-  let lastError: Error = new Error('Fetch failed due to unknown reasons.');
-  const FETCH_TIMEOUT_MS = 10000;
-  const BASE_RETRY_DELAY_MS = 1000;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(input, { ...init, signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (response.ok || (response.status >= 400 && response.status < 500)) {
-        return response;
-      }
-      lastError = new Error(`Server error: ${response.status} ${response.statusText}`);
-    } catch (error) {
-      clearTimeout(timeoutId);
-      if (error instanceof Error) {
-        lastError = error;
-        if (controller.signal.aborted && !lastError.message.includes('timed out')) {
-           lastError = new Error(`Request timed out after ${FETCH_TIMEOUT_MS / 1000}s on attempt ${attempt + 1}. Original error: ${lastError.message}`);
-        }
-      } else {
-        lastError = new Error(String(error) || 'Network request failed');
-      }
-    }
-    
-    if (attempt === retries) break;
-
-    const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt) + Math.random() * (BASE_RETRY_DELAY_MS / 2);
-    await new Promise(resolve => setTimeout(resolve, delay));
-  }
-  
-  throw lastError;
-};
-
-// Función de transformación de datos
 const transformPatientData = (apiPatient: ApiPatient): PatientData => {
   const patientId = normalizeId(apiPatient.id);
   const parsedFechaRegistro = safeParseDate(apiPatient.fecha_registro);
@@ -138,16 +97,12 @@ const transformPatientData = (apiPatient: ApiPatient): PatientData => {
     estado_paciente: (apiPatient.estado_paciente as PatientStatusEnum) || PatientStatusEnum.PENDIENTE_DE_CONSULTA,
     diagnostico_principal: (apiPatient.diagnostico_principal as DiagnosisEnum) ?? undefined,
     diagnostico_principal_detalle: apiPatient.diagnostico_principal_detalle ?? undefined,
-    
-    // Fechas (convertidas a ISO strings para PatientData)
     fecha_registro: parsedFechaRegistro ? parsedFechaRegistro.toISOString() : undefined,
     fecha_nacimiento: parsedFechaNacimiento ? format(parsedFechaNacimiento, 'yyyy-MM-dd') : undefined,
     ultimo_contacto: parsedUltimoContacto ? parsedUltimoContacto.toISOString() : undefined,
     proximo_contacto: parsedProximoContacto ? parsedProximoContacto.toISOString() : undefined,
     fecha_cirugia_programada: parsedFechaCirugiaProgramada ? parsedFechaCirugiaProgramada.toISOString() : undefined,
     fecha_primera_consulta: parsedFechaPrimeraConsulta ? parsedFechaPrimeraConsulta.toISOString() : undefined,
-
-    // Otros campos
     origen_paciente: (apiPatient.origen_paciente as PatientOriginEnum) ?? undefined,
     probabilidad_cirugia: apiPatient.probabilidad_cirugia ?? undefined,
     etiquetas: apiPatient.etiquetas ? apiPatient.etiquetas.split(',').map(tag => tag.trim()) : [],
@@ -159,19 +114,201 @@ const transformPatientData = (apiPatient: ApiPatient): PatientData => {
     doctor_asignado_nombre: apiPatient.doctor?.full_name ?? '',
     creado_por_id: normalizeId(apiPatient.creado_por_id),
     creado_por_nombre: apiPatient.creator?.full_name ?? '',
-    // Campos que podrían necesitar lógica adicional o estar ausentes en ApiPatient
-    foto_perfil: '', // Placeholder, no presente en ApiPatient
-    preferencias_comunicacion: [], // Placeholder
-    consentimientos: [], // Placeholder
+    foto_perfil: '',
+    preferencias_comunicacion: [],
+    consentimientos: [],
   } as PatientData;
 };
 
-// Interfaz del Store de pacientes
+// Query Keys
+export const patientKeys = {
+  all: ['patients'] as const,
+  lists: () => [...patientKeys.all, 'list'] as const,
+  list: (filters: { page?: number; pageSize?: number; estado?: string }) => 
+    [...patientKeys.lists(), filters] as const,
+  details: () => [...patientKeys.all, 'detail'] as const,
+  detail: (id: string) => [...patientKeys.details(), id] as const,
+};
+
+// Hooks de React Query
+export const usePatients = (page = 1, pageSize = 20, estado?: string) => {
+  return useQuery({
+    queryKey: patientKeys.list({ page, pageSize, estado }),
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      });
+      if (estado) params.append('estado', estado);
+
+      const response = await fetch(`/api/patients?${params}`);
+      if (!response.ok) {
+        throw new Error('Error fetching patients');
+      }
+      
+      const data = await response.json();
+      return {
+        patients: data.data.map(transformPatientData),
+        pagination: data.pagination
+      };
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutos
+    gcTime: 10 * 60 * 1000, // 10 minutos
+  });
+};
+
+export const usePatient = (id: string | null) => {
+  return useQuery({
+    queryKey: patientKeys.detail(id!),
+    queryFn: async () => {
+      const response = await fetch(`/api/patients/${id}`);
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Error fetching patient');
+      }
+      const data = await response.json();
+      return transformPatientData(data);
+    },
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+};
+
+export const useCreatePatient = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: Omit<PatientData, 'id' | 'fecha_creacion' | 'fecha_actualizacion' | 'created_at' | 'updated_at' | 'historial_cambios' | 'estado_paciente_info' | 'proxima_cita' | 'ultima_cita' | 'fecha_registro'>) => {
+      const response = await fetch('/api/patients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Error creating patient');
+      }
+      
+      const responseData = await response.json();
+      return transformPatientData(responseData);
+    },
+    onSuccess: (newPatient) => {
+      // Invalidar todas las listas de pacientes
+      queryClient.invalidateQueries({ queryKey: patientKeys.lists() });
+      
+      // Agregar el nuevo paciente al cache
+      queryClient.setQueryData(
+        patientKeys.detail(newPatient.id),
+        newPatient
+      );
+      
+      toast.success('Paciente creado exitosamente');
+    },
+    onError: (error) => {
+      toast.error('Error al crear paciente', {
+        description: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    },
+  });
+};
+
+export const useUpdatePatient = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...updateData }: { id: string } & Partial<PatientData>) => {
+      const response = await fetch(`/api/patients/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Error updating patient');
+      }
+      
+      const responseData = await response.json();
+      return transformPatientData(responseData);
+    },
+    onSuccess: (updatedPatient) => {
+      // Actualizar el cache del paciente específico
+      queryClient.setQueryData(
+        patientKeys.detail(updatedPatient.id),
+        updatedPatient
+      );
+      
+      // Invalidar las listas para refrescarlas
+      queryClient.invalidateQueries({ queryKey: patientKeys.lists() });
+      
+      toast.success('Paciente actualizado exitosamente');
+    },
+    onError: (error) => {
+      toast.error('Error al actualizar paciente', {
+        description: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    },
+  });
+};
+
+export const useCreateFollowUp = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (followUpData: Partial<FollowUpData>) => {
+      if (!followUpData.patient_id) {
+        throw new Error('ID de paciente requerido');
+      }
+
+      const payload = {
+        patient_id: followUpData.patient_id,
+        fecha_seguimiento: followUpData.fecha_seguimiento || new Date().toISOString().split('T')[0],
+        tipo_seguimiento: followUpData.tipo_seguimiento || 'Llamada',
+        notas_seguimiento: followUpData.notas_seguimiento || '',
+        estado_seguimiento: followUpData.estado_seguimiento || FollowUpStatusEnum.PROGRAMADO,
+        resultado_seguimiento: followUpData.resultado_seguimiento,
+        proximo_seguimiento_fecha: followUpData.proximo_seguimiento_fecha,
+        user_id_assigned: followUpData.user_id_assigned
+      };
+
+      const response = await fetch('/api/followups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Error creating follow-up');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      // Invalidar el paciente específico para refrescar sus datos
+      if (variables.patient_id) {
+        queryClient.invalidateQueries({ 
+          queryKey: patientKeys.detail(variables.patient_id) 
+        });
+      }
+      
+      toast.success('Seguimiento creado correctamente');
+    },
+    onError: (error) => {
+      toast.error('Error al crear seguimiento', {
+        description: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    },
+  });
+};
+
+// Store para compatibilidad hacia atrás (wrapper sobre React Query)
 interface PatientStore {
   patients: PatientData[];
   isLoading: boolean;
   error: Error | null;
-  // Paginación
   currentPage: number;
   pageSize: number;
   totalCount: number;
@@ -183,230 +320,42 @@ interface PatientStore {
   addFollowUp: (followUpData: Partial<FollowUpData>) => Promise<FollowUpData>;
 }
 
-// Creación del store con Zustand + immer para actualizaciones inmutables
-const DEFAULT_STORE_PAGE_SIZE = 20;
-
-export const usePatientStore = create<PatientStore>()(
-  immer((set, get) => ({
-    patients: [],
-    isLoading: false,
-    error: null,
-    // Estado de paginación inicial
-    currentPage: 1,
-    pageSize: DEFAULT_STORE_PAGE_SIZE,
-    totalCount: 0,
-    totalPages: 0,
-    
-    fetchPatients: async (page, pageSizeOption) => {
-      set((state) => {
-        state.isLoading = true;
-        state.error = null;
-      });
-      
-      const requestedPage = page || get().currentPage || 1;
-      const requestedPageSize = pageSizeOption || get().pageSize || DEFAULT_STORE_PAGE_SIZE;
-
-      set((state) => {
-        state.isLoading = true;
-        state.error = null;
-      });
-      
-      try {
-        const apiUrl = `/api/patients?page=${requestedPage}&pageSize=${requestedPageSize}`;
-        const response = await fetchWithRetry(apiUrl);
-        const responseData = await response.json(); // Ahora esperamos un objeto { data: [], pagination: {} }
-        
-        if (response.ok && responseData.data) {
-          const transformedPatients = responseData.data.map(transformPatientData);
-          set((state) => {
-            state.patients = transformedPatients;
-            state.currentPage = responseData.pagination.page;
-            state.pageSize = responseData.pagination.pageSize;
-            state.totalCount = responseData.pagination.totalCount;
-            state.totalPages = responseData.pagination.totalPages;
-            state.isLoading = false;
-          });
-        } else {
-          throw new Error(responseData.message || 'Error fetching patients');
-        }
-      } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error('Unknown error');
-          state.isLoading = false;
-        });
-      }
-    },
-    
-    addPatient: async (data) => {
-      set((state) => { state.isLoading = true; state.error = null; });
-      
-      try {
-        const response = await fetchWithRetry('/api/patients', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        
-        const responseData = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(responseData.message || 'Error adding patient');
-        }
-        
-        const newPatient = transformPatientData(responseData);
-        
-        // Actualiza el estado con el nuevo paciente
-        set((state) => {
-          state.patients = [...state.patients, newPatient];
-          state.isLoading = false;
-        });
-        
-        return newPatient;
-      } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error('Error adding patient');
-          state.isLoading = false;
-        });
-        
-        throw error;
-      }
-    },
-    
-    updatePatient: async (input) => {
-      set((state) => { state.isLoading = true; state.error = null; });
-      
-      try {
-        const { id, ...updateData } = input;
-        
-        const response = await fetchWithRetry(`/api/patients/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updateData)
-        });
-        
-        const responseData = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(responseData.message || 'Error updating patient');
-        }
-        
-        const updatedPatient = transformPatientData(responseData);
-        
-        // Actualiza el estado con el paciente modificado
-        set((state) => {
-          state.patients = state.patients.map(p => 
-            p.id === updatedPatient.id ? updatedPatient : p
-          );
-          state.isLoading = false;
-        });
-        
-        return updatedPatient;
-      } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error('Error updating patient');
-          state.isLoading = false;
-        });
-        
-        throw error;
-      }
-    },
-    
-    getPatientById: async (patientId) => {
-      const normalizedId = normalizeId(patientId);
-      
-      // Primero buscamos en el estado local
-      const localPatient = get().patients.find(p => p.id === normalizedId);
-      if (localPatient) {
-        return localPatient;
-      }
-      
-      set((state) => { state.isLoading = true; state.error = null; });
-      
-      try {
-        const response = await fetchWithRetry(`/api/patients/${normalizedId}`);
-        const data = await response.json();
-        
-        if (!response.ok || !data) {
-          if (response.status === 404) {
-            set((state) => { state.isLoading = false; });
-            return null;
-          }
-          throw new Error(data?.message || `Error fetching patient ${normalizedId}`);
-        }
-        
-        const patient = transformPatientData(data);
-        
-        // No actualizamos el estado global con este paciente individual para no contaminar la lista
-        set((state) => { state.isLoading = false; });
-        
-        return patient;
-      } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error(`Error fetching patient ${normalizedId}`);
-          state.isLoading = false;
-        });
-        
-        throw error;
-      }
-    },
-    addFollowUp: async (followUpData) => {
-      try {
-        if (!followUpData.patient_id) {
-          throw new Error('ID de paciente requerido para crear seguimiento');
-        }
-
-        // Asegurar que tiene los campos requeridos
-        const payload = {
-          patient_id: followUpData.patient_id,
-          fecha_seguimiento: followUpData.fecha_seguimiento || new Date().toISOString().split('T')[0],
-          tipo_seguimiento: followUpData.tipo_seguimiento || 'Llamada',
-          notas_seguimiento: followUpData.notas_seguimiento || '',
-          estado_seguimiento: followUpData.estado_seguimiento || FollowUpStatusEnum.PROGRAMADO,
-          resultado_seguimiento: followUpData.resultado_seguimiento,
-          proximo_seguimiento_fecha: followUpData.proximo_seguimiento_fecha,
-          user_id_assigned: followUpData.user_id_assigned
-        };
-
-        // Realizamos la llamada a la API
-        const response = await fetchWithRetry('/api/followups', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `Error ${response.status} al crear seguimiento`);
-        }
-
-        const createdFollowUp = await response.json();
-
-        // Actualizar el estado del paciente si es necesario
-        if (followUpData.patient_id) {
-          const patientId = followUpData.patient_id;
-          try {
-            // Refrescamos el paciente para ver su estado actualizado
-            await get().getPatientById(patientId);
-          } catch (patientError) {
-            console.error('Error actualizando datos del paciente después de crear seguimiento:', patientError);
-          }
-        }
-
-        // Mostrar notificación de éxito
-        toast?.success?.('Seguimiento creado correctamente');
-        
-        return createdFollowUp;
-      } catch (error) {
-        console.error('Error en addFollowUp:', error);
-        // Mostrar notificación de error
-        toast?.error?.('Error al crear seguimiento', {
-          description: error instanceof Error ? error.message : 'Error inesperado'
-        });
-        throw error;
-      }
-    },
-  }))
-);
-
-// Tipo para usar con patientStore
-export type { PatientStore };
+// Store wrapper para mantener compatibilidad
+export const usePatientStore = create<PatientStore>(() => ({
+  patients: [],
+  isLoading: false,
+  error: null,
+  currentPage: 1,
+  pageSize: 20,
+  totalCount: 0,
+  totalPages: 0,
+  
+  fetchPatients: async () => {
+    // Este método ahora es un no-op porque usamos React Query
+    console.warn('fetchPatients is deprecated. Use usePatients hook instead');
+  },
+  
+  addPatient: async (data) => {
+    // Este método ahora es un no-op porque usamos React Query
+    console.warn('addPatient is deprecated. Use useCreatePatient hook instead');
+    throw new Error('Use useCreatePatient hook instead');
+  },
+  
+  updatePatient: async (input) => {
+    // Este método ahora es un no-op porque usamos React Query
+    console.warn('updatePatient is deprecated. Use useUpdatePatient hook instead');
+    throw new Error('Use useUpdatePatient hook instead');
+  },
+  
+  getPatientById: async (patientId) => {
+    // Este método ahora es un no-op porque usamos React Query
+    console.warn('getPatientById is deprecated. Use usePatient hook instead');
+    return null;
+  },
+  
+  addFollowUp: async (followUpData) => {
+    // Este método ahora es un no-op porque usamos React Query
+    console.warn('addFollowUp is deprecated. Use useCreateFollowUp hook instead');
+    throw new Error('Use useCreateFollowUp hook instead');
+  },
+}));

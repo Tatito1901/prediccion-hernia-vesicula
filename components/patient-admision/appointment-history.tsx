@@ -1,6 +1,6 @@
-// appointment-history.tsx - Versión optimizada para rendimiento
-import { useEffect, useMemo, memo } from "react";
-import { useAppointmentStore } from "@/lib/stores/appointment-store";
+// appointment-history.tsx - Actualizado para usar React Query
+import { useMemo, memo } from "react";
+import { useAppointments } from "@/lib/stores/appointment-store";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -236,18 +236,10 @@ export const AppointmentHistory = memo<{
   maxItems,
   className
 }) => {
-  const appointments = useAppointmentStore(state => state.appointments);
-  const isLoadingAppointments = useAppointmentStore(state => state.isLoading);
-  const errorAppointments = useAppointmentStore(state => state.error);
-  const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
+  // Usar React Query hook
+  const { data: appointmentsData, isLoading, error } = useAppointments(1, 100);
+  const appointments = appointmentsData?.appointments || [];
   
-  // Cargar citas solo si es necesario
-  useEffect(() => {
-    if (!appointments && !isLoadingAppointments && !errorAppointments) {
-      fetchAppointments();
-    }
-  }, []);
-
   // Filtrar y ordenar citas del paciente con memoización
   const patientAppointments = useMemo(() => {
     if (!appointments) return [];
@@ -301,7 +293,7 @@ export const AppointmentHistory = memo<{
     };
   }, [patientAppointments]);
 
-  if (isLoadingAppointments && !appointments) {
+  if (isLoading && !appointments.length) {
     return (
       <div className="space-y-6">
         <div className="flex flex-col items-center justify-center py-12">
@@ -318,13 +310,13 @@ export const AppointmentHistory = memo<{
     );
   }
 
-  if (errorAppointments) {
+  if (error) {
     return (
       <Alert variant="destructive" className="animate-in fade-in-0 shadow-lg">
         <AlertCircle className="h-5 w-5" />
         <AlertTitle>Error al cargar el historial</AlertTitle>
         <AlertDescription>
-          {errorAppointments.message || "Ocurrió un error al cargar las citas del paciente."}
+          {error instanceof Error ? error.message : "Ocurrió un error al cargar las citas del paciente."}
         </AlertDescription>
       </Alert>
     );

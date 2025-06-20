@@ -1,4 +1,4 @@
-// patient-admission.tsx - Versión optimizada para rendimiento
+// patient-admission.tsx - Actualizado para usar React Query
 import React, { useState, useCallback, useMemo, memo } from "react";
 import {
   Calendar,
@@ -33,11 +33,10 @@ import { useBreakpointStore } from "@/hooks/use-breakpoint";
 import { toast } from "sonner";
 
 import { AppointmentCard } from "./patient-card";
-import { usePatientStore } from "@/lib/stores/patient-store";
+import { usePatients } from "@/lib/stores/patient-store";
 import { AppointmentData, AppointmentStatusEnum } from "@/app/dashboard/data-model";
-import { useAppointmentStore } from "@/lib/stores/appointment-store";
+import { useAppointments, useUpdateAppointmentStatus } from "@/lib/stores/appointment-store";
 import { useSurveyStore } from "@/lib/stores/survey-store";
-import { usePatientAdmissionFlow } from "./use-patient-admission-flow";
 
 // Importaciones directas sin lazy loading
 import { RescheduleDatePicker } from './patient-admission.reschedule';
@@ -105,6 +104,56 @@ const transformAppointment = (appointment: AppointmentData): Appointment => {
     telefono: appointment.telefono || "",
     dateTime: appointment.fechaConsulta,
   };
+};
+
+// Hook personalizado para filtrar citas
+const useFilteredAppointments = (appointments: AppointmentData[]) => {
+  return useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    const result = {
+      today: [] as AppointmentData[],
+      future: [] as AppointmentData[],
+      past: [] as AppointmentData[],
+    };
+
+    if (!appointments?.length) {
+      return result;
+    }
+
+    for (const appointment of appointments) {
+      try {
+        const appointmentDate = new Date(appointment.fechaConsulta);
+        appointmentDate.setHours(0, 0, 0, 0);
+        const appointmentTime = appointmentDate.getTime();
+
+        if (appointmentTime === todayTime) {
+          result.today.push(appointment);
+        } else if (appointmentTime > todayTime) {
+          result.future.push(appointment);
+        } else {
+          result.past.push(appointment);
+        }
+      } catch (error) {
+        console.error(`Error procesando cita ${appointment.id}:`, error);
+      }
+    }
+
+    // Ordenar por hora
+    const sortByTime = (a: AppointmentData, b: AppointmentData): number => {
+      const timeA = a.horaConsulta || '00:00';
+      const timeB = b.horaConsulta || '00:00';
+      return timeA.localeCompare(timeB);
+    };
+
+    result.today.sort(sortByTime);
+    result.future.sort(sortByTime);
+    result.past.sort((a, b) => sortByTime(b, a));
+
+    return result;
+  }, [appointments]);
 };
 
 // Componentes UI memoizados
@@ -206,19 +255,18 @@ const MobileTabs = memo(({
 
 // Componente principal optimizado
 export default memo(function PatientAdmission() {
-  const {
-    appointments,
-    isLoading: isLoadingAppointments,
-    activeTab,
-    setActiveTab,
-    refetchAppointments,
-    filteredAppointments,
-  } = usePatientAdmissionFlow();
-
-  const { patients } = usePatientStore();
-  const { updateAppointmentStatus } = useAppointmentStore();
+  // Usar React Query hooks
+  const { data: appointmentsData, isLoading: isLoadingAppointments } = useAppointments(1, 100);
+  const { data: patientsData } = usePatients(1, 100);
+  const updateAppointmentStatusMutation = useUpdateAppointmentStatus();
+  
+  const appointments = appointmentsData?.appointments || [];
+  const patients = patientsData?.patients || [];
+  
   const { getAssignmentById } = useSurveyStore();
   const { mobile: isMobile } = useBreakpointStore();
+
+  const [activeTab, setActiveTab] = useState<TabValue>("today");
 
   // Estados simplificados con valores iniciales optimizados
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -251,6 +299,9 @@ export default memo(function PatientAdmission() {
     date: null as Date | null,
     time: null as string | null
   });
+
+  // Filtrar citas usando el hook personalizado
+  const filteredAppointments = useFilteredAppointments(appointments);
 
   // Datos derivados memoizados
   const currentAppointments = useMemo(() => 
@@ -328,21 +379,32 @@ export default memo(function PatientAdmission() {
     if (!action || !appointment) return;
 
     try {
-      let statusUpdate: { status: AppointmentStatusEnum; nota: string; nuevaFecha?: string };
-
       switch (action) {
         case "checkIn":
-          statusUpdate = { status: AppointmentStatusEnum.PRESENTE, nota: "Check-in manual" };
-          break;
         case "cancel":
-          statusUpdate = { status: AppointmentStatusEnum.CANCELADA, nota: "Cancelación manual" };
-          break;
         case "complete":
-          statusUpdate = { status: AppointmentStatusEnum.COMPLETADA, nota: "Consulta completada" };
-          break;
         case "noShow":
-          statusUpdate = { status: AppointmentStatusEnum.NO_ASISTIO, nota: "Paciente no asistió" };
+          const statusMap = {
+            checkIn: AppointmentStatusEnum.PRESENTE,
+            cancel: AppointmentStatusEnum.CANCELADA,
+            complete: AppointmentStatusEnum.COMPLETADA,
+            noShow: AppointmentStatusEnum.NO_ASISTIO,
+          };
+          
+          const motivoMap = {
+            checkIn: "Check-in manual",
+            cancel: "Cancelación manual",
+            complete: "Consulta completada",
+            noShow: "Paciente no asistió",
+          };
+          
+          await updateAppointmentStatusMutation.mutateAsync({
+            appointmentId: appointment.id,
+            newStatus: statusMap[action],
+            motivo: motivoMap[action],
+          });
           break;
+          
         case "reschedule":
           if (!rescheduleState.date || !rescheduleState.time) {
             toast.error("Seleccione fecha y hora para reprogramar");
@@ -352,26 +414,14 @@ export default memo(function PatientAdmission() {
           const newDate = new Date(rescheduleState.date);
           newDate.setHours(hours, minutes);
           
-          statusUpdate = {
-            status: AppointmentStatusEnum.REAGENDADA,
-            nota: "Cita reprogramada",
-            nuevaFecha: newDate.toISOString()
-          };
+          await updateAppointmentStatusMutation.mutateAsync({
+            appointmentId: appointment.id,
+            newStatus: AppointmentStatusEnum.REAGENDADA,
+            motivo: "Cita reprogramada",
+            nuevaFechaHora: newDate.toISOString()
+          });
           break;
-        default:
-          return;
       }
-
-      await toast.promise(
-        updateAppointmentStatus(appointment.id, statusUpdate.status, statusUpdate.nota, statusUpdate.nuevaFecha),
-        {
-          loading: "Actualizando...",
-          success: "Actualizado correctamente",
-          error: "Error al actualizar"
-        }
-      );
-
-      refetchAppointments();
       
       if (action === "checkIn") {
         setTimeout(() => handleStartSurvey(appointment), 300);
@@ -384,7 +434,7 @@ export default memo(function PatientAdmission() {
         setRescheduleState({ date: null, time: null });
       }
     }
-  }, [confirmDialog, rescheduleState, updateAppointmentStatus, refetchAppointments, handleStartSurvey]);
+  }, [confirmDialog, rescheduleState, updateAppointmentStatusMutation, handleStartSurvey]);
 
   const dialogConfig = confirmDialog.action ? DIALOG_CONFIG[confirmDialog.action] : null;
 
@@ -492,7 +542,7 @@ export default memo(function PatientAdmission() {
           isOpen={surveySelector.isOpen}
           {...surveySelector.data}
           onClose={() => setSurveySelector({ isOpen: false, data: null })}
-          onSurveyAssigned={handleSurveyAssigned}
+          onAssigned={handleSurveyAssigned}
         />
       )}
       
@@ -590,7 +640,7 @@ export default memo(function PatientAdmission() {
                     disabled={
                       (confirmDialog.action === "reschedule" && 
                        (!rescheduleState.date || !rescheduleState.time)) || 
-                      isLoadingAppointments
+                      updateAppointmentStatusMutation.isPending
                     }
                     className={cn(
                       confirmDialog.action === "cancel" && "bg-red-600 hover:bg-red-700 text-white",

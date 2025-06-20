@@ -1,4 +1,4 @@
-// new-patient-form.tsx - Versión optimizada para rendimiento
+// new-patient-form.tsx - Actualizado para usar React Query
 import React, { useState, useEffect, useMemo, useCallback, memo } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -49,8 +49,8 @@ import {
   AppointmentStatusEnum,
   type TimeString
 } from "@/app/dashboard/data-model"
-import { usePatientStore } from "@/lib/stores/patient-store"
-import { useAppointmentStore, type AddAppointmentInput } from "@/lib/stores/appointment-store"
+import { useCreatePatient } from "@/lib/stores/patient-store"
+import { useAppointments, useCreateAppointment } from "@/lib/stores/appointment-store"
 
 // Esquema de validación
 const FORM_SCHEMA = z.object({
@@ -133,7 +133,6 @@ const DEFAULT_VALUES: FormValues = {
 // Cache para formateo
 const diagnosisFormatCache = new Map<string, string>();
 
-// Función de formateo con cache
 const formatDiagnosis = (diagnosis: DiagnosisEnum): string => {
   const cached = diagnosisFormatCache.get(diagnosis);
   if (cached) return cached;
@@ -172,14 +171,15 @@ interface NewPatientFormProps {
 
 export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerButton }) => {
   const [open, setOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const addPatient = usePatientStore(state => state.addPatient);
-  const addAppointment = useAppointmentStore(state => state.addAppointment);
-  const appointments = useAppointmentStore(state => state.appointments);
-  const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
-  const isLoadingAppointments = useAppointmentStore(state => state.isLoading);
-
+  // Usar hooks de React Query
+  const { data: appointmentsData } = useAppointments(1, 100);
+  const createPatientMutation = useCreatePatient();
+  const createAppointmentMutation = useCreateAppointment();
+  
+  const appointments = appointmentsData?.appointments || [];
+  const isLoadingAppointments = !appointmentsData;
+  
   const form = useForm<FormValues>({
     resolver: zodResolver(FORM_SCHEMA),
     defaultValues: DEFAULT_VALUES,
@@ -188,21 +188,10 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
 
   const selectedDate = form.watch("fechaConsulta");
 
-  // Cargar citas cuando se abre el diálogo - optimizado
-  useEffect(() => {
-    if (open && !appointments && !isLoadingAppointments) {
-      fetchAppointments().catch(error => {
-        console.error("Error fetching appointments:", error);
-        toast.error("No se pudieron cargar las citas disponibles");
-      });
-    }
-  }, [open, appointments, isLoadingAppointments, fetchAppointments]);
-
   // Reset form cuando se cierra
   useEffect(() => {
     if (!open) {
       form.reset(DEFAULT_VALUES);
-      setIsSubmitting(false);
     }
   }, [open, form]);
 
@@ -253,7 +242,7 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
 
   // Calcular fechas mínima y máxima - memoizado
   const { minDate, maxDate } = useMemo(() => ({
-    minDate: startOfDay(new Date()),
+    minDate: new Date(),
     maxDate: addMonths(new Date(), MAX_MONTHS_AHEAD)
   }), []);
 
@@ -283,14 +272,9 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
   }, [form]);
 
   const handleSubmit = useCallback(async (values: FormValues) => {
-    if (isSubmitting) return;
-    
-    const submissionToast = toast.loading("Registrando paciente...");
-    setIsSubmitting(true);
-    
     try {
       // Crear paciente
-      const newPatient = await addPatient({
+      const newPatient = await createPatientMutation.mutateAsync({
         nombre: values.nombre.trim(),
         apellidos: values.apellidos.trim(),
         edad: values.edad ?? undefined,
@@ -302,31 +286,26 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
       });
 
       // Crear cita
-      await addAppointment({
+      await createAppointmentMutation.mutateAsync({
         patientId: newPatient.id,
         fecha_raw: format(values.fechaConsulta, "yyyy-MM-dd"),
         hora_raw: values.horaConsulta,
         estado: AppointmentStatusEnum.PROGRAMADA,
         motivoConsulta: values.motivoConsulta,
         notas: values.notas?.trim() || "",
-      } as AddAppointmentInput);
+        esPrimeraVez: true,
+      });
 
-      toast.success("Paciente registrado y cita agendada.", { id: submissionToast });
       setOpen(false);
       onSuccess?.();
     } catch (error) {
-      const errorMessage = error instanceof Error 
-        ? `Error al registrar paciente: ${error.message}`
-        : "Error al registrar paciente. Intente de nuevo.";
-      
-      toast.error(errorMessage, { id: submissionToast });
+      // Los errores ya son manejados por los mutations
       console.error("Registration error:", error);
-    } finally {
-      setIsSubmitting(false);
     }
-  }, [isSubmitting, addPatient, addAppointment, onSuccess]);
+  }, [createPatientMutation, createAppointmentMutation, onSuccess]);
 
-  const isLoading = isLoadingAppointments && !appointments;
+  const isSubmitting = createPatientMutation.isPending || createAppointmentMutation.isPending;
+  const isLoading = isLoadingAppointments;
   const canSubmit = form.formState.isValid && !isSubmitting && !isLoading;
 
   return (
@@ -508,13 +487,13 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
                           Fecha de Consulta <span className="text-red-500">*</span>
                         </FormLabel>
                         <DatePicker
-                          date={field.value}
-                          onDateChange={field.onChange}
+                          value={field.value}
+                          onChange={handleDateChange}
                           minDate={minDate}
                           maxDate={maxDate}
-                          placeholder="DD/MM/AAAA"
+                          placeholder="Seleccione fecha"
                           filterDate={filterAvailableDates}
-                          className="w-full"
+                          className="h-9 text-sm"
                           disabled={isSubmitting}
                         />
                         <FormMessage className="text-xs mt-1" />

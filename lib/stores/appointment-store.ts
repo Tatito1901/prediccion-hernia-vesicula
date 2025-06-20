@@ -1,8 +1,9 @@
-// lib/stores/appointmentStore.ts
+// lib/stores/appointmentStore.ts - Optimizado con React Query
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { parseISO, isValid, format } from 'date-fns';
+import { toast } from 'sonner';
 
 import { 
   AppointmentData, AppointmentStatusEnum,
@@ -18,13 +19,11 @@ interface ApiAppointment {
   motivo_cita?: string;
   estado_cita: string;
   notas_cita_seguimiento?: string | null;
-  // Manejar ambas posibles estructuras que podría devolver Supabase
   patients?: {
     nombre?: string;
     apellidos?: string;
     telefono?: string;
   };
-  // A veces Supabase puede devolverlo en singular
   patient?: {
     nombre?: string;
     apellidos?: string;
@@ -38,18 +37,10 @@ interface ApiAppointment {
   };
 }
 
-export interface AppointmentHistoryItem {
-  id: string;
-  event_type: string;
-  timestamp: string;
-  changed_by_user_id?: string;
-  details: Record<string, any>;
-}
-
 export interface AddAppointmentInput {
   patientId: string;
-  fecha_raw: string; // YYYY-MM-DD
-  hora_raw: string; // HH:MM
+  fecha_raw: string;
+  hora_raw: string;
   estado: AppointmentStatusEnum;
   raw_doctor_id?: string | null;
   motivoConsulta: string;
@@ -78,11 +69,25 @@ export interface UpdateAppointmentInput {
   notas?: string;
 }
 
-// Funciones auxiliares
+// Store UI simplificado
+interface AppointmentUIStore {
+  selectedAppointmentId: string | null;
+  setSelectedAppointmentId: (id: string | null) => void;
+}
+
+export const useAppointmentUIStore = create<AppointmentUIStore>()(
+  immer((set) => ({
+    selectedAppointmentId: null,
+    setSelectedAppointmentId: (id) => set((state) => {
+      state.selectedAppointmentId = id;
+    }),
+  }))
+);
+
+// Funciones de transformación
 const normalizeId = (id: string | number | null | undefined): string => {
   if (id === null || id === undefined) return '';
-  const stringId = String(id);
-  return stringId.trim();
+  return String(id).trim();
 };
 
 const safeParseDate = (dateString: string | null | undefined): Date | null => {
@@ -95,55 +100,11 @@ const safeParseDate = (dateString: string | null | undefined): Date | null => {
   }
 };
 
-const fetchWithRetry = async (
-  input: RequestInfo,
-  init: RequestInit = {},
-  retries = 2
-): Promise<Response> => {
-  let lastError: Error = new Error('Fetch failed due to unknown reasons.');
-  const FETCH_TIMEOUT_MS = 10000;
-  const BASE_RETRY_DELAY_MS = 1000;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(input, { ...init, signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (response.ok || (response.status >= 400 && response.status < 500)) {
-        return response;
-      }
-      lastError = new Error(`Server error: ${response.status} ${response.statusText}`);
-    } catch (error) {
-      clearTimeout(timeoutId);
-      if (error instanceof Error) {
-        lastError = error;
-        if (controller.signal.aborted && !lastError.message.includes('timed out')) {
-           lastError = new Error(`Request timed out after ${FETCH_TIMEOUT_MS / 1000}s on attempt ${attempt + 1}. Original error: ${lastError.message}`);
-        }
-      } else {
-        lastError = new Error(String(error) || 'Network request failed');
-      }
-    }
-    
-    if (attempt === retries) break;
-
-    const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt) + Math.random() * (BASE_RETRY_DELAY_MS / 2);
-    await new Promise(resolve => setTimeout(resolve, delay));
-  }
-  
-  throw lastError;
-};
-
-// Función para transformar los datos de la API a nuestro modelo AppointmentData
 const transformAppointmentData = (apiAppointment: ApiAppointment): AppointmentData => {
   const appointmentId = normalizeId(apiAppointment.id);
   const patientId = normalizeId(apiAppointment.patient_id);
   const parsedDateTime = safeParseDate(apiAppointment.fecha_hora_cita);
-
-  // Determinar el nombre del paciente y del doctor
+  
   const patientInfo = apiAppointment.patients || apiAppointment.patient;
   const doctorInfo = apiAppointment.doctors || apiAppointment.doctor;
 
@@ -151,31 +112,279 @@ const transformAppointmentData = (apiAppointment: ApiAppointment): AppointmentDa
     id: appointmentId,
     patientId: patientId,
     paciente: patientInfo?.nombre ? `${patientInfo.nombre} ${patientInfo.apellidos || ''}`.trim() : 'Paciente no especificado',
-    telefonoPaciente: patientInfo?.telefono || 'N/A',
-    fechaConsulta: parsedDateTime || new Date(), // Usar fecha actual como fallback si es inválida
-    horaConsulta: parsedDateTime ? format(parsedDateTime, 'HH:mm') as TimeString : '00:00', // Formato HH:MM
-    duracionEstimadaMin: 30, // Placeholder
+    telefono: patientInfo?.telefono || 'N/A',
+    fechaConsulta: parsedDateTime || new Date(),
+    horaConsulta: parsedDateTime ? format(parsedDateTime, 'HH:mm') as TimeString : '00:00',
+    duracionEstimadaMin: 30,
     motivoConsulta: apiAppointment.motivo_cita || 'Motivo no especificado',
-    tipoConsulta: 'Seguimiento', // Placeholder, determinar según lógica de negocio
+    tipoConsulta: 'Seguimiento',
     estado: apiAppointment.estado_cita as AppointmentStatusEnum || AppointmentStatusEnum.PROGRAMADA,
     notas: apiAppointment.notas_cita_seguimiento ?? undefined,
-    ubicacion: 'Consultorio Principal', // Placeholder
-    recursosNecesarios: [], // Placeholder
-    esPrimeraVez: false, // Placeholder, determinar según lógica de negocio
-    costo: 0, // Placeholder
+    ubicacion: 'Consultorio Principal',
+    recursosNecesarios: [],
+    esPrimeraVez: false,
+    costo: 0,
     doctor: doctorInfo?.full_name || 'Doctor no asignado',
     raw_doctor_id: normalizeId(apiAppointment.doctor_id),
   } as AppointmentData;
 };
 
-// Interface del Store de citas
+// Query Keys
+export const appointmentKeys = {
+  all: ['appointments'] as const,
+  lists: () => [...appointmentKeys.all, 'list'] as const,
+  list: (filters: { page?: number; pageSize?: number }) => 
+    [...appointmentKeys.lists(), filters] as const,
+  details: () => [...appointmentKeys.all, 'detail'] as const,
+  detail: (id: string) => [...appointmentKeys.details(), id] as const,
+  history: (id: string) => [...appointmentKeys.all, 'history', id] as const,
+};
+
+// Hooks de React Query
+export const useAppointments = (page = 1, pageSize = 10) => {
+  return useQuery({
+    queryKey: appointmentKeys.list({ page, pageSize }),
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      });
+
+      const response = await fetch(`/api/appointments?${params}`);
+      if (!response.ok) {
+        throw new Error('Error fetching appointments');
+      }
+      
+      const data = await response.json();
+      return {
+        appointments: data.data.map(transformAppointmentData),
+        pagination: data.pagination
+      };
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutos
+    gcTime: 5 * 60 * 1000, // 5 minutos
+    refetchInterval: 30 * 1000, // Refrescar cada 30 segundos
+  });
+};
+
+export const useAppointment = (id: string | null) => {
+  return useQuery({
+    queryKey: appointmentKeys.detail(id!),
+    queryFn: async () => {
+      const response = await fetch(`/api/appointments/${id}`);
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Error fetching appointment');
+      }
+      const data = await response.json();
+      return transformAppointmentData(data);
+    },
+    enabled: !!id,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+};
+
+export const useCreateAppointment = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: AddAppointmentInput) => {
+      const { fecha_raw, hora_raw, ...rest } = data;
+      const payload = {
+        patient_id: data.patientId,
+        doctor_id: data.raw_doctor_id || null,
+        fecha_hora_cita: `${fecha_raw}T${hora_raw}:00.000Z`,
+        motivo_cita: data.motivoConsulta,
+        estado_cita: data.estado,
+        es_primera_vez: data.esPrimeraVez,
+        notas_cita_seguimiento: data.notas || null
+      };
+      
+      const response = await fetch('/api/appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Error creating appointment');
+      }
+      
+      const responseData = await response.json();
+      return transformAppointmentData(responseData);
+    },
+    onSuccess: (newAppointment) => {
+      // Invalidar todas las listas de citas
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+      
+      // Invalidar los pacientes para actualizar sus citas
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      
+      // Agregar la nueva cita al cache
+      queryClient.setQueryData(
+        appointmentKeys.detail(newAppointment.id),
+        newAppointment
+      );
+      
+      toast.success('Cita agendada exitosamente');
+    },
+    onError: (error) => {
+      toast.error('Error al agendar cita', {
+        description: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    },
+  });
+};
+
+export const useUpdateAppointment = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (input: UpdateAppointmentInput) => {
+      const { id, fecha_raw, hora_raw, ...updateData } = input;
+      
+      const payload: Record<string, any> = { ...updateData };
+      
+      if (fecha_raw && hora_raw) {
+        payload.fecha_hora_cita = `${fecha_raw}T${hora_raw}:00.000Z`;
+      }
+      
+      if (updateData.raw_doctor_id !== undefined) {
+        payload.doctor_id = updateData.raw_doctor_id;
+        delete payload.raw_doctor_id;
+      }
+      
+      if (updateData.motivoConsulta !== undefined) {
+        payload.motivo_cita = updateData.motivoConsulta;
+        delete payload.motivoConsulta;
+      }
+      
+      if (updateData.notas !== undefined) {
+        payload.notas_cita_seguimiento = updateData.notas;
+        delete payload.notas;
+      }
+      
+      const response = await fetch(`/api/appointments/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Error updating appointment');
+      }
+      
+      const responseData = await response.json();
+      return transformAppointmentData(responseData);
+    },
+    onSuccess: (updatedAppointment) => {
+      // Actualizar el cache de la cita específica
+      queryClient.setQueryData(
+        appointmentKeys.detail(updatedAppointment.id),
+        updatedAppointment
+      );
+      
+      // Invalidar las listas para refrescarlas
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+      
+      // Invalidar pacientes relacionados
+      if (updatedAppointment.patientId) {
+        queryClient.invalidateQueries({ 
+          queryKey: ['patients', 'detail', updatedAppointment.patientId] 
+        });
+      }
+      
+      toast.success('Cita actualizada exitosamente');
+    },
+    onError: (error) => {
+      toast.error('Error al actualizar cita', {
+        description: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    },
+  });
+};
+
+export const useUpdateAppointmentStatus = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      appointmentId, 
+      newStatus, 
+      motivo, 
+      nuevaFechaHora 
+    }: { 
+      appointmentId: string; 
+      newStatus: AppointmentStatusEnum; 
+      motivo?: string; 
+      nuevaFechaHora?: string;
+    }) => {
+      const payload = {
+        estado_cita: newStatus,
+        actor_id: '5e4d29a2-5eec-49ee-ac0f-8d349d5660ed', // TODO: Obtener del usuario actual
+        motivo_cambio: motivo,
+        fecha_hora_cita: nuevaFechaHora
+      };
+      
+      const response = await fetch(`/api/appointments/${appointmentId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Error updating appointment status');
+      }
+      
+      const responseData = await response.json();
+      return transformAppointmentData(responseData);
+    },
+    onSuccess: (updatedAppointment) => {
+      // Actualizar el cache de la cita
+      queryClient.setQueryData(
+        appointmentKeys.detail(updatedAppointment.id),
+        updatedAppointment
+      );
+      
+      // Invalidar listas
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+      
+      // Invalidar paciente relacionado
+      if (updatedAppointment.patientId) {
+        queryClient.invalidateQueries({ 
+          queryKey: ['patients', 'detail', updatedAppointment.patientId] 
+        });
+      }
+      
+      const statusMessages = {
+        [AppointmentStatusEnum.PRESENTE]: 'Check-in registrado',
+        [AppointmentStatusEnum.COMPLETADA]: 'Consulta completada',
+        [AppointmentStatusEnum.CANCELADA]: 'Cita cancelada',
+        [AppointmentStatusEnum.NO_ASISTIO]: 'Marcado como no asistió',
+        [AppointmentStatusEnum.REAGENDADA]: 'Cita reagendada',
+      };
+      
+      toast.success(statusMessages[updatedAppointment.estado] || 'Estado actualizado');
+    },
+    onError: (error) => {
+      toast.error('Error al actualizar estado', {
+        description: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    },
+  });
+};
+
+// Store wrapper para mantener compatibilidad
 interface AppointmentStore {
-  // Estado
   appointments: AppointmentData[];
   isLoading: boolean;
   error: Error | null;
-  lastFetched: number | null; // Timestamp de la última carga exitosa
-  isStale: boolean; // Indica si los datos podrían estar obsoletos
+  lastFetched: number | null;
+  isStale: boolean;
   pagination: {
     page: number;
     pageSize: number;
@@ -183,357 +392,47 @@ interface AppointmentStore {
     totalPages: number;
     hasMore: boolean;
   };
-  
-  // Acciones
   fetchAppointments: (force?: boolean) => Promise<void>;
   loadMoreAppointments: () => Promise<void>;
   addAppointment: (data: AddAppointmentInput) => Promise<AppointmentData>;
   updateAppointment: (input: UpdateAppointmentInput) => Promise<AppointmentData>;
-  updateAppointmentStatus: (
-    appointmentId: string,
-    newStatus: AppointmentStatusEnum,
-    motivo?: string,
-    nuevaFechaHora?: string
-  ) => Promise<AppointmentData>;
-  getAppointmentHistory: (appointmentId: string) => Promise<AppointmentHistoryItem[]>;
+  updateAppointmentStatus: (appointmentId: string, newStatus: AppointmentStatusEnum, motivo?: string, nuevaFechaHora?: string) => Promise<AppointmentData>;
 }
 
-// Duración máxima de la caché en milisegundos (5 minutos)
-const CACHE_MAX_AGE = 5 * 60 * 1000;
-
-// Creación del store con Zustand + immer para actualizaciones inmutables + persist para caché local
-export const useAppointmentStore = create<AppointmentStore>()(
-  persist(
-    immer((set, get) => ({
-    appointments: [],
-    isLoading: false,
-    error: null,
-    lastFetched: null,
-    isStale: true,
-    pagination: {
-      page: 1,
-      pageSize: 10,
-      totalCount: 0,
-      totalPages: 0,
-      hasMore: false
-    },
-    
-    fetchAppointments: async (force = false) => {
-      const state = get();
-      const now = Date.now();
-      
-      // Verificar si tenemos datos en caché válidos
-      const cacheValid = 
-        !force && 
-        state.lastFetched && 
-        state.appointments.length > 0 && 
-        now - state.lastFetched < CACHE_MAX_AGE;
-      
-      // Si hay una solicitud en curso y no estamos forzando, no hacer nada
-      if (state.isLoading && !force) return;
-      
-      // Si los datos en caché son válidos y no estamos forzando, usar los datos en caché
-      if (cacheValid) {
-        set((state) => {
-          state.isStale = false;
-        });
-        return;
-      }
-      
-      // Si los datos están obsoletos pero tenemos datos, marcarlos como obsoletos
-      // pero no bloquear la UI mientras se recargan
-      const shouldBlockUI = state.appointments.length === 0;
-      
-      set((state) => {
-        state.isLoading = shouldBlockUI;
-        state.isStale = state.appointments.length > 0;
-        state.error = null;
-        // Reiniciar paginación al hacer una carga completa nueva
-        state.pagination.page = 1;
-      });
-      
-      try {
-        // Usar AbortController para cancelar peticiones pendientes si se hace una nueva
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
-        // Añadir parámetros de paginación a la solicitud
-        const searchParams = new URLSearchParams({
-          page: '1',
-          pageSize: state.pagination.pageSize.toString()
-        });
-        
-        const response = await fetch(`/api/appointments?${searchParams.toString()}`, {
-          method: 'GET',
-          headers: { 'Cache-Control': 'no-cache' },
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        const responseData = await response.json();
-        
-        if (response.ok) {
-          const { data, pagination } = responseData;
-          const transformedAppointments = data.map(transformAppointmentData);
-          
-          set((state) => {
-            state.appointments = transformedAppointments;
-            state.pagination = pagination;
-            state.isLoading = false;
-            state.isStale = false;
-            state.lastFetched = Date.now();
-          });
-        } else {
-          throw new Error(responseData.message || 'Error fetching appointments');
-        }
-      } catch (error) {
-        // Solo actualizar el estado de error si no fue por aborto de la petición
-        if (error instanceof Error && error.name !== 'AbortError') {
-          set((state) => {
-            state.error = error instanceof Error ? error : new Error('Unknown error');
-            state.isLoading = false;
-          });
-        }
-      }
-    },
-    
-    loadMoreAppointments: async () => {
-      const state = get();
-      
-      // No cargar más si ya estamos cargando o no hay más datos
-      if (state.isLoading || !state.pagination.hasMore) return;
-      
-      set((state) => {
-        state.isLoading = true;
-        state.error = null;
-      });
-      
-      try {
-        // Incrementar página para cargar el siguiente conjunto
-        const nextPage = state.pagination.page + 1;
-        
-        const searchParams = new URLSearchParams({
-          page: nextPage.toString(),
-          pageSize: state.pagination.pageSize.toString()
-        });
-        
-        const response = await fetchWithRetry(`/api/appointments?${searchParams.toString()}`, {
-          method: 'GET',
-          headers: { 'Cache-Control': 'no-cache' },
-        });
-        
-        const responseData = await response.json();
-        
-        if (response.ok) {
-          const { data, pagination } = responseData;
-          const newAppointments = data.map(transformAppointmentData);
-          
-          set((state) => {
-            // Concatenar los nuevos resultados a los existentes
-            state.appointments = [...state.appointments, ...newAppointments];
-            state.pagination = pagination;
-            state.isLoading = false;
-            state.lastFetched = Date.now();
-          });
-        } else {
-          throw new Error(responseData.message || 'Error fetching more appointments');
-        }
-      } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error('Error loading more appointments');
-          state.isLoading = false;
-        });
-      }
-    },
-    
-    
-    addAppointment: async (data) => {
-      set((state) => { state.isLoading = true; state.error = null; });
-      
-      try {
-        // Preparar payload para la API
-        const { fecha_raw, hora_raw, ...rest } = data;
-        const payload = {
-          patient_id: data.patientId,
-          doctor_id: data.raw_doctor_id || null,
-          fecha_hora_cita: `${fecha_raw}T${hora_raw}:00.000Z`, // ISO string
-          motivo_cita: data.motivoConsulta,
-          estado_cita: data.estado,
-          es_primera_vez: data.esPrimeraVez,
-          notas_cita_seguimiento: data.notas || null
-        };
-        
-        const response = await fetchWithRetry('/api/appointments', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        
-        const responseData = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(responseData.message || 'Error adding appointment');
-        }
-        
-        const newAppointment = transformAppointmentData(responseData);
-        
-        // Actualiza el estado con la nueva cita
-        set((state) => {
-          state.appointments = [...state.appointments, newAppointment];
-          state.isLoading = false;
-        });
-        
-        return newAppointment;
-      } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error('Error adding appointment');
-          state.isLoading = false;
-        });
-        
-        throw error;
-      }
-    },
-    
-    updateAppointment: async (input) => {
-      set((state) => { state.isLoading = true; state.error = null; });
-      
-      try {
-        const { id, fecha_raw, hora_raw, ...updateData } = input;
-        
-        // Preparar payload para la API
-        const payload: Record<string, any> = { ...updateData };
-        
-        if (fecha_raw && hora_raw) {
-          payload.fecha_hora_cita = `${fecha_raw}T${hora_raw}:00.000Z`;
-        }
-        
-        if (updateData.raw_doctor_id !== undefined) {
-          payload.doctor_id = updateData.raw_doctor_id;
-          delete payload.raw_doctor_id;
-        }
-        
-        if (updateData.motivoConsulta !== undefined) {
-          payload.motivo_cita = updateData.motivoConsulta;
-          delete payload.motivoConsulta;
-        }
-        
-        if (updateData.notas !== undefined) {
-          payload.notas_cita_seguimiento = updateData.notas;
-          delete payload.notas;
-        }
-        
-        const response = await fetchWithRetry(`/api/appointments/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        
-        const responseData = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(responseData.message || 'Error updating appointment');
-        }
-        
-        const updatedAppointment = transformAppointmentData(responseData);
-        
-        // Actualiza el estado con la cita modificada
-        set((state) => {
-          state.appointments = state.appointments.map(a => 
-            a.id === updatedAppointment.id ? updatedAppointment : a
-          );
-          state.isLoading = false;
-        });
-        
-        return updatedAppointment;
-      } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error('Error updating appointment');
-          state.isLoading = false;
-        });
-        
-        throw error;
-      }
-    },
-    
-    updateAppointmentStatus: async (appointmentId, newStatus, motivo, nuevaFechaHora) => {
-      set((state) => { state.isLoading = true; state.error = null; });
-      
-      try {
-        const payload = {
-          estado_cita: newStatus,
-          actor_id: '5e4d29a2-5eec-49ee-ac0f-8d349d5660ed', // TODO: Obtener el ID del usuario actual
-          motivo_cambio: motivo,
-          fecha_hora_cita: nuevaFechaHora
-        };
-        
-        const response = await fetchWithRetry(`/api/appointments/${appointmentId}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        
-        const responseData = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(responseData.message || 'Error updating appointment status');
-        }
-        
-        const updatedAppointment = transformAppointmentData(responseData);
-        
-        // Actualiza el estado con la cita modificada
-        set((state) => {
-          state.appointments = state.appointments.map(a => 
-            a.id === updatedAppointment.id ? updatedAppointment : a
-          );
-          state.isLoading = false;
-        });
-        
-        return updatedAppointment;
-      } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error('Error updating appointment status');
-          state.isLoading = false;
-        });
-        
-        throw error;
-      }
-    },
-    
-    getAppointmentHistory: async (appointmentId) => {
-      set((state) => { state.isLoading = true; state.error = null; });
-      
-      try {
-        const response = await fetchWithRetry(`/api/appointments/${appointmentId}/history`);
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.message || 'Error fetching appointment history');
-        }
-        
-        set((state) => { state.isLoading = false; });
-        
-        return data as AppointmentHistoryItem[];
-      } catch (error) {
-        set((state) => {
-          state.error = error instanceof Error ? error : new Error('Error fetching appointment history');
-          state.isLoading = false;
-        });
-        
-        throw error;
-      }
-    },
-  })),
-    {
-      name: 'appointment-storage-v2', // Actualizado para evitar conflictos con la versión anterior
-      partialize: (state) => ({
-        appointments: state.appointments,
-        lastFetched: state.lastFetched
-      }),
-      storage: createJSONStorage(() => localStorage)
-    }
-  )
-);
-
-// Tipo para usar con appointmentStore
-export type { AppointmentStore };
+export const useAppointmentStore = create<AppointmentStore>(() => ({
+  appointments: [],
+  isLoading: false,
+  error: null,
+  lastFetched: null,
+  isStale: true,
+  pagination: {
+    page: 1,
+    pageSize: 10,
+    totalCount: 0,
+    totalPages: 0,
+    hasMore: false
+  },
+  
+  fetchAppointments: async () => {
+    console.warn('fetchAppointments is deprecated. Use useAppointments hook instead');
+  },
+  
+  loadMoreAppointments: async () => {
+    console.warn('loadMoreAppointments is deprecated. Use useAppointments hook with pagination');
+  },
+  
+  addAppointment: async (data) => {
+    console.warn('addAppointment is deprecated. Use useCreateAppointment hook instead');
+    throw new Error('Use useCreateAppointment hook instead');
+  },
+  
+  updateAppointment: async (input) => {
+    console.warn('updateAppointment is deprecated. Use useUpdateAppointment hook instead');
+    throw new Error('Use useUpdateAppointment hook instead');
+  },
+  
+  updateAppointmentStatus: async () => {
+    console.warn('updateAppointmentStatus is deprecated. Use useUpdateAppointmentStatus hook instead');
+    throw new Error('Use useUpdateAppointmentStatus hook instead');
+  },
+}));
