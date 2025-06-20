@@ -211,7 +211,7 @@ export default function GraciasPage() {
       y: 0,
       transition: {
         duration: 0.5,
-        ease: [0.22, 1, 0.36, 1],
+        ease: [0.22, 1, 0.36, 1] as const,
       },
     },
   }
@@ -237,7 +237,7 @@ export default function GraciasPage() {
             className="text-center mb-16 sm:mb-20"
             animate={thankYouInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
             initial={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] as const }}
             id="thank-you"
           >
             <motion.div
@@ -259,7 +259,7 @@ export default function GraciasPage() {
                   transition={{
                     duration: 2,
                     repeat: Number.POSITIVE_INFINITY,
-                    ease: "easeInOut",
+                    ease: [0.22, 1, 0.36, 1] as const,
                   }}
                 />
                 {/* Decoración adicional */}
@@ -308,7 +308,7 @@ export default function GraciasPage() {
             variants={fadeIn}
             animate={statusCardInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
             initial={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] as const }}
             className="mb-12 sm:mb-16"
             id="status-card"
           >
@@ -428,7 +428,7 @@ export default function GraciasPage() {
             className="mb-16 sm:mb-20"
             animate={valuePropsInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
             initial={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] as const }}
             id="value-props"
           >
             <div className="text-center mb-10">
@@ -504,7 +504,7 @@ export default function GraciasPage() {
             className="mb-16 sm:mb-20"
             animate={doctorsInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
             initial={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] as const }}
             id="doctors"
           >
             <div className="flex flex-col sm:flex-row items-center sm:items-center sm:justify-between gap-3 sm:gap-0 mb-8">
@@ -785,7 +785,7 @@ export default function GraciasPage() {
             className="mb-16"
             animate={privacyInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
             initial={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] as const }}
             id="privacy"
           >
             <Card className="border-0 shadow-xl bg-blue-950/30 backdrop-blur-sm overflow-hidden">

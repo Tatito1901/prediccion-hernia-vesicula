@@ -1,9 +1,5 @@
-import React, {
-  useState,
-  useMemo,
-  useCallback,
-  memo,
-} from "react";
+// filter-controls.tsx - Versión optimizada para rendimiento
+import React, { useState, useMemo, useCallback, memo } from "react";
 import {
   Search,
   RefreshCcw,
@@ -19,9 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { useBreakpointStore } from "@/hooks/use-breakpoint";
 
-// =================================================================
-// TIPOS OPTIMIZADOS
-// =================================================================
+// Tipos optimizados
 export interface FilterState {
   searchTerm: string;
   statusFilter: string;
@@ -37,9 +31,7 @@ export interface FilterControlsProps {
   isLoading: boolean;
 }
 
-// =================================================================
-// CONFIGURACIONES ESTÁTICAS PARA EVITAR RE-CREACIONES
-// =================================================================
+// Configuraciones estáticas fuera del componente
 const STATUS_CONFIG = {
   PRESENTE: { label: "En espera" },
   CANCELADA: { label: "Cancelada" },
@@ -50,7 +42,7 @@ const STATUS_CONFIG = {
   CONFIRMADA: { label: "Confirmada" },
 } as const;
 
-// Opciones para el select estático
+// Opciones pre-generadas para el select
 const STATUS_OPTIONS = [
   { value: "all", label: "Todos los Estados" },
   ...Object.entries(STATUS_CONFIG).map(([key, { label }]) => ({
@@ -59,9 +51,7 @@ const STATUS_OPTIONS = [
   }))
 ] as const;
 
-// =================================================================
-// COMPONENTES MEMOIZADOS PARA RENDIMIENTO
-// =================================================================
+// Componentes internos memoizados
 const SearchInput = memo(({ 
   value, 
   onChange, 
@@ -153,47 +143,7 @@ const ActionButtons = memo(({
 
 ActionButtons.displayName = "ActionButtons";
 
-const MainControls = memo(({ 
-  filters, 
-  onUpdateFilters, 
-  isLoading 
-}: {
-  filters: FilterState;
-  onUpdateFilters: (filters: Partial<FilterState>) => void;
-  isLoading: boolean;
-}) => {
-  // Handlers memoizados para evitar re-renders
-  const handleSearchChange = useCallback(
-    (searchTerm: string) => onUpdateFilters({ searchTerm }),
-    [onUpdateFilters]
-  );
-
-  const handleStatusChange = useCallback(
-    (statusFilter: string) => onUpdateFilters({ statusFilter }),
-    [onUpdateFilters]
-  );
-
-  return (
-    <div className="flex flex-col sm:flex-row gap-3 w-full">
-      <SearchInput
-        value={filters.searchTerm}
-        onChange={handleSearchChange}
-        disabled={isLoading}
-      />
-      <StatusSelect
-        value={filters.statusFilter}
-        onChange={handleStatusChange}
-        disabled={isLoading}
-      />
-    </div>
-  );
-});
-
-MainControls.displayName = "MainControls";
-
-// =================================================================
-// COMPONENTE PRINCIPAL OPTIMIZADO
-// =================================================================
+// Componente principal optimizado
 export const FilterControls = memo<FilterControlsProps>(({
   filters,
   onUpdateFilters,
@@ -204,16 +154,22 @@ export const FilterControls = memo<FilterControlsProps>(({
   const [isExpanded, setIsExpanded] = useState(false);
   const { mobile: isMobile } = useBreakpointStore();
 
-  // Valor derivado memoizado
+  // Cálculo memoizado de filtros activos
   const hasActiveFilters = useMemo(() => 
     filters.searchTerm !== "" || filters.statusFilter !== "all",
     [filters.searchTerm, filters.statusFilter]
   );
 
-  // Callback memoizado para toggle
-  const handleToggleExpanded = useCallback(() => {
-    setIsExpanded(prev => !prev);
-  }, []);
+  // Handlers memoizados
+  const handleSearchChange = useCallback(
+    (searchTerm: string) => onUpdateFilters({ searchTerm }),
+    [onUpdateFilters]
+  );
+
+  const handleStatusChange = useCallback(
+    (statusFilter: string) => onUpdateFilters({ statusFilter }),
+    [onUpdateFilters]
+  );
 
   // Clases CSS memoizadas
   const containerClasses = useMemo(() => cn(
@@ -221,19 +177,19 @@ export const FilterControls = memo<FilterControlsProps>(({
     hasActiveFilters && "ring-2 ring-blue-500/10 border-blue-200 dark:border-blue-800"
   ), [hasActiveFilters]);
 
-  const mobileContainerClasses = useMemo(() => cn(
-    "flex items-center justify-between p-4 rounded-xl border bg-slate-50 dark:bg-slate-800/30",
-    hasActiveFilters && "ring-2 ring-blue-500/10 border-blue-200 dark:border-blue-800"
-  ), [hasActiveFilters]);
-
-  // Renderizado optimizado para desktop
+  // Renderizado para desktop
   if (!isMobile) {
     return (
       <div className={containerClasses}>
-        <MainControls
-          filters={filters}
-          onUpdateFilters={onUpdateFilters}
-          isLoading={isLoading}
+        <SearchInput
+          value={filters.searchTerm}
+          onChange={handleSearchChange}
+          disabled={isLoading}
+        />
+        <StatusSelect
+          value={filters.statusFilter}
+          onChange={handleStatusChange}
+          disabled={isLoading}
         />
         <ActionButtons
           hasActiveFilters={hasActiveFilters}
@@ -245,10 +201,10 @@ export const FilterControls = memo<FilterControlsProps>(({
     );
   }
 
-  // Renderizado optimizado para mobile
+  // Renderizado para mobile
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded} className="space-y-3">
-      <div className={mobileContainerClasses}>
+      <div className={containerClasses}>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Filter className="h-4 w-4" />
@@ -275,7 +231,6 @@ export const FilterControls = memo<FilterControlsProps>(({
               variant="ghost" 
               size="sm" 
               className="gap-2"
-              onClick={handleToggleExpanded}
             >
               <ChevronDown 
                 className={cn(
@@ -289,11 +244,16 @@ export const FilterControls = memo<FilterControlsProps>(({
       </div>
 
       <CollapsibleContent>
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-200 dark:border-slate-700">
-          <MainControls
-            filters={filters}
-            onUpdateFilters={onUpdateFilters}
-            isLoading={isLoading}
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+          <SearchInput
+            value={filters.searchTerm}
+            onChange={handleSearchChange}
+            disabled={isLoading}
+          />
+          <StatusSelect
+            value={filters.statusFilter}
+            onChange={handleStatusChange}
+            disabled={isLoading}
           />
         </div>
       </CollapsibleContent>

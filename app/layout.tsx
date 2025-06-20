@@ -3,9 +3,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 // Importamos el CSS global después del CSS crítico para no bloquear el renderizado
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme/theme-provider"
-import { Toaster } from "sonner"
-import { AppProvider } from "@/lib/context/app-context"
+import { Providers } from "@/components/providers"
 import Script from 'next/script'
 
 // Optimización de Google Fonts usando next/font para auto-hosting
@@ -40,15 +38,8 @@ export default function RootLayout({
       <head>
         {/* Ya no se requieren preconexiones para Google Fonts al usar next/font */}
         
-        
-        {/* Precarga de recursos críticos */}
-        <link rel="preload" href="/globals.css" as="style" />
-        
-        {/* Precargar módulos JS críticos para la experiencia inicial */}
-        <link rel="modulepreload" href="/_next/static/chunks/main-app.js" />
-        <link rel="modulepreload" href="/_next/static/chunks/app/layout.js" />
-        <link rel="modulepreload" href="/_next/static/chunks/app/page.js" />
-        <link rel="modulepreload" href="/_next/static/chunks/app/dashboard/page.js" />
+        {/* Next.js maneja automáticamente la precarga de chunks JS críticos,
+           no necesitamos precargarlos manualmente */}
         
         {/* Precarga de rutas comunes */}
         <link rel="prefetch" href="/dashboard" />
@@ -62,12 +53,9 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
       </head>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          <AppProvider>
-            {children}
-            <Toaster position="top-right" />
-          </AppProvider>
-        </ThemeProvider>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   )

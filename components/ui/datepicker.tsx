@@ -1,103 +1,120 @@
 "use client"
 
 import * as React from "react"
-import { CalendarIcon } from "lucide-react"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
+import { Calendar as CalendarIcon } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-function formatDate(date: Date | undefined) {
-  if (!date) {
-    return ""
-  }
-
-  return date.toLocaleDateString("en-US", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  })
+export interface DatePickerProps {
+  date: Date | undefined
+  onDateChange: (date: Date | undefined) => void
+  minDate?: Date
+  maxDate?: Date
+  filterDate?: (date: Date) => boolean
+  placeholder?: string
+  disabled?: boolean
+  className?: string
 }
 
-function isValidDate(date: Date | undefined) {
-  if (!date) {
-    return false
+export function DatePicker({
+  date,
+  onDateChange,
+  minDate,
+  maxDate,
+  filterDate,
+  placeholder = "Seleccione una fecha",
+  disabled = false,
+  className,
+}: DatePickerProps): React.ReactElement {
+  console.log("[DatePicker] Initial date prop:", date);
+  
+  // Estado local para gestionar la fecha seleccionada dentro del componente
+  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(date);
+  
+  // Efecto para sincronizar el estado local cuando cambia la prop date
+  React.useEffect(() => {
+    console.log("[DatePicker] date prop changed:", date);
+    setSelectedDate(date);
+  }, [date]);
+  
+  const handleSelect = (newDate: Date | undefined) => {
+    console.log("[DatePicker] handleSelect called with:", newDate);
+    setSelectedDate(newDate); // Actualizar estado local para UI inmediata
+    onDateChange(newDate); // Propagar el cambio al formulario padre
   }
-  return !isNaN(date.getTime())
-}
 
-export function DatePicker() {
-  const [open, setOpen] = React.useState(false)
-  const [date, setDate] = React.useState<Date | undefined>(
-    new Date("2025-06-01")
+  const isDisabled = React.useCallback(
+    (day: Date) => {
+      // Check if component-level disabled prop is true
+      if (disabled) {
+        console.log("[DatePicker] Date disabled by component prop", day);
+        return true;
+      }
+      
+      // Check if date is filtered out by filterDate function
+      if (filterDate && !filterDate(day)) {
+        console.log("[DatePicker] Date disabled by filterDate function", day);
+        return true;
+      }
+      
+      console.log("[DatePicker] Date is enabled", day);
+      return false;
+    },
+    [filterDate, disabled]
   )
-  const [month, setMonth] = React.useState<Date | undefined>(date)
-  const [value, setValue] = React.useState(formatDate(date))
+
+  // Estado para controlar la apertura del popover
+  const [open, setOpen] = React.useState(false);
+
+  // Modificar handleSelect para cerrar el popover después de seleccionar
+  const handleSelectAndClose = (newDate: Date | undefined) => {
+    console.log("[DatePicker] handleSelectAndClose called with:", newDate);
+    setSelectedDate(newDate); // Actualizar estado local para UI inmediata
+    onDateChange(newDate); // Propagar el cambio al formulario padre
+    setOpen(false); // Cerrar explícitamente el popover
+  }
 
   return (
-    <div className="flex flex-col gap-3">
-      <Label htmlFor="date" className="px-1">
-        Subscription Date
-      </Label>
-      <div className="relative flex gap-2">
-        <Input
-          id="date"
-          value={value}
-          placeholder="June 01, 2025"
-          className="bg-background pr-10"
-          onChange={(e) => {
-            const date = new Date(e.target.value)
-            setValue(e.target.value)
-            if (isValidDate(date)) {
-              setDate(date)
-              setMonth(date)
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") {
-              e.preventDefault()
-              setOpen(true)
-            }
-          }}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant={"outline"}
+          disabled={disabled}
+          className={cn(
+            "w-full justify-start text-left font-normal",
+            !selectedDate && "text-muted-foreground",
+            className
+          )}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {selectedDate ? (
+            format(selectedDate, "PPP", { locale: es })
+          ) : (
+            <span>{placeholder}</span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0">
+        <Calendar
+          locale={es}
+          mode="single"
+          selected={selectedDate}
+          onSelect={handleSelectAndClose}
+          disabled={isDisabled}
+          fromDate={minDate}
+          toDate={maxDate}
+          initialFocus
         />
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              id="date-picker"
-              variant="ghost"
-              className="absolute top-1/2 right-2 size-6 -translate-y-1/2"
-            >
-              <CalendarIcon className="size-3.5" />
-              <span className="sr-only">Select date</span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="w-auto overflow-hidden p-0"
-            align="end"
-            alignOffset={-8}
-            sideOffset={10}
-          >
-            <Calendar
-              mode="single"
-              selected={date}
-              captionLayout="dropdown"
-              month={month}
-              onMonthChange={setMonth}
-              onSelect={(date) => {
-                setDate(date)
-                setValue(formatDate(date))
-                setOpen(false)
-              }}
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
-    </div>
+      </PopoverContent>
+    </Popover>
   )
 }

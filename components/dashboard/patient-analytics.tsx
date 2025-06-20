@@ -1,17 +1,11 @@
 "use client"
 
 import React, { useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"; // Asumo que estos componentes de ui son de shadcn/ui o similar
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"; 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useChartData } from "@/hooks/use-chart-data";
 import { Skeleton } from "@/components/ui/skeleton";
 
-
-
-
-
-// El componente PatientAnalytics, envuelto en React.memo para optimización.
-// React.memo previene re-renderizados si las props no cambian.
 export const PatientAnalytics: React.FC = React.memo(() => {
   // Obtener datos desde el API
   const { rawData: { patients }, loading, error } = useChartData({ dateRange: 'ytd' });

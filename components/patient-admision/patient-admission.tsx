@@ -1,5 +1,5 @@
-// PatientAdmission.tsx - Versión optimizada y simplificada
-import React, { useState, Suspense, lazy } from "react";
+// patient-admission.tsx - Versión optimizada para rendimiento
+import React, { useState, useCallback, useMemo, memo } from "react";
 import {
   Calendar,
   CheckCircle,
@@ -28,7 +28,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useBreakpointStore } from "@/hooks/use-breakpoint";
 import { toast } from "sonner";
@@ -40,19 +39,11 @@ import { useAppointmentStore } from "@/lib/stores/appointment-store";
 import { useSurveyStore } from "@/lib/stores/survey-store";
 import { usePatientAdmissionFlow } from "./use-patient-admission-flow";
 
-// Lazy loading
-const RescheduleDatePicker = lazy(() => 
-  import('./patient-admission.reschedule').then(m => ({ default: m.RescheduleDatePicker }))
-);
-const NewPatientForm = lazy(() => 
-  import('./new-patient-form').then(m => ({ default: m.NewPatientForm }))
-);
-const SurveyShareDialog = lazy(() => 
-  import('@/components/surveys/survey-share-dialog').then(m => ({ default: m.SurveyShareDialog }))
-);
-const SurveySelector = lazy(() => 
-  import('@/components/surveys/survey-selector').then(m => ({ default: m.SurveySelector }))
-);
+// Importaciones directas sin lazy loading
+import { RescheduleDatePicker } from './patient-admission.reschedule';
+import { NewPatientForm } from './new-patient-form';
+import { SurveyShareDialog } from '@/components/surveys/survey-share-dialog';
+import { SurveySelector } from '@/components/surveys/survey-selector';
 
 // Tipos simplificados
 type TabValue = "newPatient" | "today" | "future" | "past";
@@ -79,17 +70,27 @@ const DIALOG_CONFIG = {
   reschedule: { title: "Reagendar Cita", description: "Seleccione la nueva fecha y hora.", icon: CalendarDays }
 };
 
-// Utilidades simplificadas
+// Cache para formateo
+const dateFormatCache = new Map<string, string>();
+
+// Utilidades simplificadas con cache
 const formatDisplay = (date: Date | string): string => {
+  const key = date.toString();
+  const cached = dateFormatCache.get(key);
+  if (cached) return cached;
+  
   if (!date) return "Fecha inválida";
   const parsedDate = date instanceof Date ? date : new Date(date);
   if (isNaN(parsedDate.getTime())) return "Fecha inválida";
   
-  return parsedDate.toLocaleDateString("es-ES", { 
+  const formatted = parsedDate.toLocaleDateString("es-ES", { 
     weekday: "long", 
     day: "numeric", 
     month: "long" 
   });
+  
+  dateFormatCache.set(key, formatted);
+  return formatted;
 };
 
 const transformAppointment = (appointment: AppointmentData): Appointment => {
@@ -106,27 +107,12 @@ const transformAppointment = (appointment: AppointmentData): Appointment => {
   };
 };
 
-// Componentes UI simplificados
-const LoadingSkeleton = () => (
-  <div className="space-y-4">
-    {[1, 2, 3].map((i) => (
-      <Card key={i} className="p-4 shadow-sm">
-        <div className="space-y-3 animate-pulse">
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-11 w-11 rounded-full" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-20" />
-            </div>
-            <Skeleton className="h-8 w-8 rounded-full" />
-          </div>
-        </div>
-      </Card>
-    ))}
-  </div>
-);
-
-const EmptyState = ({ title, description, icon: Icon }) => (
+// Componentes UI memoizados
+const EmptyState = memo(({ title, description, icon: Icon }: {
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+}) => (
   <div className="text-center p-16 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 min-h-[400px] flex flex-col items-center justify-center">
     <div className="h-20 w-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-6">
       <Icon className="h-10 w-10 text-slate-500 dark:text-slate-400" />
@@ -136,18 +122,23 @@ const EmptyState = ({ title, description, icon: Icon }) => (
       {description}
     </p>
   </div>
-);
+));
 
-const AppointmentsList = ({ 
+const AppointmentsList = memo(({ 
   appointments, 
   isLoading,
   emptyState,
   onAction,
   onStartSurvey,
   onViewHistory,
+}: {
+  appointments: AppointmentData[];
+  isLoading: boolean;
+  emptyState: { title: string; description: string; icon: React.ComponentType<{ className?: string }> };
+  onAction: (action: ConfirmAction, id: string, appointment: Appointment) => void;
+  onStartSurvey: (appointment: AppointmentData) => void;
+  onViewHistory: (patientId: string) => void;
 }) => {
-  if (isLoading && !appointments?.length) return <LoadingSkeleton />;
-  
   if (!appointments?.length) {
     return <EmptyState {...emptyState} />;
   }
@@ -157,7 +148,7 @@ const AppointmentsList = ({
       {appointments.map((appointment) => (
         <AppointmentCard
           key={appointment.id}
-          appointment={appointment}
+          appointment={transformAppointment(appointment)}
           onAction={onAction}
           onStartSurvey={() => onStartSurvey(appointment)}
           onViewHistory={onViewHistory}
@@ -165,18 +156,23 @@ const AppointmentsList = ({
       ))}
     </div>
   );
-};
+});
 
-const MobileTabs = ({ 
+const MobileTabs = memo(({ 
   activeTab, 
   onTabChange, 
   appointmentCounts, 
   isLoading 
+}: {
+  activeTab: TabValue;
+  onTabChange: (tab: TabValue) => void;
+  appointmentCounts: Record<'today' | 'future' | 'past', number>;
+  isLoading: boolean;
 }) => (
   <div className="grid grid-cols-4 gap-2 p-2 bg-slate-100 dark:bg-slate-800/50 rounded-xl border mb-4">
     {TABS_CONFIG.map((tab) => {
       const Icon = tab.icon;
-      const count = tab.value === "newPatient" ? 0 : appointmentCounts[tab.value] || 0;
+      const count = tab.value === "newPatient" ? 0 : appointmentCounts[tab.value as keyof typeof appointmentCounts] || 0;
       const isActive = activeTab === tab.value;
       
       return (
@@ -206,10 +202,10 @@ const MobileTabs = ({
       );
     })}
   </div>
-);
+));
 
-// Componente principal simplificado
-export default function PatientAdmission() {
+// Componente principal optimizado
+export default memo(function PatientAdmission() {
   const {
     appointments,
     isLoading: isLoadingAppointments,
@@ -224,46 +220,60 @@ export default function PatientAdmission() {
   const { getAssignmentById } = useSurveyStore();
   const { mobile: isMobile } = useBreakpointStore();
 
-  // Estados simplificados
-  const [confirmDialog, setConfirmDialog] = useState({
+  // Estados simplificados con valores iniciales optimizados
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    action: ConfirmAction | null;
+    appointment: Appointment | null;
+  }>({
     isOpen: false,
     action: null,
     appointment: null
   });
 
-  const [surveySelector, setSurveySelector] = useState({
+  const [surveySelector, setSurveySelector] = useState<{
+    isOpen: boolean;
+    data: { patientId: string; appointmentId: string; patientName: string; } | null;
+  }>({
     isOpen: false,
     data: null
   });
 
-  const [surveyShare, setSurveyShare] = useState({
+  const [surveyShare, setSurveyShare] = useState<{
+    isOpen: boolean;
+    data: { patient: any; surveyLink: string; assignmentId: string; } | null;
+  }>({
     isOpen: false,
     data: null
   });
 
   const [rescheduleState, setRescheduleState] = useState({
-    date: null,
-    time: null
+    date: null as Date | null,
+    time: null as string | null
   });
 
-  // Datos derivados simplificados
-  const currentAppointments = filteredAppointments[activeTab] || [];
-  const appointmentCounts = {
+  // Datos derivados memoizados
+  const currentAppointments = useMemo(() => 
+    filteredAppointments[activeTab] || [], 
+    [filteredAppointments, activeTab]
+  );
+
+  const appointmentCounts = useMemo(() => ({
     today: filteredAppointments.today?.length || 0,
     future: filteredAppointments.future?.length || 0,
     past: filteredAppointments.past?.length || 0
-  };
+  }), [filteredAppointments]);
 
-  // Handlers simplificados
-  const handleAppointmentAction = (action, appointmentId, appointment) => {
+  // Handlers optimizados con useCallback
+  const handleAppointmentAction = useCallback((action: ConfirmAction, appointmentId: string, appointment: AppointmentData) => {
     setConfirmDialog({
       isOpen: true,
       action,
       appointment: transformAppointment(appointment)
     });
-  };
+  }, []);
 
-  const handleStartSurvey = (appointment) => {
+  const handleStartSurvey = useCallback((appointment: AppointmentData) => {
     const patient = patients?.find(p => p.id === appointment.patientId);
     
     if (!patient) {
@@ -279,15 +289,15 @@ export default function PatientAdmission() {
         patientName: `${patient.nombre} ${patient.apellidos}`.trim(),
       }
     });
-  };
+  }, [patients]);
 
-  const handleViewHistory = (patientId) => {
+  const handleViewHistory = useCallback((patientId: string) => {
     if (patientId) {
       window.open(`/pacientes/historial/${patientId}`, "_blank");
     }
-  };
+  }, []);
 
-  const handleSurveyAssigned = (assignmentId) => {
+  const handleSurveyAssigned = useCallback((assignmentId: string) => {
     const patientId = surveySelector.data?.patientId;
     const patient = patients?.find(p => p.id === patientId);
     const assignment = getAssignmentById(assignmentId);
@@ -311,14 +321,14 @@ export default function PatientAdmission() {
         assignmentId,
       }
     });
-  };
+  }, [surveySelector.data?.patientId, patients, getAssignmentById]);
 
-  const handleConfirmAction = async () => {
+  const handleConfirmAction = useCallback(async () => {
     const { action, appointment } = confirmDialog;
     if (!action || !appointment) return;
 
     try {
-      let statusUpdate;
+      let statusUpdate: { status: AppointmentStatusEnum; nota: string; nuevaFecha?: string };
 
       switch (action) {
         case "checkIn":
@@ -370,13 +380,32 @@ export default function PatientAdmission() {
       console.error("Error al actualizar cita:", error);
     } finally {
       setConfirmDialog({ isOpen: false, action: null, appointment: null });
-      if (action === "reschedule") {
+      if (confirmDialog.action === "reschedule") {
         setRescheduleState({ date: null, time: null });
       }
     }
-  };
+  }, [confirmDialog, rescheduleState, updateAppointmentStatus, refetchAppointments, handleStartSurvey]);
 
   const dialogConfig = confirmDialog.action ? DIALOG_CONFIG[confirmDialog.action] : null;
+
+  // Configuración de estados vacíos memoizada
+  const emptyStates = useMemo(() => ({
+    today: {
+      title: "No hay citas hoy",
+      description: "No tienes citas programadas para hoy.",
+      icon: CalendarCheck,
+    },
+    future: {
+      title: "No hay citas futuras",
+      description: "No tienes citas programadas para el futuro.",
+      icon: CalendarClock,
+    },
+    past: {
+      title: "No hay citas anteriores",
+      description: "No tienes citas anteriores registradas.",
+      icon: CalendarBlank,
+    }
+  }), []);
 
   return (
     <div className="w-full max-w-7xl mx-auto p-3 sm:p-4 lg:p-6 space-y-6 min-h-screen">
@@ -405,26 +434,14 @@ export default function PatientAdmission() {
                   activeTab === "newPatient" ? (
                     <Card>
                       <CardContent className="p-6">
-                        <Suspense fallback={<LoadingSkeleton />}>
-                          <NewPatientForm />
-                        </Suspense>
+                        <NewPatientForm />
                       </CardContent>
                     </Card>
                   ) : (
                     <AppointmentsList
                       appointments={currentAppointments}
                       isLoading={isLoadingAppointments}
-                      emptyState={{
-                        title: activeTab === "today" ? "No hay citas hoy" :
-                               activeTab === "future" ? "No hay citas futuras" :
-                               "No hay citas anteriores",
-                        description: activeTab === "today" ? "No tienes citas programadas para hoy." :
-                                    activeTab === "future" ? "No tienes citas programadas para el futuro." :
-                                    "No tienes citas anteriores registradas.",
-                        icon: activeTab === "today" ? CalendarCheck :
-                              activeTab === "future" ? CalendarClock :
-                              CalendarBlank,
-                      }}
+                      emptyState={emptyStates[activeTab as keyof typeof emptyStates]}
                       onAction={handleAppointmentAction}
                       onStartSurvey={handleStartSurvey}
                       onViewHistory={handleViewHistory}
@@ -444,29 +461,17 @@ export default function PatientAdmission() {
                     <TabsContent value="newPatient" className="mt-6">
                       <Card>
                         <CardContent className="p-6">
-                          <Suspense fallback={<LoadingSkeleton />}>
-                            <NewPatientForm />
-                          </Suspense>
+                          <NewPatientForm />
                         </CardContent>
                       </Card>
                     </TabsContent>
                     
-                    {["today", "future", "past"].map((tab) => (
+                    {(["today", "future", "past"] as const).map((tab) => (
                       <TabsContent key={tab} value={tab} className="space-y-4">
                         <AppointmentsList
                           appointments={filteredAppointments[tab]}
                           isLoading={isLoadingAppointments}
-                          emptyState={{
-                            title: tab === "today" ? "No hay citas hoy" :
-                                   tab === "future" ? "No hay citas futuras" :
-                                   "No hay citas anteriores",
-                            description: tab === "today" ? "No tienes citas programadas para hoy." :
-                                        tab === "future" ? "No tienes citas programadas para el futuro." :
-                                        "No tienes citas anteriores registradas.",
-                            icon: tab === "today" ? CalendarCheck :
-                                  tab === "future" ? CalendarClock :
-                                  CalendarBlank,
-                          }}
+                          emptyState={emptyStates[tab]}
                           onAction={handleAppointmentAction}
                           onStartSurvey={handleStartSurvey}
                           onViewHistory={handleViewHistory}
@@ -482,29 +487,27 @@ export default function PatientAdmission() {
       </Card>
 
       {/* Dialogs */}
-      <Suspense fallback={null}>
-        {surveySelector.isOpen && surveySelector.data && (
-          <SurveySelector
-            isOpen={surveySelector.isOpen}
-            {...surveySelector.data}
-            onClose={() => setSurveySelector({ isOpen: false, data: null })}
-            onAssigned={handleSurveyAssigned}
-          />
-        )}
-        
-        {surveyShare.isOpen && surveyShare.data && (
-          <SurveyShareDialog
-            isOpen={surveyShare.isOpen}
-            patient={surveyShare.data.patient}
-            surveyLink={surveyShare.data.surveyLink}
-            onClose={() => setSurveyShare({ isOpen: false, data: null })}
-            onStartInternal={() => {
-              setSurveyShare({ isOpen: false, data: null });
-              toast.info("Iniciando encuesta internamente");
-            }}
-          />
-        )}
-      </Suspense>
+      {surveySelector.isOpen && surveySelector.data && (
+        <SurveySelector
+          isOpen={surveySelector.isOpen}
+          {...surveySelector.data}
+          onClose={() => setSurveySelector({ isOpen: false, data: null })}
+          onSurveyAssigned={handleSurveyAssigned}
+        />
+      )}
+      
+      {surveyShare.isOpen && surveyShare.data && (
+        <SurveyShareDialog
+          isOpen={surveyShare.isOpen}
+          patient={surveyShare.data.patient}
+          surveyLink={surveyShare.data.surveyLink}
+          onClose={() => setSurveyShare({ isOpen: false, data: null })}
+          onStartInternal={() => {
+            setSurveyShare({ isOpen: false, data: null });
+            toast.info("Iniciando encuesta internamente");
+          }}
+        />
+      )}
 
       {/* Confirmation Dialog */}
       <AlertDialog 
@@ -567,12 +570,10 @@ export default function PatientAdmission() {
                       </div>
                       
                       {confirmDialog.action === "reschedule" ? (
-                        <Suspense fallback={<LoadingSkeleton />}>
-                          <RescheduleDatePicker
-                            rescheduleState={rescheduleState}
-                            onStateChange={setRescheduleState}
-                          />
-                        </Suspense>
+                        <RescheduleDatePicker
+                          rescheduleState={rescheduleState}
+                          onStateChange={setRescheduleState}
+                        />
                       ) : (
                         <p className="text-slate-600 dark:text-slate-400 text-base leading-relaxed">
                           {dialogConfig.description}
@@ -607,4 +608,4 @@ export default function PatientAdmission() {
       </AlertDialog>
     </div>
   );
-}
+});

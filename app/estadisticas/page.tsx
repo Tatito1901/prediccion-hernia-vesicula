@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { FileBarChart, PieChartIcon, ActivitySquare, TrendingUp, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useIsMobile, useCurrentBreakpoint } from "@/hooks/use-breakpoint"
-import { useAppContext } from "@/lib/context/app-context";
+import { usePatientStore } from "@/lib/stores/patient-store";
+import { useQueryClient } from "@tanstack/react-query";
 import type { PatientData, ChartData, DiagnosticInsight } from "@/components/charts/chart-diagnostic";
 
 // Definición local de la interfaz MetricsResult anteriormente importada
@@ -54,18 +55,11 @@ const AppointmentStatistics = dynamic(
 
 // Prefetch de datos comunes para mejorar experiencia del usuario
 function usePrefetchCommonData() {
-  const appContext = useAppContext();
+  const queryClient = useQueryClient();
   const chartData = useChartData();
   
   // Prefetch datos frecuentes cuando se cargue la página
   React.useEffect(() => {
-    // Solo si tenemos acceso al cliente de queries
-    if (!appContext) return;
-    
-    // Usar el cliente de React Query desde el contexto global
-    const queryClient = (appContext as any).queryClient;
-    if (!queryClient) return;
-    
     // Usar una fecha estándar como rango si no está disponible en chartData
     const dateRange = (chartData as any)?.currentDateRange || 'week';
     
@@ -75,7 +69,7 @@ function usePrefetchCommonData() {
       queryFn: () => fetch('/api/statistics/common').then(res => res.json()),
       staleTime: 5 * 60 * 1000, // 5 minutos
     });
-  }, [appContext, chartData]);
+  }, [queryClient, chartData]);
 }
 
 // Componente para carga progresiva con Intersection Observer
@@ -220,8 +214,13 @@ export default function EstadisticasPage() {
   const isMobile = useIsMobile()
   const currentBreakpoint = useCurrentBreakpoint()
   
-  // Usar contexto para compatibilidad con la implementación actual
-  const { patients } = useAppContext();
+  // Usar el store de Zustand para obtener los datos de pacientes
+  const { patients, fetchPatients } = usePatientStore();
+
+  React.useEffect(() => {
+    // Cargar los pacientes cuando el componente se monta
+    fetchPatients();
+  }, [fetchPatients]);
   
   // Obtener datos reales de la API usando nuestro hook personalizado
   const {

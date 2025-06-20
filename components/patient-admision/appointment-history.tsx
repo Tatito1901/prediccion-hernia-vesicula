@@ -1,5 +1,5 @@
-// appointment-history.tsx - Versión optimizada y simplificada
-import { useEffect } from "react";
+// appointment-history.tsx - Versión optimizada para rendimiento
+import { useEffect, useMemo, memo } from "react";
 import { useAppointmentStore } from "@/lib/stores/appointment-store";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
@@ -29,7 +29,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { AppointmentStatusEnum, type AppointmentData } from "@/app/dashboard/data-model";
 
-// Configuración estática
+// Configuración estática fuera del componente
 const STATUS_CONFIG = {
   [AppointmentStatusEnum.PROGRAMADA]: {
     label: "Programada",
@@ -68,74 +68,78 @@ const STATUS_CONFIG = {
   },
 };
 
-// Utilidades simplificadas
+// Cache para formateo de fechas
+const dateFormatCache = new Map<string, string>();
+const timeFormatCache = new Map<string, string>();
+
+// Funciones de formateo optimizadas
 const formatDateTime = (dateString: string | null): string => {
   if (!dateString) return "N/A";
+  
+  const cached = dateFormatCache.get(dateString);
+  if (cached) return cached;
+  
   try {
     const date = parseISO(dateString);
-    if (!isValid(date)) return format(new Date(), "dd MMM yyyy HH:mm", { locale: es });
-    return format(date, "dd MMM yyyy HH:mm", { locale: es });
+    if (!isValid(date)) {
+      const fallback = format(new Date(), "dd MMM yyyy HH:mm", { locale: es });
+      dateFormatCache.set(dateString, fallback);
+      return fallback;
+    }
+    const formatted = format(date, "dd MMM yyyy HH:mm", { locale: es });
+    dateFormatCache.set(dateString, formatted);
+    return formatted;
   } catch {
-    return format(new Date(), "dd MMM yyyy HH:mm", { locale: es });
+    const fallback = format(new Date(), "dd MMM yyyy HH:mm", { locale: es });
+    dateFormatCache.set(dateString, fallback);
+    return fallback;
   }
 };
 
 const formatDisplayDate = (dateString: string | Date): string => {
+  const key = dateString.toString();
+  const cached = dateFormatCache.get(key);
+  if (cached) return cached;
+  
   try {
     const date = typeof dateString === 'string' ? parseISO(dateString) : dateString;
     if (!isValid(date)) return "Fecha inválida";
-    return format(date, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es });
+    const formatted = format(date, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es });
+    dateFormatCache.set(key, formatted);
+    return formatted;
   } catch {
     return "Fecha inválida";
   }
 };
 
 const formatTime = (time: string): string => {
+  const cached = timeFormatCache.get(time);
+  if (cached) return cached;
+  
   if (!time?.includes(':')) return "---";
   const [hours, minutes] = time.split(':');
   const hour = parseInt(hours, 10);
   if (isNaN(hour) || isNaN(parseInt(minutes, 10))) return "---";
   const period = hour >= 12 ? 'PM' : 'AM';
   const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-  return `${displayHour}:${minutes.padStart(2, '0')} ${period}`;
+  const formatted = `${displayHour}:${minutes.padStart(2, '0')} ${period}`;
+  timeFormatCache.set(time, formatted);
+  return formatted;
 };
 
-// Tipos
-interface PatientAppointmentsListProps {
-  patientId: string;
-  showStats?: boolean;
-  maxItems?: number;
-  className?: string;
-}
-
-interface AppointmentStats {
-  total: number;
-  completadas: number;
-  programadas: number;
-  canceladas: number;
-  noAsistio: number;
-  completionRate: number;
-  attendanceRate: number;
-}
-
-// Componentes UI
-const StatCard = ({ 
+// Componentes internos memoizados
+const StatCard = memo(({ 
   title, 
   value, 
   subtitle, 
   icon: Icon, 
-  className
 }: {
   title: string;
   value: number | string;
   subtitle?: string;
   icon: React.ComponentType<{ className?: string }>;
-  className?: string;
 }) => (
-  <div className={cn(
-    "p-4 rounded-xl border shadow-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
-    className
-  )}>
+  <div className="p-4 rounded-xl border shadow-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
     <div className="flex items-start justify-between">
       <div className="space-y-2 flex-1">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
@@ -156,9 +160,9 @@ const StatCard = ({
       </div>
     </div>
   </div>
-);
+));
 
-const AppointmentCard = ({ appointment }: { appointment: AppointmentData }) => {
+const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData }) => {
   const fechaFormateada = formatDisplayDate(appointment.fechaConsulta);
   const statusConfig = STATUS_CONFIG[appointment.estado as AppointmentStatusEnum] || 
                       STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
@@ -218,53 +222,15 @@ const AppointmentCard = ({ appointment }: { appointment: AppointmentData }) => {
       </CardContent>
     </Card>
   );
-};
-
-const LoadingSkeleton = () => (
-  <div className="space-y-6">
-    <div className="flex flex-col items-center justify-center py-12">
-      <div className="relative">
-        <CalendarClock className="h-12 w-12 text-blue-500 animate-pulse mb-4" />
-        <div className="absolute -inset-2 bg-blue-500/20 rounded-full animate-ping" />
-      </div>
-      <p className="text-base text-slate-600 dark:text-slate-400 mb-4 font-medium">
-        Cargando historial de citas...
-      </p>
-      <Progress value={75} className="h-2 w-64" />
-    </div>
-    
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {Array.from({ length: 4 }, (_, i) => (
-        <div key={i} className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-800/50 animate-pulse">
-          <div className="flex items-start justify-between">
-            <div className="space-y-2 flex-1">
-              <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-16" />
-              <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-12" />
-              <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-20" />
-            </div>
-            <div className="h-12 w-12 bg-slate-200 dark:bg-slate-700 rounded-xl" />
-          </div>
-        </div>
-      ))}
-    </div>
-    
-    {Array.from({ length: 3 }, (_, i) => (
-      <Card key={i} className="p-4 space-y-3 animate-pulse">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2 flex-1">
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-48" />
-            <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-32" />
-          </div>
-          <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded-full w-20" />
-        </div>
-        <div className="h-16 bg-slate-200 dark:bg-slate-700 rounded-lg" />
-      </Card>
-    ))}
-  </div>
-);
+});
 
 // Componente principal
-export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = ({
+export const AppointmentHistory = memo<{
+  patientId: string;
+  showStats?: boolean;
+  maxItems?: number;
+  className?: string;
+}>(({
   patientId,
   showStats = true,
   maxItems,
@@ -275,21 +241,26 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = ({
   const errorAppointments = useAppointmentStore(state => state.error);
   const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
   
-  // Cargar citas
+  // Cargar citas solo si es necesario
   useEffect(() => {
-    if (!appointments?.length && !isLoadingAppointments) {
+    if (!appointments && !isLoadingAppointments && !errorAppointments) {
       fetchAppointments();
     }
-  }, [appointments?.length, isLoadingAppointments, fetchAppointments]);
+  }, []);
 
-  // Filtrar citas del paciente
-  const patientAppointments = appointments?.filter(app => app.patientId === patientId)
-    .sort((a, b) => new Date(b.fechaConsulta).getTime() - new Date(a.fechaConsulta).getTime())
-    .slice(0, maxItems) || [];
+  // Filtrar y ordenar citas del paciente con memoización
+  const patientAppointments = useMemo(() => {
+    if (!appointments) return [];
+    
+    return appointments
+      .filter(app => app.patientId === patientId)
+      .sort((a, b) => new Date(b.fechaConsulta).getTime() - new Date(a.fechaConsulta).getTime())
+      .slice(0, maxItems);
+  }, [appointments, patientId, maxItems]);
 
-  // Calcular estadísticas
-  const calculateStats = (appointmentsList: AppointmentData[]): AppointmentStats => {
-    if (!appointmentsList.length) {
+  // Calcular estadísticas con memoización
+  const statistics = useMemo(() => {
+    if (!patientAppointments.length) {
       return {
         total: 0,
         completadas: 0,
@@ -301,7 +272,7 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = ({
       };
     }
 
-    const counts = appointmentsList.reduce((acc, app) => {
+    const counts = patientAppointments.reduce((acc, app) => {
       const estado = app.estado as AppointmentStatusEnum;
       acc[estado] = (acc[estado] || 0) + 1;
       return acc;
@@ -320,7 +291,7 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = ({
     const attendanceRate = (completadas + noAsistio) > 0 ? (completadas / (completadas + noAsistio)) * 100 : 0;
 
     return {
-      total: appointmentsList.length,
+      total: patientAppointments.length,
       completadas,
       programadas,
       canceladas,
@@ -328,12 +299,23 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = ({
       completionRate: Math.round(completionRate),
       attendanceRate: Math.round(attendanceRate),
     };
-  };
+  }, [patientAppointments]);
 
-  const statistics = calculateStats(patientAppointments);
-
-  if (isLoadingAppointments) {
-    return <LoadingSkeleton />;
+  if (isLoadingAppointments && !appointments) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col items-center justify-center py-12">
+          <div className="relative">
+            <CalendarClock className="h-12 w-12 text-blue-500 animate-pulse mb-4" />
+            <div className="absolute -inset-2 bg-blue-500/20 rounded-full animate-ping" />
+          </div>
+          <p className="text-base text-slate-600 dark:text-slate-400 mb-4 font-medium">
+            Cargando historial de citas...
+          </p>
+          <Progress value={75} className="h-2 w-64" />
+        </div>
+      </div>
+    );
   }
 
   if (errorAppointments) {
@@ -350,7 +332,6 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = ({
 
   return (
     <div className={cn("space-y-6", className)}>
-      {/* Estadísticas */}
       {showStats && (
         <Card className="shadow-lg border bg-white dark:bg-slate-900">
           <CardHeader>
@@ -399,7 +380,6 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = ({
         </Card>
       )}
 
-      {/* Lista de citas */}
       {patientAppointments.length === 0 ? (
         <Card className="text-center py-16 shadow-lg bg-white dark:bg-slate-900">
           <CardContent className="space-y-6">
@@ -450,4 +430,4 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = ({
       )}
     </div>
   );
-};
+});

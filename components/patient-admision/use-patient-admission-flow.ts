@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+// use-patient-admission-flow.ts - Versión optimizada para rendimiento
+import { useState, useEffect, useMemo } from 'react'
 import { usePatientStore } from '@/lib/stores/patient-store'
 import { useAppointmentStore } from '@/lib/stores/appointment-store'
 import type { AppointmentData } from '@/app/dashboard/data-model'
@@ -12,8 +13,11 @@ export interface AppointmentLists {
   past: AppointmentData[]
 }
 
+// Cache para clasificación de fechas
+const dateClassificationCache = new Map<string, 'today' | 'future' | 'past'>();
+
 /**
- * Hook simplificado para manejar el flujo de admisión de pacientes
+ * Hook optimizado para manejar el flujo de admisión de pacientes
  */
 export function usePatientAdmissionFlow() {
   const { 
@@ -25,48 +29,62 @@ export function usePatientAdmissionFlow() {
   
   const [activeTab, setActiveTab] = useState<AdmissionTab>("today");
 
-  // Cargar citas al montar el componente
+  // Cargar citas al montar el componente - solo una vez
   useEffect(() => {
-    if (!appointments?.length && !isLoading) {
+    if (!appointments && !isLoading && !error) {
       fetchAppointments();
     }
-  }, [appointments?.length, isLoading, fetchAppointments]);
+  }, []);
 
-  // Clasificar citas por fecha - lógica simplificada
-  const classifyAppointments = (appointmentsList: AppointmentData[]): AppointmentLists => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
+  // Clasificar citas por fecha - optimizado con memoización y cache
+  const filteredAppointments = useMemo((): AppointmentLists => {
     const result: AppointmentLists = {
       today: [],
       future: [],
       past: [],
     };
 
-    if (!appointmentsList?.length) {
+    if (!appointments?.length) {
       return result;
     }
 
-    for (const appointment of appointmentsList) {
-      try {
-        const appointmentDate = new Date(appointment.fechaConsulta);
-        appointmentDate.setHours(0, 0, 0, 0);
-        const appointmentTime = appointmentDate.getTime();
+    // Calcular fechas una sola vez
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
 
-        if (appointmentTime === todayTime) {
-          result.today.push(appointment);
-        } else if (appointmentTime > todayTime) {
-          result.future.push(appointment);
-        } else {
-          result.past.push(appointment);
+    // Clasificar citas con cache
+    for (const appointment of appointments) {
+      try {
+        const dateKey = appointment.fechaConsulta.toString();
+        
+        // Verificar cache primero
+        let classification = dateClassificationCache.get(dateKey);
+        
+        if (!classification) {
+          const appointmentDate = new Date(appointment.fechaConsulta);
+          appointmentDate.setHours(0, 0, 0, 0);
+          const appointmentTime = appointmentDate.getTime();
+
+          if (appointmentTime === todayTime) {
+            classification = 'today';
+          } else if (appointmentTime > todayTime) {
+            classification = 'future';
+          } else {
+            classification = 'past';
+          }
+          
+          // Guardar en cache
+          dateClassificationCache.set(dateKey, classification);
         }
+
+        result[classification].push(appointment);
       } catch (error) {
         console.error(`Error procesando cita ${appointment.id}:`, error);
       }
     }
 
-    // Ordenar por hora
+    // Ordenar por hora usando localeCompare (más eficiente)
     const sortByTime = (a: AppointmentData, b: AppointmentData): number => {
       const timeA = a.horaConsulta || '00:00';
       const timeB = b.horaConsulta || '00:00';
@@ -77,10 +95,13 @@ export function usePatientAdmissionFlow() {
     result.future.sort(sortByTime);
     result.past.sort((a, b) => sortByTime(b, a)); // Descendente para el pasado
 
-    return result;
-  };
+    // Limpiar cache si es muy grande (para evitar memory leaks)
+    if (dateClassificationCache.size > 1000) {
+      dateClassificationCache.clear();
+    }
 
-  const filteredAppointments = classifyAppointments(appointments || []);
+    return result;
+  }, [appointments]);
 
   return {
     appointments: appointments || [],

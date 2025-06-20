@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -25,20 +25,69 @@ interface SurveySelectorProps {
   onSurveyAssigned: (assignmentId: string, surveyId: string) => void;
 }
 
-const SurveySelector = ({ 
-  isOpen, 
-  onClose, 
-  patientId, 
-  patientName, 
-  onSurveyAssigned 
+// Props for SurveyTemplateCard
+interface SurveyTemplateCardProps {
+  template: SurveyTemplate;
+  isAssigning: boolean; // Is *any* survey being assigned?
+  isCurrentlyAssigning: boolean; // Is *this specific* survey being assigned?
+  onAssign: (template: SurveyTemplate) => void;
+}
+
+const SurveyTemplateCard = React.memo(({ template, isAssigning, isCurrentlyAssigning, onAssign }: SurveyTemplateCardProps) => {
+  const handleClick = useCallback(() => {
+    if (!isAssigning) {
+      onAssign(template);
+    }
+  }, [isAssigning, onAssign, template]);
+
+  return (
+    <Card
+      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200 cursor-pointer"
+      onClick={handleClick}
+    >
+      <CardContent className="p-4 flex items-center justify-between">
+        <div>
+          <h4 className="font-semibold text-slate-800 dark:text-slate-100">{template.title}</h4>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{template.description || 'Sin descripción.'}</p>
+        </div>
+        <Button
+          size="sm"
+          disabled={isAssigning}
+          className="ml-4 w-32"
+          aria-label={`Asignar encuesta ${template.title}`}
+        >
+          {isCurrentlyAssigning ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <>
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Asignar
+            </>
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+});
+SurveyTemplateCard.displayName = 'SurveyTemplateCard';
+
+// Move skeleton config outside
+const SKELETON_COUNT = 3;
+const skeletonItems = Array.from({ length: SKELETON_COUNT });
+
+export const SurveySelector = React.memo(({
+  isOpen,
+  onClose,
+  patientId,
+  patientName,
+  onSurveyAssigned
 }: SurveySelectorProps) => {
-  const supabase = createClientComponentClient();
+  const supabase = useMemo(() => createClientComponentClient(), []);
   const [templates, setTemplates] = useState<SurveyTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAssigning, setIsAssigning] = useState<number | null>(null); // Store the ID of the survey being assigned
+  const [isAssigning, setIsAssigning] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch survey templates from Supabase
   const fetchTemplates = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -65,8 +114,8 @@ const SurveySelector = ({
     }
   }, [isOpen, fetchTemplates]);
 
-  // Handle survey selection and assignment
-  const handleAssignSurvey = async (template: SurveyTemplate) => {
+  const handleAssignSurvey = useCallback(async (template: SurveyTemplate) => {
+    if (isAssigning !== null) return; // Prevent multiple assignments
     setIsAssigning(template.id);
     try {
       const response = await fetch('/api/assign-survey', {
@@ -83,18 +132,23 @@ const SurveySelector = ({
 
       toast.success(`Encuesta "${template.title}" asignada correctamente.`);
       onSurveyAssigned(result.assignmentId, String(template.id));
-      onClose(); // Close the dialog on success
-
+      onClose();
     } catch (err: any) {
       console.error('Error assigning survey:', err);
       toast.error(`Error: ${err.message}`);
     } finally {
       setIsAssigning(null);
     }
-  };
+  }, [isAssigning, patientId, onSurveyAssigned, onClose]);
+
+  const handleClose = useCallback(() => {
+    if (isAssigning === null) {
+      onClose();
+    }
+  }, [isAssigning, onClose]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
@@ -109,7 +163,7 @@ const SurveySelector = ({
         <div className="py-4 max-h-[60vh] overflow-y-auto pr-2">
           {isLoading ? (
             <div className="space-y-4">
-              {Array.from({ length: 3 }).map((_, i) => (
+              {skeletonItems.map((_, i) => (
                 <Skeleton key={i} className="h-24 w-full" />
               ))}
             </div>
@@ -124,43 +178,24 @@ const SurveySelector = ({
           ) : (
             <div className="space-y-3">
               {templates.map((template) => (
-                <Card 
-                  key={template.id} 
-                  className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200 cursor-pointer"
-                  onClick={() => !isAssigning && handleAssignSurvey(template)}
-                >
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div>
-                      <h4 className="font-semibold text-slate-800 dark:text-slate-100">{template.title}</h4>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{template.description || 'Sin descripción.'}</p>
-                    </div>
-                    <Button 
-                      size="sm" 
-                      disabled={isAssigning !== null}
-                      className="ml-4 w-32"
-                    >
-                      {isAssigning === template.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Asignar
-                        </>
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
+                <SurveyTemplateCard
+                  key={template.id}
+                  template={template}
+                  isAssigning={isAssigning !== null}
+                  isCurrentlyAssigning={isAssigning === template.id}
+                  onAssign={handleAssignSurvey}
+                />
               ))}
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={handleClose} disabled={isAssigning !== null}>Cancelar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-};
+});
 
-export default SurveySelector;
+SurveySelector.displayName = 'SurveySelector';

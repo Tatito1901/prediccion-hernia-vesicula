@@ -39,6 +39,7 @@ import { NavUser } from "./nav-user"
 const USER = {
   name:  "Dr. Luis Ángel Medina",
   email: "medina@clinica.com",
+  avatar: "",
 } as const
 
 const NAV_MAIN = [
@@ -171,12 +172,12 @@ export function AppSidebar({
         {/* Contenido */}
         <SidebarContent className="px-2">
           <NavMain
-            items={NAV_MAIN}
+            items={[...NAV_MAIN]}
             pathname={pathname}
             onNavigate={handleNavigate}
           />
           <NavSecondary
-            items={NAV_SECONDARY}
+            items={[...NAV_SECONDARY]}
             pathname={pathname}
             onNavigate={handleNavigate}
             className="mt-auto"
@@ -212,7 +213,7 @@ export function AppSidebar({
 
             {/* Usuario */}
             <NavUser
-              user={{ ...USER, avatar: USER.avatar || '' }}
+              user={USER}
               collapsed={isCollapsed && !isMobile}
             />
 

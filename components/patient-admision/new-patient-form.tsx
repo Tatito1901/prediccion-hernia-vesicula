@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react"
+// new-patient-form.tsx - Versión optimizada para rendimiento
+import React, { useState, useEffect, useMemo, useCallback, memo } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -9,7 +10,9 @@ import {
   isBefore, 
   addMonths, 
   startOfDay, 
-  format 
+  format,
+  addDays,
+  isSunday
 } from "date-fns"
 import { UserPlus, Loader2, Clock } from "lucide-react"
 
@@ -63,7 +66,8 @@ const FORM_SCHEMA = z.object({
     .int()
     .min(0, "La edad no puede ser negativa.")
     .max(120, "Edad no válida.")
-    .optional(),
+    .optional()
+    .nullable(),
   telefono: z.string()
     .trim()
     .min(10, "El teléfono debe tener al menos 10 dígitos.")
@@ -115,24 +119,36 @@ const DIAGNOSIS_GROUPS = {
 const WORKING_HOURS = { start: 9, end: 15, interval: 30 };
 const MAX_MONTHS_AHEAD = 3;
 
-const DEFAULT_VALUES: Partial<FormValues> = {
+const DEFAULT_VALUES: FormValues = {
   nombre: "",
   apellidos: "",
   telefono: "",
   notas: "",
-  edad: undefined,
+  edad: null,
+  fechaConsulta: null as any,
+  horaConsulta: "",
+  motivoConsulta: null as any,
 };
 
-// Función de formateo
+// Cache para formateo
+const diagnosisFormatCache = new Map<string, string>();
+
+// Función de formateo con cache
 const formatDiagnosis = (diagnosis: DiagnosisEnum): string => {
-  return diagnosis
+  const cached = diagnosisFormatCache.get(diagnosis);
+  if (cached) return cached;
+  
+  const formatted = diagnosis
     .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
+  
+  diagnosisFormatCache.set(diagnosis, formatted);
+  return formatted;
 };
 
-// Generar slots de tiempo
-const generateTimeSlots = (): TimeString[] => {
+// Generar slots de tiempo - memoizado
+const TIME_SLOTS = (() => {
   const slots: TimeString[] = [];
   const totalSlots = (WORKING_HOURS.end - WORKING_HOURS.start) * 2;
   
@@ -147,22 +163,22 @@ const generateTimeSlots = (): TimeString[] => {
   }
   
   return slots;
-};
+})();
 
 interface NewPatientFormProps {
   onSuccess?: () => void;
   triggerButton?: React.ReactNode;
 }
 
-export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess, triggerButton }) => {
+export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerButton }) => {
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [appointmentsLoaded, setAppointmentsLoaded] = useState(false);
   
   const addPatient = usePatientStore(state => state.addPatient);
   const addAppointment = useAppointmentStore(state => state.addAppointment);
   const appointments = useAppointmentStore(state => state.appointments);
   const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
+  const isLoadingAppointments = useAppointmentStore(state => state.isLoading);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FORM_SCHEMA),
@@ -172,22 +188,15 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess, trigg
 
   const selectedDate = form.watch("fechaConsulta");
 
-  // Cargar citas cuando se abre el diálogo
+  // Cargar citas cuando se abre el diálogo - optimizado
   useEffect(() => {
-    if (open && !appointmentsLoaded) {
-      const loadAppointments = async () => {
-        try {
-          await fetchAppointments();
-          setAppointmentsLoaded(true);
-        } catch (error) {
-          console.error("Error fetching appointments:", error);
-          toast.error("No se pudieron cargar las citas disponibles");
-        }
-      };
-      
-      loadAppointments();
+    if (open && !appointments && !isLoadingAppointments) {
+      fetchAppointments().catch(error => {
+        console.error("Error fetching appointments:", error);
+        toast.error("No se pudieron cargar las citas disponibles");
+      });
     }
-  }, [open, appointmentsLoaded, fetchAppointments]);
+  }, [open, appointments, isLoadingAppointments, fetchAppointments]);
 
   // Reset form cuando se cierra
   useEffect(() => {
@@ -197,65 +206,60 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess, trigg
     }
   }, [open, form]);
 
-  // Calcular slots disponibles
-  const getAvailableTimeSlots = () => {
-    if (!selectedDate || !appointmentsLoaded) return [];
+  // Calcular slots disponibles - memoizado
+  const availableTimeSlots = useMemo(() => {
+    if (!selectedDate || !appointments) return [];
     
     const now = new Date();
     const isSelectedDateToday = isToday(selectedDate);
     const startOfSelectedDay = startOfDay(selectedDate);
     
-    // Citas ocupadas para el día seleccionado
+    // Crear Set de citas ocupadas para búsqueda O(1)
     const dayAppointments = new Set<TimeString>();
     
-    if (appointments) {
-      appointments.forEach(app => {
-        if (
-          app.estado !== AppointmentStatusEnum.CANCELADA &&
-          startOfDay(new Date(app.fechaConsulta)).getTime() === startOfSelectedDay.getTime()
-        ) {
-          dayAppointments.add(app.horaConsulta as TimeString);
-        }
-      });
-    }
-    
-    // Generar slots disponibles
-    const allSlots = generateTimeSlots();
-    const availableSlots = [];
-    
-    for (const timeStr of allSlots) {
-      const [hour, minute] = timeStr.split(':').map(Number);
-      const slotDateTime = setMinutes(setHours(new Date(startOfSelectedDay), hour), minute);
-      
-      const isPast = isSelectedDateToday && isBefore(slotDateTime, now);
-      const isBooked = dayAppointments.has(timeStr);
-      
-      if (!isPast && !isBooked) {
-        availableSlots.push(timeStr);
+    const selectedDayTime = startOfSelectedDay.getTime();
+    appointments.forEach(app => {
+      if (
+        app.estado !== AppointmentStatusEnum.CANCELADA &&
+        startOfDay(new Date(app.fechaConsulta)).getTime() === selectedDayTime
+      ) {
+        dayAppointments.add(app.horaConsulta as TimeString);
       }
-    }
+    });
     
-    return availableSlots;
-  };
+    // Filtrar slots disponibles
+    return TIME_SLOTS.filter(timeStr => {
+      if (dayAppointments.has(timeStr)) return false;
+      
+      if (isSelectedDateToday) {
+        const [hour, minute] = timeStr.split(':').map(Number);
+        const slotDateTime = setMinutes(setHours(new Date(startOfSelectedDay), hour), minute);
+        if (isBefore(slotDateTime, now)) return false;
+      }
+      
+      return true;
+    });
+  }, [selectedDate, appointments]);
 
-  const availableTimeSlots = getAvailableTimeSlots();
-
-  // Filtrar fechas disponibles
-  const filterAvailableDates = (date: Date) => {
+  // Función para filtrar fechas disponibles - memoizada
+  const filterAvailableDates = useCallback((date: Date) => {
     // Excluir domingos
-    if (date.getDay() === 0) return false;
+    if (isSunday(date)) return false;
     
     // Excluir fechas pasadas
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
+    const today = startOfDay(new Date());
     return date >= today;
-  };
+  }, []);
 
-  const handleDateChange = (date: Date | undefined) => {
+  // Calcular fechas mínima y máxima - memoizado
+  const { minDate, maxDate } = useMemo(() => ({
+    minDate: startOfDay(new Date()),
+    maxDate: addMonths(new Date(), MAX_MONTHS_AHEAD)
+  }), []);
+
+  const handleDateChange = useCallback((date: Date | undefined) => {
     if (date) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = startOfDay(new Date());
       
       if (date < today) {
         toast.error("No se puede seleccionar una fecha anterior a hoy");
@@ -269,16 +273,16 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess, trigg
     
     // Limpiar hora al cambiar fecha
     form.setValue("horaConsulta", "", { shouldValidate: true });
-  };
+  }, [form]);
 
-  const handleAgeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAgeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    form.setValue("edad", value === "" ? undefined : Number(value), {
+    form.setValue("edad", value === "" ? null : Number(value), {
       shouldValidate: true
     });
-  };
+  }, [form]);
 
-  const handleSubmit = async (values: FormValues) => {
+  const handleSubmit = useCallback(async (values: FormValues) => {
     if (isSubmitting) return;
     
     const submissionToast = toast.loading("Registrando paciente...");
@@ -289,7 +293,7 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess, trigg
       const newPatient = await addPatient({
         nombre: values.nombre.trim(),
         apellidos: values.apellidos.trim(),
-        edad: values.edad,
+        edad: values.edad ?? undefined,
         diagnostico_principal: values.motivoConsulta,
         estado_paciente: PatientStatusEnum.PENDIENTE_DE_CONSULTA,
         probabilidad_cirugia: 0.5,
@@ -320,9 +324,9 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess, trigg
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [isSubmitting, addPatient, addAppointment, onSuccess]);
 
-  const isLoading = !appointmentsLoaded && open;
+  const isLoading = isLoadingAppointments && !appointments;
   const canSubmit = form.formState.isValid && !isSubmitting && !isLoading;
 
   return (
@@ -440,7 +444,7 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess, trigg
                           <Input 
                             type="number" 
                             placeholder="Ej: 35" 
-                            value={field.value === undefined ? '' : String(field.value)}
+                            value={field.value === null || field.value === undefined ? '' : String(field.value)}
                             onChange={handleAgeChange}
                             className="h-9 text-sm"
                             disabled={isSubmitting}
@@ -504,13 +508,13 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess, trigg
                           Fecha de Consulta <span className="text-red-500">*</span>
                         </FormLabel>
                         <DatePicker
-                          value={field.value}
-                          onChange={handleDateChange}
-                          minDate={new Date()}
-                          maxDate={addMonths(new Date(), MAX_MONTHS_AHEAD)}
-                          placeholder="Seleccione fecha"
+                          date={field.value}
+                          onDateChange={field.onChange}
+                          minDate={minDate}
+                          maxDate={maxDate}
+                          placeholder="DD/MM/AAAA"
                           filterDate={filterAvailableDates}
-                          className="h-9 text-sm"
+                          className="w-full"
                           disabled={isSubmitting}
                         />
                         <FormMessage className="text-xs mt-1" />
@@ -636,4 +640,4 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess, trigg
       </DialogContent>
     </Dialog>
   )
-};
+});

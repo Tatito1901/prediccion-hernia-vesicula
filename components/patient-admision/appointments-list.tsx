@@ -1,4 +1,5 @@
-import React from "react";
+// appointments-list.tsx - Versión optimizada para rendimiento
+import React, { memo } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppointmentStatusEnum } from "@/app/dashboard/data-model";
@@ -37,10 +38,10 @@ export interface AppointmentsListProps {
   onViewHistory: (patientId: string) => void;
 }
 
-// Skeleton de carga simplificado
-const LoadingSkeleton = () => (
+// Componente de skeleton optimizado
+const LoadingSkeleton = memo(() => (
   <div className="space-y-4" role="status" aria-label="Cargando citas">
-    {Array.from({ length: 3 }, (_, i) => (
+    {[0, 1, 2].map((i) => (
       <Card key={i} className="p-4 shadow-sm">
         <div className="space-y-3 animate-pulse">
           <div className="flex items-center gap-3">
@@ -59,10 +60,12 @@ const LoadingSkeleton = () => (
       </Card>
     ))}
   </div>
-);
+));
+
+LoadingSkeleton.displayName = "LoadingSkeleton";
 
 // Estado vacío optimizado
-const EmptyState: React.FC<EmptyStateProps> = ({ title, description, icon: IconComponent }) => (
+const EmptyState = memo<EmptyStateProps>(({ title, description, icon: IconComponent }) => (
   <div className="text-center p-16 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 min-h-[400px] flex flex-col items-center justify-center">
     <div className="relative mb-6">
       <div className="h-20 w-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
@@ -76,10 +79,12 @@ const EmptyState: React.FC<EmptyStateProps> = ({ title, description, icon: IconC
       {description}
     </p>
   </div>
-);
+));
+
+EmptyState.displayName = "EmptyState";
 
 // Componente principal optimizado
-export const AppointmentsList: React.FC<AppointmentsListProps> = ({
+export const AppointmentsList = memo<AppointmentsListProps>(({
   appointments,
   isLoading,
   emptyState,
@@ -87,11 +92,12 @@ export const AppointmentsList: React.FC<AppointmentsListProps> = ({
   onStartSurvey,
   onViewHistory,
 }) => {
-  // Early returns para mejor rendimiento
-  if (isLoading) {
+  // Early return para loading
+  if (isLoading && !appointments?.length) {
     return <LoadingSkeleton />;
   }
 
+  // Early return para estado vacío
   if (!appointments?.length) {
     return (
       <EmptyState
@@ -116,4 +122,6 @@ export const AppointmentsList: React.FC<AppointmentsListProps> = ({
       ))}
     </div>
   );
-};
+});
+
+AppointmentsList.displayName = "AppointmentsList";

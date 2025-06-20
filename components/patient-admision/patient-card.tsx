@@ -1,4 +1,5 @@
-import React from "react"
+// patient-card.tsx - Versión optimizada para rendimiento
+import React, { memo, useCallback, useMemo } from "react"
 import {
   Card,
   CardContent,
@@ -107,24 +108,39 @@ const STATUS_CONFIG = {
   },
 }
 
-const ACTIONABLE_STATUSES = [
+const ACTIONABLE_STATUSES = new Set([
   AppointmentStatusEnum.PROGRAMADA,
   AppointmentStatusEnum.CONFIRMADA,
   AppointmentStatusEnum.PRESENTE,
-]
+]);
 
-// Utilidades simplificadas
+// Cache para formateo
+const timeFormatCache = new Map<string, string>();
+const dateFormatCache = new Map<string, string>();
+
+// Utilidades de formateo con cache
 const formatTime = (time?: string) => {
   if (!time || !time.includes(":")) return "---"
+  
+  const cached = timeFormatCache.get(time);
+  if (cached) return cached;
+  
   const [h, m] = time.split(":")
   const hour = Number(h)
   if (isNaN(hour)) return "---"
   const period = hour >= 12 ? "PM" : "AM"
   const displayHour = hour % 12 || 12
-  return `${displayHour}:${m} ${period}`
+  const formatted = `${displayHour}:${m} ${period}`;
+  
+  timeFormatCache.set(time, formatted);
+  return formatted;
 }
 
 const formatDate = (date: string | Date) => {
+  const key = date.toString();
+  const cached = dateFormatCache.get(key);
+  if (cached) return cached;
+  
   const d = new Date(date)
   if (isNaN(d.getTime())) return "---"
 
@@ -132,24 +148,32 @@ const formatDate = (date: string | Date) => {
   today.setHours(0, 0, 0, 0)
 
   const diff = (d.setHours(0, 0, 0, 0) - today.getTime()) / 86400000
-  if (diff === 0) return "Hoy"
-  if (diff === 1) return "Mañana"
-
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" })
+  let formatted: string;
+  
+  if (diff === 0) {
+    formatted = "Hoy";
+  } else if (diff === 1) {
+    formatted = "Mañana";
+  } else {
+    formatted = d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+  }
+  
+  dateFormatCache.set(key, formatted);
+  return formatted;
 }
 
 const getInitials = (name = "", last = "") =>
   `${name.charAt(0).toUpperCase() || "?"}${last.charAt(0).toUpperCase()}`
 
-// Componente principal simplificado
-export function AppointmentCard({
+// Componente principal optimizado con memo
+export const AppointmentCard = memo<AppointmentCardProps>(({
   appointment,
   onAction,
   onStartSurvey,
   onViewHistory,
   disableActions = false,
   surveyCompleted = false,
-}: AppointmentCardProps) {
+}) => {
   const {
     nombre,
     apellidos,
@@ -163,14 +187,14 @@ export function AppointmentCard({
   } = appointment
 
   const statusConfig = STATUS_CONFIG[estado] || STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA]
-  const isActionable = ACTIONABLE_STATUSES.includes(estado)
+  const isActionable = ACTIONABLE_STATUSES.has(estado)
   const needsSurvey = estado === AppointmentStatusEnum.PRESENTE && disableActions && !surveyCompleted
   const formattedDate = formatDate(fechaConsulta)
   const formattedTime = formatTime(horaConsulta)
   const initials = getInitials(nombre, apellidos)
 
-  // Generar menu items
-  const getMenuItems = () => {
+  // Generar menu items memoizado
+  const menuItems = useMemo(() => {
     switch (estado) {
       case AppointmentStatusEnum.PROGRAMADA:
         return [
@@ -193,11 +217,10 @@ export function AppointmentCard({
       default:
         return [];
     }
-  }
+  }, [estado, disableActions, surveyCompleted]);
 
-  const menuItems = getMenuItems()
-
-  const handlePrimaryAction = () => {
+  // Callbacks optimizados
+  const handlePrimaryAction = useCallback(() => {
     if (!statusConfig.primary) return
 
     if (needsSurvey && statusConfig.primary === "complete") {
@@ -205,13 +228,19 @@ export function AppointmentCard({
       return
     }
     onAction(statusConfig.primary, id, appointment)
-  }
+  }, [statusConfig.primary, needsSurvey, onStartSurvey, onAction, id, patientId, appointment]);
 
-  const handleAction = (action: ConfirmAction) => onAction(action, id, appointment)
+  const handleAction = useCallback((action: ConfirmAction) => {
+    onAction(action, id, appointment)
+  }, [onAction, id, appointment]);
 
-  const handleStartSurvey = () => onStartSurvey(id, patientId, appointment)
+  const handleStartSurvey = useCallback(() => {
+    onStartSurvey(id, patientId, appointment)
+  }, [onStartSurvey, id, patientId, appointment]);
 
-  const handleViewHistory = () => patientId && onViewHistory(patientId)
+  const handleViewHistory = useCallback(() => {
+    patientId && onViewHistory(patientId)
+  }, [patientId, onViewHistory]);
 
   return (
     <Card className={cn(
@@ -365,7 +394,7 @@ export function AppointmentCard({
             <Button
               onClick={handlePrimaryAction}
               className="w-full font-semibold"
-              variant={statusConfig.primary === "checkIn" ? "default" : "success"}
+              variant="default"
               size="sm"
               disabled={needsSurvey && statusConfig.primary === "complete" ? false : disableActions && !surveyCompleted}
             >
@@ -391,4 +420,4 @@ export function AppointmentCard({
       </CardContent>
     </Card>
   )
-}
+});
