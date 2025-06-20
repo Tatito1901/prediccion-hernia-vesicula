@@ -1,25 +1,9 @@
 import type React from "react"
 import { useRef, useCallback, memo, useMemo, useState, useEffect } from "react"
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  Brush,
-  ScatterChart,
-  Scatter,
-  ZAxis,
-  LabelList,
-  type TooltipProps,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell, LineChart, Line, Brush, ScatterChart, Scatter, ZAxis,
+  LabelList, type TooltipProps,
 } from "recharts"
 import { format, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale/es"
@@ -53,7 +37,6 @@ export interface ChartOptions {
   responsive?: boolean
 }
 
-// TIPOS UNIFICADOS PARA TODOS LOS COMPONENTES
 export interface PatientData {
   id: string
   diagnostico?: string
@@ -158,21 +141,8 @@ export interface StatCardProps {
   size?: 'sm' | 'md' | 'lg'
 }
 
-export interface ResponsiveConfig {
-  breakpoints: {
-    mobile: number
-    tablet: number
-    desktop: number
-  }
-  chartSizes: {
-    mobile: { width: string; height: number }
-    tablet: { width: string; height: number }
-    desktop: { width: string; height: number }
-  }
-}
-
 /* ============================================================================
- * UTILIDADES CENTRALIZADAS Y OPTIMIZADAS
+ * UTILIDADES CENTRALIZADAS Y OPTIMIZADAS - SIMPLIFICADAS
  * ========================================================================== */
 
 export const WEEKDAYS_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
@@ -184,102 +154,84 @@ export const MAIN_DIAGNOSES = [
   'Consulta General', 'Revisión Postoperatoria', 'Apendicitis'
 ] as const
 
-// Cache global para funciones pesadas
-const globalUtilsCache = new Map<string, any>()
+// Cache simplificado con límite
+const cache = new Map<string, any>()
+const CACHE_LIMIT = 500
 
-// Función unificada y optimizada para formateo de fechas
-export const formatDateUtil = (
-  date: Date | string | undefined | null,
-  formatStr = "dd/MM/yyyy"
-): string => {
+const setCache = (key: string, value: any) => {
+  if (cache.size >= CACHE_LIMIT) {
+    const firstKey = cache.keys().next().value
+    cache.delete(firstKey)
+  }
+  cache.set(key, value)
+}
+
+// Funciones utilitarias simplificadas
+export const formatDateUtil = (date: Date | string | undefined | null, formatStr = "dd/MM/yyyy"): string => {
   if (!date) return "Fecha no definida"
   
   const cacheKey = `date-${date}-${formatStr}`
-  const cached = globalUtilsCache.get(cacheKey)
-  if (cached) return cached
+  if (cache.has(cacheKey)) return cache.get(cacheKey)
   
   try {
     const dateObj = typeof date === "string" ? parseISO(date) : date
-    if (!isValid(dateObj)) {
-      const fallbackDateObj = new Date(date as string)
-      if (isValid(fallbackDateObj)) {
-        const result = format(fallbackDateObj, formatStr, { locale: es })
-        globalUtilsCache.set(cacheKey, result)
-        return result
-      }
-      return "Fecha inválida"
-    }
+    if (!isValid(dateObj)) return "Fecha inválida"
+    
     const result = format(dateObj, formatStr, { locale: es })
-    globalUtilsCache.set(cacheKey, result)
+    setCache(cacheKey, result)
     return result
   } catch {
     return "Error de formato"
   }
 }
 
-// Función unificada para formateo de estados
 export const titleCaseStatus = (status: string): string => {
   if (status === "NO ASISTIO") return "No Asistió"
-  return status
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase())
+  return status.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
-// Función unificada para abreviar texto con cache
-export const ABBR = (s: string, n = 16) => {
-  if (s.length <= n) return s
-  const cacheKey = `abbr-${s}-${n}`
-  const cached = globalUtilsCache.get(cacheKey)
-  if (cached) return cached
-  
-  const result = `${s.slice(0, n - 1)}…`
-  globalUtilsCache.set(cacheKey, result)
-  return result
-}
+export const ABBR = (s: string, n = 16) => s.length <= n ? s : `${s.slice(0, n - 1)}…`
 
-// Función unificada para convertir hora a decimal
 export const hourToDecimal = (timeStr: string | undefined): number | null => {
-  if (!timeStr || typeof timeStr !== "string") return null
+  if (!timeStr) return null
   
-  const cached = globalUtilsCache.get(`hour-${timeStr}`)
-  if (cached !== undefined) return cached
+  const cacheKey = `hour-${timeStr}`
+  if (cache.has(cacheKey)) return cache.get(cacheKey)
   
   const match = timeStr.match(/^(\d{1,2}):(\d{2})$/)
   if (!match) return null
+  
   const hours = Number.parseInt(match[1], 10)
   const minutes = Number.parseInt(match[2], 10)
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
   
   const result = hours + minutes / 60
-  globalUtilsCache.set(`hour-${timeStr}`, result)
+  setCache(cacheKey, result)
   return result
 }
 
-// Función unificada para categorizar diagnósticos médicos
 export const categorizeMainDiagnosis = (diagnosis?: string): string => {
   if (!diagnosis) return 'Otro'
   
-  const cached = globalUtilsCache.get(`cat-${diagnosis}`)
-  if (cached) return cached
+  const cacheKey = `cat-${diagnosis}`
+  if (cache.has(cacheKey)) return cache.get(cacheKey)
   
   const lower = diagnosis.toLowerCase()
   
   for (const mainDiag of MAIN_DIAGNOSES) {
     if (lower.includes(mainDiag.toLowerCase())) {
-      globalUtilsCache.set(`cat-${diagnosis}`, mainDiag)
+      setCache(cacheKey, mainDiag)
       return mainDiag
     }
   }
   
-  globalUtilsCache.set(`cat-${diagnosis}`, 'Otro')
+  setCache(cacheKey, 'Otro')
   return 'Otro'
 }
 
-// Función unificada para obtener categoría médica con color
 export const getMedicalCategory = (tipo: string): { categoria: string; color: number } => {
-  const cached = globalUtilsCache.get(`medcat-${tipo}`)
-  if (cached) return cached
+  const cacheKey = `medcat-${tipo}`
+  if (cache.has(cacheKey)) return cache.get(cacheKey)
   
   const lower = tipo.toLowerCase()
   
@@ -292,107 +244,26 @@ export const getMedicalCategory = (tipo: string): { categoria: string; color: nu
   else if (lower.includes("apendicitis")) result = { categoria: 'Cirugía General', color: 1 }
   else result = { categoria: 'Medicina General', color: 4 }
   
-  globalUtilsCache.set(`medcat-${tipo}`, result)
+  setCache(cacheKey, result)
   return result
 }
 
-// Función unificada para procesar datos de pacientes - OPTIMIZADA
-export const processPatientData = (patients: PatientData[]): {
-  totalPatients: number
-  diagnosisCounts: Map<string, number>
-  medicalCategories: Map<string, number>
-  ageStats: { average: number; count: number }
-  genderStats: { male: number; female: number }
-} => {
-  if (!patients?.length) {
-    return {
-      totalPatients: 0,
-      diagnosisCounts: new Map(),
-      medicalCategories: new Map(),
-      ageStats: { average: 0, count: 0 },
-      genderStats: { male: 0, female: 0 }
-    }
-  }
-
-  const diagnosisCounts = new Map<string, number>()
-  const medicalCategories = new Map<string, number>()
-  let totalAge = 0
-  let ageCount = 0
-  let maleCount = 0
-  let femaleCount = 0
-
-  for (let i = 0; i < patients.length; i++) {
-    const p = patients[i]
-    
-    const diagnosis = p.diagnostico_principal || p.diagnostico || p.motivoConsulta || 'Sin diagnóstico'
-    diagnosisCounts.set(diagnosis, (diagnosisCounts.get(diagnosis) || 0) + 1)
-    
-    const { categoria } = getMedicalCategory(diagnosis)
-    medicalCategories.set(categoria, (medicalCategories.get(categoria) || 0) + 1)
-    
-    if (p.edad != null) {
-      totalAge += p.edad
-      ageCount++
-    }
-    
-    if (p.genero === 'M') maleCount++
-    else if (p.genero === 'F') femaleCount++
-  }
-
-  return {
-    totalPatients: patients.length,
-    diagnosisCounts,
-    medicalCategories,
-    ageStats: { average: ageCount > 0 ? Math.round(totalAge / ageCount) : 0, count: ageCount },
-    genderStats: { male: maleCount, female: femaleCount }
-  }
-}
-
-// Hook para detectar tamaño de pantalla - OPTIMIZADO
+// Hook simplificado para detección de pantalla
 export const useResponsiveBreakpoint = () => {
   const [breakpoint, setBreakpoint] = useState<'mobile' | 'tablet' | 'desktop'>('desktop')
 
   useEffect(() => {
     const updateBreakpoint = () => {
       const width = window.innerWidth
-      if (width < 768) setBreakpoint('mobile')
-      else if (width < 1024) setBreakpoint('tablet')
-      else setBreakpoint('desktop')
+      setBreakpoint(width < 768 ? 'mobile' : width < 1024 ? 'tablet' : 'desktop')
     }
 
     updateBreakpoint()
-    
-    let timeoutId: NodeJS.Timeout
-    const throttledUpdate = () => {
-      clearTimeout(timeoutId)
-      timeoutId = setTimeout(updateBreakpoint, 150)
-    }
-    
-    window.addEventListener('resize', throttledUpdate)
-    return () => {
-      window.removeEventListener('resize', throttledUpdate)
-      clearTimeout(timeoutId)
-    }
+    window.addEventListener('resize', updateBreakpoint)
+    return () => window.removeEventListener('resize', updateBreakpoint)
   }, [])
 
   return breakpoint
-}
-
-/* ============================================================================
- * CONFIGURACIÓN RESPONSIVA
- * ========================================================================== */
-
-const DEFAULT_RESPONSIVE_CONFIG: ResponsiveConfig = {
-  breakpoints: {
-    mobile: 768,
-    tablet: 1024,
-    desktop: 1200
-  },
-  chartSizes: {
-    mobile: { width: '100%', height: 250 },
-    tablet: { width: '100%', height: 300 },
-    desktop: { width: '100%', height: 350 }
-  }
 }
 
 /* ============================================================================
@@ -400,12 +271,6 @@ const DEFAULT_RESPONSIVE_CONFIG: ResponsiveConfig = {
  * ========================================================================== */
 
 const COLORS_PROFESSIONAL = getChartColors('medical', 12)
-
-const SIZE_CLASSES = {
-  sm: "p-3",
-  md: "p-4", 
-  lg: "p-6"
-} as const
 
 const DEFAULT_CHART_OPTIONS: ChartOptions = {
   showLegend: true,
@@ -423,43 +288,17 @@ const DEFAULT_CHART_OPTIONS: ChartOptions = {
 }
 
 /* ============================================================================
- * COMPONENTES REUTILIZABLES ULTRA-OPTIMIZADOS
+ * COMPONENTES REUTILIZABLES OPTIMIZADOS
  * ========================================================================== */
 
 export const StatCard = memo<StatCardProps>(({
-  title,
-  value,
-  icon,
-  description,
-  color = "bg-primary",
-  trendPercent,
-  previousValue,
-  trendLabel = "vs anterior",
-  onClick,
-  className = "",
-  isLoading,
-  size = 'md',
+  title, value, icon, description, color = "bg-primary", trendPercent, previousValue,
+  trendLabel = "vs anterior", onClick, className = "", isLoading, size = 'md',
 }) => {
-  const { trendIcon, trendColor, borderStyle, iconColorClass } = useMemo(() => {
-    const trendIcon = trendPercent === undefined ? null :
-      trendPercent > 0 ? <ChevronUp className="h-3.5 w-3.5" /> :
-      trendPercent < 0 ? <ChevronDown className="h-3.5 w-3.5" /> : null
-
-    const trendColor = trendPercent === undefined ? "text-muted-foreground" :
-      trendPercent > 0 ? "text-emerald-600 dark:text-emerald-400" :
-      "text-red-600 dark:text-red-400"
-
-    const colorName = color.split("-")[1] || "primary"
-    const iconColorClass = `text-${colorName}-600 dark:text-${colorName}-400`
-    const borderStyle = { borderLeftColor: `hsl(var(--${colorName}))` }
-
-    return { trendIcon, trendColor, borderStyle, iconColorClass }
-  }, [color, trendPercent])
-
   if (isLoading) {
     return (
-      <Card className={cn("border-l-4 border-transparent", SIZE_CLASSES[size], className)}>
-        <CardHeader className="pb-2 space-y-3">
+      <Card className={cn("border-l-4 border-transparent p-4", className)}>
+        <div className="space-y-3">
           <div className="flex justify-between items-start">
             <div className="space-y-2 flex-1">
               <div className="h-4 bg-muted rounded w-3/4 animate-pulse" />
@@ -467,13 +306,22 @@ export const StatCard = memo<StatCardProps>(({
             </div>
             <div className="h-12 w-12 bg-muted rounded-full animate-pulse" />
           </div>
-        </CardHeader>
-        <CardContent className="pt-2">
           <div className="h-3 bg-muted rounded w-full animate-pulse" />
-        </CardContent>
+        </div>
       </Card>
     )
   }
+
+  const trendIcon = trendPercent === undefined ? null :
+    trendPercent > 0 ? <ChevronUp className="h-3.5 w-3.5" /> :
+    trendPercent < 0 ? <ChevronDown className="h-3.5 w-3.5" /> : null
+
+  const trendColor = trendPercent === undefined ? "text-muted-foreground" :
+    trendPercent > 0 ? "text-emerald-600 dark:text-emerald-400" :
+    "text-red-600 dark:text-red-400"
+
+  const colorName = color.split("-")[1] || "primary"
+  const borderStyle = { borderLeftColor: `hsl(var(--${colorName}))` }
 
   return (
     <Card
@@ -484,10 +332,8 @@ export const StatCard = memo<StatCardProps>(({
       )}
       style={borderStyle}
       onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
     >
-      <CardHeader className={cn("pb-3", SIZE_CLASSES[size])}>
+      <CardHeader className="pb-3 p-4">
         <div className="flex justify-between items-start">
           <div className="space-y-1 flex-1 min-w-0">
             <CardTitle className="text-sm font-medium text-muted-foreground truncate">
@@ -495,10 +341,8 @@ export const StatCard = memo<StatCardProps>(({
             </CardTitle>
             
             <div className="flex items-baseline space-x-2">
-              <span className={cn(
-                "font-bold tracking-tight",
-                size === 'sm' ? "text-lg" : size === 'lg' ? "text-3xl" : "text-2xl"
-              )}>
+              <span className={cn("font-bold tracking-tight", 
+                size === 'sm' ? "text-lg" : size === 'lg' ? "text-3xl" : "text-2xl")}>
                 {value}
               </span>
               
@@ -517,7 +361,7 @@ export const StatCard = memo<StatCardProps>(({
             )}
           </div>
           
-          <div className={cn("rounded-xl p-2.5 bg-primary/10 shrink-0", iconColorClass)}>
+          <div className="rounded-xl p-2.5 bg-primary/10 shrink-0 text-primary">
             {icon}
           </div>
         </div>
@@ -640,7 +484,7 @@ const UniversalTooltip = memo<TooltipProps<number, string> & {
 UniversalTooltip.displayName = "UniversalTooltip"
 
 /* ============================================================================
- * HOOK PRINCIPAL ULTRA-OPTIMIZADO CON RESPONSIVIDAD
+ * HOOK PRINCIPAL OPTIMIZADO
  * ========================================================================== */
 
 export function useChartConfig(options?: Partial<ChartOptions>) {
@@ -650,68 +494,43 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
   }), [options])
 
   const chartRef = useRef<HTMLDivElement>(null)
-  const [isVisible, setIsVisible] = useState(true) // Simplificado, asume visible por defecto
   const isDark = isDarkTheme()
   const breakpoint = useResponsiveBreakpoint()
 
-  // Configuración responsiva
-  const responsiveConfig = useMemo(() => {
-    if (!chartOptions.responsive) return DEFAULT_RESPONSIVE_CONFIG
-    
-    return {
-      ...DEFAULT_RESPONSIVE_CONFIG,
-      chartSizes: {
-        mobile: { width: '100%', height: 250 },
-        tablet: { width: '100%', height: 300 },
-        desktop: { width: '100%', height: chartOptions.showLegend ? 380 : 350 }
-      }
-    }
-  }, [chartOptions.responsive, chartOptions.showLegend])
-
-  /* ============================================================================
-   * RENDERIZADORES DE GRÁFICOS ULTRA-OPTIMIZADOS
-   * ========================================================================== */
-
   const renderPieChart = useCallback(
-    (
-      data: StatusChartData[] | DiagnosisData[], 
-      generalStats: GeneralStats, 
-      isLoading: boolean,
-      customOptions?: Partial<ChartOptions>
-    ): React.ReactNode => {
+    (data: StatusChartData[] | DiagnosisData[], generalStats: GeneralStats, isLoading: boolean) => {
       if (isLoading) return <LoadingSpinner />
 
       if (!data?.length || data.every(item => ('value' in item ? item.value : item.cantidad) === 0)) {
         return <EmptyState message="No hay datos disponibles para mostrar" />
       }
 
-      const mergedOptions = { ...chartOptions, ...customOptions }
-      const colors = getChartColors(mergedOptions.colorScheme || 'medical', data.length)
-      const chartSize = responsiveConfig.chartSizes[breakpoint]
+      const colors = getChartColors(chartOptions.colorScheme || 'medical', data.length)
+      const chartHeight = breakpoint === 'mobile' ? 250 : breakpoint === 'tablet' ? 300 : 350
 
       const normalizedData = data.map((item, index) => ({
         name: 'name' in item ? item.name : titleCaseStatus(item.tipo),
         value: 'value' in item ? item.value : item.cantidad,
         color: item.color || colors[index % colors.length],
-        percentage: 'percentage' in item && item.percentage !== undefined ? item.percentage : ('porcentaje' in item ? item.porcentaje : undefined),
-        descripcion: 'descripcion' in item ? item.descripcion : undefined,
+        percentage: 'percentage' in item && item.percentage !== undefined ? item.percentage : 
+                   ('porcentaje' in item ? item.porcentaje : undefined),
       }))
 
       return (
-        <div style={{ height: chartSize.height }} ref={chartRef}>
+        <div style={{ height: chartHeight }} ref={chartRef}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={normalizedData}
                 cx="50%"
                 cy="50%"
-                outerRadius={`${mergedOptions.outerRadius}%`}
-                innerRadius={`${mergedOptions.innerRadius}%`}
+                outerRadius={`${chartOptions.outerRadius}%`}
+                innerRadius={`${chartOptions.innerRadius}%`}
                 dataKey="value"
                 nameKey="name"
                 paddingAngle={breakpoint === 'mobile' ? 2 : 3}
                 cornerRadius={breakpoint === 'mobile' ? 3 : 4}
-                isAnimationActive={mergedOptions.animation && isVisible}
+                isAnimationActive={chartOptions.animation}
                 animationDuration={600}
                 stroke={isDark ? 'hsl(var(--card))' : 'hsl(var(--background))'}
                 strokeWidth={breakpoint === 'mobile' ? 1 : 2}
@@ -726,7 +545,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                   />
                 ))}
                 
-                {mergedOptions.showLabels && breakpoint !== 'mobile' && (
+                {chartOptions.showLabels && breakpoint !== 'mobile' && (
                   <LabelList
                     dataKey="percentage"
                     position="outside"
@@ -741,7 +560,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                 )}
               </Pie>
               
-              {mergedOptions.showTooltip && (
+              {chartOptions.showTooltip && (
                 <Tooltip
                   content={<UniversalTooltip isDark={isDark} showDescription responsive />}
                   formatter={(value: number, name: string) => [
@@ -751,7 +570,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                 />
               )}
               
-              {mergedOptions.showLegend && normalizedData.length <= 8 && breakpoint !== 'mobile' && (
+              {chartOptions.showLegend && normalizedData.length <= 8 && breakpoint !== 'mobile' && (
                 <Legend
                   layout="horizontal"
                   verticalAlign="bottom"
@@ -767,23 +586,15 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
         </div>
       )
     },
-    [chartOptions, isDark, breakpoint, responsiveConfig, isVisible]
+    [chartOptions, isDark, breakpoint]
   )
 
   const renderBarChart = useCallback(
-    (
-      data: MotiveChartData[] | DiagnosisData[], 
-      isLoading: boolean,
-      customOptions?: Partial<ChartOptions>
-    ): React.ReactNode => {
+    (data: MotiveChartData[] | DiagnosisData[], isLoading: boolean) => {
       if (isLoading) return <LoadingSpinner />
+      if (!data?.length) return <EmptyState message="No hay datos disponibles para mostrar" />
 
-      if (!data?.length) {
-        return <EmptyState message="No hay datos disponibles para mostrar" />
-      }
-
-      const mergedOptions = { ...chartOptions, ...customOptions }
-      const chartSize = responsiveConfig.chartSizes[breakpoint]
+      const chartHeight = breakpoint === 'mobile' ? 250 : breakpoint === 'tablet' ? 300 : 350
       const hasLongLabels = data.length > 6
 
       const normalizedData = data.map(item => ({
@@ -793,7 +604,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
       }))
 
       return (
-        <div style={{ height: chartSize.height }} ref={chartRef}>
+        <div style={{ height: chartHeight }} ref={chartRef}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart 
               data={normalizedData} 
@@ -804,7 +615,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                 bottom: hasLongLabels ? (breakpoint === 'mobile' ? 60 : 80) : 30 
               }}
             >
-              {mergedOptions.showGrid && (
+              {chartOptions.showGrid && (
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               )}
               
@@ -823,7 +634,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                 tickLine={false} 
               />
               
-              {mergedOptions.showTooltip && (
+              {chartOptions.showTooltip && (
                 <Tooltip
                   content={<UniversalTooltip isDark={isDark} responsive />}
                   formatter={(value: number) => [`${value} casos`, "Cantidad"]}
@@ -834,7 +645,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                 dataKey="value" 
                 name="Cantidad" 
                 radius={[4, 4, 0, 0]}
-                isAnimationActive={mergedOptions.animation && isVisible}
+                isAnimationActive={chartOptions.animation}
                 animationDuration={500}
               >
                 {normalizedData.map((_, index) => (
@@ -844,7 +655,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                   />
                 ))}
                 
-                {mergedOptions.showLabels && breakpoint === 'desktop' && (
+                {chartOptions.showLabels && breakpoint === 'desktop' && (
                   <LabelList
                     dataKey="value"
                     position="top"
@@ -857,28 +668,17 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
         </div>
       )
     },
-    [chartOptions, isDark, breakpoint, responsiveConfig, isVisible]
+    [chartOptions, isDark, breakpoint]
   )
 
   const renderLineChart = useCallback(
-    (
-      data: TrendChartData[], 
-      isLoading: boolean,
-      customOptions?: Partial<ChartOptions>
-    ): React.ReactNode => {
+    (data: TrendChartData[], isLoading: boolean) => {
       if (isLoading) return <LoadingSpinner />
-
       if (!data?.length) {
-        return (
-          <EmptyState 
-            message="No hay datos de tendencias para mostrar"
-            icon={<TrendingUp className="h-8 w-8 text-muted-foreground" />}
-          />
-        )
+        return <EmptyState message="No hay datos de tendencias para mostrar" icon={<TrendingUp className="h-8 w-8 text-muted-foreground" />} />
       }
 
-      const mergedOptions = { ...chartOptions, ...customOptions }
-      const chartSize = responsiveConfig.chartSizes[breakpoint]
+      const chartHeight = breakpoint === 'mobile' ? 250 : breakpoint === 'tablet' ? 300 : 350
 
       const dataKeys = Object.keys(data[0] || {})
         .filter(key => 
@@ -890,7 +690,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
         .slice(0, breakpoint === 'mobile' ? 3 : 5)
 
       return (
-        <div style={{ height: chartSize.height }} ref={chartRef}>
+        <div style={{ height: chartHeight }} ref={chartRef}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart 
               data={data} 
@@ -901,7 +701,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                 bottom: 10 
               }}
             >
-              {mergedOptions.showGrid && (
+              {chartOptions.showGrid && (
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               )}
               
@@ -915,14 +715,14 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                 axisLine={false} 
               />
               
-              {mergedOptions.showTooltip && (
+              {chartOptions.showTooltip && (
                 <Tooltip 
                   content={<UniversalTooltip isDark={isDark} showTrend responsive />} 
                   labelFormatter={(label: string) => `Fecha: ${label}`}
                 />
               )}
               
-              {mergedOptions.showLegend && breakpoint !== 'mobile' && (
+              {chartOptions.showLegend && breakpoint !== 'mobile' && (
                 <Legend 
                   verticalAlign="top" 
                   height={40} 
@@ -940,13 +740,13 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                   strokeWidth={breakpoint === 'mobile' ? 2 : 2.5}
                   dot={{ r: breakpoint === 'mobile' ? 2 : 3 }}
                   activeDot={{ r: breakpoint === 'mobile' ? 3 : 4 }}
-                  isAnimationActive={mergedOptions.animation && isVisible}
+                  isAnimationActive={chartOptions.animation}
                   animationDuration={600 + index * 100}
                   connectNulls={false}
                 />
               ))}
 
-              {mergedOptions.showBrush && data.length > 15 && breakpoint === 'desktop' && (
+              {chartOptions.showBrush && data.length > 15 && breakpoint === 'desktop' && (
                 <Brush dataKey="formattedDate" height={30} />
               )}
             </LineChart>
@@ -954,21 +754,18 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
         </div>
       )
     },
-    [chartOptions, isDark, breakpoint, responsiveConfig, isVisible]
+    [chartOptions, isDark, breakpoint]
   )
 
   const renderWeekdayChart = useCallback(
-    (data: WeekdayChartData[], isLoading: boolean): React.ReactNode => {
+    (data: WeekdayChartData[], isLoading: boolean) => {
       if (isLoading) return <LoadingSpinner />
+      if (!data?.length) return <EmptyState message="No hay datos de asistencia por día" />
 
-      if (!data?.length) {
-        return <EmptyState message="No hay datos de asistencia por día" />
-      }
-
-      const chartSize = responsiveConfig.chartSizes[breakpoint]
+      const chartHeight = breakpoint === 'mobile' ? 250 : breakpoint === 'tablet' ? 300 : 350
 
       return (
-        <div style={{ height: chartSize.height }} ref={chartRef}>
+        <div style={{ height: chartHeight }} ref={chartRef}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart 
               data={data} 
@@ -1009,7 +806,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                 name="Total Citas"
                 fill="hsl(var(--primary))"
                 radius={[4, 4, 0, 0]}
-                isAnimationActive={chartOptions.animation && isVisible}
+                isAnimationActive={chartOptions.animation}
                 animationDuration={500}
               />
               
@@ -1018,7 +815,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                 name="Asistencias"
                 fill="hsl(var(--secondary))"
                 radius={[4, 4, 0, 0]}
-                isAnimationActive={chartOptions.animation && isVisible}
+                isAnimationActive={chartOptions.animation}
                 animationDuration={600}
               />
             </BarChart>
@@ -1026,22 +823,22 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
         </div>
       )
     },
-    [chartOptions, isDark, breakpoint, responsiveConfig, isVisible]
+    [chartOptions, isDark, breakpoint]
   )
 
   const renderScatterChart = useCallback(
-    (scatterData: ScatterData, timeRange: readonly [number, number], isLoading: boolean): React.ReactNode => {
+    (scatterData: ScatterData, timeRange: readonly [number, number], isLoading: boolean) => {
       if (isLoading) return <LoadingSpinner />
 
       if (!scatterData || Object.values(scatterData).every(arr => arr.length === 0)) {
         return <EmptyState message="No hay datos de correlación para mostrar" />
       }
 
-      const chartSize = responsiveConfig.chartSizes[breakpoint]
+      const chartHeight = breakpoint === 'mobile' ? 300 : breakpoint === 'tablet' ? 350 : 400
 
       return (
         <div className="space-y-4">
-          <div style={{ height: chartSize.height + 50 }} ref={chartRef}>
+          <div style={{ height: chartHeight }} ref={chartRef}>
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ 
                 top: 20, 
@@ -1102,7 +899,7 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
                     name={titleCaseStatus(status)}
                     data={data}
                     fill={STATUS_COLORS[status as AppointmentStatus] || COLORS_PROFESSIONAL[index % COLORS_PROFESSIONAL.length]}
-                    isAnimationActive={chartOptions.animation && isVisible}
+                    isAnimationActive={chartOptions.animation}
                     animationDuration={600 + index * 100}
                   />
                 ))}
@@ -1116,20 +913,10 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
         </div>
       )
     },
-    [chartOptions, isDark, breakpoint, responsiveConfig, isVisible]
+    [chartOptions, isDark, breakpoint]
   )
 
-  // Cleanup optimizado
-  useEffect(() => {
-    return () => {
-      // Limpiar cache cuando el componente se desmonta si crece demasiado
-      if (globalUtilsCache.size > 1000) {
-        globalUtilsCache.clear()
-      }
-    }
-  }, [])
-
-  return useMemo(() => ({
+  return {
     chartOptions,
     chartRef,
     renderPieChart,
@@ -1142,10 +929,8 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
     LoadingSpinner,
     EmptyState,
     UniversalTooltip,
-    isVisible,
     isDark,
     breakpoint,
-    responsiveConfig,
     // Utilidades centralizadas
     formatDateUtil,
     titleCaseStatus,
@@ -1153,25 +938,12 @@ export function useChartConfig(options?: Partial<ChartOptions>) {
     hourToDecimal,
     categorizeMainDiagnosis,
     getMedicalCategory,
-    processPatientData,
     WEEKDAYS,
     WEEKDAYS_SHORT,
     MAIN_DIAGNOSES,
     useResponsiveBreakpoint,
-  }), [
-    chartOptions,
-    renderPieChart,
-    renderBarChart,
-    renderLineChart,
-    renderWeekdayChart,
-    renderScatterChart,
-    isVisible,
-    isDark,
-    breakpoint,
-    responsiveConfig,
-  ])
+  }
 }
 
 export default useChartConfig
-
 export { LoadingSpinner, EmptyState, UniversalTooltip }

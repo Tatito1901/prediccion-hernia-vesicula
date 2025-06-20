@@ -1,157 +1,166 @@
 "use client"
 
-import { useState } from "react"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
-import { LoaderCircle, ClipboardList, AlertCircle } from "lucide-react"
-import { SurveyType, useSurveyStore } from "@/lib/stores/survey-store"
-import { toast } from "sonner"
+import React, { useState, useEffect, useCallback } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { CheckCircle, FileText, XCircle, Loader2 } from 'lucide-react';
 
-interface SurveySelectorProps {
-  isOpen: boolean
-  patientId: string
-  appointmentId: string
-  patientName: string
-  onClose: () => void
-  onAssigned: (assignmentId: string, surveyId: string) => void
+// Type for the survey templates fetched from Supabase
+interface SurveyTemplate {
+  id: number;
+  title: string;
+  description: string | null;
 }
 
-export function SurveySelector({
-  isOpen,
-  patientId,
-  appointmentId,
-  patientName,
-  onClose,
-  onAssigned,
-}: SurveySelectorProps) {
-  const [selectedSurveyId, setSelectedSurveyId] = useState("")
-  const [isAssigning, setIsAssigning] = useState(false)
-  
-  const { surveys, assignSurveyToPatient } = useSurveyStore()
-  
-  // Agrupar encuestas por tipo
-  const surveysByType = surveys.reduce((acc, survey) => {
-    const type = survey.type
-    if (!acc[type]) {
-      acc[type] = []
-    }
-    acc[type].push(survey)
-    return acc
-  }, {} as Record<string, typeof surveys>)
-  
-  const handleAssignSurvey = async () => {
-    if (!selectedSurveyId) {
-      toast.error("Por favor, seleccione una encuesta")
-      return
-    }
-    
-    setIsAssigning(true)
-    
-    try {
-      const assignment = await assignSurveyToPatient(patientId, appointmentId, selectedSurveyId)
-      toast.success("Encuesta asignada correctamente")
-      onAssigned(assignment.id, selectedSurveyId)
-    } catch (error) {
-      console.error("Error al asignar encuesta:", error)
-      toast.error("Error al asignar la encuesta")
-    } finally {
-      setIsAssigning(false)
-      onClose()
-    }
-  }
+// Props for the SurveySelector component
+interface SurveySelectorProps {
+  isOpen: boolean;
+  onClose: () => void;
+  patientId: string;
+  patientName: string;
+  onSurveyAssigned: (assignmentId: string, surveyId: string) => void;
+}
 
-  const getSurveyTypeLabel = (type: string): string => {
-    switch (type) {
-      case SurveyType.HERNIA:
-        return "Hernia"
-      case SurveyType.VESICULA:
-        return "Vesícula"
-      case SurveyType.GENERAL:
-        return "General"
-      default:
-        return type
+const SurveySelector = ({ 
+  isOpen, 
+  onClose, 
+  patientId, 
+  patientName, 
+  onSurveyAssigned 
+}: SurveySelectorProps) => {
+  const supabase = createClientComponentClient();
+  const [templates, setTemplates] = useState<SurveyTemplate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAssigning, setIsAssigning] = useState<number | null>(null); // Store the ID of the survey being assigned
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch survey templates from Supabase
+  const fetchTemplates = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from('survey_templates')
+        .select('id, title, description')
+        .order('id', { ascending: true });
+
+      if (error) throw error;
+      setTemplates(data || []);
+    } catch (err: any) {
+      console.error('Error fetching survey templates:', err);
+      setError('No se pudieron cargar las encuestas. Intente de nuevo.');
+      toast.error('Error al cargar las plantillas de encuesta.');
+    } finally {
+      setIsLoading(false);
     }
-  }
-  
+  }, [supabase]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchTemplates();
+    }
+  }, [isOpen, fetchTemplates]);
+
+  // Handle survey selection and assignment
+  const handleAssignSurvey = async (template: SurveyTemplate) => {
+    setIsAssigning(template.id);
+    try {
+      const response = await fetch('/api/assign-survey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientId, templateId: template.id }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error desconocido al asignar la encuesta.');
+      }
+
+      toast.success(`Encuesta "${template.title}" asignada correctamente.`);
+      onSurveyAssigned(result.assignmentId, String(template.id));
+      onClose(); // Close the dialog on success
+
+    } catch (err: any) {
+      console.error('Error assigning survey:', err);
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setIsAssigning(null);
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Asignar Encuesta</DialogTitle>
+          <DialogTitle className="text-2xl flex items-center gap-2">
+            <FileText className="h-6 w-6 text-blue-600" />
+            Asignar Encuesta
+          </DialogTitle>
           <DialogDescription>
-            Seleccione la encuesta adecuada para {patientName}
+            Seleccione una encuesta para asignar a <strong>{patientName}</strong>.
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-6 py-4">
-          <div className="space-y-2">
-            <label htmlFor="survey-select" className="text-sm font-medium">
-              Tipo de Encuesta
-            </label>
-            <Select value={selectedSurveyId} onValueChange={setSelectedSurveyId}>
-              <SelectTrigger id="survey-select" className="w-full">
-                <SelectValue placeholder="Seleccionar encuesta" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(surveysByType).map(([type, typeSurveys]) => (
-                  <div key={type} className="p-1">
-                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-2 py-1">
-                      {getSurveyTypeLabel(type)}
+        <div className="py-4 max-h-[60vh] overflow-y-auto pr-2">
+          {isLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 w-full" />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center text-center p-8 bg-red-50 dark:bg-red-900/20 rounded-lg">
+              <XCircle className="h-12 w-12 text-red-500 mb-4" />
+              <p className="font-semibold text-red-700 dark:text-red-300">{error}</p>
+              <Button variant="outline" size="sm" onClick={fetchTemplates} className="mt-4">
+                Reintentar
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {templates.map((template) => (
+                <Card 
+                  key={template.id} 
+                  className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200 cursor-pointer"
+                  onClick={() => !isAssigning && handleAssignSurvey(template)}
+                >
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-slate-800 dark:text-slate-100">{template.title}</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{template.description || 'Sin descripción.'}</p>
                     </div>
-                    {typeSurveys.map(survey => (
-                      <SelectItem key={survey.id} value={survey.id}>
-                        {survey.title}
-                      </SelectItem>
-                    ))}
-                  </div>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {selectedSurveyId && (
-            <div className="bg-slate-50 dark:bg-slate-800 rounded-md p-3 text-sm">
-              <div className="flex items-start gap-2">
-                <ClipboardList className="h-5 w-5 text-slate-500 dark:text-slate-400 mt-0.5" />
-                <div>
-                  <p className="font-medium">
-                    {surveys.find(s => s.id === selectedSurveyId)?.title}
-                  </p>
-                  <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
-                    {surveys.find(s => s.id === selectedSurveyId)?.description}
-                  </p>
-                </div>
-              </div>
+                    <Button 
+                      size="sm" 
+                      disabled={isAssigning !== null}
+                      className="ml-4 w-32"
+                    >
+                      {isAssigning === template.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Asignar
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
-          
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-md p-3 text-sm">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500 mt-0.5 shrink-0" />
-              <div className="text-amber-800 dark:text-amber-400">
-                Una vez seleccionada y asignada la encuesta, podrá compartirla con el paciente.
-              </div>
-            </div>
-          </div>
         </div>
-        
+
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isAssigning}>
-            Cancelar
-          </Button>
-          <Button onClick={handleAssignSurvey} disabled={!selectedSurveyId || isAssigning}>
-            {isAssigning ? (
-              <>
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                Asignando...
-              </>
-            ) : (
-              'Asignar y Continuar'
-            )}
-          </Button>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
+  );
+};
+
+export default SurveySelector;

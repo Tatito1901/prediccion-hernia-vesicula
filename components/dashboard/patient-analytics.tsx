@@ -16,6 +16,7 @@ export const PatientAnalytics: React.FC = React.memo(() => {
   // Obtener datos desde el API
   const { rawData: { patients }, loading, error } = useChartData({ dateRange: 'ytd' });
 
+
   // Calcular los datos mensuales para los últimos 12 meses
   const chartData = useMemo(() => {
     const today = new Date();

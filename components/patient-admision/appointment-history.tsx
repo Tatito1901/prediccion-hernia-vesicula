@@ -1,6 +1,5 @@
-// appointment-history.tsx - Versión mejorada eliminando redundancias
-import { useMemo, memo, useEffect } from "react";
-// Reemplazando useAppContext con el store de Zustand
+// appointment-history.tsx - Versión optimizada y simplificada
+import { useEffect } from "react";
 import { useAppointmentStore } from "@/lib/stores/appointment-store";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
@@ -9,14 +8,12 @@ import {
   Calendar,
   CalendarClock,
   AlertCircle,
-  TrendingUp,
   Activity,
   Clock,
   CheckCircle2,
   FileText,
   BarChart3,
   Target,
-  Users,
   History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,64 +29,53 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { AppointmentStatusEnum, type AppointmentData } from "@/app/dashboard/data-model";
 
-// =================================================================
-// CONFIGURACIONES CONSOLIDADAS PARA EVITAR REDUNDANCIAS
-// =================================================================
+// Configuración estática
 const STATUS_CONFIG = {
   [AppointmentStatusEnum.PROGRAMADA]: {
     label: "Programada",
     className: "bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300",
     icon: Clock,
-    color: "slate"
   },
   [AppointmentStatusEnum.CONFIRMADA]: {
     label: "Confirmada",
     className: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300",
     icon: CalendarClock,
-    color: "blue"
   },
   [AppointmentStatusEnum.PRESENTE]: {
     label: "En espera",
     className: "bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300",
-    icon: Users,
-    color: "emerald"
+    icon: CalendarClock,
   },
   [AppointmentStatusEnum.COMPLETADA]: {
     label: "Completada",
     className: "bg-white dark:bg-slate-900 border border-green-300 dark:border-green-700 text-green-700 dark:text-green-300",
     icon: CheckCircle2,
-    color: "green"
   },
   [AppointmentStatusEnum.CANCELADA]: {
     label: "Cancelada",
     className: "bg-white dark:bg-slate-900 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300",
     icon: AlertCircle,
-    color: "red"
   },
   [AppointmentStatusEnum.NO_ASISTIO]: {
     label: "No asistió",
     className: "bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300",
     icon: AlertCircle,
-    color: "amber"
   },
   [AppointmentStatusEnum.REAGENDADA]: {
     label: "Reagendada",
     className: "bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300",
     icon: Calendar,
-    color: "purple"
   },
-} as const;
+};
 
-// Utilidades consolidadas para formateo
+// Utilidades simplificadas
 const formatDateTime = (dateString: string | null): string => {
   if (!dateString) return "N/A";
   try {
-    // Intentar convertir la fecha
     const date = parseISO(dateString);
     if (!isValid(date)) return format(new Date(), "dd MMM yyyy HH:mm", { locale: es });
     return format(date, "dd MMM yyyy HH:mm", { locale: es });
   } catch {
-    // Si hay error, mostrar la fecha actual
     return format(new Date(), "dd MMM yyyy HH:mm", { locale: es });
   }
 };
@@ -114,9 +100,7 @@ const formatTime = (time: string): string => {
   return `${displayHour}:${minutes.padStart(2, '0')} ${period}`;
 };
 
-// =================================================================
-// TIPOS CONSOLIDADOS
-// =================================================================
+// Tipos
 interface PatientAppointmentsListProps {
   patientId: string;
   showStats?: boolean;
@@ -132,27 +116,20 @@ interface AppointmentStats {
   noAsistio: number;
   completionRate: number;
   attendanceRate: number;
-  monthlyTrend: number;
 }
 
-// =================================================================
-// COMPONENTES MEMOIZADOS PARA RENDIMIENTO
-// =================================================================
-const StatCard = memo(({ 
+// Componentes UI
+const StatCard = ({ 
   title, 
   value, 
   subtitle, 
   icon: Icon, 
-  color = "slate",
-  trend,
   className
 }: {
   title: string;
   value: number | string;
   subtitle?: string;
   icon: React.ComponentType<{ className?: string }>;
-  color?: string;
-  trend?: { value: number; isPositive: boolean };
   className?: string;
 }) => (
   <div className={cn(
@@ -168,7 +145,7 @@ const StatCard = memo(({
           {value}
         </p>
         {subtitle && (
-          <p className={cn("text-xs", `text-${color}-600 dark:text-${color}-400`)}>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
             {subtitle}
           </p>
         )}
@@ -178,42 +155,17 @@ const StatCard = memo(({
         <Icon className="h-6 w-6 text-slate-600 dark:text-slate-300" />
       </div>
     </div>
-    
-    {trend && (
-      <div className="flex items-center gap-1 mt-3 pt-3 border-t border-current/20">
-        <TrendingUp 
-          size={14} 
-          className={cn(
-            trend.isPositive ? "text-green-500" : "text-red-500",
-            !trend.isPositive && "rotate-180"
-          )} 
-        />
-        <span className={cn(
-          "text-xs font-semibold",
-          trend.isPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-        )}>
-          {Math.abs(trend.value)}% vs mes anterior
-        </span>
-      </div>
-    )}
   </div>
-));
+);
 
-const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData }) => {
-  const fechaFormateada = useMemo(() => {
-    return formatDisplayDate(appointment.fechaConsulta);
-  }, [appointment.fechaConsulta]);
-
+const AppointmentCard = ({ appointment }: { appointment: AppointmentData }) => {
+  const fechaFormateada = formatDisplayDate(appointment.fechaConsulta);
   const statusConfig = STATUS_CONFIG[appointment.estado as AppointmentStatusEnum] || 
                       STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
   const StatusIcon = statusConfig.icon;
 
   return (
-    <Card className={cn(
-      "shadow-sm",
-      "bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/80",
-      "backdrop-blur-sm rounded-xl"
-    )}>
+    <Card className="shadow-sm bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/80 backdrop-blur-sm rounded-xl">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -266,10 +218,9 @@ const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData })
       </CardContent>
     </Card>
   );
-});
+};
 
-// Componente de carga mejorado
-const LoadingSkeleton = memo(() => (
+const LoadingSkeleton = () => (
   <div className="space-y-6">
     <div className="flex flex-col items-center justify-center py-12">
       <div className="relative">
@@ -282,7 +233,6 @@ const LoadingSkeleton = memo(() => (
       <Progress value={75} className="h-2 w-64" />
     </div>
     
-    {/* Skeleton de estadísticas */}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {Array.from({ length: 4 }, (_, i) => (
         <div key={i} className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-800/50 animate-pulse">
@@ -298,7 +248,6 @@ const LoadingSkeleton = memo(() => (
       ))}
     </div>
     
-    {/* Skeleton de tarjetas */}
     {Array.from({ length: 3 }, (_, i) => (
       <Card key={i} className="p-4 space-y-3 animate-pulse">
         <div className="flex items-center justify-between">
@@ -312,49 +261,35 @@ const LoadingSkeleton = memo(() => (
       </Card>
     ))}
   </div>
-));
+);
 
-// =================================================================
-// COMPONENTE PRINCIPAL MEJORADO
-// =================================================================
-export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo(({
+// Componente principal
+export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = ({
   patientId,
   showStats = true,
   maxItems,
   className
 }) => {
-  // Utilizamos el store de Zustand para citas
   const appointments = useAppointmentStore(state => state.appointments);
   const isLoadingAppointments = useAppointmentStore(state => state.isLoading);
   const errorAppointments = useAppointmentStore(state => state.error);
   const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
   
-  // Cargamos las citas al montar el componente
+  // Cargar citas
   useEffect(() => {
-    fetchAppointments();
-  }, [fetchAppointments]);
+    if (!appointments?.length && !isLoadingAppointments) {
+      fetchAppointments();
+    }
+  }, [appointments?.length, isLoadingAppointments, fetchAppointments]);
 
-  // Filtrar y procesar citas del paciente con mejor rendimiento
-  const patientAppointments = useMemo<AppointmentData[]>(() => {
-    if (!patientId || !appointments) return [];
-    
-    const filtered = appointments.filter(
-      (app) => app.patientId === patientId
-    );
-    
-    // Ordenar por fecha descendente (más recientes primero)
-    const sorted = filtered.sort((a, b) => {
-      const dateA = new Date(a.fechaConsulta);
-      const dateB = new Date(b.fechaConsulta);
-      return dateB.getTime() - dateA.getTime();
-    });
-    
-    return maxItems ? sorted.slice(0, maxItems) : sorted;
-  }, [appointments, patientId, maxItems]);
+  // Filtrar citas del paciente
+  const patientAppointments = appointments?.filter(app => app.patientId === patientId)
+    .sort((a, b) => new Date(b.fechaConsulta).getTime() - new Date(a.fechaConsulta).getTime())
+    .slice(0, maxItems) || [];
 
-  // Calcular estadísticas mejoradas con tendencias
-  const statistics = useMemo<AppointmentStats>(() => {
-    if (!patientAppointments || patientAppointments.length === 0) {
+  // Calcular estadísticas
+  const calculateStats = (appointmentsList: AppointmentData[]): AppointmentStats => {
+    if (!appointmentsList.length) {
       return {
         total: 0,
         completadas: 0,
@@ -363,11 +298,10 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
         noAsistio: 0,
         completionRate: 0,
         attendanceRate: 0,
-        monthlyTrend: 0,
       };
     }
 
-    const counts = patientAppointments.reduce((acc, app) => {
+    const counts = appointmentsList.reduce((acc, app) => {
       const estado = app.estado as AppointmentStatusEnum;
       acc[estado] = (acc[estado] || 0) + 1;
       return acc;
@@ -385,22 +319,19 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
     const completionRate = totalFinalizadas > 0 ? (completadas / totalFinalizadas) * 100 : 0;
     const attendanceRate = (completadas + noAsistio) > 0 ? (completadas / (completadas + noAsistio)) * 100 : 0;
 
-    // Calcular tendencia mensual (simulada para demo)
-    const monthlyTrend = Math.random() * 30 - 15; // Entre -15% y +15%
-
     return {
-      total: patientAppointments.length,
+      total: appointmentsList.length,
       completadas,
       programadas,
       canceladas,
       noAsistio,
       completionRate: Math.round(completionRate),
       attendanceRate: Math.round(attendanceRate),
-      monthlyTrend: Math.round(monthlyTrend),
     };
-  }, [patientAppointments]);
+  };
 
-  // Manejo de estados de carga y error
+  const statistics = calculateStats(patientAppointments);
+
   if (isLoadingAppointments) {
     return <LoadingSkeleton />;
   }
@@ -412,10 +343,6 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
         <AlertTitle>Error al cargar el historial</AlertTitle>
         <AlertDescription>
           {errorAppointments.message || "Ocurrió un error al cargar las citas del paciente."}
-          <br />
-          <span className="text-xs opacity-75 mt-1 block">
-            Intente actualizar la página o contacte al soporte técnico.
-          </span>
         </AlertDescription>
       </Alert>
     );
@@ -423,13 +350,13 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
 
   return (
     <div className={cn("space-y-6", className)}>
-      {/* Estadísticas mejoradas */}
+      {/* Estadísticas */}
       {showStats && (
         <Card className="shadow-lg border bg-white dark:bg-slate-900">
           <CardHeader>
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 rounded-xl bg-blue-600/10 dark:bg-blue-600/20 flex items-center justify-center">
-                <Activity className="h-6 w-6 text-white" />
+                <Activity className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
                 <CardTitle className="text-xl font-bold">Resumen del Paciente</CardTitle>
@@ -440,75 +367,12 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
             </div>
           </CardHeader>
           
-          <CardContent className={cn(
-            "grid gap-4",
-            statistics.total <= 1 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-2 lg:grid-cols-4"
-          )}>
-            {/* Tarjeta principal más destacada cuando solo hay 1 cita */}
-            {statistics.total <= 1 && (
-              <div className={cn(
-                "rounded-xl border p-4 flex flex-col justify-between",
-                "bg-slate-50 dark:bg-slate-800/50",
-                "border-blue-200 dark:border-blue-800",
-                "md:col-span-3"
-              )}>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-800/50 flex items-center justify-center shadow-sm">
-                      <History className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <h4 className="text-base font-medium text-blue-800 dark:text-blue-300">TOTAL DE CITAS</h4>
-                      <p className="text-sm text-blue-600 dark:text-blue-400">Historial completo</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">{statistics.total}</p>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4">
-                  <StatCard
-                    title="Completadas"
-                    value={statistics.completadas}
-                    subtitle={`${statistics.completionRate}% tasa`}
-                    icon={CheckCircle2}
-                    color="green"
-                    className="bg-opacity-80 dark:bg-opacity-40"
-                  />
-                  
-                  <StatCard
-                    title="Programadas"
-                    value={statistics.programadas}
-                    subtitle="Próximas"
-                    icon={CalendarClock}
-                    color="blue"
-                    className="bg-opacity-80 dark:bg-opacity-40"
-                  />
-                  
-                  <StatCard
-                    title="Asistencia"
-                    value={`${statistics.attendanceRate}%`}
-                    subtitle={statistics.noAsistio > 0 ? 
-                      `${statistics.noAsistio} inasistencia${statistics.noAsistio !== 1 ? 's' : ''}` : 
-                      "Perfecta"}
-                    icon={Target}
-                    color={statistics.attendanceRate >= 80 ? "green" : statistics.attendanceRate >= 60 ? "amber" : "red"}
-                    className="bg-opacity-80 dark:bg-opacity-40"
-                  />
-                </div>
-              </div>
-            )}
-            
-            {/* Mostrar el diseño original para más de 1 cita */}
-            {statistics.total > 1 && (
-            <>
+          <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="Total de citas"
               value={statistics.total}
               subtitle="Historial completo"
               icon={BarChart3}
-              color="slate"
             />
             
             <StatCard
@@ -516,7 +380,6 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
               value={statistics.completadas}
               subtitle={`${statistics.completionRate}% tasa de éxito`}
               icon={CheckCircle2}
-              color="green"
             />
             
             <StatCard
@@ -524,7 +387,6 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
               value={statistics.programadas}
               subtitle="Próximas citas"
               icon={CalendarClock}
-              color="blue"
             />
             
             <StatCard
@@ -532,10 +394,7 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
               value={`${statistics.attendanceRate}%`}
               subtitle={`${statistics.noAsistio} inasistencia${statistics.noAsistio !== 1 ? 's' : ''}`}
               icon={Target}
-              color={statistics.attendanceRate >= 80 ? "green" : statistics.attendanceRate >= 60 ? "amber" : "red"}
             />
-            </>
-            )}
           </CardContent>
         </Card>
       )}
@@ -555,8 +414,7 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
                 Sin historial de citas
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
-                Este paciente no tiene citas registradas en el sistema. 
-                Cuando se agenden citas, aparecerán aquí con toda la información detallada.
+                Este paciente no tiene citas registradas en el sistema.
               </p>
             </div>
           </CardContent>
@@ -592,10 +450,4 @@ export const AppointmentHistory: React.FC<PatientAppointmentsListProps> = memo((
       )}
     </div>
   );
-});
-
-AppointmentHistory.displayName = "AppointmentHistory";
-
-StatCard.displayName = "StatCard";
-AppointmentCard.displayName = "AppointmentCard";
-LoadingSkeleton.displayName = "LoadingSkeleton";
+};

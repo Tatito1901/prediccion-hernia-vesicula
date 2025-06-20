@@ -1,35 +1,18 @@
+
 /* -------------------------------------------------------------------------- */
-/*  components/charts/diagnosis-timeline-chart.tsx - OPTIMIZADO              */
+/*  diagnosis-timeline-chart.tsx - OPTIMIZADO                                */
 /* -------------------------------------------------------------------------- */
 
 import { memo, useMemo, useCallback, useState, FC } from 'react';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Activity, TrendingUp, BarChart2, Calendar, Settings, ChevronDown } from 'lucide-react';
 import { 
-  Activity, 
-  TrendingUp, 
-  BarChart2,
-  Calendar,
-  Brain,
-  Target,
-  ChevronDown,
-  Settings
-} from 'lucide-react';
-import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSeparator, DropdownMenuLabel
 } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
@@ -39,10 +22,7 @@ import useChartConfig, {
   categorizeMainDiagnosis,
   MAIN_DIAGNOSES,
 } from '@/components/charts/use-chart-config';
-
-/* ============================================================================
- * TIPOS Y CONFIGURACIÓN
- * ========================================================================== */
+import { format, parseISO } from "date-fns";
 
 type ChartView = 'line' | 'bar';
 type ChartPeriod = 'weekly' | 'monthly' | 'quarterly';
@@ -51,7 +31,6 @@ interface ChartConfig {
   view: ChartView;
   period: ChartPeriod;
   topN: number;
-  showPredictions: boolean;
   showTrend: boolean;
 }
 
@@ -66,46 +45,29 @@ const DEFAULT_CONFIG: ChartConfig = {
   view: 'line',
   period: 'monthly',
   topN: 6,
-  showPredictions: false,
   showTrend: true,
 };
 
-/* ============================================================================
- * UTILIDADES OPTIMIZADAS
- * ========================================================================== */
+// Cache simplificado para fechas
+const dateCache = new Map<string, string>();
 
-// Cache para funciones de fecha
-const dateKeyCache = new Map<string, string>();
-
-const getQuarter = (d: Date): string => {
-  const key = d.toISOString();
-  const cached = dateKeyCache.get(`q-${key}`);
-  if (cached) return cached;
+const getGroupKey = (date: Date, period: ChartPeriod): string => {
+  const cacheKey = `${date.toISOString()}-${period}`;
+  if (dateCache.has(cacheKey)) return dateCache.get(cacheKey)!;
   
-  const result = `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
-  dateKeyCache.set(`q-${key}`, result);
-  return result;
-};
-
-const getMonthKey = (d: Date): string => {
-  const key = d.toISOString();
-  const cached = dateKeyCache.get(`m-${key}`);
-  if (cached) return cached;
+  let result: string;
+  if (period === 'quarterly') {
+    result = `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}`;
+  } else if (period === 'weekly') {
+    const startOfWeek = new Date(date);
+    startOfWeek.setDate(date.getDate() - date.getDay());
+    result = `${startOfWeek.getFullYear()}-W${Math.ceil(startOfWeek.getDate() / 7)}`;
+  } else {
+    result = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
   
-  const result = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  dateKeyCache.set(`m-${key}`, result);
-  return result;
-};
-
-const getWeekKey = (d: Date): string => {
-  const key = d.toISOString();
-  const cached = dateKeyCache.get(`w-${key}`);
-  if (cached) return cached;
-  
-  const startOfWeek = new Date(d);
-  startOfWeek.setDate(d.getDate() - d.getDay());
-  const result = `${startOfWeek.getFullYear()}-W${Math.ceil(startOfWeek.getDate() / 7)}`;
-  dateKeyCache.set(`w-${key}`, result);
+  if (dateCache.size > 100) dateCache.clear(); // Limpiar cache
+  dateCache.set(cacheKey, result);
   return result;
 };
 
@@ -123,23 +85,11 @@ const formatPeriodLabel = (key: string, period: ChartPeriod): string => {
   }
 };
 
-/* ============================================================================
- * HOOK DE PROCESAMIENTO OPTIMIZADO
- * ========================================================================== */
-
 const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) => {
   return useMemo(() => {
     if (!patients?.length) {
-      return { 
-        timelineData: [], 
-        diagnosisMetrics: [], 
-        maxY: 10 
-      };
+      return { timelineData: [], diagnosisMetrics: [], maxY: 10 };
     }
-
-    const getGroupKey = config.period === 'quarterly' ? getQuarter :
-                       config.period === 'weekly' ? getWeekKey : 
-                       getMonthKey;
 
     const totals = new Map<string, number>();
     const grouped = new Map<string, Record<string, number>>();
@@ -152,7 +102,7 @@ const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) 
         
       if (!date || isNaN(date.getTime())) return;
 
-      const key = getGroupKey(date);
+      const key = getGroupKey(date, config.period);
       const diagnosis = categorizeMainDiagnosis(p.diagnostico_principal || p.diagnostico);
 
       if (!grouped.has(key)) {
@@ -208,10 +158,6 @@ const useProcessedTimelineData = (patients: PatientData[], config: ChartConfig) 
     };
   }, [patients, config]);
 };
-
-/* ============================================================================
- * COMPONENTE PRINCIPAL OPTIMIZADO
- * ============================================================================ */
 
 const DiagnosisTimelineChart: FC<Props> = memo(({ 
   patients, 
@@ -275,12 +221,6 @@ const DiagnosisTimelineChart: FC<Props> = memo(({
             <div>
               <CardTitle className="flex items-center gap-2">
                 Tendencia de Diagnósticos
-                {config.showPredictions && (
-                  <Badge variant="secondary" className="gap-1">
-                    <Brain className="h-3 w-3" />
-                    IA
-                  </Badge>
-                )}
               </CardTitle>
               <CardDescription>
                 Evolución {config.period === 'monthly' ? 'mensual' : 
@@ -290,7 +230,6 @@ const DiagnosisTimelineChart: FC<Props> = memo(({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Controles de Vista */}
             <div className="flex gap-1 p-1 bg-muted rounded-lg">
               <Button
                 size="sm"
@@ -312,7 +251,6 @@ const DiagnosisTimelineChart: FC<Props> = memo(({
               </Button>
             </div>
 
-            {/* Configuración */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-2">
@@ -324,24 +262,18 @@ const DiagnosisTimelineChart: FC<Props> = memo(({
                 <DropdownMenuLabel>Período</DropdownMenuLabel>
                 <DropdownMenuItem onClick={() => updateConfig({ period: 'weekly' })}>
                   <Calendar className="h-4 w-4 mr-2" />
-                  Semanal {config.period === 'weekly' && <Target className="h-3 w-3 ml-auto" />}
+                  Semanal
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => updateConfig({ period: 'monthly' })}>
                   <Calendar className="h-4 w-4 mr-2" />
-                  Mensual {config.period === 'monthly' && <Target className="h-3 w-3 ml-auto" />}
+                  Mensual
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => updateConfig({ period: 'quarterly' })}>
                   <Calendar className="h-4 w-4 mr-2" />
-                  Trimestral {config.period === 'quarterly' && <Target className="h-3 w-3 ml-auto" />}
+                  Trimestral
                 </DropdownMenuItem>
                 
                 <DropdownMenuSeparator />
-                
-                <DropdownMenuItem onClick={() => updateConfig({ showPredictions: !config.showPredictions })}>
-                  <Brain className="h-4 w-4 mr-2" />
-                  Predicciones
-                  <Switch checked={config.showPredictions} className="ml-auto" />
-                </DropdownMenuItem>
                 
                 <DropdownMenuItem onClick={() => updateConfig({ showTrend: !config.showTrend })}>
                   <TrendingUp className="h-4 w-4 mr-2" />
@@ -356,7 +288,6 @@ const DiagnosisTimelineChart: FC<Props> = memo(({
 
       <CardContent className="p-6">
         
-        {/* Métricas */}
         {diagnosisMetrics.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {diagnosisMetrics.slice(0, 4).map((metric) => (
@@ -380,7 +311,6 @@ const DiagnosisTimelineChart: FC<Props> = memo(({
           </div>
         )}
 
-        {/* Gráfico usando el hook centralizador */}
         {renderLineChart(timelineData, false)}
 
       </CardContent>
@@ -419,4 +349,5 @@ const DiagnosisTimelineChart: FC<Props> = memo(({
 
 DiagnosisTimelineChart.displayName = 'DiagnosisTimelineChart';
 
-export default DiagnosisTimelineChart;
+export { DiagnosisTimelineChart };
+// Final del archivo

@@ -21,11 +21,11 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 /* ============================================================================
- * COMPONENTES DINÁMICOS SIMPLIFICADOS
+ * COMPONENTES DINÁMICOS OPTIMIZADOS
  * ============================================================================ */
 
 const DiagnosisChart = dynamic(
-  () => import('@/components/charts/diagnosis-chart'),
+  () => import('@/components/charts/diagnosis-chart').then(mod => ({ default: mod.default })),
   { 
     loading: () => <ChartSkeleton />,
     ssr: false 
@@ -33,7 +33,7 @@ const DiagnosisChart = dynamic(
 );
 
 const DiagnosisTimelineChart = dynamic(
-  () => import('@/components/charts/diagnosis-timeline-chart'),
+  () => import('@/components/charts/diagnosis-timeline-chart').then(mod => ({ default: mod.DiagnosisTimelineChart })),
   { 
     loading: () => <ChartSkeleton height="h-80" />,
     ssr: false 
@@ -41,7 +41,7 @@ const DiagnosisTimelineChart = dynamic(
 );
 
 const DiagnosisBarChart = dynamic(
-  () => import('@/components/charts/diagnosis-bar-chart'),
+  () => import('@/components/charts/diagnosis-bar-chart').then(mod => ({ default: mod.default })),
   { 
     loading: () => <ChartSkeleton />,
     ssr: false 
@@ -49,7 +49,7 @@ const DiagnosisBarChart = dynamic(
 );
 
 const DiagnosisTypeDistribution = dynamic(
-  () => import('@/components/charts/diagnosis-type-distribution'),
+  () => import('@/components/charts/diagnosis-type-distribution').then(mod => ({ default: mod.default })),
   { 
     loading: () => <ChartSkeleton />,
     ssr: false 
@@ -57,7 +57,7 @@ const DiagnosisTypeDistribution = dynamic(
 );
 
 /* ============================================================================
- * TIPOS Y INTERFACES SIMPLIFICADAS
+ * TIPOS SIMPLIFICADOS
  * ============================================================================ */
 
 export interface PatientData {
@@ -87,9 +87,7 @@ export interface Metrics {
   porcentajeHernias: number;
   porcentajeVesicula: number;
   porcentajeApendicitis: number;
-  ratioHerniaVesicula: number;
   diversidadDiagnostica: number;
-  tendenciaGeneral: number;
 }
 
 export interface DiagnosticInsight {
@@ -111,18 +109,8 @@ const ChartSkeleton: FC<{ height?: string }> = memo(({ height = "h-64" }) => (
 
 ChartSkeleton.displayName = 'ChartSkeleton';
 
-const StatCardSkeleton: FC = memo(() => (
-  <Card className="p-6 border-l-4 border-transparent animate-pulse">
-    <div className="h-4 w-20 mb-2 bg-muted rounded" />
-    <div className="h-8 w-16 mb-1 bg-muted rounded" />
-    <div className="h-3 w-32 bg-muted rounded" />
-  </Card>
-));
-
-StatCardSkeleton.displayName = 'StatCardSkeleton';
-
 /* ============================================================================
- * COMPONENTE DE TARJETA DE ESTADÍSTICAS SIMPLIFICADO
+ * COMPONENTE DE TARJETA DE ESTADÍSTICAS OPTIMIZADO
  * ============================================================================ */
 
 const StatCard: FC<{
@@ -131,7 +119,6 @@ const StatCard: FC<{
   subtitle: string;
   icon: React.ReactNode;
   variant: 'blue' | 'green' | 'purple' | 'orange';
-  trend?: number;
 }> = memo(({ title, value, subtitle, icon, variant }) => {
   
   const variantStyles = {
@@ -173,7 +160,7 @@ const StatCard: FC<{
 StatCard.displayName = 'StatCard';
 
 /* ============================================================================
- * FUNCIÓN AUXILIAR SIMPLIFICADA
+ * FUNCIÓN AUXILIAR OPTIMIZADA
  * ============================================================================ */
 
 const processPatientData = (patients: PatientData[]): { metrics: Metrics; insights: DiagnosticInsight[] } => {
@@ -189,9 +176,7 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
         porcentajeHernias: 0,
         porcentajeVesicula: 0,
         porcentajeApendicitis: 0,
-        ratioHerniaVesicula: 0,
         diversidadDiagnostica: 0,
-        tendenciaGeneral: 0,
       },
       insights: []
     };
@@ -200,7 +185,7 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
   const total = patients.length;
   const diagnosisCounts = new Map<string, number>();
 
-  // Contar diagnósticos en una sola pasada
+  // Contadores optimizados en una sola pasada
   let herniaCount = 0;
   let vesiculaCount = 0;
   let apendicitis = 0;
@@ -215,16 +200,13 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
     if (lower.includes('apendicitis')) apendicitis++;
   });
 
-  // Calcular métricas
+  // Cálculos optimizados
   const porcentajeHernias = total > 0 ? (herniaCount / total) * 100 : 0;
   const porcentajeVesicula = total > 0 ? (vesiculaCount / total) * 100 : 0;
   const porcentajeApendicitis = total > 0 ? (apendicitis / total) * 100 : 0;
-  const ratioHerniaVesicula = vesiculaCount > 0 ? herniaCount / vesiculaCount : herniaCount;
-  
-  // Diversidad simplificada
   const diversidad = diagnosisCounts.size > 1 ? Math.log2(diagnosisCounts.size) : 0;
 
-  // Diagnósticos más comunes
+  // Diagnósticos más comunes optimizado
   const diagnosticosMasComunes: ChartData[] = Array.from(diagnosisCounts.entries())
     .sort(([,a], [,b]) => b - a)
     .slice(0, 10)
@@ -232,10 +214,10 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
       tipo,
       cantidad,
       porcentaje: Math.round((cantidad / total) * 100),
-      tendencia: 0, // Simplificado
+      tendencia: 0,
     }));
 
-  // Distribución de hernias
+  // Distribución de hernias optimizada
   const distribucionHernias: ChartData[] = Array.from(diagnosisCounts.entries())
     .filter(([tipo]) => tipo.toLowerCase().includes('hernia'))
     .sort(([,a], [,b]) => b - a)
@@ -243,7 +225,7 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
       tipo,
       cantidad,
       porcentaje: herniaCount > 0 ? Math.round((cantidad / herniaCount) * 100) : 0,
-      tendencia: 0, // Simplificado
+      tendencia: 0,
     }));
 
   const metrics: Metrics = {
@@ -256,12 +238,10 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
     porcentajeHernias,
     porcentajeVesicula,
     porcentajeApendicitis,
-    ratioHerniaVesicula,
     diversidadDiagnostica: diversidad,
-    tendenciaGeneral: 0, // Simplificado
   };
 
-  // Generar insights simplificados
+  // Insights simplificados
   const insights: DiagnosticInsight[] = [
     {
       type: porcentajeHernias > 50 ? 'warning' : 'info',
@@ -279,7 +259,7 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
 };
 
 /* ============================================================================
- * COMPONENTE CLIENTE PRINCIPAL SIMPLIFICADO
+ * COMPONENTE CLIENTE PRINCIPAL OPTIMIZADO
  * ============================================================================ */
 
 interface ChartDiagnosticClientProps {
@@ -300,12 +280,13 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
   
   const [activeTab, setActiveTab] = useState<'distribution' | 'timeline' | 'analysis'>('distribution');
 
-  // Procesamiento de datos memoizado
+  // Procesamiento de datos memoizado y optimizado
   const { metrics, insights } = useMemo(() => 
     processPatientData(apiPatients?.length ? apiPatients : initialPatientsData), 
     [apiPatients, initialPatientsData]
   );
 
+  // Datos de tarjetas de estadísticas memoizados
   const statCardsData = useMemo(() => [
     {
       title: 'Total Pacientes',
@@ -337,9 +318,20 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
     },
   ], [metrics]);
 
+  // Callback memoizado para cambio de tab
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value as typeof activeTab);
+  }, []);
+
+  // Datos de pacientes consolidados
+  const consolidatedPatients = useMemo(() => 
+    apiPatients?.length ? apiPatients : initialPatientsData,
+    [apiPatients, initialPatientsData]
+  );
+
   return (
     <div className="space-y-6">
-      {/* Insights */}
+      {/* Insights optimizados */}
       {insights.length > 0 && (
         <div className="grid gap-3">
           {insights.slice(0, 2).map((insight, index) => (
@@ -353,15 +345,15 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
         </div>
       )}
 
-      {/* Métricas Principales */}
+      {/* Métricas Principales optimizadas */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {statCardsData.map((stat) => (
           <StatCard key={stat.title} {...stat} />
         ))}
       </div>
 
-      {/* Tabs de Contenido */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+      {/* Tabs de Contenido optimizados */}
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-3 bg-muted/60 dark:bg-muted/30">
           <TabsTrigger value="distribution" className="gap-2 data-[state=active]:bg-background">
             <PieChartIcon className="h-4 w-4" />
@@ -390,7 +382,7 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
             {metrics.distribucionHernias.length > 0 && (
               <Suspense fallback={<ChartSkeleton />}>
                 <DiagnosisTypeDistribution 
-                  patients={apiPatients?.length ? apiPatients : initialPatientsData}
+                  patients={consolidatedPatients}
                   isLoading={isLoading}
                 />
               </Suspense>
@@ -400,7 +392,7 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
 
         <TabsContent value="timeline" className="space-y-6">
           <Suspense fallback={<ChartSkeleton height="h-80" />}>
-            <DiagnosisTimelineChart patients={apiPatients?.length ? apiPatients : initialPatientsData} />
+            <DiagnosisTimelineChart patients={consolidatedPatients} />
           </Suspense>
         </TabsContent>
 
@@ -414,7 +406,7 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
         </TabsContent>
       </Tabs>
 
-      {/* Footer */}
+      {/* Footer optimizado */}
       <div className="text-right">
         <p className="text-xs text-muted-foreground">
           Última actualización: {lastUpdated}

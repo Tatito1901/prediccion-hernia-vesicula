@@ -8,16 +8,34 @@ const cacheConfig = {
   'Cache-Control': 'max-age=60, s-maxage=60, stale-while-revalidate=300',
 };
 
+// Tamaño de página predeterminado - no demasiado grande para evitar problemas de rendimiento
+const DEFAULT_PAGE_SIZE = 10;
+// Valor máximo permitido para page_size para evitar consultas muy pesadas
+const MAX_PAGE_SIZE = 50;
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { searchParams } = new URL(request.url);
+  
+  // Parámetros de filtro
   const patientId = searchParams.get('patientId');
   const doctorId = searchParams.get('doctorId');
   const startDate = searchParams.get('startDate'); // YYYY-MM-DD
-  const endDate = searchParams.get('endDate');   // YYYY-MM-DD
+  const endDate = searchParams.get('endDate');     // YYYY-MM-DD
   const estado = searchParams.get('estado');
+  
+  // Parámetros de paginación
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+  let pageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE));
+  // Limitar el tamaño de página para evitar consultas demasiado pesadas
+  pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
+  
+  // Calcular el rango para la paginación
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
   try {
+    // Iniciar la consulta con count para obtener el total de registros
     let query = supabase.from('appointments').select(`
       id,
       patient_id,
@@ -29,22 +47,45 @@ export async function GET(request: Request) {
       notas_cita_seguimiento,
       patients (id, nombre, apellidos, telefono),
       doctor:profiles!appointments_doctor_id_fkey(id, full_name)
-    `);
+    `, { count: 'exact' });
 
+    // Aplicar filtros
     if (patientId) query = query.eq('patient_id', patientId);
     if (doctorId) query = query.eq('doctor_id', doctorId);
     if (startDate) query = query.gte('fecha_hora_cita', `${startDate}T00:00:00Z`);
     if (endDate) query = query.lte('fecha_hora_cita', `${endDate}T23:59:59Z`);
     if (estado && estado !== 'todos') query = query.eq('estado_cita', estado);
     
+    // Ordenar por fecha de consulta
     query = query.order('fecha_hora_cita', { ascending: true });
+    
+    // Aplicar paginación
+    query = query.range(from, to);
 
-    const { data: appointments, error } = await query;
+    const { data: appointments, error, count } = await query;
 
     if (error) throw error;
-    return NextResponse.json(appointments, { headers: cacheConfig });
+    
+    // Construir respuesta con metadatos de paginación
+    const totalCount = count || 0;
+    const totalPages = Math.ceil(totalCount / pageSize);
+    
+    return NextResponse.json({
+      data: appointments,
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+        hasMore: page < totalPages
+      }
+    }, { headers: cacheConfig });
   } catch (error: any) {
-    return NextResponse.json({ message: 'Error al obtener citas', error: error.message }, { status: 500 });
+    console.error('Error en GET /api/appointments:', error);
+    return NextResponse.json({ 
+      message: 'Error al obtener citas', 
+      error: error.message 
+    }, { status: 500 });
   }
 }
 

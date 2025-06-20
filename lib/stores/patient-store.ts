@@ -171,7 +171,12 @@ interface PatientStore {
   patients: PatientData[];
   isLoading: boolean;
   error: Error | null;
-  fetchPatients: () => Promise<void>;
+  // Paginación
+  currentPage: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  fetchPatients: (page?: number, pageSize?: number) => Promise<void>;
   addPatient: (data: Omit<PatientData, 'id' | 'fecha_creacion' | 'fecha_actualizacion' | 'created_at' | 'updated_at' | 'historial_cambios' | 'estado_paciente_info' | 'proxima_cita' | 'ultima_cita' | 'fecha_registro'>) => Promise<PatientData>;
   updatePatient: (input: { id: string } & Partial<PatientData>) => Promise<PatientData>;
   getPatientById: (patientId: string | number) => Promise<PatientData | null>;
@@ -179,30 +184,50 @@ interface PatientStore {
 }
 
 // Creación del store con Zustand + immer para actualizaciones inmutables
+const DEFAULT_STORE_PAGE_SIZE = 20;
+
 export const usePatientStore = create<PatientStore>()(
   immer((set, get) => ({
     patients: [],
     isLoading: false,
     error: null,
+    // Estado de paginación inicial
+    currentPage: 1,
+    pageSize: DEFAULT_STORE_PAGE_SIZE,
+    totalCount: 0,
+    totalPages: 0,
     
-    fetchPatients: async () => {
+    fetchPatients: async (page, pageSizeOption) => {
+      set((state) => {
+        state.isLoading = true;
+        state.error = null;
+      });
+      
+      const requestedPage = page || get().currentPage || 1;
+      const requestedPageSize = pageSizeOption || get().pageSize || DEFAULT_STORE_PAGE_SIZE;
+
       set((state) => {
         state.isLoading = true;
         state.error = null;
       });
       
       try {
-        const response = await fetchWithRetry('/api/patients');
-        const data = await response.json();
+        const apiUrl = `/api/patients?page=${requestedPage}&pageSize=${requestedPageSize}`;
+        const response = await fetchWithRetry(apiUrl);
+        const responseData = await response.json(); // Ahora esperamos un objeto { data: [], pagination: {} }
         
-        if (response.ok) {
-          const transformedPatients = data.map(transformPatientData);
+        if (response.ok && responseData.data) {
+          const transformedPatients = responseData.data.map(transformPatientData);
           set((state) => {
             state.patients = transformedPatients;
+            state.currentPage = responseData.pagination.page;
+            state.pageSize = responseData.pagination.pageSize;
+            state.totalCount = responseData.pagination.totalCount;
+            state.totalPages = responseData.pagination.totalPages;
             state.isLoading = false;
           });
         } else {
-          throw new Error(data.message || 'Error fetching patients');
+          throw new Error(responseData.message || 'Error fetching patients');
         }
       } catch (error) {
         set((state) => {

@@ -61,7 +61,7 @@ const doctors: Doctor[] = [
     longBio:
       "El Dr. Luis Angel Medina Andrade es un cirujano especialista en el tratamiento de hernias y vesícula biliar, reconocido por su excelencia en la Ciudad de México. Con más de 15 años de experiencia, se ha especializado en técnicas quirúrgicas mínimamente invasivas que permiten una recuperación más rápida y menos dolorosa. Su enfoque personalizado garantiza que cada paciente reciba un tratamiento adaptado a sus necesidades específicas, utilizando los avances más recientes en cirugía laparoscópica y procedimientos ambulatorios.",
     image:
-      "/placeholder.svg?height=400&width=400&query=professional%20doctor%20surgeon%20portrait%20with%20blue%20scrubs",
+      '', // Was placeholder.svg
     credentials: [
       "Certificado por el Consejo Mexicano de Cirugía General",
       "Fellow del American College of Surgeons",
@@ -103,7 +103,7 @@ const doctors: Doctor[] = [
     bio: "Experto en cirugía bariátrica y metabólica con enfoque en protocolos de recuperación acelerada. Especializado en procedimientos mínimamente invasivos.",
     longBio:
       "El Dr. Sahid Vargas es un destacado cirujano general y bariatra con amplia experiencia en procedimientos mínimamente invasivos. Se ha especializado en cirugía bariátrica y metabólica, implementando protocolos de recuperación acelerada que han beneficiado a cientos de pacientes. Su formación académica y constante actualización le permiten ofrecer las técnicas más avanzadas en el tratamiento quirúrgico de la obesidad y enfermedades metabólicas asociadas, así como en procedimientos de vesícula biliar y hernias.",
-    image: "/placeholder.svg?height=400&width=400&query=professional%20surgeon%20portrait%20with%20medical%20coat",
+    image: '', // Was placeholder.svg
     credentials: [
       "Certificado por el Consejo Mexicano de Cirugía General",
       "Miembro de la International Federation for the Surgery of Obesity",
@@ -337,7 +337,7 @@ export default function GraciasPage() {
                   <div className="relative">
                     <Avatar className="h-24 w-24 border-2 border-blue-900 shadow-md">
                       <AvatarImage
-                        src={assignedDoctorData?.image || "/placeholder.svg"}
+                        src={assignedDoctorData?.image}
                         alt={assignedDoctorData?.name}
                       />
                       <AvatarFallback className="bg-blue-900 text-blue-300">
@@ -545,7 +545,7 @@ export default function GraciasPage() {
                       <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
                         <div className="relative">
                           <Avatar className="h-24 w-24 border border-slate-700 shadow-md">
-                            <AvatarImage src={doctor.image || "/placeholder.svg"} alt={doctor.name} />
+                            <AvatarImage src={doctor.image} alt={doctor.name} />
                             <AvatarFallback className="bg-slate-800 text-slate-300">
                               {doctor.name.substring(0, 2)}
                             </AvatarFallback>

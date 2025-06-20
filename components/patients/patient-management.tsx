@@ -254,26 +254,31 @@ const SimplePagination = ({
 };
 
 export function PatientManagement() {
-  // Utilizamos los stores de Zustand en lugar de useAppContext
-  const patients = usePatientStore(state => state.patients);
-  const isLoadingPatients = usePatientStore(state => state.isLoading);
-  const fetchPatients = usePatientStore(state => state.fetchPatients);
+  // Utilizamos los stores de Zustand
+  const {
+    patients,
+    isLoading: isLoadingPatients,
+    error: patientError,
+    fetchPatients,
+    currentPage: storeCurrentPage,
+    totalPages: storeTotalPages,
+    pageSize: storePageSize,
+  } = usePatientStore();
   
   const appointments = useAppointmentStore(state => state.appointments);
   const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
   
-  // Efecto para cargar los datos al montar el componente
+  // Efecto para cargar los datos iniciales al montar el componente
   useEffect(() => {
-    fetchPatients();
+    fetchPatients(1, storePageSize); // Cargar primera página
     fetchAppointments();
-  }, [fetchPatients, fetchAppointments]);
+  }, [fetchPatients, fetchAppointments, storePageSize]);
+  
   const router = useRouter();
 
-  // Estados simplificados
+  // Estados para filtros locales (aplicados a la página actual)
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<PatientStatusEnum | "all">("all");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(false);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   // Estados para modales
@@ -313,28 +318,29 @@ export function PatientManagement() {
     });
   }, [patients, appointments]);
 
-  // Filtrado y paginación combinados
-  const { filteredPatients, paginatedPatients, totalPages, statusStats } = useMemo(() => {
-    let filtered = enrichedPatients;
+  // Filtrado (aplicado a los datos de la página actual del store)
+  const { filteredAndEnrichedPatients, statusStats } = useMemo(() => {
+    let currentViewPatients = enrichedPatients; // enrichedPatients se basa en 'patients' del store (ya paginados)
     const term = searchTerm.toLowerCase();
 
-    // Filtrar por búsqueda
+    // Filtrar por búsqueda (sobre la página actual)
     if (term) {
-      filtered = filtered.filter(p =>
+      currentViewPatients = currentViewPatients.filter(p =>
         p.nombreCompleto.toLowerCase().includes(term) ||
-        p.telefono?.toLowerCase().includes(term) ||
-        p.email?.toLowerCase().includes(term) ||
+        (p.telefono && p.telefono.toLowerCase().includes(term)) ||
+        (p.email && p.email.toLowerCase().includes(term)) ||
         p.displayDiagnostico.toLowerCase().includes(term) ||
         p.id.toLowerCase().includes(term)
       );
     }
 
-    // Filtrar por estado
+    // Filtrar por estado (sobre la página actual)
     if (statusFilter !== "all") {
-      filtered = filtered.filter((p) => p.estado_paciente === statusFilter);
+      currentViewPatients = currentViewPatients.filter((p) => p.estado_paciente === statusFilter);
     }
 
-    // Calcular estadísticas
+    // Calcular estadísticas (basadas en los datos de la página actual)
+    // Para estadísticas globales, necesitaríamos otra estrategia o un endpoint de API
     const stats = enrichedPatients.reduce((acc, patient) => {
       if (patient.estado_paciente && patient.estado_paciente in STATUS_CONFIG) {
         acc[patient.estado_paciente]++;
@@ -349,18 +355,11 @@ export function PatientManagement() {
       [PatientStatusEnum.INDECISO]: 0,
     });
 
-    // Paginar
-    const pages = Math.max(Math.ceil(filtered.length / PAGE_SIZE), 1);
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const paginated = filtered.slice(start, start + PAGE_SIZE);
-
     return {
-      filteredPatients: filtered,
-      paginatedPatients: paginated,
-      totalPages: pages,
-      statusStats: { ...stats, all: enrichedPatients.length }
+      filteredAndEnrichedPatients: currentViewPatients,
+      statusStats: { ...stats, all: enrichedPatients.length } // 'all' aquí se refiere al total en la página actual
     };
-  }, [enrichedPatients, searchTerm, statusFilter, currentPage]);
+  }, [enrichedPatients, searchTerm, statusFilter]);
 
   // Estadísticas principales
   const mainStats = useMemo(() => {
@@ -377,7 +376,7 @@ export function PatientManagement() {
 
   // Handlers simplificados
   const handlePageChange = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    fetchPatients(page, storePageSize);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -408,7 +407,6 @@ export function PatientManagement() {
   const clearAllFilters = () => {
     setSearchTerm("");
     setStatusFilter("all");
-    setCurrentPage(1);
     setIsMobileFiltersOpen(false);
   };
 
@@ -421,7 +419,6 @@ export function PatientManagement() {
         value={statusFilter}
         onValueChange={(value) => {
           setStatusFilter(value as PatientStatusEnum | "all");
-          setCurrentPage(1);
           if (isMobile) setIsMobileFiltersOpen(false);
         }}
       >
@@ -436,7 +433,7 @@ export function PatientManagement() {
           <SelectItem value="all" className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
             <div className="flex items-center justify-between w-full">
               <span>Todos los estados</span>
-              <Badge variant="secondary" className="ml-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600">
+              <Badge variant="secondary" className="ml-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                 {statusStats.all}
               </Badge>
             </div>
@@ -473,7 +470,7 @@ export function PatientManagement() {
     </div>
   );
 
-  if (loading) {
+  if (isLoadingPatients) {
     return <LoadingSkeleton />;
   }
 
@@ -547,7 +544,6 @@ export function PatientManagement() {
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
-                  setCurrentPage(1);
                 }}
               />
               {searchTerm && (
@@ -575,7 +571,6 @@ export function PatientManagement() {
                 value={statusFilter}
                 onValueChange={(value) => {
                   setStatusFilter(value as PatientStatusEnum | "all");
-                  setCurrentPage(1);
                 }}
               >
                 <SelectTrigger className="h-9 text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 w-[180px]">
@@ -649,32 +644,24 @@ export function PatientManagement() {
 
       {/* Tabla */}
       <PatientTable 
-        patients={paginatedPatients}
+        patients={filteredAndEnrichedPatients} // Usar los datos filtrados de la página actual
         onSelectPatient={handleSelectPatient}
         onShareSurvey={handleShareSurvey}
-        onAnswerSurvey={handleAnswerSurvey}
         onEditPatient={handleEditPatient}
+        onAnswerSurvey={handleAnswerSurvey}
         onScheduleAppointment={handleScheduleAppointment}
-        loading={false}
+        loading={isLoadingPatients} // Corregido: de isLoading a loading
       />
 
       {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Mostrando {paginatedPatients.length} de {filteredPatients.length} pacientes
-              {filteredPatients.length !== enrichedPatients.length && (
-                <span className="text-slate-400 dark:text-slate-500"> (de {enrichedPatients.length} totales)</span>
-              )}
-            </p>
-            <SimplePagination 
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              loading={false}
-            />
-          </div>
+      {storeTotalPages > 1 && (
+        <div className="mt-6 sm:mt-8 pb-4">
+          <SimplePagination 
+            currentPage={storeCurrentPage} 
+            totalPages={storeTotalPages} 
+            onPageChange={handlePageChange} 
+            loading={isLoadingPatients} 
+          />
         </div>
       )}
 

@@ -4,35 +4,18 @@
 
 import React, { useState, useMemo, useCallback, memo } from "react"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card"
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs"
-import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, isSameDay, subDays } from "date-fns"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, isSameDay } from "date-fns"
 import { es } from "date-fns/locale/es"
 import { Button } from "@/components/ui/button"
 import { useAppointmentStore } from "@/lib/stores/appointment-store"
 import type { AppointmentData } from "@/app/dashboard/data-model"
 import { AppointmentStatusEnum, type AppointmentStatus } from "@/app/dashboard/data-model"
-import { Progress } from "@/components/ui/progress"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import {
-  FileBarChart,
-  RefreshCw,
-  AlertCircle,
-  X,
-  TrendingUp,
-  Calendar,
-  Clock,
+  FileBarChart, RefreshCw, AlertCircle, X, TrendingUp, Calendar, Clock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import useChartConfig, {
@@ -70,26 +53,17 @@ export interface AppointmentFilters {
 }
 
 /* ============================================================================
- * CONSTANTES Y UTILIDADES
+ * CONSTANTES OPTIMIZADAS
  * ========================================================================== */
 
-// Sin filtro de fechas por defecto para mostrar todas las citas al cargar
-const INITIAL_DATE_RANGE: DateRange | undefined = undefined
-
 const INITIAL_FILTERS: AppointmentFilters = {
-  dateRange: INITIAL_DATE_RANGE,
+  dateRange: undefined,
   motiveFilter: "all",
   statusFilter: [...Object.values(AppointmentStatusEnum)],
   sortBy: "fechaConsulta",
   sortOrder: "desc",
   timeRange: [0, 24] as const,
 }
-
-const ALLOWED_MOTIVES: readonly string[] = [
-  "Hernia Inguinal", "Hernia Umbilical", "Hernia Incisional", "Hernia Hiatal", "Hernia Epigástrica",
-  "Colecistitis Aguda", "Colelitiasis Sintomática", "Vesícula Biliar y Vías Biliares",
-  "Consulta General", "Revisión Postoperatoria"
-]
 
 /* ============================================================================
  * COMPONENTES AUXILIARES OPTIMIZADOS
@@ -235,12 +209,13 @@ const StatCards = memo<{ generalStats: GeneralStats; isLoading: boolean }>(({ ge
 StatCards.displayName = "StatCards"
 
 /* ============================================================================
- * HOOK DE PROCESAMIENTO OPTIMIZADO
+ * HOOKS DE PROCESAMIENTO OPTIMIZADOS
  * ============================================================================ */
 
 const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], filters: AppointmentFilters) => {
   return useMemo(() => {
-    const mappedAppointments: any[] = appointmentsFromContext.map((appt: AppointmentData) => {
+    // Mapeo optimizado en una sola pasada
+    const mappedAppointments: PatientData[] = appointmentsFromContext.map((appt: AppointmentData) => {
       const nameParts = appt.paciente?.split(' ') || ['Desconocido']
       
       let dateObj: Date | null = null
@@ -268,10 +243,9 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
       }
     })
 
-    // Aplicar filtros en una sola pasada
+    // Filtrado optimizado
     const filteredAppointments = mappedAppointments.filter((appt) => {
       if (!appt.fechaConsulta || !isValid(appt.fechaConsulta)) return false
-      
       
       const { from, to } = filters.dateRange || {}
       if (from || to) {
@@ -283,7 +257,7 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
       }
       
       if (filters.motiveFilter !== "all" && appt.motivoConsulta !== filters.motiveFilter) return false
-      if (!filters.statusFilter.includes(appt.estado)) return false
+      if (!filters.statusFilter.includes(appt.estado!)) return false
       
       const hourDecimalValue = hourToDecimal(appt.horaConsulta)
       if (hourDecimalValue !== null && (hourDecimalValue < filters.timeRange[0] || hourDecimalValue > filters.timeRange[1])) return false
@@ -291,7 +265,7 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
       return true
     })
     
-    // Ordenar según filtros
+    // Ordenamiento optimizado
     filteredAppointments.sort((a, b) => {
       let comp = 0
       if (filters.sortBy === "fechaConsulta") {
@@ -320,15 +294,19 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
 const useChartData = (filteredAppointments: PatientData[], filters: AppointmentFilters) => {
   return useMemo(() => {
     const total = filteredAppointments.length
-    const initialCounts = Object.values(AppointmentStatusEnum).reduce((acc, status) => { 
-      acc[status] = 0
+    
+    // Conteo optimizado de estados
+    const allStatusCounts = filteredAppointments.reduce((acc, appt) => { 
+      if (appt.estado && Object.values(AppointmentStatusEnum).includes(appt.estado)) {
+        acc[appt.estado] = (acc[appt.estado] || 0) + 1
+      }
       return acc 
     }, {} as Record<AppointmentStatus, number>)
-    
-    const allStatusCounts = filteredAppointments.reduce((acc, appt) => { 
-      if (appt.estado && acc.hasOwnProperty(appt.estado)) acc[appt.estado]++
-      return acc 
-    }, initialCounts)
+
+    // Rellenar estados faltantes
+    Object.values(AppointmentStatusEnum).forEach(status => {
+      if (!allStatusCounts[status]) allStatusCounts[status] = 0
+    })
 
     const completed = allStatusCounts[AppointmentStatusEnum.COMPLETADA] || 0
     const cancelled = allStatusCounts[AppointmentStatusEnum.CANCELADA] || 0
@@ -350,48 +328,51 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
       allStatusCounts,
     }
 
+    // Datos para gráficos optimizados
     const statusChartData: StatusChartData[] = Object.values(AppointmentStatusEnum).map(status => ({
       name: titleCaseStatus(status),
-      value: generalStats.allStatusCounts?.[status] || 0,
+      value: allStatusCounts[status] || 0,
       color: `hsl(var(--chart-${status === AppointmentStatusEnum.COMPLETADA ? '1' : status === AppointmentStatusEnum.CANCELADA ? '2' : status === AppointmentStatusEnum.PROGRAMADA ? '3' : '4'}))`
     }))
 
     const motiveChartData: MotiveChartData[] = (() => {
-      const cM: Record<string, number> = {}
+      const motiveCounts: Record<string, number> = {}
       filteredAppointments.forEach(a => { 
-        cM[a.motivoConsulta!] = (cM[a.motivoConsulta!] || 0) + 1 
+        motiveCounts[a.motivoConsulta!] = (motiveCounts[a.motivoConsulta!] || 0) + 1 
       })
-      return Object.entries(cM).map(([motive, count]) => ({ 
-        motive, 
-        count 
-      })).sort((a, b) => b.count - a.count)
+      return Object.entries(motiveCounts)
+        .map(([motive, count]) => ({ motive, count }))
+        .sort((a, b) => b.count - a.count)
     })()
 
     const trendChartData: TrendChartData[] = (() => {
-      const bD: Record<string, Record<AppointmentStatus | "total", number>> = {}
+      const byDate: Record<string, Record<AppointmentStatus | "total", number>> = {}
       filteredAppointments.forEach(a => { 
         const dateStr = format(a.fechaConsulta!, "yyyy-MM-dd")
-        if (!bD[dateStr]) {
-          bD[dateStr] = Object.values(AppointmentStatusEnum).reduce((ac, s) => { 
+        if (!byDate[dateStr]) {
+          byDate[dateStr] = Object.values(AppointmentStatusEnum).reduce((ac, s) => { 
             ac[s] = 0
             return ac 
           }, { total: 0 } as any)
         }
-        if (bD[dateStr].hasOwnProperty(a.estado!)) bD[dateStr][a.estado!]++
-        bD[dateStr].total++
+        if (byDate[dateStr].hasOwnProperty(a.estado!)) byDate[dateStr][a.estado!]++
+        byDate[dateStr].total++
       })
-      return Object.entries(bD).map(([date, counts]) => ({ 
-        date, 
-        formattedDate: format(parseISO(date), "dd/MM", { locale: es }), 
-        ...counts 
-      })).sort((a, b) => a.date.localeCompare(b.date))
+      return Object.entries(byDate)
+        .map(([date, counts]) => ({ 
+          date, 
+          formattedDate: format(parseISO(date), "dd/MM", { locale: es }), 
+          ...counts 
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date))
     })()
 
     const weekdayChartData: WeekdayChartData[] = (() => {
-      const weekdayData: Record<number, { name: string; total: number; attended: number }> = WEEKDAYS.reduce((acc, name, idx) => { 
-        acc[idx] = { name, total: 0, attended: 0 }
-        return acc 
-      }, {} as any)
+      const weekdayData: Record<number, { name: string; total: number; attended: number }> = 
+        WEEKDAYS.reduce((acc, name, idx) => { 
+          acc[idx] = { name, total: 0, attended: 0 }
+          return acc 
+        }, {} as any)
 
       filteredAppointments.forEach(a => { 
         const fechaDate = a.fechaConsulta instanceof Date ? a.fechaConsulta : 
@@ -431,7 +412,7 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
         const key = `${dayOfWeek}-${hour}`
         const currentStatus = a.estado!
 
-        if (Object.values(AppointmentStatusEnum).some(status => status === currentStatus)) { 
+        if (Object.values(AppointmentStatusEnum).includes(currentStatus)) { 
           if (!scatterByStatus[currentStatus][key]) {
             scatterByStatus[currentStatus][key] = { 
               day: dayOfWeek, 
@@ -467,15 +448,10 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
  * ============================================================================ */
 
 interface AppointmentStatisticsProps {
-  /** Datos generales de estadísticas de citas desde la API */
   generalStats?: GeneralStats;
-  /** Distribución de citas por día de la semana desde la API */
   weekdayDistribution?: WeekdayChartData[];
-  /** Estado de carga de los datos */
   isLoading?: boolean;
-  /** Última actualización de datos */
   lastUpdated?: string;
-  /** Función para refrescar los datos */
   onRefresh?: () => void;
 }
 
@@ -490,11 +466,9 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
   const [isLoading, setIsLoading] = useState(false)
   const [filters, setFilters] = useState<AppointmentFilters>(INITIAL_FILTERS)
   
-  // Mantener compatibilidad con la implementación actual usando datos del contexto como fallback
   const appointmentsFromContext = useAppointmentStore(state => state.appointments)
   const fetchAppointments = useAppointmentStore(state => state.fetchAppointments)
   
-  // Solo usar fetchAppointments si no se proporciona onRefresh
   React.useEffect(() => {
     if (!apiGeneralStats && !onRefresh) {
       fetchAppointments()
@@ -517,7 +491,6 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
 
   const { filteredAppointments } = useProcessedAppointments(appointmentsFromContext, filters)
   
-  // Usar datos de la API si están disponibles, o los datos locales como fallback
   const { 
     generalStats: localGeneralStats, 
     statusChartData, 
@@ -527,11 +500,8 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
     scatterData 
   } = useChartData(filteredAppointments, filters)
   
-  // Priorizar datos de la API sobre datos locales
   const generalStats = apiGeneralStats || localGeneralStats
   const weekdayChartData = apiWeekdayDistribution || localWeekdayChartData
-  
-  // Usar loading state de la API o local
   const loading = apiLoading || isLoading
 
   const updateFilter = useCallback(<K extends keyof AppointmentFilters>(key: K, value: AppointmentFilters[K]) => {
@@ -540,20 +510,24 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
 
   const handleRefresh = useCallback(() => {
     if (onRefresh) {
-      // Usar la función de refresco proporcionada por props
       onRefresh()
     } else {
-      // Fallback al comportamiento tradicional
       setIsLoading(true)
       fetchAppointments().finally(() => setIsLoading(false))
     }
   }, [onRefresh, fetchAppointments])
 
+  const tabsData = useMemo(() => [
+    { id: "general", label: "General", icon: <FileBarChart className="h-4 w-4" /> },
+    { id: "trends", label: "Tendencias", icon: <TrendingUp className="h-4 w-4" /> },
+    { id: "weekday", label: "Día Semana", icon: <Calendar className="h-4 w-4" /> },
+    { id: "correlation", label: "Correlación", icon: <Clock className="h-4 w-4" /> }
+  ], [])
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/20 transition-all duration-500">
       <div className="container mx-auto p-4 lg:p-6 max-w-7xl">
         
-        {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
             <div>
@@ -566,25 +540,19 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
               variant="outline" 
               onClick={handleRefresh} 
               className="bg-background/50 backdrop-blur-sm hover:bg-background transition-all hover:scale-105 shadow-sm" 
-              disabled={isLoading}
+              disabled={loading}
             >
-              <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
-              {isLoading ? "Actualizando..." : "Actualizar"}
+              <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+              {loading ? "Actualizando..." : "Actualizar"}
             </Button>
           </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           
-          {/* Tabs Header */}
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
             <TabsList className="grid w-full lg:w-auto grid-cols-2 sm:grid-cols-4 h-auto sm:h-12 p-1 bg-muted/50 backdrop-blur-sm">
-              {[
-                { id: "general", label: "General", icon: <FileBarChart className="h-4 w-4" /> },
-                { id: "trends", label: "Tendencias", icon: <TrendingUp className="h-4 w-4" /> },
-                { id: "weekday", label: "Día Semana", icon: <Calendar className="h-4 w-4" /> },
-                { id: "correlation", label: "Correlación", icon: <Clock className="h-4 w-4" /> }
-              ].map((tab) => (
+              {tabsData.map((tab) => (
                 <TabsTrigger 
                   key={tab.id} 
                   value={tab.id} 
@@ -597,16 +565,14 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
             </TabsList>
           </div>
 
-          {/* Filter Summary */}
           <FilterSummary filters={filters} updateFilter={updateFilter} />
 
-          {/* Content Tabs */}
           <div className="min-h-[400px]">
             
             <TabsContent value="general" className="space-y-6 m-0">
               {activeTab === "general" && (
                 <>
-                  <StatCards generalStats={generalStats} isLoading={isLoading} />
+                  <StatCards generalStats={generalStats} isLoading={loading} />
                   <div className="grid gap-6 lg:grid-cols-2">
                     
                     <Card className="overflow-hidden hover:shadow-lg transition-all duration-300">
@@ -620,7 +586,7 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="p-6">
-                        {renderPieChart(statusChartData, generalStats, isLoading)}
+                        {renderPieChart(statusChartData, generalStats, loading)}
                       </CardContent>
                     </Card>
 
@@ -635,7 +601,7 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="p-6">
-                        {renderBarChart(motiveChartData, isLoading)}
+                        {renderBarChart(motiveChartData, loading)}
                       </CardContent>
                     </Card>
 
@@ -657,7 +623,7 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-6">
-                    {renderLineChart(trendChartData, isLoading)}
+                    {renderLineChart(trendChartData, loading)}
                   </CardContent>
                 </Card>
               )}
@@ -676,7 +642,7 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-6">
-                    {renderWeekdayChart(weekdayChartData, isLoading)}
+                    {renderWeekdayChart(weekdayChartData, loading)}
                   </CardContent>
                 </Card>
               )}
@@ -695,7 +661,7 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-6">
-                    {renderScatterChart(scatterData, filters.timeRange, isLoading)}
+                    {renderScatterChart(scatterData, filters.timeRange, loading)}
                   </CardContent>
                 </Card>
               )}

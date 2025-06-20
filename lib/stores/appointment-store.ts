@@ -176,9 +176,17 @@ interface AppointmentStore {
   error: Error | null;
   lastFetched: number | null; // Timestamp de la última carga exitosa
   isStale: boolean; // Indica si los datos podrían estar obsoletos
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
   
   // Acciones
   fetchAppointments: (force?: boolean) => Promise<void>;
+  loadMoreAppointments: () => Promise<void>;
   addAppointment: (data: AddAppointmentInput) => Promise<AppointmentData>;
   updateAppointment: (input: UpdateAppointmentInput) => Promise<AppointmentData>;
   updateAppointmentStatus: (
@@ -202,6 +210,13 @@ export const useAppointmentStore = create<AppointmentStore>()(
     error: null,
     lastFetched: null,
     isStale: true,
+    pagination: {
+      page: 1,
+      pageSize: 10,
+      totalCount: 0,
+      totalPages: 0,
+      hasMore: false
+    },
     
     fetchAppointments: async (force = false) => {
       const state = get();
@@ -233,6 +248,8 @@ export const useAppointmentStore = create<AppointmentStore>()(
         state.isLoading = shouldBlockUI;
         state.isStale = state.appointments.length > 0;
         state.error = null;
+        // Reiniciar paginación al hacer una carga completa nueva
+        state.pagination.page = 1;
       });
       
       try {
@@ -240,7 +257,13 @@ export const useAppointmentStore = create<AppointmentStore>()(
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         
-        const response = await fetch('/api/appointments', {
+        // Añadir parámetros de paginación a la solicitud
+        const searchParams = new URLSearchParams({
+          page: '1',
+          pageSize: state.pagination.pageSize.toString()
+        });
+        
+        const response = await fetch(`/api/appointments?${searchParams.toString()}`, {
           method: 'GET',
           headers: { 'Cache-Control': 'no-cache' },
           signal: controller.signal
@@ -248,18 +271,21 @@ export const useAppointmentStore = create<AppointmentStore>()(
         
         clearTimeout(timeoutId);
         
-        const data = await response.json();
+        const responseData = await response.json();
         
         if (response.ok) {
+          const { data, pagination } = responseData;
           const transformedAppointments = data.map(transformAppointmentData);
+          
           set((state) => {
             state.appointments = transformedAppointments;
+            state.pagination = pagination;
             state.isLoading = false;
             state.isStale = false;
             state.lastFetched = Date.now();
           });
         } else {
-          throw new Error(data.message || 'Error fetching appointments');
+          throw new Error(responseData.message || 'Error fetching appointments');
         }
       } catch (error) {
         // Solo actualizar el estado de error si no fue por aborto de la petición
@@ -271,6 +297,56 @@ export const useAppointmentStore = create<AppointmentStore>()(
         }
       }
     },
+    
+    loadMoreAppointments: async () => {
+      const state = get();
+      
+      // No cargar más si ya estamos cargando o no hay más datos
+      if (state.isLoading || !state.pagination.hasMore) return;
+      
+      set((state) => {
+        state.isLoading = true;
+        state.error = null;
+      });
+      
+      try {
+        // Incrementar página para cargar el siguiente conjunto
+        const nextPage = state.pagination.page + 1;
+        
+        const searchParams = new URLSearchParams({
+          page: nextPage.toString(),
+          pageSize: state.pagination.pageSize.toString()
+        });
+        
+        const response = await fetchWithRetry(`/api/appointments?${searchParams.toString()}`, {
+          method: 'GET',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
+        
+        const responseData = await response.json();
+        
+        if (response.ok) {
+          const { data, pagination } = responseData;
+          const newAppointments = data.map(transformAppointmentData);
+          
+          set((state) => {
+            // Concatenar los nuevos resultados a los existentes
+            state.appointments = [...state.appointments, ...newAppointments];
+            state.pagination = pagination;
+            state.isLoading = false;
+            state.lastFetched = Date.now();
+          });
+        } else {
+          throw new Error(responseData.message || 'Error fetching more appointments');
+        }
+      } catch (error) {
+        set((state) => {
+          state.error = error instanceof Error ? error : new Error('Error loading more appointments');
+          state.isLoading = false;
+        });
+      }
+    },
+    
     
     addAppointment: async (data) => {
       set((state) => { state.isLoading = true; state.error = null; });
@@ -449,7 +525,7 @@ export const useAppointmentStore = create<AppointmentStore>()(
     },
   })),
     {
-      name: 'appointment-storage',
+      name: 'appointment-storage-v2', // Actualizado para evitar conflictos con la versión anterior
       partialize: (state) => ({
         appointments: state.appointments,
         lastFetched: state.lastFetched

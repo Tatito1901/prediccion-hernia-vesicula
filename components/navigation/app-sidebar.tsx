@@ -212,7 +212,7 @@ export function AppSidebar({
 
             {/* Usuario */}
             <NavUser
-              user={{ ...USER, avatar: "/placeholder.svg" }}
+              user={{ ...USER, avatar: USER.avatar || '' }}
               collapsed={isCollapsed && !isMobile}
             />
 

@@ -8,11 +8,23 @@ const cacheConfig = {
   'Cache-Control': 'max-age=60, s-maxage=60, stale-while-revalidate=300',
 };
 
+// Tamaño de página predeterminado y máximo para la paginación de pacientes
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { searchParams } = new URL(request.url);
+  
+  // Filtros
   const estado = searchParams.get('estado');
-  // Podrías añadir más filtros como query params: nombre, fecha_registro_start, fecha_registro_end, etc.
+
+  // Paginación
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+  let pageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE));
+  pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
   try {
     let query = supabase.from('patients').select(`
@@ -38,24 +50,41 @@ export async function GET(request: Request) {
       creado_por_id,
       doctor:profiles!patients_doctor_asignado_id_fkey(id, full_name),
       creator:profiles!patients_creado_por_id_fkey(id, full_name)
-    `); // Incluye explícitamente ambas relaciones con nombres personalizados
+    `, { count: 'exact' });
 
     if (estado && estado !== 'todos') {
       query = query.eq('estado_paciente', estado);
     }
     
-    // Ejemplo de ordenamiento
     query = query.order('fecha_registro', { ascending: false });
+    query = query.range(from, to);
 
-    const { data: patients, error } = await query;
+    const { data: patients, error, count } = await query;
 
     if (error) {
       console.error('Supabase error fetching patients:', error);
       throw error;
     }
-    return NextResponse.json(patients, { headers: cacheConfig });
+
+    const totalCount = count || 0;
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    return NextResponse.json({
+      data: patients,
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+        hasMore: page < totalPages
+      }
+    }, { headers: cacheConfig });
   } catch (error: any) {
-    return NextResponse.json({ message: 'Error al obtener pacientes', error: error.message }, { status: 500 });
+    console.error('Error in patients API route:', error);
+    return NextResponse.json({ 
+      message: 'Error al obtener pacientes', 
+      error: error.message 
+    }, { status: 500 });
   }
 }
 

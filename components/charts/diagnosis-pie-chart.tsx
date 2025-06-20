@@ -1,38 +1,19 @@
 /* -------------------------------------------------------------------------- */
-/*  components/charts/diagnosis-pie-chart.tsx - OPTIMIZADO                   */
+/*  diagnosis-pie-chart.tsx - OPTIMIZADO                                     */
 /* -------------------------------------------------------------------------- */
 
 import { memo, useMemo, useCallback, useState, FC } from 'react';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
-  Activity, 
-  Eye,
-  EyeOff,
-  Target,
-  Settings,
-  Download,
-  Info,
-  TrendingUp,
-  TrendingDown,
-  ChevronDown,
+  Activity, Eye, EyeOff, Target, Settings, Download, Info, TrendingUp, TrendingDown, ChevronDown,
 } from 'lucide-react';
 import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-  DropdownMenuCheckboxItem
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -44,10 +25,6 @@ import useChartConfig, {
   ABBR,
   titleCaseStatus 
 } from '@/components/charts/use-chart-config';
-
-/* ============================================================================
- * TIPOS SIMPLIFICADOS
- * ========================================================================== */
 
 interface ChartConfig {
   showPercentages: boolean;
@@ -82,10 +59,6 @@ const DEFAULT_CONFIG: ChartConfig = {
   maxCategories: 8,
 };
 
-/* ============================================================================
- * COMPONENTE PRINCIPAL SIMPLIFICADO
- * ============================================================================ */
-
 const DiagnosisPieChart: FC<Props> = memo(({
   data,
   title = "Distribución de Diagnósticos",
@@ -118,7 +91,6 @@ const DiagnosisPieChart: FC<Props> = memo(({
     colorScheme: config.colorScheme,
   });
 
-  // Procesamiento de datos optimizado con un solo useMemo
   const { processedData, chartStats, visibleData } = useMemo(() => {
     if (!data?.length) {
       return { 
@@ -132,7 +104,6 @@ const DiagnosisPieChart: FC<Props> = memo(({
       };
     }
 
-    // Clonar y ordenar solo si es necesario
     const sortedData = config.sortBy === 'valor' 
       ? [...data].sort((a, b) => b.cantidad - a.cantidad)
       : config.sortBy === 'alfabetico'
@@ -141,7 +112,6 @@ const DiagnosisPieChart: FC<Props> = memo(({
 
     const total = sortedData.reduce((sum, d) => sum + d.cantidad, 0);
 
-    // Manejar categorías en exceso
     let finalData = sortedData;
     if (sortedData.length > config.maxCategories) {
       const topItems = sortedData.slice(0, config.maxCategories - 1);
@@ -161,7 +131,6 @@ const DiagnosisPieChart: FC<Props> = memo(({
       }
     }
 
-    // Procesar datos con metadatos médicos
     const processed = finalData.map((item, index) => {
       const medicalInfo = getMedicalCategory(item.tipo);
       const porcentaje = total > 0 ? Math.round((item.cantidad / total) * 100) : 0;
@@ -175,11 +144,9 @@ const DiagnosisPieChart: FC<Props> = memo(({
       };
     });
 
-    // Datos visibles para el gráfico
     const visible = processed.filter(d => d.isVisible);
     const visibleTotal = visible.reduce((sum, d) => sum + d.cantidad, 0);
 
-    // Estadísticas para el hook
     const stats: GeneralStats = {
       total: visibleTotal,
       attendance: 100,
@@ -208,7 +175,6 @@ const DiagnosisPieChart: FC<Props> = memo(({
       visibleData: visible
     };
   }, [data, config, hiddenSegments]);
-
   const updateConfig = useCallback((updates: Partial<ChartConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));
   }, []);
@@ -273,7 +239,6 @@ const DiagnosisPieChart: FC<Props> = memo(({
           {showControls && (
             <div className="flex items-center gap-2">
               
-              {/* Configuración */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2">
@@ -325,7 +290,6 @@ const DiagnosisPieChart: FC<Props> = memo(({
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Exportar */}
               {onExport && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -353,7 +317,6 @@ const DiagnosisPieChart: FC<Props> = memo(({
 
       <CardContent className="p-6">
         
-        {/* Controles de visibilidad */}
         {interactive && processedData.length > 4 && (
           <div className="mb-6 space-y-3">
             <div className="flex items-center gap-2">
@@ -381,10 +344,8 @@ const DiagnosisPieChart: FC<Props> = memo(({
           </div>
         )}
 
-        {/* Gráfico usando hook centralizador */}
         {renderPieChart(visibleData, chartStats, false)}
 
-        {/* Información detallada del segmento seleccionado */}
         {selectedData && (
           <div className="mt-4 p-4 bg-muted/30 rounded-lg border animate-in slide-in-from-top-2 fade-in duration-200">
             <div className="flex items-center justify-between mb-3">
@@ -470,4 +431,4 @@ const DiagnosisPieChart: FC<Props> = memo(({
 
 DiagnosisPieChart.displayName = 'DiagnosisPieChart';
 
-export default DiagnosisPieChart;
+export { DiagnosisTimelineChart, DiagnosisPieChart };

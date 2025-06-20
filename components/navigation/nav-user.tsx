@@ -39,7 +39,7 @@ export function NavUser({ user, className, collapsed, ...props }: NavUserProps) 
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton>
                   <Avatar className="h-6 w-6">
-                    <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
+                    <AvatarImage src={user.avatar} alt={user.name} />
                     <AvatarFallback>
                       {user.name
                         .split(" ")

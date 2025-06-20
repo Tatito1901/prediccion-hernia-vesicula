@@ -1,92 +1,103 @@
 "use client"
 
 import * as React from "react"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { Calendar as CalendarIcon } from "lucide-react"
-import DatePicker, { registerLocale } from "react-datepicker"
-import "react-datepicker/dist/react-datepicker.css"
+import { CalendarIcon } from "lucide-react"
 
-// Registrar el locale español
-registerLocale("es", es)
-
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
-export interface DatePickerProps {
-  value?: Date
-  onChange?: (date: Date | null) => void
-  disabled?: boolean
-  placeholder?: string
-  showTimeSelect?: boolean
-  timeIntervals?: number
-  minDate?: Date
-  maxDate?: Date
-  minTime?: Date
-  maxTime?: Date
-  excludeDates?: Date[]
-  filterDate?: (date: Date) => boolean
-  className?: string
+function formatDate(date: Date | undefined) {
+  if (!date) {
+    return ""
+  }
+
+  return date.toLocaleDateString("en-US", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  })
 }
 
-export function DatePickerComponent({
-  value,
-  onChange,
-  disabled = false,
-  placeholder = "Seleccionar fecha",
-  showTimeSelect = false,
-  timeIntervals = 30,
-  minDate,
-  maxDate,
-  minTime,
-  maxTime,
-  excludeDates,
-  filterDate,
-  className,
-}: DatePickerProps) {
+function isValidDate(date: Date | undefined) {
+  if (!date) {
+    return false
+  }
+  return !isNaN(date.getTime())
+}
+
+export function DatePicker() {
+  const [open, setOpen] = React.useState(false)
+  const [date, setDate] = React.useState<Date | undefined>(
+    new Date("2025-06-01")
+  )
+  const [month, setMonth] = React.useState<Date | undefined>(date)
+  const [value, setValue] = React.useState(formatDate(date))
+
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn(
-            "w-full justify-start text-left font-normal",
-            !value && "text-muted-foreground",
-            className
-          )}
-          disabled={disabled}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {value ? (
-            showTimeSelect ? 
-              format(value, "PPP HH:mm", { locale: es }) : 
-              format(value, "PPP", { locale: es })
-          ) : (
-            <span>{placeholder}</span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <DatePicker
-          selected={value}
-          onChange={onChange}
-          showTimeSelect={showTimeSelect}
-          timeIntervals={timeIntervals}
-          dateFormat={showTimeSelect ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy"}
-          locale="es"
-          minDate={minDate}
-          maxDate={maxDate}
-          minTime={minTime}
-          maxTime={maxTime}
-          excludeDates={excludeDates}
-          filterDate={filterDate}
-          inline
-          calendarClassName="border-0 shadow-none"
+    <div className="flex flex-col gap-3">
+      <Label htmlFor="date" className="px-1">
+        Subscription Date
+      </Label>
+      <div className="relative flex gap-2">
+        <Input
+          id="date"
+          value={value}
+          placeholder="June 01, 2025"
+          className="bg-background pr-10"
+          onChange={(e) => {
+            const date = new Date(e.target.value)
+            setValue(e.target.value)
+            if (isValidDate(date)) {
+              setDate(date)
+              setMonth(date)
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault()
+              setOpen(true)
+            }
+          }}
         />
-      </PopoverContent>
-    </Popover>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              id="date-picker"
+              variant="ghost"
+              className="absolute top-1/2 right-2 size-6 -translate-y-1/2"
+            >
+              <CalendarIcon className="size-3.5" />
+              <span className="sr-only">Select date</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-auto overflow-hidden p-0"
+            align="end"
+            alignOffset={-8}
+            sideOffset={10}
+          >
+            <Calendar
+              mode="single"
+              selected={date}
+              captionLayout="dropdown"
+              month={month}
+              onMonthChange={setMonth}
+              onSelect={(date) => {
+                setDate(date)
+                setValue(formatDate(date))
+                setOpen(false)
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+    </div>
   )
 }
-
-export { DatePickerComponent as DatePicker }

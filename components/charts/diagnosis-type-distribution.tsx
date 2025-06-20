@@ -349,3 +349,4 @@ const DiagnosisTypeDistribution: FC<Props> = memo(({
 DiagnosisTypeDistribution.displayName = 'DiagnosisTypeDistribution';
 
 export default DiagnosisTypeDistribution;
+// Final del archivo

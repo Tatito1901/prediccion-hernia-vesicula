@@ -253,15 +253,17 @@ export function useChartData({
           `/api/appointments${appointmentsParams ? `?${appointmentsParams}` : ''}`, 
           'Error al obtener citas'
         ),
-        fetchData<ApiPatient[]>(
-          `/api/patients${patientsParams ? `?${patientsParams}` : ''}`, 
-          'Error al obtener pacientes'
-        )
+        fetchData<{ data: ApiPatient[], pagination: unknown }>(`/api/patients${patientsParams ? `?${patientsParams}` : ''}`, 'Error al obtener pacientes')
       ]);
 
+      const safeAppointments = Array.isArray(appointmentsData) ? appointmentsData : [];
+      const safePatients = (patientsData && typeof patientsData === 'object' && Array.isArray(patientsData.data)) 
+        ? patientsData.data 
+        : [];
+
       return { 
-        appointments: appointmentsData, 
-        patients: patientsData 
+        appointments: safeAppointments, 
+        patients: safePatients 
       };
     },
     staleTime: DEFAULT_STALE_TIME,
@@ -276,8 +278,8 @@ export function useChartData({
   });
 
   // Extraer datos para mantener compatibilidad con el resto del código
-  const appointments = data.appointments || [];
-  const patients = data.patients || [];
+  const appointments = Array.isArray(data?.appointments) ? data.appointments : [];
+  const patients = Array.isArray(data?.patients) ? data.patients : [];
   
   // Errores separados para retrocompatibilidad
   const loadingAppointments = loading;
