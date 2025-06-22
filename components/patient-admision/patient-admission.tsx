@@ -33,9 +33,9 @@ import { useBreakpointStore } from "@/hooks/use-breakpoint";
 import { toast } from "sonner";
 
 import { AppointmentCard } from "./patient-card";
-import { usePatients } from "@/lib/stores/patient-store";
+import { usePatients } from "@/lib/hooks/use-patients";
 import { AppointmentData, AppointmentStatusEnum } from "@/app/dashboard/data-model";
-import { useAppointments, useUpdateAppointmentStatus } from "@/lib/stores/appointment-store";
+import { useAppointments, useUpdateAppointmentStatus } from "@/lib/hooks/use-appointments";
 import { useSurveyStore } from "@/lib/stores/survey-store";
 
 // Importaciones directas sin lazy loading

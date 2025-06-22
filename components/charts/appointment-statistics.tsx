@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, isSameDay } from "date-fns"
 import { es } from "date-fns/locale/es"
 import { Button } from "@/components/ui/button"
-import { useAppointmentStore } from "@/lib/stores/appointment-store"
+import { useAppointments } from "@/lib/hooks/use-appointments";
 import type { AppointmentData } from "@/app/dashboard/data-model"
 import { AppointmentStatusEnum, type AppointmentStatus } from "@/app/dashboard/data-model"
 import { Badge } from "@/components/ui/badge"
@@ -218,16 +218,16 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
     const mappedAppointments: PatientData[] = appointmentsFromContext.map((appt: AppointmentData) => {
       const nameParts = appt.paciente?.split(' ') || ['Desconocido']
       
-      let dateObj: Date | null = null
+      let dateObj: Date | undefined = undefined;
       try {
         if (appt.fechaConsulta) {
-          const parsedDate = typeof appt.fechaConsulta === 'string' ? parseISO(appt.fechaConsulta) : appt.fechaConsulta
+          const parsedDate = typeof appt.fechaConsulta === 'string' ? parseISO(appt.fechaConsulta) : appt.fechaConsulta;
           if (isValid(parsedDate)) {
-            dateObj = parsedDate
+            dateObj = parsedDate;
           }
         }
       } catch (error) {
-        console.error("Error procesando fecha para cita ID:", appt.id, error)
+        console.error("Error procesando fecha para cita ID:", appt.id, error);
       }
 
       return {
@@ -296,17 +296,18 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
     const total = filteredAppointments.length
     
     // Conteo optimizado de estados
-    const allStatusCounts = filteredAppointments.reduce((acc, appt) => { 
-      if (appt.estado && Object.values(AppointmentStatusEnum).includes(appt.estado)) {
-        acc[appt.estado] = (acc[appt.estado] || 0) + 1
-      }
-      return acc 
-    }, {} as Record<AppointmentStatus, number>)
+      const allStatusCounts = filteredAppointments.reduce((acc, appt) => { 
+        if (appt.estado && (Object.values(AppointmentStatusEnum) as string[]).includes(appt.estado)) {
+          acc[appt.estado] = (acc[appt.estado] || 0) + 1
+        }
+        return acc 
+      }, {} as Record<AppointmentStatus, number>)
 
     // Rellenar estados faltantes
     Object.values(AppointmentStatusEnum).forEach(status => {
       if (!allStatusCounts[status]) allStatusCounts[status] = 0
     })
+    
 
     const completed = allStatusCounts[AppointmentStatusEnum.COMPLETADA] || 0
     const cancelled = allStatusCounts[AppointmentStatusEnum.CANCELADA] || 0
@@ -355,7 +356,7 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
             return ac 
           }, { total: 0 } as any)
         }
-        if (byDate[dateStr].hasOwnProperty(a.estado!)) byDate[dateStr][a.estado!]++
+        if (a.estado && byDate[dateStr].hasOwnProperty(a.estado)) byDate[dateStr][a.estado as AppointmentStatus]++
         byDate[dateStr].total++
       })
       return Object.entries(byDate)
@@ -412,8 +413,9 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
         const key = `${dayOfWeek}-${hour}`
         const currentStatus = a.estado!
 
-        if (Object.values(AppointmentStatusEnum).includes(currentStatus)) { 
-          if (!scatterByStatus[currentStatus][key]) {
+        if ((Object.values(AppointmentStatusEnum) as string[]).includes(currentStatus)) { 
+          const statusKey = currentStatus as AppointmentStatus;
+          if (!scatterByStatus[statusKey][key]) {
             scatterByStatus[currentStatus][key] = { 
               day: dayOfWeek, 
               hour, 
@@ -421,7 +423,7 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
               dayName: WEEKDAYS[dayOfWeek] || `Día ${dayOfWeek}` 
             }
           }
-          scatterByStatus[currentStatus][key].count++
+          scatterByStatus[currentStatus as AppointmentStatus][key].count++
         } 
       })
 
@@ -455,26 +457,13 @@ interface AppointmentStatisticsProps {
   onRefresh?: () => void;
 }
 
-export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
-  generalStats: apiGeneralStats,
-  weekdayDistribution: apiWeekdayDistribution,
-  isLoading: apiLoading = false,
-  lastUpdated,
-  onRefresh
-}) => {
+export const AppointmentStatistics: React.FC = () => {
+  const { data: appointmentsData, isLoading, error, refetch } = useAppointments(1, 5000); // Fetch up to 5000 appointments for stats
+  const allAppointments = appointmentsData?.appointments || [];
+
   const [activeTab, setActiveTab] = useState("general")
-  const [isLoading, setIsLoading] = useState(false)
   const [filters, setFilters] = useState<AppointmentFilters>(INITIAL_FILTERS)
   
-  const appointmentsFromContext = useAppointmentStore(state => state.appointments)
-  const fetchAppointments = useAppointmentStore(state => state.fetchAppointments)
-  
-  React.useEffect(() => {
-    if (!apiGeneralStats && !onRefresh) {
-      fetchAppointments()
-    }
-  }, [fetchAppointments, apiGeneralStats, onRefresh])
-
   const { 
     renderPieChart, 
     renderBarChart, 
@@ -489,7 +478,7 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
     interactive: true,
   })
 
-  const { filteredAppointments } = useProcessedAppointments(appointmentsFromContext, filters)
+  const { filteredAppointments } = useProcessedAppointments(allAppointments, filters)
   
   const { 
     generalStats: localGeneralStats, 
@@ -500,22 +489,17 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
     scatterData 
   } = useChartData(filteredAppointments, filters)
   
-  const generalStats = apiGeneralStats || localGeneralStats
-  const weekdayChartData = apiWeekdayDistribution || localWeekdayChartData
-  const loading = apiLoading || isLoading
+  const generalStats = localGeneralStats
+  const weekdayChartData = localWeekdayChartData
+  const loading = isLoading
 
   const updateFilter = useCallback(<K extends keyof AppointmentFilters>(key: K, value: AppointmentFilters[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }))
   }, [])
 
   const handleRefresh = useCallback(() => {
-    if (onRefresh) {
-      onRefresh()
-    } else {
-      setIsLoading(true)
-      fetchAppointments().finally(() => setIsLoading(false))
-    }
-  }, [onRefresh, fetchAppointments])
+    refetch()
+  }, [refetch])
 
   const tabsData = useMemo(() => [
     { id: "general", label: "General", icon: <FileBarChart className="h-4 w-4" /> },
@@ -535,6 +519,9 @@ export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({
                 Estadísticas de Citas
               </h1>
               <p className="text-muted-foreground mt-2">Panel de control y análisis de citas médicas</p>
+              {error && (
+                <p className="text-sm text-red-500">Error al cargar datos: {error.message}</p>
+              )}
             </div>
             <Button 
               variant="outline" 

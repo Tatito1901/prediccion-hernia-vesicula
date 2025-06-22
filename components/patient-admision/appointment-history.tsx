@@ -1,6 +1,6 @@
 // appointment-history.tsx - Actualizado para usar React Query
 import { useMemo, memo } from "react";
-import { useAppointments } from "@/lib/stores/appointment-store";
+import { useAppointments } from "@/lib/hooks/use-appointments";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -245,8 +245,8 @@ export const AppointmentHistory = memo<{
     if (!appointments) return [];
     
     return appointments
-      .filter(app => app.patientId === patientId)
-      .sort((a, b) => new Date(b.fechaConsulta).getTime() - new Date(a.fechaConsulta).getTime())
+      .filter((app: AppointmentData) => app.patientId === patientId)
+      .sort((a: AppointmentData, b: AppointmentData) => new Date(b.fechaConsulta).getTime() - new Date(a.fechaConsulta).getTime())
       .slice(0, maxItems);
   }, [appointments, patientId, maxItems]);
 
@@ -264,7 +264,7 @@ export const AppointmentHistory = memo<{
       };
     }
 
-    const counts = patientAppointments.reduce((acc, app) => {
+    const counts = patientAppointments.reduce((acc: Record<AppointmentStatusEnum, number>, app: AppointmentData) => {
       const estado = app.estado as AppointmentStatusEnum;
       acc[estado] = (acc[estado] || 0) + 1;
       return acc;

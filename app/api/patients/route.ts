@@ -52,7 +52,7 @@ export async function GET(request: Request) {
       creator:profiles!patients_creado_por_id_fkey(id, full_name)
     `, { count: 'exact' });
 
-    if (estado && estado !== 'todos') {
+    if (estado && estado !== 'all') {
       query = query.eq('estado_paciente', estado);
     }
     

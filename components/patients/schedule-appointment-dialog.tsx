@@ -13,7 +13,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useAppointmentStore, type AddAppointmentInput } from "@/lib/stores/appointment-store";
+import { useCreateAppointment } from "@/lib/hooks/use-appointments";
 import type { PatientData } from "@/app/dashboard/data-model";
 import { AppointmentStatusEnum } from "@/app/dashboard/data-model";
 import { toast } from "sonner";
@@ -34,7 +34,7 @@ interface ScheduleAppointmentDialogProps {
 }
 
 export function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppointmentDialogProps) {
-  const addAppointment = useAppointmentStore(state => state.addAppointment);
+  const { mutateAsync: addAppointment, isPending } = useCreateAppointment();
   const form = useForm<FormValues>({
     resolver: zodResolver(FORM_SCHEMA),
     defaultValues: {
@@ -47,22 +47,25 @@ export function ScheduleAppointmentDialog({ isOpen, patient, onClose }: Schedule
 
   const handleSubmit = async (values: FormValues) => {
     if (!patient) return;
-    const id = toast.loading("Agendando cita...");
-    try {
-      await addAppointment({
-        patientId: patient.id,
-        fecha_raw: format(values.fechaConsulta, "yyyy-MM-dd"),
-        hora_raw: values.horaConsulta,
-        estado: AppointmentStatusEnum.PROGRAMADA,
-        motivoConsulta: values.motivoConsulta || "",
-        notas: values.notas || "",
-        raw_doctor_id: "default-doctor", // TODO: obtener ID real
-      } as AddAppointmentInput);
-      toast.success("Cita agendada", { id });
-      onClose();
-    } catch (err: any) {
-      toast.error(err?.message || "Error desconocido", { id });
-    }
+    const promise = addAppointment({
+      patientId: patient.id,
+      fecha_raw: format(values.fechaConsulta, "yyyy-MM-dd"),
+      hora_raw: values.horaConsulta,
+      estado: AppointmentStatusEnum.PROGRAMADA,
+      motivoConsulta: values.motivoConsulta || "",
+      notas: values.notas || "",
+      raw_doctor_id: "default-doctor", // TODO: obtener ID real
+      esPrimeraVez: false, // Defaulting to false as the UI doesn't specify
+    });
+
+    toast.promise(promise, {
+      loading: "Agendando cita...",
+      success: () => {
+        onClose();
+        return "Cita agendada con éxito";
+      },
+      error: (err) => err.message || "Error al agendar la cita",
+    });
   };
 
   const hourOptions = useMemo(() => {
@@ -131,7 +134,9 @@ export function ScheduleAppointmentDialog({ isOpen, patient, onClose }: Schedule
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancelar
             </Button>
-            <Button type="submit">Guardar</Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Guardando..." : "Guardar"}
+            </Button>
           </div>
         </form>
       </DialogContent>

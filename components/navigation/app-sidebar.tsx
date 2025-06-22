@@ -45,17 +45,12 @@ const USER = {
 const NAV_MAIN = [
   { title: "Dashboard",       url: "/dashboard",   icon: LayoutDashboardIcon },
   { title: "Pacientes",       url: "/pacientes",   icon: UsersIcon },
-  { title: "CRM Seguimiento", url: "/crm",         icon: PhoneIcon },
   { title: "Encuesta Digital",url: "/encuesta",    icon: TabletIcon },
-  { title: "Cirugías",        url: "/cirugias",    icon: CalendarIcon },
   { title: "Admisión",        url: "/admision",    icon: UserPlusIcon },
   { title: "Estadísticas",    url: "/estadisticas",icon: FileBarChart },
 ] as const
 
-const NAV_SECONDARY = [
-  { title: "Configuración", url: "#", icon: Settings2Icon },
-  { title: "Ayuda",         url: "#", icon: FileTextIcon  },
-] as const
+const NAV_SECONDARY = [] as const
 
 /* ──────────────────────────────────────────────────────────────────────────── */
 /* Tipos                                                                       */

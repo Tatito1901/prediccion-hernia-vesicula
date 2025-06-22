@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { FileBarChart, PieChartIcon, ActivitySquare, TrendingUp, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useIsMobile, useCurrentBreakpoint } from "@/hooks/use-breakpoint"
-import { usePatientStore } from "@/lib/stores/patient-store";
+import { usePatients } from "@/lib/hooks/use-patients";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PatientData, ChartData, DiagnosticInsight } from "@/components/charts/chart-diagnostic";
 
@@ -214,13 +214,9 @@ export default function EstadisticasPage() {
   const isMobile = useIsMobile()
   const currentBreakpoint = useCurrentBreakpoint()
   
-  // Usar el store de Zustand para obtener los datos de pacientes
-  const { patients, fetchPatients } = usePatientStore();
-
-  React.useEffect(() => {
-    // Cargar los pacientes cuando el componente se monta
-    fetchPatients();
-  }, [fetchPatients]);
+  // Usar el hook de React Query para obtener los datos de pacientes
+  const { data: patientsData, isLoading: isLoadingPatients } = usePatients(1, 1000); // Ajusta según sea necesario
+  const patients = useMemo(() => patientsData?.patients || [], [patientsData]);
   
   // Obtener datos reales de la API usando nuestro hook personalizado
   const {
@@ -276,7 +272,7 @@ export default function EstadisticasPage() {
     let totalApendicitis = 0;
 
     // Un solo bucle para procesar todos los datos
-    patients.forEach(patient => {
+    patients.forEach((patient: PatientData) => {
       // Contar diagnósticos por tipo
       if (patient.diagnostico_principal) {
         const formattedDiagnosis = formatDiagnosisName(patient.diagnostico_principal);
@@ -441,13 +437,7 @@ export default function EstadisticasPage() {
                           </AlertDescription>
                         </Alert>
                       )}
-                      <AppointmentStatistics 
-                        generalStats={chartData.generalStats}
-                        weekdayDistribution={chartData.weekdayDistribution}
-                        isLoading={loading}
-                        lastUpdated={lastUpdated}
-                        onRefresh={refresh}
-                      />
+                      <AppointmentStatistics />
                     </div>
                   )}
                 </TabsContent>

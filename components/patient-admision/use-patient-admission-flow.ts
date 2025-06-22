@@ -1,7 +1,7 @@
 // use-patient-admission-flow.ts - Versión optimizada para rendimiento
 import { useState, useEffect, useMemo } from 'react'
-import { usePatientStore } from '@/lib/stores/patient-store'
-import { useAppointmentStore } from '@/lib/stores/appointment-store'
+
+import { useAppointments } from '@/lib/hooks/use-appointments'
 import type { AppointmentData } from '@/app/dashboard/data-model'
 
 // Tipos simplificados
@@ -21,20 +21,15 @@ const dateClassificationCache = new Map<string, 'today' | 'future' | 'past'>();
  */
 export function usePatientAdmissionFlow() {
   const { 
-    appointments, 
-    isLoading = false, 
-    error = null,
-    fetchAppointments,
-  } = useAppointmentStore();
+    data: appointmentsData,
+    isLoading,
+    error,
+    refetch: refetchAppointments
+  } = useAppointments(1, 1000); // Fetch a large number of appointments
+
+  const appointments = appointmentsData?.appointments || [];
   
   const [activeTab, setActiveTab] = useState<AdmissionTab>("today");
-
-  // Cargar citas al montar el componente - solo una vez
-  useEffect(() => {
-    if (!appointments && !isLoading && !error) {
-      fetchAppointments();
-    }
-  }, []);
 
   // Clasificar citas por fecha - optimizado con memoización y cache
   const filteredAppointments = useMemo((): AppointmentLists => {
@@ -104,14 +99,14 @@ export function usePatientAdmissionFlow() {
   }, [appointments]);
 
   return {
-    appointments: appointments || [],
+    appointments,
     isLoading,
-    error: error as string | null,
+    error: error as Error | null,
     activeTab,
     setActiveTab,
     filteredAppointments,
     todayAppointments: filteredAppointments.today,
     upcomingAppointments: filteredAppointments.future,
-    refetchAppointments: fetchAppointments,
+    refetchAppointments,
   };
 }

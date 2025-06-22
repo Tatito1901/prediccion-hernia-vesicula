@@ -23,8 +23,8 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { usePatientStore } from "@/lib/stores/patient-store";
-import { useAppointmentStore } from "@/lib/stores/appointment-store";
+import { usePatients } from "@/lib/hooks/use-patients";
+import { useAppointments } from "@/lib/hooks/use-appointments";
 import type { PatientData, DiagnosisType, AppointmentData } from "@/app/dashboard/data-model";
 import { PatientStatusEnum } from "@/app/dashboard/data-model";
 import { generateSurveyId } from "@/lib/form-utils";
@@ -254,31 +254,27 @@ const SimplePagination = ({
 };
 
 export function PatientManagement() {
-  // Utilizamos los stores de Zustand
-  const {
-    patients,
-    isLoading: isLoadingPatients,
-    error: patientError,
-    fetchPatients,
-    currentPage: storeCurrentPage,
-    totalPages: storeTotalPages,
-    pageSize: storePageSize,
-  } = usePatientStore();
-  
-  const appointments = useAppointmentStore(state => state.appointments);
-  const fetchAppointments = useAppointmentStore(state => state.fetchAppointments);
-  
-  // Efecto para cargar los datos iniciales al montar el componente
-  useEffect(() => {
-    fetchPatients(1, storePageSize); // Cargar primera página
-    fetchAppointments();
-  }, [fetchPatients, fetchAppointments, storePageSize]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<PatientStatusEnum | "all">("all");
+
+  const { 
+    data: patientData, 
+    isLoading: isLoadingPatients, 
+    error: patientError 
+  } = usePatients(currentPage, PAGE_SIZE, statusFilter === 'all' ? undefined : statusFilter);
+
+  const patients = patientData?.data || [];
+  const pagination = patientData?.pagination;
+  const totalPages = pagination?.totalPages || 1;
+
+  // Cargar todas las citas (sin paginación por ahora para el enriquecimiento)
+  const { data: appointmentsData } = useAppointments(1, 1000); // TODO: Considerar una mejor estrategia si hay muchas citas
+  const appointments = appointmentsData?.appointments || [];
   
   const router = useRouter();
 
   // Estados para filtros locales (aplicados a la página actual)
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<PatientStatusEnum | "all">("all");
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   // Estados para modales
@@ -297,12 +293,22 @@ export function PatientManagement() {
 
   // Datos enriquecidos - simplificado
   const enrichedPatients = useMemo((): EnrichedPatientData[] => {
-    if (!patients || !appointments) return [];
+    if (!patients) return [];
     
-    return patients.map((patient) => {
-      const patientAppointments = (appointments as AppointmentData[])
-        .filter((appointment) => appointment.patientId === patient.id)
-        .sort((a, b) => new Date(a.fechaConsulta).getTime() - new Date(b.fechaConsulta).getTime());
+    // Crear un mapa de citas por patientId para búsqueda rápida
+    const appointmentsByPatientId = new Map<string, AppointmentData[]>();
+    if (appointments) {
+      for (const app of appointments) {
+        if (!appointmentsByPatientId.has(app.patientId)) {
+          appointmentsByPatientId.set(app.patientId, []);
+        }
+        appointmentsByPatientId.get(app.patientId)!.push(app);
+      }
+    }
+
+    return patients.map((patient: PatientData) => {
+      const patientAppointments = appointmentsByPatientId.get(patient.id) || [];
+      patientAppointments.sort((a, b) => new Date(a.fechaConsulta).getTime() - new Date(b.fechaConsulta).getTime());
 
       const nextAppointment = patientAppointments.find(
         appointment => new Date(appointment.fechaConsulta) >= new Date()
@@ -376,7 +382,7 @@ export function PatientManagement() {
 
   // Handlers simplificados
   const handlePageChange = (page: number) => {
-    fetchPatients(page, storePageSize);
+    setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -654,11 +660,11 @@ export function PatientManagement() {
       />
 
       {/* Paginación */}
-      {storeTotalPages > 1 && (
+      {totalPages > 1 && (
         <div className="mt-6 sm:mt-8 pb-4">
           <SimplePagination 
-            currentPage={storeCurrentPage} 
-            totalPages={storeTotalPages} 
+            currentPage={currentPage} 
+            totalPages={totalPages} 
             onPageChange={handlePageChange} 
             loading={isLoadingPatients} 
           />

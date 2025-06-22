@@ -49,8 +49,8 @@ import {
   AppointmentStatusEnum,
   type TimeString
 } from "@/app/dashboard/data-model"
-import { useCreatePatient } from "@/lib/stores/patient-store"
-import { useAppointments, useCreateAppointment } from "@/lib/stores/appointment-store"
+import { useCreatePatient } from "@/lib/hooks/use-patients";
+import { useAppointments, useCreateAppointment } from "@/lib/hooks/use-appointments";
 
 // Esquema de validación
 const FORM_SCHEMA = z.object({
@@ -207,7 +207,7 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
     const dayAppointments = new Set<TimeString>();
     
     const selectedDayTime = startOfSelectedDay.getTime();
-    appointments.forEach(app => {
+    appointments.forEach((app: any) => {
       if (
         app.estado !== AppointmentStatusEnum.CANCELADA &&
         startOfDay(new Date(app.fechaConsulta)).getTime() === selectedDayTime
@@ -280,9 +280,10 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
         edad: values.edad ?? undefined,
         diagnostico_principal: values.motivoConsulta,
         estado_paciente: PatientStatusEnum.PENDIENTE_DE_CONSULTA,
-        probabilidad_cirugia: 0.5,
+        probabilidad_cirugia: 0.5, // Default value, can be updated later
         notas_paciente: values.notas?.trim() || "",
         telefono: values.telefono.trim(),
+        fecha_registro: new Date().toISOString(),
       });
 
       // Crear cita
@@ -487,11 +488,11 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
                           Fecha de Consulta <span className="text-red-500">*</span>
                         </FormLabel>
                         <DatePicker
-                          value={field.value}
-                          onChange={handleDateChange}
+                          date={field.value}
+                          onDateChange={field.onChange}
                           minDate={minDate}
                           maxDate={maxDate}
-                          placeholder="Seleccione fecha"
+                          placeholder="Seleccionar fecha"
                           filterDate={filterAvailableDates}
                           className="h-9 text-sm"
                           disabled={isSubmitting}
