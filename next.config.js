@@ -2,11 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   // Configuración del analizador de bundle nativo de Next.js
-  experimental: {
-    // Habilitar solo cuando se necesite analizar el bundle
-    // Para habilitar: ANALYZE=true npm run build
-    bundleAnalyzer: process.env.ANALYZE === 'true',
-  },
+  // La opción bundleAnalyzer no está soportada directamente en Next.js 15+
+  // Usar @next/bundle-analyzer como plugin si se necesita analizar el bundle
   // Optimización de imágenes
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -42,4 +39,14 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = {
+  ...nextConfig,
+  // Resolver los warnings de Supabase
+  webpack: (config, { isServer }) => {
+    // Ignorar warnings específicos para @supabase/realtime-js
+    config.ignoreWarnings = [
+      { module: /node_modules\/@supabase\/realtime-js/ },
+    ];
+    return config;
+  },
+};
