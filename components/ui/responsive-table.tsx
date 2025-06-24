@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useMemo, useCallback } from "react"
-import { useBreakpoint } from "@/hooks/use-breakpoint"
+import { useIsMobile, useIsTablet } from "@/hooks/use-breakpoint"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +20,10 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  X,
+  FileText,
+  Table,
+  Code
 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -69,13 +73,13 @@ export interface ResponsiveTableProps<T> {
   selectable?: boolean
   onSelectionChange?: (selectedRows: T[]) => void
   uniqueKey?: keyof T
-  forceCardView?: boolean // Nueva propiedad para forzar vista de tarjetas
-  showFirstButton?: boolean // Controla si mostrar el botón de primera página
-  showLastButton?: boolean // Controla si mostrar el botón de última página
-  siblingCount?: number // Número de páginas hermanas a mostrar
+  forceCardView?: boolean
+  showFirstButton?: boolean
+  showLastButton?: boolean
+  siblingCount?: number
 }
 
-export function ResponsiveTable<T>({
+export function ResponsiveTable<T extends object>({
   data,
   columns,
   title,
@@ -97,15 +101,18 @@ export function ResponsiveTable<T>({
   selectable = false,
   onSelectionChange,
   uniqueKey,
-  forceCardView = false, // Nueva propiedad para forzar vista de tarjetas
+  forceCardView = false,
+  showFirstButton = true,
+  showLastButton = true,
+  siblingCount = 1,
 }: ResponsiveTableProps<T>) {
-  // Utilizar nuestro hook de breakpoint para detectar dispositivos
-  const { isMobile, isTablet } = useBreakpoint();
+  const isMobile = useIsMobile();
+  const isTablet = useIsTablet();
   
-  // Determinar automáticamente si mostrar vista de tarjetas
   const shouldUseCardView = useMemo(() => {
     return forceCardView || isMobile || (isTablet && cardView);
   }, [forceCardView, isMobile, isTablet, cardView]);
+  
   const [searchTerm, setSearchTerm] = useState("")
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null)
   const [filters, setFilters] = useState<Record<string, any>>({})
@@ -113,7 +120,6 @@ export function ResponsiveTable<T>({
   const [selectedRows, setSelectedRows] = useState<T[]>([])
   const [allSelected, setAllSelected] = useState(false)
 
-  // Función para ordenar datos
   const sortedData = useMemo(() => {
     if (!sortConfig) return [...data]
 
@@ -122,28 +128,28 @@ export function ResponsiveTable<T>({
       const bValue = b[sortConfig.key as keyof T]
 
       if (aValue === undefined || bValue === undefined) return 0
+      
+      const safeAValue = aValue as any;
+      const safeBValue = bValue as any;
 
-      if (aValue < bValue) {
+      if (safeAValue < safeBValue) {
         return sortConfig.direction === "asc" ? -1 : 1
       }
-      if (aValue > bValue) {
+      if (safeAValue > safeBValue) {
         return sortConfig.direction === "asc" ? 1 : -1
       }
       return 0
     })
   }, [data, sortConfig])
 
-  // Función para filtrar datos
   const filteredData = useMemo(() => {
     return sortedData.filter((row) => {
-      // Aplicar filtros
       for (const [key, value] of Object.entries(filters)) {
         if (value && row[key as keyof T] !== value) return false
       }
 
-      // Aplicar búsqueda
       if (searchTerm) {
-        const keys = searchKeys.length > 0 ? searchKeys : (Object.keys(row) as (keyof T)[])
+        const keys = searchKeys.length > 0 ? searchKeys : Object.keys(row) as (keyof T)[]
 
         return keys.some((key) => {
           const value = row[key]
@@ -156,7 +162,6 @@ export function ResponsiveTable<T>({
     })
   }, [sortedData, filters, searchTerm, searchKeys])
 
-  // Datos paginados
   const paginatedData = useMemo(() => {
     if (!pagination) return filteredData
 
@@ -164,12 +169,10 @@ export function ResponsiveTable<T>({
     return filteredData.slice(start, start + pageSize)
   }, [filteredData, pagination, currentPage, pageSize])
 
-  // Total de páginas
   const totalPages = useMemo(() => {
     return Math.ceil(filteredData.length / pageSize)
   }, [filteredData, pageSize])
 
-  // Función para manejar el ordenamiento
   const handleSort = useCallback(
     (key: string) => {
       let direction: "asc" | "desc" = "asc"
@@ -183,23 +186,20 @@ export function ResponsiveTable<T>({
     [sortConfig],
   )
 
-  // Función para manejar los filtros
   const handleFilter = useCallback((key: string, value: any) => {
     setFilters((prev) => ({
       ...prev,
       [key]: value === "all" ? null : value,
     }))
-    setCurrentPage(0) // Resetear a la primera página al filtrar
+    setCurrentPage(0) 
   }, [])
 
-  // Función para limpiar filtros
   const handleClearFilters = useCallback(() => {
     setFilters({})
     setSearchTerm("")
     setCurrentPage(0)
   }, [])
 
-  // Función para manejar la selección de filas
   const handleRowSelection = useCallback(
     (row: T, isSelected: boolean) => {
       setSelectedRows((prev) => {
@@ -217,7 +217,6 @@ export function ResponsiveTable<T>({
     [onSelectionChange, uniqueKey],
   )
 
-  // Función para manejar la selección de todas las filas
   const handleSelectAll = useCallback(
     (isSelected: boolean) => {
       if (isSelected) {
@@ -237,7 +236,6 @@ export function ResponsiveTable<T>({
     [paginatedData, onSelectionChange],
   )
 
-  // Verificar si una fila está seleccionada
   const isRowSelected = useCallback(
     (row: T) => {
       if (uniqueKey) {
@@ -248,7 +246,6 @@ export function ResponsiveTable<T>({
     [selectedRows, uniqueKey],
   )
 
-  // Renderizar esqueletos de carga
   const renderSkeletons = () => (
     <div className="space-y-2">
       {Array.from({ length: pageSize }).map((_, index) => (
@@ -264,7 +261,6 @@ export function ResponsiveTable<T>({
     </div>
   )
 
-  // Renderizar mensaje de no hay datos
   const renderEmptyState = () => (
     <div className="flex flex-col items-center justify-center py-12 text-center">
       <div className="rounded-full bg-muted p-3 mb-4">
@@ -284,7 +280,6 @@ export function ResponsiveTable<T>({
     </div>
   )
 
-  // Renderizar tarjeta de fila para vista móvil
   const renderMobileCard = (row: T, index: number) => {
     if (cardView) {
       return cardView(row)
@@ -310,12 +305,12 @@ export function ResponsiveTable<T>({
                   #{currentPage * pageSize + index + 1}
                 </Badge>
               )}
-              <CardTitle className="text-base">{columns[0] && row[columns[0].key as keyof T]}</CardTitle>
+              <CardTitle className="text-base">{columns[0] && String(row[columns[0].key as keyof T] ?? '')}</CardTitle>
               {columns[1] && (
                 <CardDescription>
                   {columns[1].render
                     ? columns[1].render(row[columns[1].key as keyof T], row)
-                    : row[columns[1].key as keyof T]}
+                    : String(row[columns[1].key as keyof T] ?? '')}
                 </CardDescription>
               )}
             </div>
@@ -328,7 +323,9 @@ export function ResponsiveTable<T>({
               <div key={colIndex} className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">{column.title}:</span>
                 <span>
-                  {column.render ? column.render(row[column.key as keyof T], row) : row[column.key as keyof T]}
+                  {column.render
+                    ? column.render(row[column.key as keyof T], row)
+                    : String(row[column.key as keyof T] ?? '')}
                 </span>
               </div>
             ))}
@@ -352,11 +349,71 @@ export function ResponsiveTable<T>({
 
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
               {searchable && (
+                <div className="relative w-full sm:w-[260px] lg:w-[320px]">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder={searchPlaceholder || "Buscar..."}
+                    className="pl-8"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm && (
+                    <X
+                      className="absolute right-2 top-2.5 h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground"
+                      onClick={() => setSearchTerm("")}
+                    />
+                  )}
+                </div>
+              )}
+              
+              {onRefresh && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-shrink-0"
+                  onClick={onRefresh}
+                >
+                  <span className="sr-only">Actualizar</span>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              )}
+              
+              {onExport && (
+                <div className="flex-shrink-0">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Download className="mr-2 h-4 w-4" />
+                        Exportar
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => onExport("csv")}>
+                        <FileText className="mr-2 h-4 w-4" /> CSV
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onExport("excel")}>
+                        <Table className="mr-2 h-4 w-4" /> Excel
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onExport("json")}>
+                        <Code className="mr-2 h-4 w-4" /> JSON
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+      )}
+
 
       <CardContent>
-        <LoadingState isLoading={isLoading} showSpinnerOnly={false}>
-          {/* Vista de escritorio */}
-          <div className="hidden md:block rounded-md border overflow-hidden">
+        {isLoading ? (
+          renderSkeletons()
+        ) : (
+          <>
+            {/* Vista de escritorio */}
+            <div className="hidden md:block rounded-md border overflow-hidden">
             {filteredData.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -447,7 +504,7 @@ export function ResponsiveTable<T>({
                             >
                               {column.render
                                 ? column.render(row[column.key as keyof T], row)
-                                : row[column.key as keyof T]}
+                                : String(row[column.key as keyof T] ?? '')}
                             </td>
                           ))}
                           {actions && <td className="p-2 text-right">{actions(row)}</td>}
@@ -466,7 +523,9 @@ export function ResponsiveTable<T>({
 
           {/* Vista móvil */}
           <div className="md:hidden">
-            {isLoading ? (
+            {filteredData.length > 0 ? (
+              paginatedData.map((row, index) => renderMobileCard(row, index))
+            ) : isLoading ? (
               <div className="space-y-4">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Card key={i} className="mb-4">
@@ -493,7 +552,8 @@ export function ResponsiveTable<T>({
               renderEmptyState()
             )}
           </div>
-        </LoadingState>
+          </>
+        )}
       </CardContent>
 
       {pagination && filteredData.length > 0 && (
@@ -541,5 +601,5 @@ export function ResponsiveTable<T>({
         </CardFooter>
       )}
     </Card>
-  )
+  );
 }

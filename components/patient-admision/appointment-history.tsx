@@ -1,6 +1,6 @@
 // appointment-history.tsx - Actualizado para usar React Query
 import { useMemo, memo } from "react";
-import { useAppointments } from "@/lib/hooks/use-appointments";
+import { useAppointments } from "@/hooks/use-appointments";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";

@@ -23,8 +23,8 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { usePatients } from "@/lib/hooks/use-patients";
-import { useAppointments } from "@/lib/hooks/use-appointments";
+import { usePatients } from "@/hooks/use-patients";
+import { useAppointments } from "@/hooks/use-appointments";
 import type { PatientData, DiagnosisType, AppointmentData } from "@/app/dashboard/data-model";
 import { PatientStatusEnum } from "@/app/dashboard/data-model";
 import { generateSurveyId } from "@/lib/form-utils";
@@ -45,6 +45,10 @@ import { NewPatientForm } from "@/components/patient-admision/new-patient-form";
 import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog";
 import PatientDetailsDialog from "./patient-details-dialog";
 import { ScheduleAppointmentDialog } from "./schedule-appointment-dialog";
+import { StatsCard } from "@/components/ui/stats-card";
+import { SimplePagination } from "@/components/ui/simple-pagination";
+import { useProcessedPatients } from "@/hooks/use-processed-patients";
+import { usePatientStats } from "@/hooks/use-patient-stats";
 
 export interface EnrichedPatientData extends PatientData {
   nombreCompleto: string;
@@ -82,67 +86,7 @@ const STATUS_CONFIG = {
   }
 } as const;
 
-// Componente StatsCard simplificado
-const StatsCard = ({ 
-  icon, 
-  label, 
-  value, 
-  trend, 
-  color = "blue" 
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number | string;
-  trend?: number;
-  color?: "blue" | "purple" | "amber" | "emerald" | "red" | "slate";
-}) => {
-  const colorClasses = {
-    blue: "bg-blue-100 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
-    purple: "bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400", 
-    amber: "bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400",
-    emerald: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
-    red: "bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400",
-    slate: "bg-slate-100 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400"
-  };
-
-  const gradientClasses = {
-    blue: "from-blue-400 to-blue-600 dark:from-blue-500/70 dark:to-blue-700/70",
-    purple: "from-purple-400 to-purple-600 dark:from-purple-500/70 dark:to-purple-700/70",
-    amber: "from-amber-400 to-amber-600 dark:from-amber-500/70 dark:to-amber-700/70", 
-    emerald: "from-emerald-400 to-emerald-600 dark:from-emerald-500/70 dark:to-emerald-700/70",
-    red: "from-red-400 to-red-600 dark:from-red-500/70 dark:to-red-700/70",
-    slate: "from-slate-400 to-slate-600 dark:from-slate-500/70 dark:to-slate-700/70"
-  };
-
-  return (
-    <Card className="relative overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-slate-900">
-      <div className="p-3 sm:p-4">
-        <div className="flex items-center justify-between">
-          <div className={cn(
-            "h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
-            colorClasses[color]
-          )}>
-            {icon}
-          </div>
-          {trend !== undefined && (
-            <div className={cn(
-              "flex items-center gap-1 text-xs font-medium",
-              trend >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
-            )}>
-              <TrendingUp className={cn("h-3 w-3", trend < 0 && "transform rotate-180")} />
-              {Math.abs(trend)}%
-            </div>
-          )}
-        </div>
-        <div className="mt-2 sm:mt-3">
-          <p className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 truncate">{value}</p>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 truncate">{label}</p>
-        </div>
-      </div>
-      <div className={cn("absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r", gradientClasses[color])} />
-    </Card>
-  );
-};
+// El componente StatsCard ahora se importa desde @/components/ui/stats-card
 
 // Loading skeleton simplificado
 const LoadingSkeleton = () => (
@@ -162,96 +106,7 @@ const LoadingSkeleton = () => (
   </div>
 );
 
-// Paginación simple
-const SimplePagination = ({ 
-  currentPage, 
-  totalPages, 
-  onPageChange,
-  loading 
-}: {
-  currentPage: number;
-  totalPages: number; 
-  onPageChange: (page: number) => void;
-  loading: boolean;
-}) => {
-  if (totalPages <= 1) return null;
-
-  const getVisiblePages = () => {
-    const delta = 2;
-    const range = [];
-    const rangeWithDots = [];
-
-    for (let i = Math.max(2, currentPage - delta); 
-         i <= Math.min(totalPages - 1, currentPage + delta); 
-         i++) {
-      range.push(i);
-    }
-
-    if (currentPage - delta > 2) {
-      rangeWithDots.push(1, '...');
-    } else {
-      rangeWithDots.push(1);
-    }
-
-    rangeWithDots.push(...range);
-
-    if (currentPage + delta < totalPages - 1) {
-      rangeWithDots.push('...', totalPages);
-    } else if (totalPages > 1) {
-      rangeWithDots.push(totalPages);
-    }
-
-    return rangeWithDots;
-  };
-
-  return (
-    <div className="flex items-center justify-center gap-1 sm:gap-2">
-      <Button 
-        variant="outline" 
-        size="sm"
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage === 1 || loading}
-        className="h-8 w-8 sm:w-auto sm:px-3"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        <span className="hidden sm:inline ml-1">Anterior</span>
-      </Button>
-      
-      <div className="flex items-center gap-1">
-        {getVisiblePages().map((page, idx) => 
-          page === '...' ? (
-            <span key={`dots-${idx}`} className="px-2 text-slate-400">...</span>
-          ) : (
-            <Button
-              key={page}
-              variant={page === currentPage ? "default" : "outline"}
-              size="sm"
-              onClick={() => onPageChange(page as number)}
-              disabled={loading}
-              className={cn(
-                "h-8 w-8",
-                page === currentPage && "bg-blue-600 hover:bg-blue-700 text-white"
-              )}
-            >
-              {page}
-            </Button>
-          )
-        )}
-      </div>
-
-      <Button 
-        variant="outline" 
-        size="sm"
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage === totalPages || loading}
-        className="h-8 w-8 sm:w-auto sm:px-3"
-      >
-        <span className="hidden sm:inline mr-1">Siguiente</span>
-        <ChevronRight className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-};
+// El componente SimplePagination ahora se importa desde @/components/ui/simple-pagination
 
 export function PatientManagement() {
   const [currentPage, setCurrentPage] = useState(1);
@@ -291,94 +146,24 @@ export function PatientManagement() {
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [patientForAppointment, setPatientForAppointment] = useState<PatientData | null>(null);
 
-  // Datos enriquecidos - simplificado
-  const enrichedPatients = useMemo((): EnrichedPatientData[] => {
-    if (!patients) return [];
-    
-    // Crear un mapa de citas por patientId para búsqueda rápida
-    const appointmentsByPatientId = new Map<string, AppointmentData[]>();
-    if (appointments) {
-      for (const app of appointments) {
-        if (!appointmentsByPatientId.has(app.patientId)) {
-          appointmentsByPatientId.set(app.patientId, []);
-        }
-        appointmentsByPatientId.get(app.patientId)!.push(app);
-      }
-    }
+  // Usar el hook personalizado para procesamiento de datos
+  const {
+    enrichedPatients,
+    filteredAndEnrichedPatients, 
+    statusStats
+  } = useProcessedPatients(
+    patients,
+    appointments,
+    searchTerm,
+    statusFilter
+  );
 
-    return patients.map((patient: PatientData) => {
-      const patientAppointments = appointmentsByPatientId.get(patient.id) || [];
-      patientAppointments.sort((a, b) => new Date(a.fechaConsulta).getTime() - new Date(b.fechaConsulta).getTime());
-
-      const nextAppointment = patientAppointments.find(
-        appointment => new Date(appointment.fechaConsulta) >= new Date()
-      );
-
-      return {
-        ...patient,
-        nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
-        fecha_proxima_cita_iso: nextAppointment?.fechaConsulta.toString(),
-        encuesta_completada: !!patient.encuesta?.id,
-        displayDiagnostico: patient.diagnostico_principal || "Sin diagnóstico",
-      };
-    });
-  }, [patients, appointments]);
-
-  // Filtrado (aplicado a los datos de la página actual del store)
-  const { filteredAndEnrichedPatients, statusStats } = useMemo(() => {
-    let currentViewPatients = enrichedPatients; // enrichedPatients se basa en 'patients' del store (ya paginados)
-    const term = searchTerm.toLowerCase();
-
-    // Filtrar por búsqueda (sobre la página actual)
-    if (term) {
-      currentViewPatients = currentViewPatients.filter(p =>
-        p.nombreCompleto.toLowerCase().includes(term) ||
-        (p.telefono && p.telefono.toLowerCase().includes(term)) ||
-        (p.email && p.email.toLowerCase().includes(term)) ||
-        p.displayDiagnostico.toLowerCase().includes(term) ||
-        p.id.toLowerCase().includes(term)
-      );
-    }
-
-    // Filtrar por estado (sobre la página actual)
-    if (statusFilter !== "all") {
-      currentViewPatients = currentViewPatients.filter((p) => p.estado_paciente === statusFilter);
-    }
-
-    // Calcular estadísticas (basadas en los datos de la página actual)
-    // Para estadísticas globales, necesitaríamos otra estrategia o un endpoint de API
-    const stats = enrichedPatients.reduce((acc, patient) => {
-      if (patient.estado_paciente && patient.estado_paciente in STATUS_CONFIG) {
-        acc[patient.estado_paciente]++;
-      }
-      return acc;
-    }, {
-      [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: 0,
-      [PatientStatusEnum.CONSULTADO]: 0,
-      [PatientStatusEnum.EN_SEGUIMIENTO]: 0,
-      [PatientStatusEnum.OPERADO]: 0,
-      [PatientStatusEnum.NO_OPERADO]: 0,
-      [PatientStatusEnum.INDECISO]: 0,
-    });
-
-    return {
-      filteredAndEnrichedPatients: currentViewPatients,
-      statusStats: { ...stats, all: enrichedPatients.length } // 'all' aquí se refiere al total en la página actual
-    };
-  }, [enrichedPatients, searchTerm, statusFilter]);
-
-  // Estadísticas principales
-  const mainStats = useMemo(() => {
-    const totalSurveys = enrichedPatients.filter(p => p.encuesta_completada).length;
-    return {
-      totalPatients: enrichedPatients.length,
-      surveyCompletionRate: enrichedPatients.length > 0 
-        ? Math.round((totalSurveys / enrichedPatients.length) * 100) 
-        : 0,
-      pendingConsults: statusStats[PatientStatusEnum.PENDIENTE_DE_CONSULTA] || 0,
-      operatedPatients: statusStats[PatientStatusEnum.OPERADO] || 0,
-    };
-  }, [enrichedPatients, statusStats]);
+  // Estadísticas principales desde la API
+  const { 
+    data: mainStats,
+    isLoading: isLoadingStats,
+    error: statsError
+  } = usePatientStats();
 
   // Handlers simplificados
   const handlePageChange = (page: number) => {
@@ -503,32 +288,32 @@ export function PatientManagement() {
               Nuevo Paciente
             </Button>
           </div>
-          
+
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6">
             <StatsCard 
               icon={<Users className="h-4 w-4 sm:h-5 sm:w-5" />} 
               label="Total Pacientes" 
-              value={mainStats.totalPatients} 
+              value={isLoadingStats ? "..." : mainStats?.totalPatients ?? 0} 
               color="blue" 
             />
             <StatsCard 
               icon={<FileText className="h-4 w-4 sm:h-5 sm:w-5" />} 
               label="Encuestas Comp." 
-              value={`${mainStats.surveyCompletionRate}%`} 
-              trend={mainStats.surveyCompletionRate > 70 ? 5 : -2}
+              value={isLoadingStats ? "..." : `${mainStats?.surveyCompletionRate ?? 0}%`} 
+              trend={mainStats?.surveyCompletionRate && mainStats.surveyCompletionRate > 70 ? 5 : -2}
               color="purple" 
             />
             <StatsCard 
               icon={<Calendar className="h-4 w-4 sm:h-5 sm:w-5" />} 
               label="Pend. Consulta" 
-              value={mainStats.pendingConsults} 
+              value={isLoadingStats ? "..." : mainStats?.pendingConsults ?? 0} 
               color="amber" 
             />
             <StatsCard 
               icon={<Activity className="h-4 w-4 sm:h-5 sm:w-5" />} 
               label="Pac. Operados" 
-              value={mainStats.operatedPatients} 
+              value={isLoadingStats ? "..." : mainStats?.operatedPatients ?? 0} 
               trend={2}
               color="emerald" 
             />

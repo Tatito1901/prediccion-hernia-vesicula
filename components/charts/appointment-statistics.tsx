@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, isSameDay } from "date-fns"
 import { es } from "date-fns/locale/es"
 import { Button } from "@/components/ui/button"
-import { useAppointments } from "@/lib/hooks/use-appointments";
+import { useAppointments } from "@/hooks/use-appointments";
 import type { AppointmentData } from "@/app/dashboard/data-model"
 import { AppointmentStatusEnum, type AppointmentStatus } from "@/app/dashboard/data-model"
 import { Badge } from "@/components/ui/badge"

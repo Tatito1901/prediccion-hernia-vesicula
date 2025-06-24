@@ -1,7 +1,7 @@
 // use-patient-admission-flow.ts - Versión optimizada para rendimiento
 import { useState, useEffect, useMemo } from 'react'
 
-import { useAppointments } from '@/lib/hooks/use-appointments'
+import { useAppointments } from '@/hooks/use-appointments'
 import type { AppointmentData } from '@/app/dashboard/data-model'
 
 // Tipos simplificados

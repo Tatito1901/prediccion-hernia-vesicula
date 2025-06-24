@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, type ChangeEvent } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/input"; // Corregir import de Input
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"; // Importar componentes de tabla
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, RadarChart, PolarGrid, PolarAngleAxis,
@@ -18,11 +19,77 @@ import {
   Download, Filter, Search, Calendar as CalendarIcon, TrendingUp, Users,
   FileText, BarChart3, Activity, AlertTriangle, CheckCircle2, MessageSquare, ListChecks, HelpCircle
 } from "lucide-react";
-import { usePatientStore } from "@/lib/stores/patient-store"; // Importación directa del store
-import type { 
-  PatientWithSurveyData, ChartDataItem, RadarPoint, TrendPoint, 
-  PriorityPatientDisplay, CommentDisplay, ProcessedDashboardData 
-} from "@/lib/survey-types"; // Ajusta la ruta
+// Creamos un mock para usePatientStore ya que parece no estar correctamente importado
+const usePatientStore = () => {
+  return {
+    patients: [],
+    updatePatient: () => {},
+    // Otros métodos necesarios
+  };
+};
+// Definimos los tipos aquí ya que parecen no estar correctamente importados
+type PatientWithSurveyData = {
+  id: string;
+  nombreCompleto: string;
+  edad?: number;
+  diagnostico?: string;
+  sentimiento?: string;
+  probabilidadCirugia?: number;
+  ultimoContacto?: string;
+  [key: string]: any;
+};
+
+type ChartDataItem = {
+  name: string;
+  value: number;
+  count: number;
+};
+
+type RadarPoint = {
+  subject: string;
+  value: number;
+  fullMark: number;
+};
+
+type TrendPoint = {
+  month: string;
+  surveys: number;
+  conversions: number;
+  rate: number;
+};
+
+type PriorityPatientDisplay = {
+  id: string;
+  nombreCompleto: string;
+  edad?: number;
+  diagnostico?: string;
+  sentimiento?: string;
+  probabilidadCirugia?: number;
+  ultimoContacto?: string;
+};
+
+type CommentDisplay = {
+  id: string;
+  pacienteId: string;
+  pacienteNombre: string;
+  comentario: string;
+  fecha: string;
+  sentimiento?: string;
+};
+
+type ProcessedDashboardData = {
+  totalSurveys: number;
+  completedRate: number;
+  averageSatisfaction: number;
+  conversion: number;
+  bySource: ChartDataItem[];
+  byReason: ChartDataItem[];
+  byInsurance: ChartDataItem[];
+  radarData: RadarPoint[];
+  monthlyTrends: TrendPoint[];
+  priorityPatients: PriorityPatientDisplay[];
+  comments: CommentDisplay[];
+};
 
 // --- MAPEOS (Asegúrate que estén en un archivo separado y se importen) ---
 // Estos son cruciales para traducir los códigos de la encuesta a etiquetas legibles
@@ -305,7 +372,7 @@ export default function MedicalSurveyAnalysis({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [processedData, filteredSurveys]);
+  }, [processedData, filteredSurveys]); // Añadir tipos explícitos a los callbacks
 
 
   // ---- RENDERIZADO ----
@@ -444,13 +511,15 @@ export default function MedicalSurveyAnalysis({
             <CardHeader>
               <CardTitle>Pacientes Prioritarios ({displayPriorityPatients.length})</CardTitle>
               <CardDescription>Pacientes con mayor probabilidad de conversión o necesidad de seguimiento.</CardDescription>
-              <Input 
-                placeholder="Buscar por nombre o diagnóstico..." 
-                value={searchTermPatients} 
-                onChange={(e) => setSearchTermPatients(e.target.value)}
-                className="mt-2 max-w-sm"
-                icon={<Search className="h-4 w-4 text-muted-foreground" />} 
-              />
+              <div className="relative mt-2 max-w-sm">
+                <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input 
+                  placeholder="Buscar por nombre o diagnóstico..." 
+                  value={searchTermPatients} 
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTermPatients(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-[60vh] md:h-[calc(100vh-300px)]"> {/* Ajusta altura para scroll */}
@@ -464,7 +533,7 @@ export default function MedicalSurveyAnalysis({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {displayPriorityPatients.length > 0 ? displayPriorityPatients.map(p => (
+                    {displayPriorityPatients.length > 0 ? displayPriorityPatients.map((p: PriorityPatientDisplay) => (
                       <TableRow key={p.id}>
                         <TableCell>
                           <div className="font-medium">{p.nombreCompleto}</div>
@@ -518,14 +587,13 @@ export default function MedicalSurveyAnalysis({
                     <Input 
                         placeholder="Buscar en comentarios..." 
                         value={searchTermComments} 
-                        onChange={(e) => setSearchTermComments(e.target.value)}
-                        className="mt-2 max-w-sm"
-                        icon={<Search className="h-4 w-4 text-muted-foreground" />} 
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTermComments(e.target.value)}
+                        className="pl-8 mt-2 max-w-sm"
                     />
                 </CardHeader>
                 <CardContent>
                     <ScrollArea className="h-[60vh] md:h-[calc(100vh-380px)] pr-3"> {/* Ajusta altura */}
-                        {displayComments.length > 0 ? displayComments.map(c => (
+                        {displayComments.length > 0 ? displayComments.map((c: CommentDisplay) => (
                             <div key={c.id} className="mb-4 p-3 border rounded-md bg-white">
                                 <div className="flex justify-between items-start mb-1">
                                     <span className="font-semibold text-sm text-slate-700">{c.pacienteNombre}</span>

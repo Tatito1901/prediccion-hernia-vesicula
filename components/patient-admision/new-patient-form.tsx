@@ -49,8 +49,8 @@ import {
   AppointmentStatusEnum,
   type TimeString
 } from "@/app/dashboard/data-model"
-import { useCreatePatient } from "@/lib/hooks/use-patients";
-import { useAppointments, useCreateAppointment } from "@/lib/hooks/use-appointments";
+import { useCreatePatient } from "@/hooks/use-patients";
+import { useAppointments, useCreateAppointment } from "@/hooks/use-appointments";
 
 // Esquema de validación
 const FORM_SCHEMA = z.object({

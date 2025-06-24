@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { FileBarChart, PieChartIcon, ActivitySquare, TrendingUp, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useIsMobile, useCurrentBreakpoint } from "@/hooks/use-breakpoint"
-import { usePatients } from "@/lib/hooks/use-patients";
+import { usePatients } from "@/hooks/use-patients";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PatientData, ChartData, DiagnosticInsight } from "@/components/charts/chart-diagnostic";
 

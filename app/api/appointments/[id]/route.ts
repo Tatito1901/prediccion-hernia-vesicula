@@ -2,6 +2,52 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 
+type RouteParams = {
+  params: {
+    id: string;
+  };
+};
+
+/**
+ * Obtener una cita específica por su ID.
+ */
+export async function GET(request: Request, { params }: RouteParams) {
+  const supabase = await createClient();
+  const { id } = params;
+
+  if (!id) {
+    return NextResponse.json({ message: 'El ID de la cita es requerido.' }, { status: 400 });
+  }
+
+  try {
+    const { data: appointment, error } = await supabase
+      .from('appointments')
+      .select(`
+        *,
+        patients (id, nombre, apellidos, telefono),
+        doctor:profiles!appointments_doctor_id_fkey(id, full_name)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return NextResponse.json({ message: 'Cita no encontrada.' }, { status: 404 });
+      }
+      throw error;
+    }
+
+    if (!appointment) {
+      return NextResponse.json({ message: 'Cita no encontrada.' }, { status: 404 });
+    }
+
+    return NextResponse.json(appointment);
+  } catch (error: any) {
+    console.error('Error en GET /api/appointments/[id]:', error);
+    return NextResponse.json({ message: 'Error al obtener la cita.', error: error.message }, { status: 500 });
+  }
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -103,5 +149,33 @@ export async function PUT(
       stack: error.stack,
       details: JSON.stringify(error)
     }, { status: 500 });
+  }
+}
+
+/**
+ * Eliminar una cita específica por su ID.
+ */
+export async function DELETE(request: Request, { params }: RouteParams) {
+  const supabase = await createClient();
+  const { id } = params;
+
+  if (!id) {
+    return NextResponse.json({ message: 'El ID de la cita es requerido.' }, { status: 400 });
+  }
+
+  try {
+    const { error } = await supabase
+      .from('appointments')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json({ message: 'Cita eliminada exitosamente.' }, { status: 200 });
+  } catch (error: any) {
+    console.error('Error en DELETE /api/appointments/[id]:', error);
+    return NextResponse.json({ message: 'Error al eliminar la cita.', error: error.message }, { status: 500 });
   }
 }

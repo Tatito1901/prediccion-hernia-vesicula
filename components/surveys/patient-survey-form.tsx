@@ -38,7 +38,7 @@ import { Separator } from "@/components/ui/separator"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 // Importar directamente del store de Zustand
-import { usePatientStore } from "@/lib/stores/patient-store"
+
 
 // Ya no necesitamos esta implementación personalizada porque estamos usando el hook centralizado
 // de @/hooks/use-breakpoint

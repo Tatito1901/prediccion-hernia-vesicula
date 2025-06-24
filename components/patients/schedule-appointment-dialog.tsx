@@ -13,7 +13,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useCreateAppointment } from "@/lib/hooks/use-appointments";
+import { useCreateAppointment } from "@/hooks/use-appointments";
 import type { PatientData } from "@/app/dashboard/data-model";
 import { AppointmentStatusEnum } from "@/app/dashboard/data-model";
 import { toast } from "sonner";
