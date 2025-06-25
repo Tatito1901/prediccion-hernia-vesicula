@@ -36,14 +36,14 @@ const diagnosticoMap: Record<string, string> = {
 };
 
 // Utility Functions
-const formatDate = (dateString?: string): string => {
+const formatDate = (dateString?: string | null): string => {
   if (!dateString) return "N/A";
   try {
     return new Date(dateString).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
   } catch { return "Fecha inválida"; }
 };
 
-const formatPercent = (value?: number, decimals = 0): string => {
+const formatPercent = (value?: number | null, decimals = 0): string => {
   if (value === undefined || value === null || isNaN(value)) return "0%";
   return `${(value * 100).toFixed(decimals)}%`;
 };
@@ -116,7 +116,7 @@ export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de E
   const [filterDate, setFilterDate] = useState("todo");
   const [filterDiagnosis, setFilterDiagnosis] = useState("todos");
   const [filterAge, setFilterAge] = useState("todos");
-  const [filterSeverity, setFilterSeverity] = useState("todas");
+
   const [searchTermPatients, setSearchTermPatients] = useState("");
 
   const filteredData = useMemo(() => {
@@ -131,14 +131,14 @@ export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de E
       else if (filterDate === "ultimo-anio") startDate.setFullYear(now.getFullYear() - 1);
       
       surveys = surveys.filter((s: Patient) => {
-        const surveyDateStr = s.fechaEncuesta || s.fechaActualizacion;
+        const surveyDateStr = s.updated_at;
         if (!surveyDateStr) return false;
         try { return new Date(surveyDateStr) >= startDate; } catch { return false; }
       });
     }
 
     if (filterDiagnosis !== "todos") {
-      surveys = surveys.filter(s => s.diagnostico?.toLowerCase().replace(/\s+/g, "-") === filterDiagnosis);
+            surveys = surveys.filter((s: Patient) => s.diagnostico_principal?.toLowerCase().replace(/\s+/g, "-") === filterDiagnosis);
     }
     
     if (filterAge !== "todos") {
@@ -152,42 +152,22 @@ export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de E
       });
     }
 
-    if (filterSeverity !== "todas") {
-      surveys = surveys.filter(s => s.severidadSintomasActuales === filterSeverity);
-    }
-
     return surveys;
-  }, [data, filterDate, filterDiagnosis, filterAge, filterSeverity]);
+  }, [data, filterDate, filterDiagnosis, filterAge]);
 
   const calculatedMetrics = useMemo(() => {
     const totalPatients = filteredData.length;
-    const completedSurveys = filteredData.filter((s: Patient) => s.estado === 'completed' || s.estado === 'completada').length;
-    const withProbCirugia = filteredData.filter(p => typeof p.probabilidadCirugia === 'number');
+    const completedSurveys = totalPatients; // Assuming usePatients hook already filters by a 'completed' status
+        const withProbCirugia = filteredData.filter((p: Patient) => typeof p.probabilidad_cirugia === 'number');
     const conversionRate = withProbCirugia.length > 0
-      ? withProbCirugia.reduce((sum, p) => sum + (p.probabilidadCirugia || 0), 0) / withProbCirugia.length
+      ? withProbCirugia.reduce((sum: number, p: Patient) => sum + (p.probabilidad_cirugia || 0), 0) / withProbCirugia.length
       : 0;
-
-    const avgPainLevel = filteredData
-      .filter((p: Patient) => p.nivel_dolor !== undefined && p.nivel_dolor !== null)
-      .reduce((sum: number, p: Patient) => sum + (parseInt(p.nivel_dolor || '0', 10) || 0), 0) / 
-      (filteredData.filter((p: Patient) => p.nivel_dolor !== undefined && p.nivel_dolor !== null).length || 1);
-
-    const severidadSintomasNum = filteredData
-        .map((s: Patient) => s.severidadSintomasActuales ? parseInt(s.severidadSintomasActuales, 10) : undefined)
-        .filter((v: number | undefined): v is number => typeof v === 'number' && !isNaN(v));
-
-    const averagePainIntensity = severidadSintomasNum.length > 0 
-        ? severidadSintomasNum.reduce((a: number, b: number) => a + b, 0) / severidadSintomasNum.length 
-        : undefined;
 
     return {
       totalPatients,
       completedSurveys,
       conversionRate,
-      avgPainLevel,
-      averagePainIntensity,
-      diagnosisDistribution: aggregateData(filteredData, 'diagnostico', diagnosticoMap),
-      symptomSeverityDistribution: aggregateData(filteredData, 'severidadSintomasActuales', severidadSintomasMap),
+      diagnosisDistribution: aggregateData(filteredData, 'diagnostico_principal', diagnosticoMap),
     };
   }, [filteredData]);
 
@@ -195,20 +175,20 @@ export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de E
     if (!searchTermPatients.trim()) return filteredData;
     
     return filteredData.filter((s: Patient) => 
-      s.paciente?.toLowerCase().includes(searchTermPatients.toLowerCase()) ||
+      (s.nombre + ' ' + s.apellidos).toLowerCase().includes(searchTermPatients.toLowerCase()) ||
       s.diagnostico_principal?.toLowerCase().includes(searchTermPatients.toLowerCase())
     );
   }, [filteredData, searchTermPatients]);
 
   const displayPriorityPatients = useMemo(() => {
-    const sorted = [...surveySearchResults].sort((a, b) => (b.probabilidadCirugia || 0) - (a.probabilidadCirugia || 0));
-    return sorted.map(p => ({
+    const sorted = [...surveySearchResults].sort((a, b) => (b.probabilidad_cirugia || 0) - (a.probabilidad_cirugia || 0));
+        return sorted.map((p: Patient) => ({
         id: p.id,
-        nombreCompleto: p.nombreCompleto || 'Sin Nombre',
+        nombreCompleto: `${p.nombre} ${p.apellidos}`,
         edad: p.edad,
-        diagnostico: p.diagnostico ? (diagnosticoMap[p.diagnostico] || p.diagnostico) : 'N/A',
-        probabilidadCirugia: p.probabilidadCirugia,
-        ultimoContacto: formatDate(p.fechaActualizacion),
+        diagnostico: p.diagnostico_principal || 'N/A',
+        probabilidadCirugia: p.probabilidad_cirugia,
+        ultimoContacto: formatDate(p.updated_at),
     }));
   }, [surveySearchResults]);
 
@@ -269,15 +249,7 @@ export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de E
                 <SelectItem value="60+">60+ años</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={filterSeverity} onValueChange={setFilterSeverity}>
-            <SelectTrigger><Activity className="mr-2 h-4 w-4 opacity-70" /><SelectValue placeholder="Severidad" /></SelectTrigger>
-            <SelectContent>
-                <SelectItem value="todas">Toda Severidad</SelectItem>
-                {Object.entries(severidadSintomasMap).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>{label}</SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+
         </CardContent>
       </Card>
 
@@ -293,16 +265,14 @@ export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de E
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <MetricCard title="Total Encuestas" value={calculatedMetrics.totalPatients.toString()} icon={Users} />
             <MetricCard title="Tasa Conversión (Prob.)" value={formatPercent(calculatedMetrics.conversionRate)} icon={TrendingUp} />
-            <MetricCard title="Dolor Promedio" value={`${calculatedMetrics.averagePainIntensity?.toFixed(1) || 'N/A'} / 5`} icon={Activity} />
+
             <MetricCard title="Prob. Cirugía (Media)" value={formatPercent(calculatedMetrics.conversionRate)} icon={CheckCircle2} />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ChartCard title="Distribución por Diagnóstico">
                 <ResponsivePieChart data={calculatedMetrics.diagnosisDistribution} />
             </ChartCard>
-            <ChartCard title="Severidad de Síntomas Reportada">
-                <ResponsivePieChart data={calculatedMetrics.symptomSeverityDistribution} />
-            </ChartCard>
+
           </div>
         </TabsContent>
 

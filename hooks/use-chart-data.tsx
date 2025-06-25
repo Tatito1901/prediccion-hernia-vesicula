@@ -1,5 +1,6 @@
 'use client';
 
+import type { Patient, Appointment, DiagnosisEnum, PatientStatus, AppointmentStatus } from '@/lib/types';
 import React, { useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -20,41 +21,20 @@ class ChartDataError extends Error {
     this.patients = patients;
   }
 }
-// Definiciones locales de tipos para eliminar dependencias externas
+
 type DateRangeOption = '7dias' | '30dias' | '90dias' | 'ytd' | 'todos';
 
-type PatientData = {
-  id: string;
-  paciente: string; // Equivalente a nombre
-  diagnostico?: any;
-  diagnostico_principal?: any;
-  fecha_registro?: any;
-  fecha_primera_consulta?: any;
-  edad?: any;
-  genero?: any;
+interface UseChartDataParams {
+  dateRange?: DateRangeOption;
+  patientId?: string;
+  doctorId?: string;
   estado?: string;
-  notas?: any;
-  telefono?: any;
-  email?: any;
-  [key: string]: any;
-};
+  refreshInterval?: number;
+}
 
-type DiagnosisData = {
-  // Puede ser diagnosis o tipo según la estructura real de datos
-  diagnosis?: string;
-  count?: number;
-  // Campos alternativos
-  tipo?: string;
-  cantidad?: number;
-  porcentaje?: number;
-  descripcion?: string;
-};
-
-type GeneralStats = {
-  // Campos opcionales para soportar ambas estructuras de datos
+interface GeneralStats {
   totalPatients?: number;
   attendedAppointments?: number;
-  // Campos alternativos
   total?: number;
   attendance?: number;
   cancellation?: number;
@@ -67,59 +47,6 @@ type GeneralStats = {
   period?: DateRangeOption;
   allStatusCounts?: Record<string, number>;
   [key: string]: any;
-};
-
-type AppointmentStatusEnum = string;
-type PatientStatusEnum = string;
-
-type Patient = {
-  id: string;
-  nombre: string;
-  [key: string]: any;
-};
-
-type Appointment = {
-  id: string;
-  patientId: string;
-  [key: string]: any;
-};
-
-type ExtendedPatient = Patient & {
-  appointments?: Appointment[];
-};
-
-type AppointmentStatus = string;
-
-interface ChartDataResponse {
-  appointments: Appointment[];
-  patients: Patient[];
-  // Add any other data types returned by your API
-}
-
-interface UseChartDataParams {
-  dateRange?: DateRangeOption;
-  patientId?: string;
-  doctorId?: string;
-  estado?: string;
-  refreshInterval?: number;
-}
-
-const getChartData = async ({
-  dateRange,
-  patientId,
-  doctorId,
-  estado,
-}: UseChartDataParams): Promise<ChartDataResponse> => {
-  const startDate = dateRange === 'todos' ? '' : calculateDateRange(dateRange).startDate;
-  const endDate = calculateDateRange(dateRange).endDate;
-}
-
-interface ChartData {
-  transformedPatients: PatientData[];
-  diagnosisData: DiagnosisData[];
-  generalStats: GeneralStats;
-  weekdayDistribution: WeekdayData[];
-  clinicMetrics: ClinicMetrics;
 }
 
 interface WeekdayData {
@@ -140,6 +67,57 @@ interface ClinicMetrics {
   fuentePrincipalPacientes: string;
   diagnosticosMasComunes: Array<{ name: string; count: number }>;
   lastUpdated: string;
+}
+
+interface ChartDataResponse {
+  appointments: Appointment[];
+  patients: Patient[];
+}
+
+interface ChartData {
+  transformedPatients: TransformedPatientData[];
+  diagnosisData: TransformedDiagnosisData[];
+  generalStats: GeneralStats;
+  weekdayDistribution: WeekdayData[];
+  clinicMetrics: ClinicMetrics;
+}
+
+interface TransformedPatientData {
+  id: string;
+  paciente: string;
+  diagnostico?: string;
+  diagnostico_principal?: string;
+  fecha_registro?: string;
+  fecha_primera_consulta?: string;
+  edad?: number;
+  genero?: string;
+  estado?: PatientStatus;
+  notas?: string;
+  telefono?: string;
+  email?: string;
+}
+
+interface TransformedDiagnosisData {
+  diagnosis?: string;
+  count?: number;
+  tipo?: string;
+  cantidad?: number;
+  porcentaje?: number;
+  descripcion?: string;
+}
+
+const getChartData = async ({
+  dateRange,
+  patientId,
+  doctorId,
+  estado,
+}: UseChartDataParams): Promise<ChartDataResponse> => {
+  const startDate = dateRange === 'todos' ? '' : calculateDateRange(dateRange || '30dias').startDate;
+  const endDate = calculateDateRange(dateRange || '30dias').endDate;
+
+  // This function is intended to return a ChartDataResponse, but the implementation is missing.
+  // For now, returning a placeholder to satisfy the type.
+  return { appointments: [], patients: [] };
 }
 
 // Helper para validar fechas ISO
@@ -291,7 +269,7 @@ export function useChartData({
           `/api/appointments${appointmentsParams ? `?${appointmentsParams}` : ''}`, 
           'Error al obtener citas'
         ),
-        fetchData<{ data: ExtendedPatient[], pagination: unknown }>(`/api/patients${patientsParams ? `?${patientsParams}` : ''}`, 'Error al obtener pacientes')
+        fetchData<{ data: Patient[], pagination: unknown }>(`/api/patients${patientsParams ? `?${patientsParams}` : ''}`, 'Error al obtener pacientes')
       ]);
 
       const safeAppointments = Array.isArray(appointmentsData) ? appointmentsData : [];
@@ -348,30 +326,26 @@ export function useChartData({
   }, [validRefreshInterval, queryClient, appointmentsQueryKey, patientsQueryKey]);
 
   // Transformar pacientes con validación
-  const transformedPatients: PatientData[] = useMemo(() => {
+  const transformedPatients: TransformedPatientData[] = useMemo(() => {
     return patients.map(p => ({
       id: p.id,
+      paciente: `${p.nombre} ${p.apellidos}`.trim(),
       diagnostico: p.diagnostico_principal || 'Sin diagnóstico',
       diagnostico_principal: p.diagnostico_principal || 'Sin diagnóstico',
       fecha_registro: p.fecha_registro || '',
-      // Convertimos null a undefined para compatibilidad con PatientData
       fecha_primera_consulta: p.fecha_primera_consulta || undefined,
       edad: p.edad || 0,
-      genero: undefined, // El campo genero no existe en el nuevo modelo
-      paciente: `${p.nombre} ${p.apellidos}`.trim(),
-      // Usamos estado_paciente como equivalente a estado
-      estado: (p.estado_paciente as unknown) as AppointmentStatus, // Cast para compatibilidad
+      genero: undefined,
+      estado: p.estado_paciente as PatientStatus,
       notas: p.comentarios_registro || '',
       telefono: p.telefono || '',
       email: p.email || '',
     }));
   }, [patients]);
 
-  // Calcular datos de diagnósticos
-  const diagnosisData: DiagnosisData[] = useMemo(() => {
+  const diagnosisData: TransformedDiagnosisData[] = useMemo(() => {
     const counts = new Map<string, number>();
     
-    // Contar diagnósticos de pacientes
     patients.forEach(p => {
       if (p.diagnostico_principal?.trim()) {
         const diag = p.diagnostico_principal.trim();
@@ -379,7 +353,6 @@ export function useChartData({
       }
     });
     
-    // Contar motivos de cita
     appointments.forEach(a => {
       if (a.motivo_cita?.trim()) {
         const motivo = a.motivo_cita.trim();
@@ -396,7 +369,7 @@ export function useChartData({
         porcentaje: totalDiagnoses > 0 ? parseFloat(((cantidad / totalDiagnoses) * 100).toFixed(2)) : 0,
         descripcion: `${tipo} - ${cantidad} caso${cantidad !== 1 ? 's' : ''}`,
       }))
-      .sort((a, b) => b.cantidad - a.cantidad); // Ordenar por cantidad descendente
+      .sort((a, b) => b.cantidad - a.cantidad);
   }, [patients, appointments]);
 
   // Calcular estadísticas generales

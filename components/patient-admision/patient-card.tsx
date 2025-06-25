@@ -1,5 +1,7 @@
-// patient-card.tsx - Versión optimizada para rendimiento
+// patient-card.tsx - Refactorizado para SSoT y rendimiento
 import React, { memo, useCallback, useMemo } from "react"
+import { format, parseISO, isValid } from 'date-fns';
+import { es } from 'date-fns/locale';
 import {
   Card,
   CardContent,
@@ -25,18 +27,16 @@ import {
   Repeat,
   Phone,
 } from "lucide-react"
-import { AppointmentStatusEnum, AppointmentData } from "@/lib/types"
+import { AppointmentStatusEnum, ExtendedAppointment } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-// Tipos simplificados
+// Tipos
 export type ConfirmAction = "checkIn" | "cancel" | "complete" | "noShow" | "reschedule"
 
-// Usamos AppointmentData de lib/types en lugar de definir una interfaz local
-
 interface AppointmentCardProps {
-  appointment: AppointmentData
-  onAction: (action: ConfirmAction, appointmentId: string, appointmentData: AppointmentData) => void
-  onStartSurvey: (appointmentId: string, patientId?: string, appointmentData?: AppointmentData) => void
+  appointment: ExtendedAppointment
+  onAction: (action: ConfirmAction, appointmentId: string, appointmentData: ExtendedAppointment) => void
+  onStartSurvey: (appointmentId: string, patientId?: string, appointmentData?: ExtendedAppointment) => void
   onViewHistory: (patientId: string) => void
   disableActions?: boolean
   surveyCompleted?: boolean
@@ -105,63 +105,54 @@ const ACTIONABLE_STATUSES = new Set([
 const timeFormatCache = new Map<string, string>();
 const dateFormatCache = new Map<string, string>();
 
-// Utilidades de formateo con cache
-const formatTime = (time?: string) => {
-  if (!time || !time.includes(":")) return "---"
-  
-  const cached = timeFormatCache.get(time);
+// Utilidades de formateo robustas
+const formatTime = (isoDate: string) => {
+  if (!isoDate) return "---";
+  const cached = timeFormatCache.get(isoDate);
   if (cached) return cached;
-  
-  const [h, m] = time.split(":")
-  const hour = Number(h)
-  if (isNaN(hour)) return "---"
-  const period = hour >= 12 ? "PM" : "AM"
-  const displayHour = hour % 12 || 12
-  const formatted = `${displayHour}:${m} ${period}`;
-  
-  timeFormatCache.set(time, formatted);
+
+  const date = parseISO(isoDate);
+  if (!isValid(date)) return "---";
+
+  const formatted = format(date, 'hh:mm a', { locale: es });
+  timeFormatCache.set(isoDate, formatted);
   return formatted;
 }
 
-const formatDate = (date: string | Date) => {
-  const key = date.toString();
+const formatDate = (isoDate: string) => {
+  if (!isoDate) return "---";
+  const key = isoDate.slice(0, 10); // Cache by date part only
   const cached = dateFormatCache.get(key);
   if (cached) return cached;
-  
-  const d = new Date(date)
-  if (isNaN(d.getTime())) return "---"
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const date = parseISO(isoDate);
+  if (!isValid(date)) return "---";
 
-  const diff = (d.setHours(0, 0, 0, 0) - today.getTime()) / 86400000
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const targetDate = new Date(date);
+  targetDate.setHours(0, 0, 0, 0);
+
+  const diff = (targetDate.getTime() - today.getTime()) / 86400000;
   let formatted: string;
-  
+
   if (diff === 0) {
     formatted = "Hoy";
   } else if (diff === 1) {
     formatted = "Mañana";
   } else {
-    formatted = d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+    formatted = format(date, 'dd MMM', { locale: es });
   }
-  
+
   dateFormatCache.set(key, formatted);
   return formatted;
 }
 
-const getInitials = (fullName = "", last = "") => {
-  if (!fullName) return "";
-  
-  // Si last está vacío, asumimos que fullName es el nombre completo
-  if (!last) {
-    const parts = fullName.split(" ");
-    if (parts.length >= 2) {
-      return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase();
-    }
-    return fullName.charAt(0).toUpperCase();
-  }
-  
-  return `${fullName.charAt(0)}${last.charAt(0)}`.toUpperCase();
+const getInitials = (nombre = "", apellidos = "") => {
+  const n = (nombre || "").charAt(0);
+  const a = (apellidos || "").charAt(0);
+  return `${n}${a}`.toUpperCase() || "SN";
 };
 
 // Componente principal optimizado con memo
@@ -174,23 +165,23 @@ export const AppointmentCard = memo<AppointmentCardProps>(({
   surveyCompleted = false,
 }) => {
   const {
-    paciente, // En lugar de nombre y apellidos
-    fechaConsulta,
-    horaConsulta,
-    motivoConsulta,
-    estado,
-    patientId,
     id,
-    telefono,
-  } = appointment
+    patient_id,
+    paciente,
+    fecha_hora_cita,
+    motivo_cita,
+    estado_cita,
+  } = appointment;
 
-  const statusConfig = STATUS_CONFIG[estado] || STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA]
-  const isActionable = ACTIONABLE_STATUSES.has(estado)
-  const needsSurvey = estado === AppointmentStatusEnum.PRESENTE && disableActions && !surveyCompleted
-  const formattedDate = formatDate(fechaConsulta)
-  const formattedTime = formatTime(horaConsulta)
-  // Extraer iniciales del nombre completo del paciente
-  const initials = getInitials(paciente, '')
+  const fullName = `${paciente?.nombre || ''} ${paciente?.apellidos || ''}`.trim();
+  const telefono = paciente?.telefono;
+
+  const statusConfig = STATUS_CONFIG[estado_cita] || STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
+  const isActionable = ACTIONABLE_STATUSES.has(estado_cita);
+  const needsSurvey = estado_cita === AppointmentStatusEnum.PRESENTE && disableActions && !surveyCompleted;
+  const formattedDate = formatDate(fecha_hora_cita);
+  const formattedTime = formatTime(fecha_hora_cita);
+  const initials = getInitials(paciente?.nombre, paciente?.apellidos);
 
   // Definir el tipo para los elementos del menú
   type MenuItem = {
@@ -203,7 +194,7 @@ export const AppointmentCard = memo<AppointmentCardProps>(({
 
   // Generar menu items memoizado
   const menuItems = useMemo<MenuItem[]>(() => {
-    switch (estado) {
+    switch (estado_cita) {
       case AppointmentStatusEnum.PROGRAMADA:
         return [
           { icon: LogIn, label: "Check In", action: "checkIn" },
@@ -222,30 +213,30 @@ export const AppointmentCard = memo<AppointmentCardProps>(({
         ];
       default: return [];
     }
-  }, [estado]);
+  }, [estado_cita]);
 
   // Callbacks optimizados
   const handlePrimaryAction = useCallback(() => {
     if (!statusConfig.primary) return
 
     if (needsSurvey && statusConfig.primary === "complete") {
-      onStartSurvey(id, patientId, appointment)
+      onStartSurvey(id, patient_id, appointment)
       return
     }
     onAction(statusConfig.primary, id, appointment)
-  }, [statusConfig.primary, needsSurvey, onStartSurvey, onAction, id, patientId, appointment]);
+  }, [statusConfig.primary, needsSurvey, onStartSurvey, onAction, id, patient_id, appointment]);
 
   const handleAction = useCallback((action: ConfirmAction) => {
     onAction(action, id, appointment)
   }, [onAction, id, appointment]);
 
   const handleStartSurvey = useCallback(() => {
-    onStartSurvey(id, patientId, appointment)
-  }, [onStartSurvey, id, patientId, appointment]);
+    onStartSurvey(id, patient_id, appointment)
+  }, [onStartSurvey, id, patient_id, appointment]);
 
   const handleViewHistory = useCallback(() => {
-    patientId && onViewHistory(patientId)
-  }, [patientId, onViewHistory]);
+    patient_id && onViewHistory(patient_id)
+  }, [patient_id, onViewHistory]);
 
   return (
     <Card className={cn(
@@ -272,7 +263,7 @@ export const AppointmentCard = memo<AppointmentCardProps>(({
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center gap-2">
                 <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {paciente}
+                  {fullName}
                 </h3>
                 <div className={cn("h-2 w-2 shrink-0 rounded-full", statusConfig.dot)} />
               </div>
@@ -335,7 +326,7 @@ export const AppointmentCard = memo<AppointmentCardProps>(({
                 <MessageSquare size={14} /> Encuesta
               </DropdownMenuItem>
 
-              {patientId && (
+              {patient_id && (
                 <DropdownMenuItem onClick={handleViewHistory} className="gap-2">
                   <History size={14} /> Historial
                 </DropdownMenuItem>
@@ -364,10 +355,10 @@ export const AppointmentCard = memo<AppointmentCardProps>(({
           </div>
 
           {/* Motivo Consulta */}
-          {motivoConsulta && motivoConsulta !== "N/A" && (
+          {motivo_cita && motivo_cita !== "N/A" && (
             <div className="mt-2">
               <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2">
-                <span className="font-medium text-slate-700 dark:text-slate-200">Motivo:</span> {motivoConsulta}
+                <span className="font-medium text-slate-700 dark:text-slate-200">Motivo:</span> {motivo_cita}
               </p>
             </div>
           )}

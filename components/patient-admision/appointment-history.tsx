@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { AppointmentStatusEnum, type AppointmentData } from "@/lib/types";
+import { AppointmentStatusEnum, type ExtendedAppointment } from "@/lib/types";
 
 // Configuración estática fuera del componente
 const STATUS_CONFIG = {
@@ -112,19 +112,19 @@ const formatDisplayDate = (dateString: string | Date): string => {
   }
 };
 
-const formatTime = (time: string): string => {
-  const cached = timeFormatCache.get(time);
+const formatTime = (dateString: string): string => {
+  const cached = timeFormatCache.get(dateString);
   if (cached) return cached;
   
-  if (!time?.includes(':')) return "---";
-  const [hours, minutes] = time.split(':');
-  const hour = parseInt(hours, 10);
-  if (isNaN(hour) || isNaN(parseInt(minutes, 10))) return "---";
-  const period = hour >= 12 ? 'PM' : 'AM';
-  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-  const formatted = `${displayHour}:${minutes.padStart(2, '0')} ${period}`;
-  timeFormatCache.set(time, formatted);
-  return formatted;
+  try {
+    const date = parseISO(dateString);
+    if (!isValid(date)) return "---";
+    const formatted = format(date, "hh:mm a", { locale: es }).toUpperCase();
+    timeFormatCache.set(dateString, formatted);
+    return formatted;
+  } catch {
+    return "---";
+  }
 };
 
 // Componentes internos memoizados
@@ -139,32 +139,31 @@ const StatCard = memo(({
   subtitle?: string;
   icon: React.ComponentType<{ className?: string }>;
 }) => (
-  <div className="p-4 rounded-xl border shadow-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
-    <div className="flex items-start justify-between">
-      <div className="space-y-2 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
-          {title}
-        </p>
-        <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          {value}
-        </p>
-        {subtitle && (
-          <p className="text-xs text-slate-600 dark:text-slate-400">
-            {subtitle}
-          </p>
-        )}
+  <Card className="p-4 shadow-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col justify-between h-full">
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 mb-3">
+      <CardTitle className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
+        {title}
+      </CardTitle>
+      <div className="p-2 rounded-md bg-slate-100 dark:bg-slate-800/60">
+        <Icon className="h-4 w-4 text-slate-600 dark:text-slate-300" />
       </div>
-      
-      <div className="h-12 w-12 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-slate-800/60">
-        <Icon className="h-6 w-6 text-slate-600 dark:text-slate-300" />
+    </CardHeader>
+    <CardContent className="p-0">
+      <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+        {value}
       </div>
-    </div>
-  </div>
+      {subtitle && (
+        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+          {subtitle}
+        </p>
+      )}
+    </CardContent>
+  </Card>
 ));
 
-const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData }) => {
-  const fechaFormateada = formatDisplayDate(appointment.fechaConsulta);
-  const statusConfig = STATUS_CONFIG[appointment.estado as keyof typeof AppointmentStatusEnum] || 
+const AppointmentCard = memo(({ appointment }: { appointment: ExtendedAppointment }) => {
+  const fechaFormateada = formatDisplayDate(appointment.fecha_hora_cita);
+  const statusConfig = STATUS_CONFIG[appointment.estado_cita as keyof typeof AppointmentStatusEnum] || 
                       STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
   const StatusIcon = statusConfig.icon;
 
@@ -178,14 +177,20 @@ const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData })
             </CardTitle>
             <CardDescription className="text-sm mt-1.5 flex items-center gap-2 text-slate-500 dark:text-slate-400">
               <Clock size={12} />
-              {formatTime(appointment.horaConsulta)}
-              {appointment.doctor && (
+              {formatTime(appointment.fecha_hora_cita)}
+              {appointment.doctor?.full_name && (
                 <>
                   <span>•</span>
-                  <span>Dr(a). {appointment.doctor}</span>
+                  <span>Dr(a). {appointment.doctor.full_name}</span>
                 </>
               )}
             </CardDescription>
+            {appointment.motivo_cita && (
+              <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
+                <FileText size={14} className="inline-block mr-1" />
+                Motivo: {appointment.motivo_cita}
+              </p>
+            )}
           </div>
           
           <Badge className={cn(
@@ -199,7 +204,7 @@ const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData })
       </CardHeader>
       
       <CardContent className="pt-0 space-y-4">
-        {appointment.motivoConsulta && appointment.motivoConsulta !== "N/A" && (
+        {appointment.motivo_cita && appointment.motivo_cita !== "N/A" && (
           <div className="flex gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
             <div className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800/60 flex items-center justify-center shrink-0">
               <FileText size={16} className="text-slate-600 dark:text-slate-300" />
@@ -209,7 +214,7 @@ const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData })
                 Motivo de consulta
               </p>
               <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2 leading-relaxed">
-                {appointment.motivoConsulta}
+                {appointment.motivo_cita}
               </p>
             </div>
           </div>
@@ -237,22 +242,23 @@ export const AppointmentHistory = memo<{
   className
 }) => {
   // Usar React Query hook
-  const { data: appointmentsData, isLoading, error } = useAppointments(1, 100);
+  const { data: appointmentsData, isLoading, error } = useAppointments(1, 100); // useAppointments devuelve ExtendedAppointment
   const appointments = appointmentsData?.appointments || [];
   
   // Filtrar y ordenar citas del paciente con memoización
-  const patientAppointments = useMemo(() => {
+  const sortedAppointments = useMemo(() => {
     if (!appointments) return [];
     
-    return appointments
-      .filter((app: AppointmentData) => app.patientId === patientId)
-      .sort((a: AppointmentData, b: AppointmentData) => new Date(b.fechaConsulta).getTime() - new Date(a.fechaConsulta).getTime())
-      .slice(0, maxItems);
+    return [...appointments].sort((a: ExtendedAppointment, b: ExtendedAppointment) => {
+      const dateA = parseISO(a.fecha_hora_cita);
+      const dateB = parseISO(b.fecha_hora_cita);
+      return dateB.getTime() - dateA.getTime();
+    }).filter((app: ExtendedAppointment) => app.patient_id === patientId).slice(0, maxItems);
   }, [appointments, patientId, maxItems]);
 
   // Calcular estadísticas con memoización
   const statistics = useMemo(() => {
-    if (!patientAppointments.length) {
+    if (!sortedAppointments.length) {
       return {
         total: 0,
         completadas: 0,
@@ -264,11 +270,12 @@ export const AppointmentHistory = memo<{
       };
     }
 
-    const counts = patientAppointments.reduce((acc: Record<keyof typeof AppointmentStatusEnum, number>, app: AppointmentData) => {
-      const estado = app.estado as keyof typeof AppointmentStatusEnum;
-      acc[estado] = (acc[estado] || 0) + 1;
+    const counts = sortedAppointments.reduce((acc: Record<string, number>, app: ExtendedAppointment) => {
+      if (app.estado_cita) {
+        acc[app.estado_cita] = (acc[app.estado_cita] || 0) + 1;
+      }
       return acc;
-    }, {} as Record<keyof typeof AppointmentStatusEnum, number>);
+    }, {});
 
     const completadas = counts[AppointmentStatusEnum.COMPLETADA] || 0;
     const noAsistio = counts[AppointmentStatusEnum.NO_ASISTIO] || 0;
@@ -283,7 +290,7 @@ export const AppointmentHistory = memo<{
     const attendanceRate = (completadas + noAsistio) > 0 ? (completadas / (completadas + noAsistio)) * 100 : 0;
 
     return {
-      total: patientAppointments.length,
+      total: sortedAppointments.length,
       completadas,
       programadas,
       canceladas,
@@ -291,7 +298,7 @@ export const AppointmentHistory = memo<{
       completionRate: Math.round(completionRate),
       attendanceRate: Math.round(attendanceRate),
     };
-  }, [patientAppointments]);
+  }, [sortedAppointments]);
 
   if (isLoading && !appointments.length) {
     return (
@@ -342,37 +349,34 @@ export const AppointmentHistory = memo<{
           
           <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
-              title="Total de citas"
-              value={statistics.total}
+              title="Total de Citas"
+              value={appointments.length}
               subtitle="Historial completo"
-              icon={BarChart3}
+              icon={History}
             />
-            
             <StatCard
               title="Completadas"
               value={statistics.completadas}
               subtitle={`${statistics.completionRate}% tasa de éxito`}
               icon={CheckCircle2}
             />
-            
             <StatCard
               title="Programadas"
               value={statistics.programadas}
               subtitle="Próximas citas"
               icon={CalendarClock}
             />
-            
             <StatCard
               title="Asistencia"
               value={`${statistics.attendanceRate}%`}
-              subtitle={`${statistics.noAsistio} inasistencia${statistics.noAsistio !== 1 ? 's' : ''}`}
+              subtitle={`${statistics.noAsistio} inasistencias`}
               icon={Target}
             />
           </CardContent>
         </Card>
       )}
 
-      {patientAppointments.length === 0 ? (
+      {sortedAppointments.length === 0 ? (
         <Card className="text-center py-16 shadow-lg bg-white dark:bg-slate-900">
           <CardContent className="space-y-6">
             <div className="relative">
@@ -403,14 +407,14 @@ export const AppointmentHistory = memo<{
                 Registro cronológico de todas las consultas
               </p>
             </div>
-            {maxItems && patientAppointments.length >= maxItems && (
+            {maxItems && sortedAppointments.length >= maxItems && (
               <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
                 Mostrando {maxItems} de {statistics.total}
               </Badge>
             )}
           </div>
           <div className="grid gap-4">
-            {patientAppointments.map((appointment: AppointmentData) => (
+            {sortedAppointments.map((appointment: ExtendedAppointment) => (
               <AppointmentCard
                 key={appointment.id}
                 appointment={appointment}

@@ -1,10 +1,26 @@
-// AppointmentsList.tsx - Versión mejorada y elegante
+// AppointmentsList.tsx - Refactorizado para SSoT
 import React, { memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { AppointmentListProps } from "./types";
-import { AppointmentCard } from "./AppointmentCard";
+import { ExtendedAppointment } from '@/lib/types';
+import { AppointmentCard, ConfirmAction } from "./patient-card"; // Actualizado
+
+// Definición de Props con tipos centralizados
+interface AppointmentListProps {
+  appointments: ExtendedAppointment[];
+  isLoading: boolean;
+  emptyStateConfig: {
+    title: string;
+    description: string;
+    icon: React.ComponentType<{ className?: string }>;
+  };
+  onAction: (action: ConfirmAction, appointmentId: string, appointmentData: ExtendedAppointment) => void;
+  onStartSurvey: (appointmentId: string, patientId?: string, appointmentData?: ExtendedAppointment) => void;
+  onViewHistory: (patientId: string) => void;
+  className?: string;
+  disabled?: boolean;
+}
 
 // Loading skeleton elegante
 const LoadingSkeleton = memo(() => (
@@ -81,69 +97,70 @@ const EmptyState = memo<{
 EmptyState.displayName = "EmptyState";
 
 // Componente principal
-export const AppointmentsList = memo<AppointmentListProps>(({
-  appointments,
-  isLoading,
-  emptyStateConfig,
-  onAction,
-  onStartSurvey,
-  onViewHistory,
-  className,
-  disabled = false,
-}) => {
-  // Loading state
-  if (isLoading && appointments.length === 0) {
-    return (
-      <div className={cn("space-y-6", className)}>
-        <LoadingSkeleton />
-      </div>
-    );
-  }
+export const AppointmentsList = memo<AppointmentListProps>(
+  ({
+    appointments,
+    isLoading,
+    emptyStateConfig,
+    onAction,
+    onStartSurvey,
+    onViewHistory,
+    className,
+    disabled = false,
+  }) => {
+    // Loading state
+    if (isLoading && appointments.length === 0) {
+      return (
+        <div className={cn("space-y-6", className)}>
+          <LoadingSkeleton />
+        </div>
+      );
+    }
 
-  // Empty state
-  if (!isLoading && appointments.length === 0) {
-    return (
-      <div className={className}>
-        <EmptyState
-          title={emptyStateConfig.title}
-          description={emptyStateConfig.description}
-          icon={emptyStateConfig.icon}
-        />
-      </div>
-    );
-  }
-
-  // Lista de citas
-  return (
-    <div className={cn("space-y-4", className)}>
-      {appointments.map((appointment, index) => (
-        <div
-          key={appointment.id}
-          className="animate-in fade-in-0 slide-in-from-bottom-4"
-          style={{ animationDelay: `${index * 50}ms` }}
-        >
-          <AppointmentCard
-            appointment={appointment}
-            onAction={onAction}
-            onStartSurvey={onStartSurvey}
-            onViewHistory={onViewHistory}
-            isLoading={isLoading}
-            disabled={disabled}
+    // Empty state
+    if (!isLoading && appointments.length === 0) {
+      return (
+        <div className={className}>
+          <EmptyState
+            title={emptyStateConfig.title}
+            description={emptyStateConfig.description}
+            icon={emptyStateConfig.icon}
           />
         </div>
-      ))}
-      
-      {/* Indicador de carga al final si hay más datos */}
-      {isLoading && appointments.length > 0 && (
-        <div className="flex justify-center py-4">
-          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
-            <span>Cargando más citas...</span>
+      );
+    }
+
+    // Lista de citas
+    return (
+      <div className={cn("space-y-4", className)}>
+        {appointments.map((appointment, index) => (
+          <div
+            key={appointment.id}
+            className="animate-in fade-in-0 slide-in-from-bottom-4"
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
+            <AppointmentCard
+              appointment={appointment}
+              onAction={onAction}
+              onStartSurvey={onStartSurvey}
+              onViewHistory={onViewHistory}
+              disableActions={disabled}
+            />
           </div>
-        </div>
-      )}
-    </div>
-  );
-});
+        ))}
+        
+        {/* Indicador de carga al final si hay más datos */}
+        {isLoading && appointments.length > 0 && (
+          <div className="flex justify-center py-4">
+            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+              <span>Cargando más citas...</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+);
 
 AppointmentsList.displayName = "AppointmentsList";

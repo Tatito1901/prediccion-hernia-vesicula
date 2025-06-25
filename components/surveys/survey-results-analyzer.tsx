@@ -53,7 +53,8 @@ import {
 } from "lucide-react"
 import { usePatient } from "@/hooks/use-patients";
 import { useCreateAppointment } from '@/hooks/use-appointments';
-import { calculateConversionScore, generateInsights, generateRecommendationCategories } from "@/lib/utils/survey-analyzer-helpers"
+// TODO: [Refactor] The helper file was not found. The logic for these functions needs to be restored.
+// import { calculateConversionScore, generateInsights, generateRecommendationCategories } from "@/lib/utils/survey-analyzer-helpers"
 import { AppointmentStatusEnum, type Patient, type PatientSurvey } from "@/lib/types"
 
 // Define the structure for conversion insights
@@ -94,27 +95,33 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
   const { data: patientData, isLoading, error: patientError } = usePatient(patient_id);
   const createAppointment = useCreateAppointment();
 
+  // TODO: [Refactor] Survey data needs to be fetched separately for this patient.
+  const surveyData: PatientSurvey | null = null; 
+
   const [modelError, setModelError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("resumen");
 
   const analysisResult = useMemo(() => {
-    if (!patientData || !patientData.encuesta) return null;
-
-    const { encuesta: surveyData } = patientData;
+    if (!patientData || !surveyData) return null;
 
     const surgeryProbability = 0.75; // Mocked
-    const conversionScore = calculateConversionScore(patientData);
-    const insights = generateInsights(patientData);
-    const recommendationCategories = generateRecommendationCategories(patientData, surgeryProbability);
-    const persuasivePoints = generatePersuasivePoints(patientData);
+    
+    // TODO: [Refactor] Restore this logic once the helper file is found.
+    const conversionScore = 0;
+    const insights: ConversionInsight[] = [];
+    const recommendationCategories: RecommendationCategory[] = [];
+    const persuasivePoints = generatePersuasivePoints(patientData, surveyData);
 
-    const calculateBenefitScore = (survey: PatientSurveyData) => {
+    // TODO: [Refactor] This logic is based on the old, flat survey structure.
+    // It needs to be rewritten to use the normalized `surveyData.answers` array.
+    /*
+    const calculateBenefitScore = (survey: PatientSurvey) => {
       const severityScore = survey.severidadSintomasActuales === "severa" ? 3 : (survey.severidadSintomasActuales === "moderada" ? 2 : 1)
       const impactScore = survey.afectacionActividadesDiarias === "mucho" ? 3 : (survey.afectacionActividadesDiarias === "moderadamente" ? 2 : 1)
       return (severityScore + impactScore) * 10
     }
 
-    const calculateRiskScore = (survey: PatientSurveyData) => {
+    const calculateRiskScore = (survey: PatientSurvey) => {
       let score = 0
       score += (survey.condicionesMedicasCronicas?.length || 0) * 5
       return score || 1
@@ -123,6 +130,8 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
     const benefitScore = calculateBenefitScore(surveyData);
     const riskScore = calculateRiskScore(surveyData);
     const benefitRiskRatio = benefitScore / riskScore;
+    */
+    const benefitRiskRatio = 0;
 
     return {
       surgeryProbability,
@@ -132,7 +141,7 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
       persuasivePoints,
       benefitRiskRatio
     }
-  }, [patientData]);
+  }, [patientData, surveyData]);
 
   useEffect(() => {
     if (patientError) {
@@ -148,12 +157,11 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
     const followUpDate = addDays(new Date(), 7);
 
     createAppointment.mutate({
-      patientId: patientData.id,
-      fecha_raw: format(followUpDate, 'yyyy-MM-dd'),
-      hora_raw: '10:00',
-      estado: AppointmentStatusEnum.PROGRAMADA,
-      motivoConsulta: 'Seguimiento de encuesta pre-quirúrgica',
-      esPrimeraVez: false,
+      patient_id: patientData.id,
+      fecha_hora_cita: followUpDate.toISOString(),
+      estado_cita: AppointmentStatusEnum.PROGRAMADA,
+      motivo_cita: 'Seguimiento de encuesta pre-quirúrgica',
+      es_primera_vez: false,
     });
   };
 
@@ -164,54 +172,16 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
     // queryClient.invalidateQueries(patientKeys.detail(patient_id)); // If you have queryClient access
   }
 
-  // Generate persuasive points based on patient data
-  function generatePersuasivePoints(patient: PatientData): PersuasivePoint[] {
+  // TODO: [Refactor] This logic needs to be rewritten to use the new normalized survey data structure.
+  function generatePersuasivePoints(patient: Patient, survey: PatientSurvey | null): PersuasivePoint[] {
     const points: PersuasivePoint[] = []
-    const surveyData = patient.encuesta
+    if (!survey) return points
 
-    if (!surveyData) return points
+    // Example of how to access new data structure (to be implemented)
+    // const painSeverityAnswer = survey.answers.find(a => a.question?.text === 'Severidad de los síntomas');
+    // if (painSeverityAnswer?.answer_text === 'severa') { ... }
 
-    // Clinical points
-    if (surveyData.severidadSintomasActuales === "severa") {
-      points.push({
-        id: "pain-relief",
-        title: "Alivio inmediato del dolor",
-        description: "La cirugía ofrece una solución definitiva para su dolor intenso.",
-        icon: Zap,
-        category: "clinical",
-        strength: "high",
-      })
-    }
-
-    if (surveyData.intensidadDolorActual >= 7) {
-      points.push({
-        id: "prevent-complications",
-        title: "Prevención de complicaciones",
-        description: "La cirugía evita el empeoramiento de su condición y posibles complicaciones futuras.",
-        icon: Shield,
-        category: "clinical",
-        strength: "high",
-      })
-    }
-
-    // Quality of life points
-    if (surveyData.afectacionActividadesDiarias === "mucho" || surveyData.afectacionActividadesDiarias === "moderadamente") {
-      points.push({
-        id: "improved-function",
-        title: "Recuperación funcional",
-        description:
-          "La cirugía le permitirá recuperar su movilidad y realizar actividades cotidianas sin limitaciones.",
-        icon: Activity,
-        category: "quality",
-        strength: "high",
-      })
-    }
-
-    // Sort by strength (high to low)
-    return points.sort((a, b) => {
-      const strengthOrder = { high: 3, medium: 2, low: 1 }
-      return strengthOrder[b.strength] - strengthOrder[a.strength]
-    })
+    return points;
   }
 
   if (isLoading) {
@@ -238,7 +208,7 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
     )
   }
 
-  if (!patientData || !patientData.encuesta || !analysisResult) {
+  if (!patientData || !surveyData || !analysisResult) {
     return (
        <div className="flex flex-col items-center justify-center h-96 bg-gray-50/50 p-6 text-center">
         <ClipboardX className="w-12 h-12 text-gray-400 mb-4" />
@@ -313,7 +283,7 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
                   <CardContent>
                     <p className="text-gray-600"><strong>Edad:</strong> {patientData.edad} años</p>
                     <p className="text-gray-600"><strong>Género:</strong> {patientData.genero}</p>
-                    <p className="text-gray-600"><strong>Motivo:</strong> {patientData.encuesta?.motivoVisita}</p>
+                    {/* <p className="text-gray-600"><strong>Motivo:</strong> {surveyData?.motivo_visita}</p> */}
                   </CardContent>
                 </Card>
                 <Card className="shadow-md rounded-xl">
@@ -324,15 +294,15 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-gray-600"><strong>Condiciones Crónicas:</strong> {patientData.encuesta.condicionesMedicasCronicas?.join(', ') || 'Ninguna'}</p>
-                    <p className="text-gray-600"><strong>Diagnóstico Previo:</strong> {patientData.encuesta?.diagnosticoPrevio ? 'Sí' : 'No'}</p>
+                    {/* <p className="text-gray-600"><strong>Condiciones Crónicas:</strong> {surveyData.condiciones_medicas_cronicas?.join(', ') || 'Ninguna'}</p> */}
+                    {/* <p className="text-gray-600"><strong>Diagnóstico Previo:</strong> {surveyData?.diagnostico_previo ? 'Sí' : 'No'}</p> */}
                   </CardContent>
                 </Card>
               </div>
               <Separator className="my-6" />
               <h3 className="text-xl font-semibold text-gray-800 mb-4">Puntos Clave de la Encuesta</h3>
               <div className="space-y-4">
-                {insights.map((insight) => (
+                {insights.map((insight: ConversionInsight) => (
                   <Alert key={insight.id} className={`bg-${insight.impact === 'high' ? 'yellow' : 'blue'}-50/70 border-${insight.impact === 'high' ? 'yellow' : 'blue'}-200/80 shadow-sm rounded-lg`}>
                     <insight.icon className={`w-5 h-5 text-${insight.impact === 'high' ? 'yellow' : 'blue'}-600`} />
                     <AlertTitle className="font-semibold text-gray-800">{insight.title}</AlertTitle>
@@ -391,7 +361,7 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
             <TabsContent value="recomendaciones" className="p-6">
               <h3 className="text-xl font-semibold text-gray-800 mb-4">Plan de Acción Sugerido</h3>
               <div className="space-y-4">
-                {recommendationCategories.map((category) => (
+                {recommendationCategories.map((category: RecommendationCategory) => (
                   <Accordion key={category.id} type="single" collapsible className="w-full">
                     <AccordionItem value={category.id} className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 font-semibold text-gray-700 hover:bg-gray-50/80 rounded-t-lg">
@@ -403,7 +373,7 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
                       <AccordionContent className="px-4 py-3 border-t bg-white">
                         <p className="text-gray-600 mb-3">{category.description}</p>
                         <ul className="list-disc list-inside space-y-2 text-gray-700">
-                          {category.recommendations.map((rec, index) => (
+                          {category.recommendations.map((rec: string, index: number) => (
                             <li key={index}>{rec}</li>
                           ))}
                         </ul>

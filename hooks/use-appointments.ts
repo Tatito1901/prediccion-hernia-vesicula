@@ -8,7 +8,6 @@ import {
   ID, 
   Appointment, 
   ExtendedAppointment,
-  AppointmentData, 
   AppointmentStatusEnum, 
   TimeString,
   NewAppointment 
@@ -79,6 +78,11 @@ const transformAppointment = (apiAppointment: ApiAppointment): ExtendedAppointme
   const pacienteNombre = patientInfo.nombre || '';
   const pacienteApellidos = patientInfo.apellidos || '';
   const pacienteTelefono = patientInfo.telefono || '';
+
+  // Datos del doctor
+  const doctorInfo = apiAppointment.doctor || {
+    full_name: ''
+  };
   
   return {
     id: appointmentId,
@@ -97,42 +101,14 @@ const transformAppointment = (apiAppointment: ApiAppointment): ExtendedAppointme
       apellidos: pacienteApellidos,
       telefono: pacienteTelefono,
       email: patientInfo.email || ''
+    },
+    doctor: {
+      full_name: doctorInfo.full_name || ''
     }
   };
 };
 
-// Función de transformación para compatibilidad con el tipo AppointmentData
-const transformToLegacyFormat = (appointment: Appointment): AppointmentData => {
-  const parsedDateTime = safeParseDate(appointment.fecha_hora_cita);
-  const doctorInfo = appointment.doctor_id
-    ? { id: appointment.doctor_id, full_name: 'Doctor' }
-    : null;
 
-  const patientName = [
-    appointment.paciente?.nombre || '',
-    appointment.paciente?.apellidos || ''
-  ].filter(Boolean).join(' ') || 'Paciente sin nombre';
-  
-  return {
-    id: appointment.id,
-    patientId: appointment.patient_id,
-    paciente: patientName,
-    telefono: appointment.paciente?.telefono || 'No disponible',
-    fechaConsulta: parsedDateTime || new Date(),
-    horaConsulta: extractTimeFromDate(parsedDateTime) || '12:00',
-    duracionEstimadaMin: 30,
-    motivoConsulta: appointment.motivo_cita || 'Motivo no especificado',
-    tipoConsulta: 'Seguimiento',
-    estado: appointment.estado_cita,
-    notas: appointment.notas_cita_seguimiento || undefined,
-    ubicacion: 'Consultorio Principal',
-    recursosNecesarios: [],
-    esPrimeraVez: appointment.es_primera_vez || false,
-    costo: 0,
-    doctor: 'Doctor no asignado',
-    raw_doctor_id: appointment.doctor_id,
-  };
-};
 
 // Query Keys
 export const appointmentKeys = {

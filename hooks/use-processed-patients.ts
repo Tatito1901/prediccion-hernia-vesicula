@@ -1,8 +1,8 @@
 // lib/hooks/use-processed-patients.ts
 
 import { useMemo } from "react";
-import { PatientData, AppointmentData, PatientStatusEnum } from "@/lib/types";
-import type { EnrichedPatientData } from "@/components/patients/patient-management";
+import { Patient, Appointment, PatientStatusEnum } from "@/lib/types";
+import type { EnrichedPatient } from "@/components/patients/patient-management";
 // Utilizamos los tipos centralizados de lib/types en lugar de app/dashboard/data-model
 
 const STATUS_CONFIG = {
@@ -15,51 +15,51 @@ const STATUS_CONFIG = {
 };
 
 export const useProcessedPatients = (
-  patients: PatientData[],
-  appointments: AppointmentData[],
+  patients: Patient[],
+  appointments: Appointment[],
   searchTerm: string,
   statusFilter: keyof typeof PatientStatusEnum | "all"
 ) => {
   // Memoización del enriquecimiento de datos
-  const enrichedPatients = useMemo((): EnrichedPatientData[] => {
+  const enrichedPatients = useMemo((): EnrichedPatient[] => {
     if (!patients) return [];
 
-    const appointmentsByPatientId = new Map<string, AppointmentData[]>();
+    const appointmentsByPatientId = new Map<string, Appointment[]>();
     if (appointments) {
       for (const app of appointments) {
         // Ignorar citas sin ID de paciente válido
-        if (!app.patientId) continue;
+        if (!app.patient_id) continue;
         
-        if (!appointmentsByPatientId.has(app.patientId)) {
-          appointmentsByPatientId.set(app.patientId, []);
+        if (!appointmentsByPatientId.has(app.patient_id)) {
+          appointmentsByPatientId.set(app.patient_id, []);
         }
-        appointmentsByPatientId.get(app.patientId)!.push(app);
+        appointmentsByPatientId.get(app.patient_id)!.push(app);
       }
     }
 
-    return patients.map((patient: PatientData) => {
+    return patients.map((patient: Patient) => {
       const patientAppointments = appointmentsByPatientId.get(patient.id) || [];
       // Asegurar que fechaConsulta es un string válido para new Date()
       patientAppointments.sort((a, b) => {
-        const dateA = a.fechaConsulta ? new Date(a.fechaConsulta).getTime() : 0;
-        const dateB = b.fechaConsulta ? new Date(b.fechaConsulta).getTime() : 0;
+        const dateA = a.fecha_hora_cita ? new Date(a.fecha_hora_cita).getTime() : 0;
+        const dateB = b.fecha_hora_cita ? new Date(b.fecha_hora_cita).getTime() : 0;
         return dateA - dateB;
       });
 
       const nextAppointment = patientAppointments.find(
         appointment => {
-          if (!appointment.fechaConsulta) return false;
-          return new Date(appointment.fechaConsulta) >= new Date();
+          if (!appointment.fecha_hora_cita) return false;
+          return new Date(appointment.fecha_hora_cita) >= new Date();
         }
       );
 
       return {
         ...patient,
         nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
-        fecha_proxima_cita_iso: nextAppointment?.fechaConsulta?.toString(),
+        fecha_proxima_cita_iso: nextAppointment?.fecha_hora_cita?.toString(),
         encuesta_completada: !!(patient as any).encuesta?.id,
         displayDiagnostico: patient.diagnostico_principal || "Sin diagnóstico",
-      } as EnrichedPatientData;
+      } as EnrichedPatient;
     });
   }, [patients, appointments]);
 
