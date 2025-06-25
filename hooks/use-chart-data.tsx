@@ -1,16 +1,94 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import type {
-  PatientData,
-  DiagnosisData,
-  GeneralStats,
-  AppointmentStatusEnum,
-  PatientStatusEnum,
-  Patient,
-  Appointment,
-} from '@/components/charts/use-chart-config';
-import type { DateRangeOption } from '@/lib/types';
+import React, { useMemo, useCallback, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+// Constantes que faltaban definir
+const DEFAULT_STALE_TIME = 5 * 60 * 1000; // 5 minutos
+const MIN_REFRESH_INTERVAL = 30 * 1000; // 30 segundos
+const WEEKDAYS_SHORT = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'];
+
+// Clase para errores personalizados
+class ChartDataError extends Error {
+  appointments: string | null;
+  patients: string | null;
+  
+  constructor(message: string, appointments: string | null = null, patients: string | null = null) {
+    super(message);
+    this.name = 'ChartDataError';
+    this.appointments = appointments;
+    this.patients = patients;
+  }
+}
+// Definiciones locales de tipos para eliminar dependencias externas
+type DateRangeOption = '7dias' | '30dias' | '90dias' | 'ytd' | 'todos';
+
+type PatientData = {
+  id: string;
+  paciente: string; // Equivalente a nombre
+  diagnostico?: any;
+  diagnostico_principal?: any;
+  fecha_registro?: any;
+  fecha_primera_consulta?: any;
+  edad?: any;
+  genero?: any;
+  estado?: string;
+  notas?: any;
+  telefono?: any;
+  email?: any;
+  [key: string]: any;
+};
+
+type DiagnosisData = {
+  // Puede ser diagnosis o tipo según la estructura real de datos
+  diagnosis?: string;
+  count?: number;
+  // Campos alternativos
+  tipo?: string;
+  cantidad?: number;
+  porcentaje?: number;
+  descripcion?: string;
+};
+
+type GeneralStats = {
+  // Campos opcionales para soportar ambas estructuras de datos
+  totalPatients?: number;
+  attendedAppointments?: number;
+  // Campos alternativos
+  total?: number;
+  attendance?: number;
+  cancellation?: number;
+  pending?: number;
+  present?: number;
+  completed?: number;
+  cancelled?: number;
+  pendingCount?: number;
+  presentCount?: number;
+  period?: DateRangeOption;
+  allStatusCounts?: Record<string, number>;
+  [key: string]: any;
+};
+
+type AppointmentStatusEnum = string;
+type PatientStatusEnum = string;
+
+type Patient = {
+  id: string;
+  nombre: string;
+  [key: string]: any;
+};
+
+type Appointment = {
+  id: string;
+  patientId: string;
+  [key: string]: any;
+};
+
+type ExtendedPatient = Patient & {
+  appointments?: Appointment[];
+};
+
+type AppointmentStatus = string;
 
 interface ChartDataResponse {
   appointments: Appointment[];
@@ -249,10 +327,11 @@ export function useChartData({
 
   // Estados de carga y error ya definidos anteriormente, usamos directamente 'loading'
   
-  const errors = useMemo<ChartDataError>(() => ({
-    appointments: errorAppointments instanceof Error ? errorAppointments.message : null,
-    patients: errorPatients instanceof Error ? errorPatients.message : null,
-  }), [errorAppointments, errorPatients]);
+  const errors = useMemo(() => new ChartDataError(
+    'Error en la carga de datos',
+    errorAppointments instanceof Error ? errorAppointments.message : null,
+    errorPatients instanceof Error ? errorPatients.message : null
+  ), [errorAppointments, errorPatients]);
   
   const hasError = Boolean(errors.appointments || errors.patients);
 

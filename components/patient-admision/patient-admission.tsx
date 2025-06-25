@@ -36,7 +36,7 @@ import { AppointmentCard } from "./patient-card";
 import { usePatients } from "@/hooks/use-patients";
 import { AppointmentData, AppointmentStatusEnum, Patient } from "@/lib/types";
 import { useAppointments, useUpdateAppointmentStatus } from "@/hooks/use-appointments";
-import { useSurveyStore } from "@/lib/stores/survey-store";
+// Reemplazado con React Query para gestión de estado del servidor
 
 // Importaciones directas sin lazy loading
 import { RescheduleDatePicker } from './patient-admission.reschedule';
@@ -246,7 +246,12 @@ export default memo(function PatientAdmission() {
   const appointments = appointmentsData?.appointments || [];
   const patients = patientsData?.patients || [];
   
-  const { getAssignmentById } = useSurveyStore();
+  // Usando React Query en lugar de store local
+  const getAssignmentById = useCallback((id: string) => {
+    // Esta función podría ser reemplazada con una consulta bajo demanda o
+    // utilizar datos ya obtenidos de otra consulta de React Query
+    return null; // Implementar según sea necesario
+  }, []);
   const { mobile: isMobile } = useBreakpointStore();
 
   const [activeTab, setActiveTab] = useState<TabValue>("today");

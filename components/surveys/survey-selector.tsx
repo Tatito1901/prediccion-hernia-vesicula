@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -82,7 +82,7 @@ export const SurveySelector = React.memo(({
   patientName,
   onSurveyAssigned
 }: SurveySelectorProps) => {
-  const supabase = useMemo(() => createClientComponentClient(), []);
+  const supabase = useMemo(() => createClient(), []);
   const [templates, setTemplates] = useState<SurveyTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAssigning, setIsAssigning] = useState<number | null>(null);

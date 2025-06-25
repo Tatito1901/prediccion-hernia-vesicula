@@ -102,8 +102,14 @@ const ResponsivePieChart: FC<{ data: ChartDataItem[] }> = ({ data }) => (
     </ResponsiveContainer>
 );
 
+// Props del componente principal
+type MedicalSurveyAnalysisProps = {
+  title?: string;
+  description?: string;
+};
+
 // Main Component
-export default function MedicalSurveyAnalysis() {
+export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de Encuestas", description = "Análisis médico detallado de los datos recopilados en las encuestas de pacientes" }: MedicalSurveyAnalysisProps) {
   const { data, isLoading, error } = usePatients(1, 1000, 'completed');
 
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -153,15 +159,18 @@ export default function MedicalSurveyAnalysis() {
     return surveys;
   }, [data, filterDate, filterDiagnosis, filterAge, filterSeverity]);
 
-  const processedData = useMemo(() => {
-    if (!filteredData.length) return null;
-
-    const totalSurveys = filteredData.length;
-    
+  const calculatedMetrics = useMemo(() => {
+    const totalPatients = filteredData.length;
+    const completedSurveys = filteredData.filter((s: Patient) => s.estado === 'completed' || s.estado === 'completada').length;
     const withProbCirugia = filteredData.filter(p => typeof p.probabilidadCirugia === 'number');
     const conversionRate = withProbCirugia.length > 0
       ? withProbCirugia.reduce((sum, p) => sum + (p.probabilidadCirugia || 0), 0) / withProbCirugia.length
       : 0;
+
+    const avgPainLevel = filteredData
+      .filter((p: Patient) => p.nivel_dolor !== undefined && p.nivel_dolor !== null)
+      .reduce((sum: number, p: Patient) => sum + (parseInt(p.nivel_dolor || '0', 10) || 0), 0) / 
+      (filteredData.filter((p: Patient) => p.nivel_dolor !== undefined && p.nivel_dolor !== null).length || 1);
 
     const severidadSintomasNum = filteredData
         .map((s: Patient) => s.severidadSintomasActuales ? parseInt(s.severidadSintomasActuales, 10) : undefined)
@@ -172,21 +181,28 @@ export default function MedicalSurveyAnalysis() {
         : undefined;
 
     return {
-      totalSurveys,
+      totalPatients,
+      completedSurveys,
       conversionRate,
+      avgPainLevel,
       averagePainIntensity,
       diagnosisDistribution: aggregateData(filteredData, 'diagnostico', diagnosticoMap),
       symptomSeverityDistribution: aggregateData(filteredData, 'severidadSintomasActuales', severidadSintomasMap),
     };
   }, [filteredData]);
 
-  const displayPriorityPatients = useMemo(() => {
-    const sorted = [...filteredData].sort((a, b) => (b.probabilidadCirugia || 0) - (a.probabilidadCirugia || 0));
-    const filtered = sorted.filter(p =>
-        p.nombreCompleto?.toLowerCase().includes(searchTermPatients.toLowerCase()) ||
-        p.diagnostico?.toLowerCase().includes(searchTermPatients.toLowerCase())
+  const surveySearchResults = useMemo(() => {
+    if (!searchTermPatients.trim()) return filteredData;
+    
+    return filteredData.filter((s: Patient) => 
+      s.paciente?.toLowerCase().includes(searchTermPatients.toLowerCase()) ||
+      s.diagnostico_principal?.toLowerCase().includes(searchTermPatients.toLowerCase())
     );
-    return filtered.map(p => ({
+  }, [filteredData, searchTermPatients]);
+
+  const displayPriorityPatients = useMemo(() => {
+    const sorted = [...surveySearchResults].sort((a, b) => (b.probabilidadCirugia || 0) - (a.probabilidadCirugia || 0));
+    return sorted.map(p => ({
         id: p.id,
         nombreCompleto: p.nombreCompleto || 'Sin Nombre',
         edad: p.edad,
@@ -194,7 +210,11 @@ export default function MedicalSurveyAnalysis() {
         probabilidadCirugia: p.probabilidadCirugia,
         ultimoContacto: formatDate(p.fechaActualizacion),
     }));
-  }, [filteredData, searchTermPatients]);
+  }, [surveySearchResults]);
+
+  const handleSearchPatientsChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setSearchTermPatients(e.target.value);
+  };
 
   if (isLoading) return <div className="flex justify-center items-center h-96"><LoadingSpinner /></div>;
   if (error) return (
@@ -204,7 +224,7 @@ export default function MedicalSurveyAnalysis() {
       <AlertDescription>{error instanceof Error ? error.message : "Ocurrió un error desconocido"}</AlertDescription>
     </Alert>
   );
-  if (!processedData) return (
+  if (!calculatedMetrics) return (
     <Alert className="m-4">
         <AlertTriangle className="h-4 w-4" />
         <AlertTitle>No hay datos disponibles</AlertTitle>
@@ -271,17 +291,17 @@ export default function MedicalSurveyAnalysis() {
 
         <TabsContent value="dashboard" className="mt-4 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard title="Total Encuestas" value={processedData.totalSurveys.toString()} icon={Users} />
-            <MetricCard title="Tasa Conversión (Prob.)" value={formatPercent(processedData.conversionRate)} icon={TrendingUp} />
-            <MetricCard title="Dolor Promedio" value={`${processedData.averagePainIntensity?.toFixed(1) || 'N/A'} / 5`} icon={Activity} />
-            <MetricCard title="Prob. Cirugía (Media)" value={formatPercent(processedData.conversionRate)} icon={CheckCircle2} />
+            <MetricCard title="Total Encuestas" value={calculatedMetrics.totalPatients.toString()} icon={Users} />
+            <MetricCard title="Tasa Conversión (Prob.)" value={formatPercent(calculatedMetrics.conversionRate)} icon={TrendingUp} />
+            <MetricCard title="Dolor Promedio" value={`${calculatedMetrics.averagePainIntensity?.toFixed(1) || 'N/A'} / 5`} icon={Activity} />
+            <MetricCard title="Prob. Cirugía (Media)" value={formatPercent(calculatedMetrics.conversionRate)} icon={CheckCircle2} />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ChartCard title="Distribución por Diagnóstico">
-                <ResponsivePieChart data={processedData.diagnosisDistribution} />
+                <ResponsivePieChart data={calculatedMetrics.diagnosisDistribution} />
             </ChartCard>
             <ChartCard title="Severidad de Síntomas Reportada">
-                <ResponsivePieChart data={processedData.symptomSeverityDistribution} />
+                <ResponsivePieChart data={calculatedMetrics.symptomSeverityDistribution} />
             </ChartCard>
           </div>
         </TabsContent>
@@ -296,7 +316,7 @@ export default function MedicalSurveyAnalysis() {
                 <Input 
                   placeholder="Buscar por nombre o diagnóstico..." 
                   value={searchTermPatients} 
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTermPatients(e.target.value)}
+                  onChange={handleSearchPatientsChange}
                   className="pl-8"
                 />
               </div>

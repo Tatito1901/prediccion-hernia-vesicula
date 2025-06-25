@@ -1,7 +1,6 @@
 // app/survey/layout.tsx
 import { cn } from "@/lib/utils"
 import { ThemeProvider } from "@/components/theme/theme-provider"
-import { AppContextProvider } from "@/lib/context/app-context-provider"
 
 export const metadata = {
   title: "Encuesta Pre-Consulta | Clínica de Hernia y Vesícula",
@@ -26,7 +25,7 @@ export default function SurveyLayout({
           "min-h-screen bg-background font-sans antialiased",
         )}
       >
-        <AppContextProvider>{children}</AppContextProvider>
+      {children}
       </div>
     </ThemeProvider>
   )

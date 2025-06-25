@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { AppSidebar } from "@/components/navigation/app-sidebar"
 
@@ -14,9 +14,12 @@ import MedicalSurveyAnalysis from "@/components/surveys/medical-survey-analysis"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"
 import { toast } from "sonner"
 
-export default function EncuestaPage() {
+// Componente interno que utiliza useSearchParams
+function EncuestaContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  
+  // El resto del componente permanece igual...
   
 
   // Obtener parámetros de la URL
@@ -193,5 +196,14 @@ export default function EncuestaPage() {
         </div>
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+// Componente principal envuelto en Suspense
+export default function EncuestaPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div></div>}>
+      <EncuestaContent />
+    </Suspense>
   )
 }
