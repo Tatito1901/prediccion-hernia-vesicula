@@ -11,8 +11,7 @@ import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, isS
 import { es } from "date-fns/locale/es"
 import { Button } from "@/components/ui/button"
 import { useAppointments } from "@/hooks/use-appointments";
-import type { AppointmentData } from "@/app/dashboard/data-model"
-import { AppointmentStatusEnum, type AppointmentStatus } from "@/app/dashboard/data-model"
+import { ExtendedAppointment, AppointmentStatusEnum, type AppointmentStatus } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import {
   FileBarChart, RefreshCw, AlertCircle, X, TrendingUp, Calendar, Clock,
@@ -25,7 +24,6 @@ import useChartConfig, {
   type TrendChartData,
   type WeekdayChartData,
   type ScatterData,
-  type PatientData,
   WEEKDAYS,
   formatDateUtil,
   titleCaseStatus,
@@ -43,11 +41,23 @@ export interface DateRange {
   to: Date | null
 }
 
+// Interfaz interna para el estado mapeado de las citas
+interface MappedAppointment {
+  id: string;
+  paciente: string;
+  fecha_consulta: Date | undefined;
+  hora_consulta: string;
+  motivo_consulta: string;
+  estado: AppointmentStatus;
+  notas: string;
+  telefono: string;
+}
+
 export interface AppointmentFilters {
   dateRange: DateRange | undefined
   motiveFilter: string
   statusFilter: readonly AppointmentStatus[]
-  sortBy: 'fechaConsulta' | 'horaConsulta' | 'nombre' | 'motivoConsulta'
+  sortBy: 'fecha_hora_cita' | 'paciente' | 'motivo_consulta'
   sortOrder: 'asc' | 'desc'
   timeRange: readonly [number, number]
 }
@@ -60,7 +70,7 @@ const INITIAL_FILTERS: AppointmentFilters = {
   dateRange: undefined,
   motiveFilter: "all",
   statusFilter: [...Object.values(AppointmentStatusEnum)],
-  sortBy: "fechaConsulta",
+  sortBy: "fecha_hora_cita",
   sortOrder: "desc",
   timeRange: [0, 24] as const,
 }
@@ -212,16 +222,19 @@ StatCards.displayName = "StatCards"
  * HOOKS DE PROCESAMIENTO OPTIMIZADOS
  * ============================================================================ */
 
-const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], filters: AppointmentFilters) => {
+const useProcessedAppointments = (appointmentsFromContext: ExtendedAppointment[], filters: AppointmentFilters) => {
   return useMemo(() => {
-    // Mapeo optimizado en una sola pasada
-    const mappedAppointments: PatientData[] = appointmentsFromContext.map((appt: AppointmentData) => {
-      const nameParts = appt.paciente?.split(' ') || ['Desconocido']
+    // Mapeo de datos optimizado
+    const mappedAppointments = appointmentsFromContext.map(appt => {
+      // En el modelo centralizado, el nombre viene del objeto paciente
+      const pacienteNombre = appt.paciente?.nombre || '';
+      const pacienteApellidos = appt.paciente?.apellidos || '';
+      const nombreCompleto = [pacienteNombre, pacienteApellidos].filter(Boolean).join(' ');
       
       let dateObj: Date | undefined = undefined;
       try {
-        if (appt.fechaConsulta) {
-          const parsedDate = typeof appt.fechaConsulta === 'string' ? parseISO(appt.fechaConsulta) : appt.fechaConsulta;
+        if (appt.fecha_hora_cita) {
+          const parsedDate = typeof appt.fecha_hora_cita === 'string' ? parseISO(appt.fecha_hora_cita) : new Date(appt.fecha_hora_cita);
           if (isValid(parsedDate)) {
             dateObj = parsedDate;
           }
@@ -230,36 +243,40 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
         console.error("Error procesando fecha para cita ID:", appt.id, error);
       }
 
-      return {
+      // Extraemos la hora de fecha_hora_cita o usamos un valor predeterminado
+      const timeStr = dateObj ? format(dateObj, 'HH:mm') : "00:00";
+      
+      const mappedAppointment: MappedAppointment = {
         id: appt.id,
-        paciente: nameParts.join(' ').trim(),
-        fechaConsulta: dateObj,
-        horaConsulta: appt.horaConsulta || "00:00",
-        motivoConsulta: appt.motivoConsulta || "No especificado",
-        estado: appt.estado || AppointmentStatusEnum.PROGRAMADA,
-        notas: appt.notas || "",
-        telefono: appt.telefono || "",
-        email: appt.email || "",
-      }
+        paciente: nombreCompleto,
+        fecha_consulta: dateObj,
+        hora_consulta: timeStr,
+        motivo_consulta: appt.motivo_cita || "No especificado",
+        estado: appt.estado_cita as AppointmentStatus || AppointmentStatusEnum.PROGRAMADA,
+        notas: appt.notas_cita_seguimiento || "",
+        telefono: appt.paciente?.telefono || ""
+      };
+      
+      return mappedAppointment;
     })
 
     // Filtrado optimizado
     const filteredAppointments = mappedAppointments.filter((appt) => {
-      if (!appt.fechaConsulta || !isValid(appt.fechaConsulta)) return false
+      if (!appt.fecha_consulta || !isValid(appt.fecha_consulta)) return false
       
       const { from, to } = filters.dateRange || {}
       if (from || to) {
-        const dateObj = appt.fechaConsulta
+        const dateObj = appt.fecha_consulta
         const fromDate = from ? startOfDay(from) : null
         const toDate = to ? endOfDay(to) : null
         if (fromDate && !isSameDay(dateObj, fromDate) && isBefore(dateObj, fromDate)) return false
         if (toDate && !isSameDay(dateObj, toDate) && isAfter(dateObj, toDate)) return false
       }
       
-      if (filters.motiveFilter !== "all" && appt.motivoConsulta !== filters.motiveFilter) return false
+      if (filters.motiveFilter !== "all" && appt.motivo_consulta !== filters.motiveFilter) return false
       if (!filters.statusFilter.includes(appt.estado!)) return false
       
-      const hourDecimalValue = hourToDecimal(appt.horaConsulta)
+      const hourDecimalValue = hourToDecimal(appt.hora_consulta)
       if (hourDecimalValue !== null && (hourDecimalValue < filters.timeRange[0] || hourDecimalValue > filters.timeRange[1])) return false
       
       return true
@@ -268,21 +285,19 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
     // Ordenamiento optimizado
     filteredAppointments.sort((a, b) => {
       let comp = 0
-      if (filters.sortBy === "fechaConsulta") {
-        comp = (a.fechaConsulta as Date).getTime() - (b.fechaConsulta as Date).getTime()
+      if (filters.sortBy === "fecha_hora_cita") {
+        comp = (a.fecha_consulta as Date).getTime() - (b.fecha_consulta as Date).getTime()
         if (comp === 0) {
-          const hourA = hourToDecimal(a.horaConsulta)
-          const hourB = hourToDecimal(b.horaConsulta)
+          const hourA = hourToDecimal(a.hora_consulta)
+          const hourB = hourToDecimal(b.hora_consulta)
           if (hourA !== null && hourB !== null) {
             comp = hourA - hourB
           }
         }
-      } else if (filters.sortBy === "nombre") {
+      } else if (filters.sortBy === "paciente") {
         comp = (a.paciente || "").localeCompare(b.paciente || "")
-      } else {
-        const valA = a[filters.sortBy as keyof PatientData] as string
-        const valB = b[filters.sortBy as keyof PatientData] as string
-        if (typeof valA === "string" && typeof valB === "string") comp = valA.localeCompare(valB)
+      } else if (filters.sortBy === "motivo_consulta") {
+        comp = (a.motivo_consulta || "").localeCompare(b.motivo_consulta || "")
       }
       return filters.sortOrder === "asc" ? comp : -comp
     })
@@ -291,7 +306,7 @@ const useProcessedAppointments = (appointmentsFromContext: AppointmentData[], fi
   }, [appointmentsFromContext, filters])
 }
 
-const useChartData = (filteredAppointments: PatientData[], filters: AppointmentFilters) => {
+const useChartData = (filteredAppointments: MappedAppointment[], filters: AppointmentFilters) => {
   return useMemo(() => {
     const total = filteredAppointments.length
     
@@ -339,7 +354,7 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
     const motiveChartData: MotiveChartData[] = (() => {
       const motiveCounts: Record<string, number> = {}
       filteredAppointments.forEach(a => { 
-        motiveCounts[a.motivoConsulta!] = (motiveCounts[a.motivoConsulta!] || 0) + 1 
+        motiveCounts[a.motivo_consulta!] = (motiveCounts[a.motivo_consulta!] || 0) + 1 
       })
       return Object.entries(motiveCounts)
         .map(([motive, count]) => ({ motive, count }))
@@ -349,7 +364,7 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
     const trendChartData: TrendChartData[] = (() => {
       const byDate: Record<string, Record<AppointmentStatus | "total", number>> = {}
       filteredAppointments.forEach(a => { 
-        const dateStr = format(a.fechaConsulta!, "yyyy-MM-dd")
+        const dateStr = format(a.fecha_consulta!, "yyyy-MM-dd")
         if (!byDate[dateStr]) {
           byDate[dateStr] = Object.values(AppointmentStatusEnum).reduce((ac, s) => { 
             ac[s] = 0
@@ -376,8 +391,8 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
         }, {} as any)
 
       filteredAppointments.forEach(a => { 
-        const fechaDate = a.fechaConsulta instanceof Date ? a.fechaConsulta : 
-                         (typeof a.fechaConsulta === 'string' ? parseISO(a.fechaConsulta) : null)
+        const fechaDate = a.fecha_consulta instanceof Date ? a.fecha_consulta : 
+                         (typeof a.fecha_consulta === 'string' ? parseISO(a.fecha_consulta) : null)
         if (!fechaDate) return
         
         const dayOfWeek = fechaDate.getDay()
@@ -401,12 +416,12 @@ const useChartData = (filteredAppointments: PatientData[], filters: AppointmentF
       ) as Record<AppointmentStatus, Record<string, any>>
 
       filteredAppointments.forEach(a => { 
-        const fechaDate = a.fechaConsulta instanceof Date ? a.fechaConsulta : 
-                         (typeof a.fechaConsulta === 'string' ? parseISO(a.fechaConsulta) : null)
+        const fechaDate = a.fecha_consulta instanceof Date ? a.fecha_consulta : 
+                         (typeof a.fecha_consulta === 'string' ? parseISO(a.fecha_consulta) : null)
         if (!fechaDate) return
         
         const dayOfWeek = fechaDate.getDay()
-        const hourDecimal = hourToDecimal(a.horaConsulta)
+        const hourDecimal = hourToDecimal(a.hora_consulta)
         if (dayOfWeek === undefined || hourDecimal === null) return
         
         const hour = Math.floor(hourDecimal)

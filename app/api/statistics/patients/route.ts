@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { PatientStatusEnum } from '@/app/dashboard/data-model';
+import { PatientStatusEnum } from '@/lib/types';
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -59,10 +59,10 @@ export async function GET(request: Request) {
         : 0;
 
     const finalStats = {
-      totalPatients,
-      surveyCompletionRate,
-      pendingConsults: statsByStatus[PatientStatusEnum.PENDIENTE_DE_CONSULTA],
-      operatedPatients: statsByStatus[PatientStatusEnum.OPERADO]
+      total_patients: totalPatients,
+      survey_completion_rate: surveyCompletionRate,
+      pending_consults: statsByStatus[PatientStatusEnum.PENDIENTE_DE_CONSULTA],
+      operated_patients: statsByStatus[PatientStatusEnum.OPERADO]
     };
 
     // Cache por 5 minutos

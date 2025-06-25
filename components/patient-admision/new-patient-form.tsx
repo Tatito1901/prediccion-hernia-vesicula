@@ -48,7 +48,7 @@ import {
   PatientStatusEnum,
   AppointmentStatusEnum,
   type TimeString
-} from "@/app/dashboard/data-model"
+} from "@/lib/types"
 import { useCreatePatient } from "@/hooks/use-patients";
 import { useAppointments, useCreateAppointment } from "@/hooks/use-appointments";
 
@@ -73,7 +73,7 @@ const FORM_SCHEMA = z.object({
     .min(10, "El teléfono debe tener al menos 10 dígitos.")
     .max(15, "Máximo 15 dígitos.")
     .regex(/^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s./0-9]*$/, "Formato de teléfono no válido."),
-  motivoConsulta: z.nativeEnum(DiagnosisEnum, {
+  motivoConsulta: z.enum(Object.values(DiagnosisEnum) as [DiagnosisEnum, ...DiagnosisEnum[]], {
     required_error: "Por favor seleccione un motivo de consulta.",
   }),
   fechaConsulta: z.date({
@@ -273,28 +273,37 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
 
   const handleSubmit = useCallback(async (values: FormValues) => {
     try {
-      // Crear paciente
+      // Crear paciente - adaptado al tipo NewPatient (snake_case)
       const newPatient = await createPatientMutation.mutateAsync({
+        // Datos personales
         nombre: values.nombre.trim(),
         apellidos: values.apellidos.trim(),
-        edad: values.edad ?? undefined,
+        telefono: values.telefono.trim(),
+        edad: values.edad ?? null,
+        
+        // Datos clínicos
         diagnostico_principal: values.motivoConsulta,
         estado_paciente: PatientStatusEnum.PENDIENTE_DE_CONSULTA,
         probabilidad_cirugia: 0.5, // Default value, can be updated later
-        notas_paciente: values.notas?.trim() || "",
-        telefono: values.telefono.trim(),
+        comentarios_registro: values.notas?.trim() || "",
+        
+        // Metadata
         fecha_registro: new Date().toISOString(),
       });
 
-      // Crear cita
+      // Combinar fecha y hora en un único string ISO
+      const fechaHoraCita = new Date(values.fechaConsulta);
+      const [horas, minutos] = values.horaConsulta.split(':').map(Number);
+      fechaHoraCita.setHours(horas, minutos, 0, 0);
+      
+      // Crear cita - adaptado al tipo NewAppointment (snake_case)
       await createAppointmentMutation.mutateAsync({
-        patientId: newPatient.id,
-        fecha_raw: format(values.fechaConsulta, "yyyy-MM-dd"),
-        hora_raw: values.horaConsulta,
-        estado: AppointmentStatusEnum.PROGRAMADA,
-        motivoConsulta: values.motivoConsulta,
-        notas: values.notas?.trim() || "",
-        esPrimeraVez: true,
+        patient_id: newPatient.id,
+        fecha_hora_cita: fechaHoraCita.toISOString(),
+        estado_cita: AppointmentStatusEnum.PROGRAMADA,
+        motivo_cita: values.motivoConsulta,
+        notas_cita_seguimiento: values.notas?.trim() || "",
+        es_primera_vez: true,
       });
 
       setOpen(false);

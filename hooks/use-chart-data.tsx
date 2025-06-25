@@ -7,56 +7,48 @@ import type {
   GeneralStats,
 } from '@/components/charts/use-chart-config';
 import { WEEKDAYS_SHORT } from '@/components/charts/use-chart-config';
-import type { AppointmentStatus } from '@/app/dashboard/data-model';
+import { AppointmentStatusEnum, PatientStatusEnum, Patient, Appointment } from '@/lib/types';
+
+// Definimos el tipo AppointmentStatus para mantener compatibilidad con el código existente
+// Es importante notar que en AppointmentStatusEnum usamos NO_ASISTIO (con guiones bajos)
+// pero en el código original se usa 'NO ASISTIO' (con espacio)
+type AppointmentStatus = 
+  | 'PROGRAMADA'
+  | 'CONFIRMADA'
+  | 'CANCELADA'
+  | 'COMPLETADA'
+  | 'NO ASISTIO' // Mantenemos esta forma para compatibilidad
+  | 'PRESENTE'
+  | 'REAGENDADA';
 
 // Constantes para mejorar mantenibilidad
 const DEFAULT_STALE_TIME = 60000; // 1 minuto
 const MIN_REFRESH_INTERVAL = 1000; // 1 segundo mínimo
 
-// Definiciones de tipos de la API con validaciones más estrictas
-export interface ApiAppointment {
-  id: string;
-  patient_id: string;
-  doctor_id: string;
-  fecha_hora_cita: string; // ISO string
-  motivo_cita: string;
-  estado_cita: AppointmentStatus;
-  es_primera_vez: boolean;
-  notas_cita_seguimiento?: string;
-  patients?: {
-    id: string;
-    nombre: string;
-    apellidos: string;
-    telefono: string;
-  };
-  doctor?: {
-    id: string;
-    full_name: string;
-  };
-}
+// Usando tipos centralizados de la base de datos en lugar de definiciones locales
+// Para referencia, las interfaces originales son reemplazadas por Patient y Appointment de lib/types
 
-export interface ApiPatient {
-  id: string;
-  nombre: string;
-  apellidos: string;
-  edad?: number;
-  telefono?: string;
-  email?: string;
-  fecha_registro: string; // ISO string date
-  estado_paciente: string;
-  diagnostico_principal?: string;
-  diagnostico_principal_detalle?: string;
-  doctor_asignado_id?: string;
-  fecha_primera_consulta?: string; // ISO string date
-  comentarios_registro?: string;
+// Extendemos los tipos centralizados para incluir campos específicos necesarios para visualizaciones
+// que podrían no estar en la base de datos original
+// Definimos un tipo que extiende Patient pero sin conflictos de tipos
+type ExtendedPatient = Patient & {
+  // Campos adicionales que no están en el tipo Patient original
   origen_paciente?: string;
   probabilidad_cirugia?: number;
   ultimo_contacto?: string;
   proximo_contacto?: string;
   etiquetas?: string[];
   fecha_cirugia_programada?: string;
-  doctor?: {
+  doctor_info?: {
     id: string;
+    full_name: string;
+  };
+};
+
+// Extensión para Appointment cuando sea necesario
+type ExtendedAppointment = Appointment & {
+  patient_name?: string;
+  doctor_info?: {
     full_name: string;
   };
 }
@@ -249,11 +241,11 @@ export function useChartData({
 
       // Ejecutar ambas peticiones en paralelo para optimizar rendimiento
       const [appointmentsData, patientsData] = await Promise.all([
-        fetchData<ApiAppointment[]>(
+        fetchData<Appointment[]>(
           `/api/appointments${appointmentsParams ? `?${appointmentsParams}` : ''}`, 
           'Error al obtener citas'
         ),
-        fetchData<{ data: ApiPatient[], pagination: unknown }>(`/api/patients${patientsParams ? `?${patientsParams}` : ''}`, 'Error al obtener pacientes')
+        fetchData<{ data: ExtendedPatient[], pagination: unknown }>(`/api/patients${patientsParams ? `?${patientsParams}` : ''}`, 'Error al obtener pacientes')
       ]);
 
       const safeAppointments = Array.isArray(appointmentsData) ? appointmentsData : [];
@@ -314,17 +306,19 @@ export function useChartData({
       id: p.id,
       diagnostico: p.diagnostico_principal || 'Sin diagnóstico',
       diagnostico_principal: p.diagnostico_principal || 'Sin diagnóstico',
-      fecha_registro: p.fecha_registro,
-      fecha_primera_consulta: p.fecha_primera_consulta,
+      fecha_registro: p.fecha_registro || '',
+      // Convertimos null a undefined para compatibilidad con PatientData
+      fecha_primera_consulta: p.fecha_primera_consulta || undefined,
       edad: p.edad || 0,
-      genero: undefined,
+      genero: undefined, // El campo genero no existe en el nuevo modelo
       paciente: `${p.nombre} ${p.apellidos}`.trim(),
-      estado: p.estado_paciente as AppointmentStatus,
+      // Usamos estado_paciente como equivalente a estado
+      estado: (p.estado_paciente as unknown) as AppointmentStatus, // Cast para compatibilidad
       notas: p.comentarios_registro || '',
       telefono: p.telefono || '',
       email: p.email || '',
     }));
-  }, [patients]);
+    }), [patients]);
 
   // Calcular datos de diagnósticos
   const diagnosisData: DiagnosisData[] = useMemo(() => {
@@ -360,19 +354,25 @@ export function useChartData({
 
   // Calcular estadísticas generales
   const generalStats = useMemo((): GeneralStats => {
-    const statusCounts: Record<AppointmentStatus, number> = {
+    // Usamos un objeto con claves específicas para mantener compatibilidad
+    const statusCounts = {
       PROGRAMADA: 0,
       CONFIRMADA: 0,
       CANCELADA: 0,
       COMPLETADA: 0,
-      'NO ASISTIO': 0,
+      'NO ASISTIO': 0, // Mantenemos la clave con espacio para compatibilidad
       PRESENTE: 0,
       REAGENDADA: 0,
     };
 
     appointments.forEach(a => {
-      if (a.estado_cita in statusCounts) {
-        statusCounts[a.estado_cita]++;
+      // Necesitamos mapear de NO_ASISTIO (con guiones bajos) a 'NO ASISTIO' (con espacio)
+      const estadoCita = a.estado_cita === 'NO_ASISTIO' ? 'NO ASISTIO' : a.estado_cita;
+      
+      // Verificar si existe la clave en statusCounts
+      if (estadoCita && estadoCita in statusCounts) {
+        // @ts-ignore - Ignoramos error de índice porque sabemos que las claves existen
+        statusCounts[estadoCita]++;
       }
     });
 

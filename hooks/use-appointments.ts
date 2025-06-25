@@ -1,71 +1,45 @@
 // lib/hooks/use-appointments.ts
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { parseISO, isValid, format } from 'date-fns';
 import { toast } from 'sonner';
+import { useState } from 'react';
 
 import { 
-  AppointmentData, AppointmentStatusEnum,
-  type TimeString
-} from '@/app/dashboard/data-model';
+  ID, 
+  Appointment, 
+  ExtendedAppointment,
+  AppointmentData, 
+  AppointmentStatusEnum, 
+  TimeString,
+  NewAppointment 
+} from '@/lib/types';
 
 // Tipos
 interface ApiAppointment {
-  id: string | number;
-  patient_id: string | number;
-  doctor_id?: string | number;
+  id: string;
+  patient_id: string;
+  doctor_id?: string | null;
+  created_at?: string | null;
   fecha_hora_cita: string;
   motivo_cita?: string;
   estado_cita: string;
   notas_cita_seguimiento?: string | null;
-  patients?: {
-    nombre?: string;
-    apellidos?: string;
-    telefono?: string;
-  };
-  patient?: {
-    nombre?: string;
-    apellidos?: string;
-    telefono?: string;
-  };
-  doctors?: {
-    full_name?: string;
-  };
+  es_primera_vez?: boolean | null;
   doctor?: {
     full_name?: string;
   };
+  // La API de Supabase devuelve la relación bajo la clave 'patients' (plural)
+  patients?: {
+    id: string;
+    nombre?: string;
+    apellidos?: string;
+    telefono?: string;
+    email?: string;
+  };
 }
 
-export interface AddAppointmentInput {
-  patientId: string;
-  fecha_raw: string;
-  hora_raw: string;
-  estado: AppointmentStatusEnum;
-  raw_doctor_id?: string | null;
-  motivoConsulta: string;
-  duracionEstimadaMin?: number;
-  esPrimeraVez: boolean;
-  tipoConsulta?: string;
-  ubicacion?: string;
-  recursosNecesarios?: string[];
-  costo?: number;
-  notas?: string;
-}
-
-export interface UpdateAppointmentInput {
-  id: string;
-  fecha_raw?: string;
-  hora_raw?: string;
-  estado?: AppointmentStatusEnum;
-  motivoConsulta?: string;
-  raw_doctor_id?: string;
-  duracionEstimadaMin?: number;
-  esPrimeraVez?: boolean;
-  tipoConsulta?: string;
-  ubicacion?: string;
-  recursosNecesarios?: string[];
-  costo?: number;
-  notas?: string;
-}
+// Las interfaces AddAppointmentInput y UpdateAppointmentInput han sido reemplazadas
+// por los tipos centralizados NewAppointment y Appointment de lib/types
 
 // Funciones de transformación
 const normalizeId = (id: string | number | null | undefined): string => {
@@ -83,33 +57,81 @@ const safeParseDate = (dateString: string | null | undefined): Date | null => {
   }
 };
 
-const transformAppointmentData = (apiAppointment: ApiAppointment): AppointmentData => {
+const extractTimeFromDate = (date: Date | null): TimeString | null => {
+  if (!date) return null;
+  return format(date, 'HH:mm') as TimeString;
+};
+
+// Transformación del modelo de API al tipo centralizado ExtendedAppointment
+const transformAppointment = (apiAppointment: ApiAppointment): ExtendedAppointment => {
   const appointmentId = normalizeId(apiAppointment.id);
   const patientId = normalizeId(apiAppointment.patient_id);
-  const parsedDateTime = safeParseDate(apiAppointment.fecha_hora_cita);
   
-  const patientInfo = apiAppointment.patients || apiAppointment.patient;
-  const doctorInfo = apiAppointment.doctors || apiAppointment.doctor;
-
+  // Datos del paciente - Supabase devuelve 'patients' (plural)
+  const patientInfo = apiAppointment.patients || {
+    id: '',
+    nombre: '',
+    apellidos: '',
+    telefono: '',
+    email: ''
+  };
+  
+  const pacienteNombre = patientInfo.nombre || '';
+  const pacienteApellidos = patientInfo.apellidos || '';
+  const pacienteTelefono = patientInfo.telefono || '';
+  
   return {
     id: appointmentId,
-    patientId: patientId,
-    paciente: patientInfo?.nombre ? `${patientInfo.nombre} ${patientInfo.apellidos || ''}`.trim() : 'Paciente no especificado',
-    telefono: patientInfo?.telefono || 'N/A',
+    patient_id: patientId,
+    doctor_id: normalizeId(apiAppointment.doctor_id),
+    created_at: apiAppointment.created_at || null,
+    fecha_hora_cita: apiAppointment.fecha_hora_cita || '',
+    motivo_cita: apiAppointment.motivo_cita || 'Motivo no especificado',
+    estado_cita: apiAppointment.estado_cita as typeof AppointmentStatusEnum[keyof typeof AppointmentStatusEnum] || AppointmentStatusEnum.PROGRAMADA,
+    notas_cita_seguimiento: apiAppointment.notas_cita_seguimiento || null,
+    es_primera_vez: apiAppointment.es_primera_vez || false,
+    // Datos enriquecidos que no son parte del modelo básico de Appointment
+    paciente: {
+      id: patientId,
+      nombre: pacienteNombre,
+      apellidos: pacienteApellidos,
+      telefono: pacienteTelefono,
+      email: patientInfo.email || ''
+    }
+  };
+};
+
+// Función de transformación para compatibilidad con el tipo AppointmentData
+const transformToLegacyFormat = (appointment: Appointment): AppointmentData => {
+  const parsedDateTime = safeParseDate(appointment.fecha_hora_cita);
+  const doctorInfo = appointment.doctor_id
+    ? { id: appointment.doctor_id, full_name: 'Doctor' }
+    : null;
+
+  const patientName = [
+    appointment.paciente?.nombre || '',
+    appointment.paciente?.apellidos || ''
+  ].filter(Boolean).join(' ') || 'Paciente sin nombre';
+  
+  return {
+    id: appointment.id,
+    patientId: appointment.patient_id,
+    paciente: patientName,
+    telefono: appointment.paciente?.telefono || 'No disponible',
     fechaConsulta: parsedDateTime || new Date(),
-    horaConsulta: parsedDateTime ? format(parsedDateTime, 'HH:mm') as TimeString : '00:00',
+    horaConsulta: extractTimeFromDate(parsedDateTime) || '12:00',
     duracionEstimadaMin: 30,
-    motivoConsulta: apiAppointment.motivo_cita || 'Motivo no especificado',
+    motivoConsulta: appointment.motivo_cita || 'Motivo no especificado',
     tipoConsulta: 'Seguimiento',
-    estado: apiAppointment.estado_cita as AppointmentStatusEnum || AppointmentStatusEnum.PROGRAMADA,
-    notas: apiAppointment.notas_cita_seguimiento ?? undefined,
+    estado: appointment.estado_cita,
+    notas: appointment.notas_cita_seguimiento || undefined,
     ubicacion: 'Consultorio Principal',
     recursosNecesarios: [],
-    esPrimeraVez: false,
+    esPrimeraVez: appointment.es_primera_vez || false,
     costo: 0,
-    doctor: doctorInfo?.full_name || 'Doctor no asignado',
-    raw_doctor_id: normalizeId(apiAppointment.doctor_id),
-  } as AppointmentData;
+    doctor: 'Doctor no asignado',
+    raw_doctor_id: appointment.doctor_id,
+  };
 };
 
 // Query Keys
@@ -124,8 +146,9 @@ export const appointmentKeys = {
 };
 
 // Hooks de React Query
+// Devuelve las citas en el formato ExtendedAppointment
 export const useAppointments = (page = 1, pageSize = 10) => {
-  return useQuery({
+  return useQuery<{ appointments: ExtendedAppointment[], pagination: any }>({  
     queryKey: appointmentKeys.list({ page, pageSize }),
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -139,8 +162,10 @@ export const useAppointments = (page = 1, pageSize = 10) => {
       }
       
       const data = await response.json();
+      // Primero transformamos al modelo centralizado
+      const appointments = data.data.map(transformAppointment);
       return {
-        appointments: data.data.map(transformAppointmentData),
+        appointments, // Devolvemos directamente los objetos tipo Appointment
         pagination: data.pagination
       };
     },
@@ -150,8 +175,9 @@ export const useAppointments = (page = 1, pageSize = 10) => {
   });
 };
 
+// Devuelve una cita específica en el formato ExtendedAppointment
 export const useAppointment = (id: string | null) => {
-  return useQuery({
+  return useQuery<ExtendedAppointment | null>({  
     queryKey: appointmentKeys.detail(id!),
     queryFn: async () => {
       const response = await fetch(`/api/appointments/${id}`);
@@ -160,7 +186,7 @@ export const useAppointment = (id: string | null) => {
         throw new Error('Error fetching appointment');
       }
       const data = await response.json();
-      return transformAppointmentData(data);
+      return transformAppointment(data);
     },
     enabled: !!id,
     staleTime: 2 * 60 * 1000,
@@ -172,16 +198,12 @@ export const useCreateAppointment = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (data: AddAppointmentInput) => {
-      const { fecha_raw, hora_raw, ...rest } = data;
+    mutationFn: async (data: NewAppointment) => {
+      // NewAppointment ya utiliza snake_case y tiene todos los campos necesarios
+      // Solo necesitamos asegurarnos de que fecha_hora_cita tiene el formato correcto
       const payload = {
-        patient_id: data.patientId,
-        doctor_id: data.raw_doctor_id || null,
-        fecha_hora_cita: `${fecha_raw}T${hora_raw}:00.000Z`,
-        motivo_cita: data.motivoConsulta,
-        estado_cita: data.estado,
-        es_primera_vez: data.esPrimeraVez,
-        notas_cita_seguimiento: data.notas || null
+        ...data,
+        // Asegurar que otros campos sean consistentes con la API
       };
       
       const response = await fetch('/api/appointments', {
@@ -196,7 +218,7 @@ export const useCreateAppointment = () => {
       }
       
       const responseData = await response.json();
-      return transformAppointmentData(responseData);
+      return transformAppointment(responseData);
     },
     onSuccess: (newAppointment) => {
       queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
@@ -220,30 +242,17 @@ export const useCreateAppointment = () => {
 export const useUpdateAppointment = () => {
   const queryClient = useQueryClient();
   
-  return useMutation({
-    mutationFn: async (input: UpdateAppointmentInput) => {
-      const { id, fecha_raw, hora_raw, ...updateData } = input;
+  return useMutation({    
+    mutationFn: async (input: Partial<ExtendedAppointment> & { id: string }) => {
+      const { id, ...updateData } = input;
       
-      const payload: Record<string, any> = { ...updateData };
+      // Usamos directamente los datos de actualización sin transformaciones adicionales
+      // ya que estamos trabajando con el tipo Partial<ExtendedAppointment> que ya tiene la estructura correcta
+      const payload = { ...updateData };
       
-      if (fecha_raw && hora_raw) {
-        payload.fecha_hora_cita = `${fecha_raw}T${hora_raw}:00.000Z`;
-      }
-      
-      if (updateData.raw_doctor_id !== undefined) {
-        payload.doctor_id = updateData.raw_doctor_id;
-        delete payload.raw_doctor_id;
-      }
-      
-      if (updateData.motivoConsulta !== undefined) {
-        payload.motivo_cita = updateData.motivoConsulta;
-        delete payload.motivoConsulta;
-      }
-      
-      if (updateData.notas !== undefined) {
-        payload.notas_cita_seguimiento = updateData.notas;
-        delete payload.notas;
-      }
+      // Nota: El tipo ExtendedAppointment ya define fecha_hora_cita como string, por lo que
+      // Nota: El tipo Appointment ya define fecha_hora_cita como string, por lo que
+      // no es necesario realizar conversiones de tipo aquí
       
       const response = await fetch(`/api/appointments/${id}`, {
         method: 'PATCH',
@@ -257,19 +266,22 @@ export const useUpdateAppointment = () => {
       }
       
       const responseData = await response.json();
-      return transformAppointmentData(responseData);
+      return transformAppointment(responseData);
     },
     onSuccess: (updatedAppointment) => {
+      // Actualizar la caché de la cita específica
       queryClient.setQueryData(
         appointmentKeys.detail(updatedAppointment.id),
         updatedAppointment
       );
       
+      // Invalidar las listas de citas para forzar una recarga
       queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
       
-      if (updatedAppointment.patientId) {
+      // Invalidar los datos del paciente asociado si existe un ID de paciente
+      if (updatedAppointment.patient_id) {
         queryClient.invalidateQueries({ 
-          queryKey: ['patients', 'detail', updatedAppointment.patientId] 
+          queryKey: ['patients', 'detail', updatedAppointment.patient_id] 
         });
       }
       
@@ -294,7 +306,7 @@ export const useUpdateAppointmentStatus = () => {
       nuevaFechaHora 
     }: { 
       appointmentId: string; 
-      newStatus: AppointmentStatusEnum; 
+      newStatus: typeof AppointmentStatusEnum[keyof typeof AppointmentStatusEnum]; 
       motivo?: string; 
       nuevaFechaHora?: string;
     }) => {
@@ -317,7 +329,7 @@ export const useUpdateAppointmentStatus = () => {
       }
       
       const responseData = await response.json();
-      return transformAppointmentData(responseData);
+      return transformAppointment(responseData);
     },
     onSuccess: (updatedAppointment) => {
       queryClient.setQueryData(
@@ -327,9 +339,9 @@ export const useUpdateAppointmentStatus = () => {
       
       queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
       
-      if (updatedAppointment.patientId) {
+      if (updatedAppointment.patient_id) {
         queryClient.invalidateQueries({ 
-          queryKey: ['patients', 'detail', updatedAppointment.patientId] 
+          queryKey: ['patients', 'detail', updatedAppointment.patient_id] 
         });
       }
       
@@ -341,7 +353,7 @@ export const useUpdateAppointmentStatus = () => {
         [AppointmentStatusEnum.REAGENDADA]: 'Cita reagendada',
       };
       
-      toast.success(statusMessages[updatedAppointment.estado] || 'Estado actualizado');
+      toast.success(statusMessages[updatedAppointment.estado_cita] || 'Estado actualizado');
     },
     onError: (error) => {
       toast.error('Error al actualizar estado', {

@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 
 import { useAppointments } from '@/hooks/use-appointments'
-import type { AppointmentData } from '@/app/dashboard/data-model'
+import { AppointmentData } from '@/lib/types' // Importamos desde el tipo centralizado
 
 // Tipos simplificados
 export type AdmissionTab = 'newPatient' | 'today' | 'future' | 'past'

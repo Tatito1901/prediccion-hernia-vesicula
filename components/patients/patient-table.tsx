@@ -35,27 +35,27 @@ import {
 } from "lucide-react"
 import PatientStatus from "./patient-status"
 import { cn } from "@/lib/utils"
-import { PatientData, PatientStatusEnum, DiagnosisType } from "@/app/dashboard/data-model"
+import { Patient, PatientStatusEnum, DiagnosisEnum } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 
-export interface EnrichedPatientData extends PatientData {
+export interface EnrichedPatientData extends Omit<Patient, 'diagnostico_principal' | 'edad'> {
   nombreCompleto: string
   fecha_proxima_cita?: string
   encuesta_completada: boolean
   displayDiagnostico: string
-  diagnostico_principal?: DiagnosisType
-  edad?: number
+  diagnostico_principal: Patient['diagnostico_principal']
+  edad: number | null
   fecha_registro: string
 }
 
 interface PatientTableProps {
   patients: EnrichedPatientData[]
   loading?: boolean
-  onSelectPatient: (patient: PatientData) => void
-  onShareSurvey?: (patient: PatientData) => void
-  onAnswerSurvey?: (patient: PatientData) => void
-  onEditPatient?: (patient: PatientData) => void
-  onScheduleAppointment?: (patient: PatientData) => void
+  onSelectPatient: (patient: Patient) => void
+  onShareSurvey?: (patient: Patient) => void
+  onAnswerSurvey?: (patient: Patient) => void
+  onEditPatient?: (patient: Patient) => void
+  onScheduleAppointment?: (patient: Patient) => void
 }
 
 type SortConfig = {
@@ -169,11 +169,11 @@ const PatientCard = ({
   onScheduleAppointment
 }: {
   patient: EnrichedPatientData
-  onSelectPatient: (patient: PatientData) => void
-  onShareSurvey?: (patient: PatientData) => void
-  onAnswerSurvey?: (patient: PatientData) => void
-  onEditPatient?: (patient: PatientData) => void
-  onScheduleAppointment?: (patient: PatientData) => void
+  onSelectPatient: (patient: Patient) => void
+  onShareSurvey?: (patient: Patient) => void
+  onAnswerSurvey?: (patient: Patient) => void
+  onEditPatient?: (patient: Patient) => void
+  onScheduleAppointment?: (patient: Patient) => void
 }) => {
   return (
     <div 
@@ -320,11 +320,11 @@ const PatientRow = ({
   onScheduleAppointment
 }: {
   patient: EnrichedPatientData
-  onSelectPatient: (patient: PatientData) => void
-  onShareSurvey?: (patient: PatientData) => void
-  onAnswerSurvey?: (patient: PatientData) => void
-  onEditPatient?: (patient: PatientData) => void
-  onScheduleAppointment?: (patient: PatientData) => void
+  onSelectPatient: (patient: Patient) => void
+  onShareSurvey?: (patient: Patient) => void
+  onAnswerSurvey?: (patient: Patient) => void
+  onEditPatient?: (patient: Patient) => void
+  onScheduleAppointment?: (patient: Patient) => void
 }) => {
   return (
     <TableRow 

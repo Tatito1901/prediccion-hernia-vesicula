@@ -54,7 +54,7 @@ import {
 import { usePatient } from "@/hooks/use-patients";
 import { useCreateAppointment } from '@/hooks/use-appointments';
 import { calculateConversionScore, generateInsights, generateRecommendationCategories } from "@/lib/utils/survey-analyzer-helpers"
-import { AppointmentStatusEnum, type PatientData, type PatientSurveyData } from "@/app/dashboard/data-model"
+import { AppointmentStatusEnum, type Patient, type PatientSurvey } from "@/lib/types"
 
 // Define the structure for conversion insights
 export interface ConversionInsight {

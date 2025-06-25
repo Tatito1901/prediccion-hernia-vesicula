@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { PatientData } from '@/app/dashboard/data-model';
+import type { Patient as PatientData, NewPatient } from '@/lib/types';
 
 // 1. Definir llaves para el caché de React Query (buena práctica)
 export const patientKeys = {
@@ -57,7 +57,7 @@ export const usePatient = (id: string | null) => {
 export const useCreatePatient = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (newPatientData: Omit<PatientData, 'id'>) => {
+    mutationFn: async (newPatientData: NewPatient) => {
       const response = await fetch('/api/patients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

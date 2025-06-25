@@ -1,9 +1,9 @@
 // lib/hooks/use-processed-patients.ts
 
 import { useMemo } from "react";
-import type { PatientData, AppointmentData, DiagnosisType } from "@/app/dashboard/data-model";
+import { PatientData, AppointmentData, PatientStatusEnum } from "@/lib/types";
 import type { EnrichedPatientData } from "@/components/patients/patient-management";
-import { PatientStatusEnum } from "@/app/dashboard/data-model";
+// Utilizamos los tipos centralizados de lib/types en lugar de app/dashboard/data-model
 
 const STATUS_CONFIG = {
   [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: { label: "Pend. Consulta" },
@@ -18,7 +18,7 @@ export const useProcessedPatients = (
   patients: PatientData[],
   appointments: AppointmentData[],
   searchTerm: string,
-  statusFilter: PatientStatusEnum | "all"
+  statusFilter: keyof typeof PatientStatusEnum | "all"
 ) => {
   // Memoización del enriquecimiento de datos
   const enrichedPatients = useMemo((): EnrichedPatientData[] => {
@@ -59,7 +59,7 @@ export const useProcessedPatients = (
         fecha_proxima_cita_iso: nextAppointment?.fechaConsulta?.toString(),
         encuesta_completada: !!(patient as any).encuesta?.id,
         displayDiagnostico: patient.diagnostico_principal || "Sin diagnóstico",
-      };
+      } as EnrichedPatientData;
     });
   }, [patients, appointments]);
 
@@ -86,7 +86,7 @@ export const useProcessedPatients = (
 
     const stats = enrichedPatients.reduce((acc, patient) => {
       if (patient.estado_paciente && patient.estado_paciente in STATUS_CONFIG) {
-        acc[patient.estado_paciente as PatientStatusEnum]++;
+        acc[patient.estado_paciente as keyof typeof PatientStatusEnum]++;
       }
       return acc;
     }, {
@@ -96,7 +96,7 @@ export const useProcessedPatients = (
       [PatientStatusEnum.OPERADO]: 0,
       [PatientStatusEnum.NO_OPERADO]: 0,
       [PatientStatusEnum.INDECISO]: 0,
-    });
+    } as Record<keyof typeof PatientStatusEnum, number>);
 
     return {
       filteredAndEnrichedPatients: currentViewPatients,

@@ -25,31 +25,18 @@ import {
   Repeat,
   Phone,
 } from "lucide-react"
-import { AppointmentStatusEnum } from "@/app/dashboard/data-model"
+import { AppointmentStatusEnum, AppointmentData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 // Tipos simplificados
 export type ConfirmAction = "checkIn" | "cancel" | "complete" | "noShow" | "reschedule"
 
-export interface Appointment {
-  readonly id: string;
-  readonly nombre: string;
-  readonly apellidos: string;
-  readonly telefono: string;
-  readonly fechaConsulta: Date;
-  readonly horaConsulta: string;
-  readonly dateTime: Date;
-  readonly motivoConsulta: string;
-  readonly estado: AppointmentStatusEnum;
-  readonly paciente: string;
-  readonly doctor: string;
-  readonly patientId?: string;
-}
+// Usamos AppointmentData de lib/types en lugar de definir una interfaz local
 
 interface AppointmentCardProps {
-  appointment: Appointment
-  onAction: (action: ConfirmAction, appointmentId: string, appointmentData: Appointment) => void
-  onStartSurvey: (appointmentId: string, patientId?: string, appointmentData?: Appointment) => void
+  appointment: AppointmentData
+  onAction: (action: ConfirmAction, appointmentId: string, appointmentData: AppointmentData) => void
+  onStartSurvey: (appointmentId: string, patientId?: string, appointmentData?: AppointmentData) => void
   onViewHistory: (patientId: string) => void
   disableActions?: boolean
   surveyCompleted?: boolean
@@ -162,8 +149,20 @@ const formatDate = (date: string | Date) => {
   return formatted;
 }
 
-const getInitials = (name = "", last = "") =>
-  `${name.charAt(0).toUpperCase() || "?"}${last.charAt(0).toUpperCase()}`
+const getInitials = (fullName = "", last = "") => {
+  if (!fullName) return "";
+  
+  // Si last está vacío, asumimos que fullName es el nombre completo
+  if (!last) {
+    const parts = fullName.split(" ");
+    if (parts.length >= 2) {
+      return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase();
+    }
+    return fullName.charAt(0).toUpperCase();
+  }
+  
+  return `${fullName.charAt(0)}${last.charAt(0)}`.toUpperCase();
+};
 
 // Componente principal optimizado con memo
 export const AppointmentCard = memo<AppointmentCardProps>(({
@@ -175,8 +174,7 @@ export const AppointmentCard = memo<AppointmentCardProps>(({
   surveyCompleted = false,
 }) => {
   const {
-    nombre,
-    apellidos,
+    paciente, // En lugar de nombre y apellidos
     fechaConsulta,
     horaConsulta,
     motivoConsulta,
@@ -191,33 +189,40 @@ export const AppointmentCard = memo<AppointmentCardProps>(({
   const needsSurvey = estado === AppointmentStatusEnum.PRESENTE && disableActions && !surveyCompleted
   const formattedDate = formatDate(fechaConsulta)
   const formattedTime = formatTime(horaConsulta)
-  const initials = getInitials(nombre, apellidos)
+  // Extraer iniciales del nombre completo del paciente
+  const initials = getInitials(paciente, '')
+
+  // Definir el tipo para los elementos del menú
+  type MenuItem = {
+    icon: any;
+    label: string;
+    action: ConfirmAction;
+    destructive?: boolean;
+    disabled?: boolean;
+  };
 
   // Generar menu items memoizado
-  const menuItems = useMemo(() => {
+  const menuItems = useMemo<MenuItem[]>(() => {
     switch (estado) {
       case AppointmentStatusEnum.PROGRAMADA:
         return [
-          { icon: LogIn, label: "Check In", action: "checkIn" as ConfirmAction },
-          { icon: XCircle, label: "Cancelar", action: "cancel" as ConfirmAction, destructive: true },
+          { icon: LogIn, label: "Check In", action: "checkIn" },
+          { icon: XCircle, label: "Cancelar", action: "cancel", destructive: true },
         ];
       case AppointmentStatusEnum.CONFIRMADA:
         return [
-          { icon: LogIn, label: "Check In", action: "checkIn" as ConfirmAction },
+          { icon: LogIn, label: "Check In", action: "checkIn" },
+          { icon: XCircle, label: "Cancelar", action: "cancel", destructive: true },
+          { icon: Repeat, label: "Reagendar", action: "reschedule" },
         ];
       case AppointmentStatusEnum.PRESENTE:
         return [
-          {
-            icon: ListChecks,
-            label: "Completar",
-            action: "complete" as ConfirmAction,
-            disabled: disableActions && !surveyCompleted,
-          },
+          { icon: ListChecks, label: "Completar", action: "complete" },
+          { icon: CalendarX, label: "No Asistió", action: "noShow", destructive: true },
         ];
-      default:
-        return [];
+      default: return [];
     }
-  }, [estado, disableActions, surveyCompleted]);
+  }, [estado]);
 
   // Callbacks optimizados
   const handlePrimaryAction = useCallback(() => {
@@ -267,7 +272,7 @@ export const AppointmentCard = memo<AppointmentCardProps>(({
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center gap-2">
                 <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {nombre} {apellidos}
+                  {paciente}
                 </h3>
                 <div className={cn("h-2 w-2 shrink-0 rounded-full", statusConfig.dot)} />
               </div>

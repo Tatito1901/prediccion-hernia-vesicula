@@ -14,8 +14,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useCreateAppointment } from "@/hooks/use-appointments";
-import type { PatientData } from "@/app/dashboard/data-model";
-import { AppointmentStatusEnum } from "@/app/dashboard/data-model";
+import { Patient, AppointmentStatusEnum } from "@/lib/types";
 import { toast } from "sonner";
 
 const FORM_SCHEMA = z.object({
@@ -29,7 +28,7 @@ type FormValues = z.infer<typeof FORM_SCHEMA>;
 
 interface ScheduleAppointmentDialogProps {
   isOpen: boolean;
-  patient: PatientData | null;
+  patient: Patient | null;
   onClose: () => void;
 }
 
@@ -48,14 +47,13 @@ export function ScheduleAppointmentDialog({ isOpen, patient, onClose }: Schedule
   const handleSubmit = async (values: FormValues) => {
     if (!patient) return;
     const promise = addAppointment({
-      patientId: patient.id,
-      fecha_raw: format(values.fechaConsulta, "yyyy-MM-dd"),
-      hora_raw: values.horaConsulta,
-      estado: AppointmentStatusEnum.PROGRAMADA,
-      motivoConsulta: values.motivoConsulta || "",
-      notas: values.notas || "",
-      raw_doctor_id: "default-doctor", // TODO: obtener ID real
-      esPrimeraVez: false, // Defaulting to false as the UI doesn't specify
+      patient_id: patient.id,
+      fecha_hora_cita: `${format(values.fechaConsulta, "yyyy-MM-dd")}T${values.horaConsulta}:00`,
+      estado_cita: AppointmentStatusEnum.PROGRAMADA,
+      motivo_cita: values.motivoConsulta || "",
+      notas_cita_seguimiento: values.notas || "",
+      doctor_id: "default-doctor", // TODO: obtener ID real
+      es_primera_vez: false, // Defaulting to false as the UI doesn't specify
     });
 
     toast.promise(promise, {

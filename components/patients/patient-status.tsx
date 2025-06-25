@@ -3,7 +3,7 @@
 import React, { useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { PatientData, PatientStatusEnum } from "@/app/dashboard/data-model"
+import { PatientStatusEnum, type Patient } from "@/lib/types"
 import { useIsMobile } from "@/hooks/use-breakpoint"
 import {
   CheckCircle2,
@@ -97,7 +97,7 @@ const DOT_SIZES = {
 } as const
 
 interface PatientStatusProps {
-  status: PatientData["estado_paciente"]
+  status: Patient["estado_paciente"]
   surveyCompleted?: boolean
   size?: "sm" | "md" | "lg"
   showIcon?: boolean
@@ -105,13 +105,13 @@ interface PatientStatusProps {
 }
 
 // Función utilitaria para obtener la configuración del estado
-const getStatusConfig = (status: PatientData["estado_paciente"], surveyCompleted: boolean) => {
+const getStatusConfig = (status: Patient["estado_paciente"], surveyCompleted: boolean) => {
   if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
     return STATUS_CONFIG.SURVEY_PENDING;
   }
   
   if (status && status in STATUS_CONFIG) {
-    return STATUS_CONFIG[status as PatientStatusEnum];
+    return STATUS_CONFIG[status as keyof typeof PatientStatusEnum];
   }
   
   return STATUS_CONFIG.DEFAULT;
@@ -193,7 +193,7 @@ const PatientStatus = React.memo(function PatientStatus({
 // Componente para mostrar múltiples estados (memoizado)
 interface PatientStatusGroupProps {
   statuses: Array<{
-    status: PatientData["estado_paciente"]
+    status: Patient["estado_paciente"]
     surveyCompleted?: boolean
   }>
   size?: "sm" | "md" | "lg"
@@ -281,7 +281,7 @@ const PatientStatusGroup = React.memo(function PatientStatusGroup({
 
 // Componente compacto optimizado para vista móvil
 interface PatientStatusCompactProps {
-  status: PatientData["estado_paciente"]
+  status: Patient["estado_paciente"]
   surveyCompleted?: boolean
   size?: "sm" | "md" | "lg"
   className?: string
@@ -323,7 +323,7 @@ const PatientStatusCompact = React.memo(function PatientStatusCompact({
 
 // Hook utilitario para obtener información del estado
 export const usePatientStatusInfo = (
-  status: PatientData["estado_paciente"],
+  status: Patient["estado_paciente"],
   surveyCompleted: boolean = false
 ) => {
   return useMemo(() => {
@@ -344,7 +344,7 @@ export const usePatientStatusInfo = (
 // Función utilitaria para ordenar por prioridad de estado
 export const sortByStatusPriority = (
   patients: Array<{ 
-    status: PatientData["estado_paciente"]
+    status: Patient["estado_paciente"]
     surveyCompleted?: boolean 
   }>
 ) => {

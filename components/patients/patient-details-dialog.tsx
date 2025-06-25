@@ -17,10 +17,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import type { PatientData } from "@/app/dashboard/data-model";
+import { Patient, PatientStatusEnum } from "@/lib/types";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { PatientStatusEnum } from "@/app/dashboard/data-model";
 import { useMediaQuery } from "@/hooks/use-breakpoint";
 
 // Iconos para mejorar la visualización
@@ -38,7 +37,7 @@ import {
 
 interface PatientDetailsDialogProps {
   isOpen: boolean;
-  patient: PatientData;
+  patient: Patient;
   onClose: () => void;
 }
 
@@ -52,7 +51,7 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
     fecha_registro,
     estado_paciente,
     diagnostico_principal,
-    notas_paciente,
+    comentarios_registro,
     id,
   } = patient;
 
@@ -208,7 +207,7 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
               </div>
 
               {/* Información clínica */}
-              {(diagnostico_principal || notas_paciente) && (
+              {(diagnostico_principal || comentarios_registro) && (
                 <div className="bg-white dark:bg-slate-900 border border-blue-100 dark:border-slate-700 rounded-md overflow-hidden">
                   <div className="bg-blue-50 dark:bg-slate-800 border-b border-blue-100 dark:border-slate-800 py-3 px-4">
                     <h3 className="font-medium flex items-center gap-2 text-blue-800 dark:text-blue-300">
@@ -230,14 +229,14 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
                       </div>
                     )}
                     
-                    {notas_paciente && (
+                    {comentarios_registro && (
                       <div className="space-y-2">
                         <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                           <FileText className="h-3.5 w-3.5" />
                           Notas clínicas
                         </p>
                         <p className="text-sm bg-slate-50 dark:bg-slate-800/50 p-3 rounded-md text-slate-800 dark:text-slate-100 whitespace-pre-wrap">
-                          {notas_paciente}
+                          {comentarios_registro}
                         </p>
                       </div>
                     )}

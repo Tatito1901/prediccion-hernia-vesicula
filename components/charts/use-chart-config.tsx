@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CHART_STYLES, getChartColors, STATUS_COLORS, getAdaptiveBackground, isDarkTheme } from "@/components/charts/chart-theme"
-import type { AppointmentStatus } from "@/app/dashboard/data-model"
+import { AppointmentStatusEnum, type AppointmentStatus } from "@/lib/types"
 
 export { STATUS_COLORS }
 
@@ -35,24 +35,6 @@ export interface ChartOptions {
   innerRadius?: number
   outerRadius?: number
   responsive?: boolean
-}
-
-export interface PatientData {
-  id: string
-  diagnostico?: string
-  diagnostico_principal?: string
-  fecha_registro?: string
-  fecha_primera_consulta?: string
-  edad?: number
-  genero?: 'M' | 'F'
-  paciente?: string
-  fechaConsulta?: Date | string
-  horaConsulta?: string
-  motivoConsulta?: string
-  estado?: AppointmentStatus
-  notas?: string
-  telefono?: string
-  email?: string
 }
 
 export interface DiagnosisData {
@@ -97,13 +79,13 @@ export interface MotiveChartData {
 export interface TrendChartData {
   date: string
   formattedDate: string
-  COMPLETADA?: number
-  CANCELADA?: number
-  PROGRAMADA?: number
-  PRESENTE?: number
-  REAGENDADA?: number
-  "NO ASISTIO"?: number
-  CONFIRMADA?: number
+  [AppointmentStatusEnum.COMPLETADA]?: number
+  [AppointmentStatusEnum.CANCELADA]?: number
+  [AppointmentStatusEnum.PROGRAMADA]?: number
+  [AppointmentStatusEnum.PRESENTE]?: number
+  [AppointmentStatusEnum.REAGENDADA]?: number
+  [AppointmentStatusEnum.NO_ASISTIO]?: number
+  [AppointmentStatusEnum.CONFIRMADA]?: number
   total?: number
   [key: string]: string | number | undefined
 }
@@ -161,7 +143,9 @@ const CACHE_LIMIT = 500
 const setCache = (key: string, value: any) => {
   if (cache.size >= CACHE_LIMIT) {
     const firstKey = cache.keys().next().value
-    cache.delete(firstKey)
+    if (firstKey !== undefined) {
+      cache.delete(firstKey)
+    }
   }
   cache.set(key, value)
 }

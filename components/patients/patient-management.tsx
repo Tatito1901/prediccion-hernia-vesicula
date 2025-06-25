@@ -25,8 +25,7 @@ import {
 import { useRouter } from "next/navigation";
 import { usePatients } from "@/hooks/use-patients";
 import { useAppointments } from "@/hooks/use-appointments";
-import type { PatientData, DiagnosisType, AppointmentData } from "@/app/dashboard/data-model";
-import { PatientStatusEnum } from "@/app/dashboard/data-model";
+import { Patient, DiagnosisEnum, Appointment, PatientStatusEnum } from "@/lib/types";
 import { generateSurveyId } from "@/lib/form-utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -50,7 +49,7 @@ import { SimplePagination } from "@/components/ui/simple-pagination";
 import { useProcessedPatients } from "@/hooks/use-processed-patients";
 import { usePatientStats } from "@/hooks/use-patient-stats";
 
-export interface EnrichedPatientData extends PatientData {
+export interface EnrichedPatient extends Patient {
   nombreCompleto: string;
   fecha_proxima_cita_iso?: string;
   encuesta_completada: boolean;
@@ -110,7 +109,7 @@ const LoadingSkeleton = () => (
 
 export function PatientManagement() {
   const [currentPage, setCurrentPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<PatientStatusEnum | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<keyof typeof PatientStatusEnum | "all">("all");
 
   const { 
     data: patientData, 
@@ -134,17 +133,17 @@ export function PatientManagement() {
 
   // Estados para modales
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [selectedPatientForSurvey, setSelectedPatientForSurvey] = useState<PatientData | null>(null);
+  const [selectedPatientForSurvey, setSelectedPatientForSurvey] = useState<Patient | null>(null);
   const [surveyLink, setSurveyLink] = useState("");
   const [isNewPatientFormOpen, setIsNewPatientFormOpen] = useState(false);
 
   // Estado para detalles de paciente
-  const [selectedPatientDetails, setSelectedPatientDetails] = useState<PatientData | null>(null);
+  const [selectedPatientDetails, setSelectedPatientDetails] = useState<Patient | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
   // Estado para agendar cita
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
-  const [patientForAppointment, setPatientForAppointment] = useState<PatientData | null>(null);
+  const [patientForAppointment, setPatientForAppointment] = useState<Patient | null>(null);
 
   // Usar el hook personalizado para procesamiento de datos
   const {
@@ -171,26 +170,26 @@ export function PatientManagement() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSelectPatient = (patient: PatientData) => {
+  const handleSelectPatient = (patient: Patient) => {
     setSelectedPatientDetails(patient);
     setDetailsDialogOpen(true);
   };
 
-  const handleShareSurvey = (patient: PatientData) => {
+  const handleShareSurvey = (patient: Patient) => {
     setSelectedPatientForSurvey(patient);
     setSurveyLink(`${window.location.origin}/survey/${generateSurveyId()}?patientId=${patient.id}`);
     setShareDialogOpen(true);
   };
 
-  const handleEditPatient = (patient: PatientData) => {
+  const handleEditPatient = (patient: Patient) => {
     toast.info(`Editar paciente: ${patient.nombre} ${patient.apellidos}`);
   };
 
-  const handleAnswerSurvey = (patient: PatientData) => {
+  const handleAnswerSurvey = (patient: Patient) => {
     router.push(`/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`);
   };
 
-  const handleScheduleAppointment = (patient: PatientData) => {
+  const handleScheduleAppointment = (patient: Patient) => {
     setPatientForAppointment(patient);
     setAppointmentDialogOpen(true);
   };
@@ -209,7 +208,7 @@ export function PatientManagement() {
       <Select
         value={statusFilter}
         onValueChange={(value) => {
-          setStatusFilter(value as PatientStatusEnum | "all");
+          setStatusFilter(value as keyof typeof PatientStatusEnum | "all");
           if (isMobile) setIsMobileFiltersOpen(false);
         }}
       >
@@ -238,7 +237,7 @@ export function PatientManagement() {
                   status === statusFilter ? "ring-1 ring-offset-1 ring-slate-200 dark:ring-slate-700 dark:ring-offset-slate-900" : "",
                   config.style
                 )}>
-                  {statusStats[status as PatientStatusEnum]}
+                  {status === "all" ? statusStats.all : statusStats[status as keyof typeof PatientStatusEnum]}
                 </Badge>
               </div>
             </SelectItem>
@@ -294,26 +293,26 @@ export function PatientManagement() {
             <StatsCard 
               icon={<Users className="h-4 w-4 sm:h-5 sm:w-5" />} 
               label="Total Pacientes" 
-              value={isLoadingStats ? "..." : mainStats?.totalPatients ?? 0} 
+              value={isLoadingStats ? "..." : `${mainStats?.total_patients ?? 0}`} 
               color="blue" 
             />
             <StatsCard 
               icon={<FileText className="h-4 w-4 sm:h-5 sm:w-5" />} 
               label="Encuestas Comp." 
-              value={isLoadingStats ? "..." : `${mainStats?.surveyCompletionRate ?? 0}%`} 
-              trend={mainStats?.surveyCompletionRate && mainStats.surveyCompletionRate > 70 ? 5 : -2}
+              value={isLoadingStats ? "..." : `${mainStats?.survey_completion_rate ?? 0}%`} 
+              trend={mainStats?.survey_completion_rate && mainStats.survey_completion_rate > 70 ? 5 : -2}
               color="purple" 
             />
             <StatsCard 
               icon={<Calendar className="h-4 w-4 sm:h-5 sm:w-5" />} 
               label="Pend. Consulta" 
-              value={isLoadingStats ? "..." : mainStats?.pendingConsults ?? 0} 
+              value={isLoadingStats ? "..." : mainStats?.pending_consults ?? 0} 
               color="amber" 
             />
             <StatsCard 
               icon={<Activity className="h-4 w-4 sm:h-5 sm:w-5" />} 
               label="Pac. Operados" 
-              value={isLoadingStats ? "..." : mainStats?.operatedPatients ?? 0} 
+              value={isLoadingStats ? "..." : mainStats?.operated_patients ?? 0} 
               trend={2}
               color="emerald" 
             />
@@ -361,7 +360,7 @@ export function PatientManagement() {
               <Select
                 value={statusFilter}
                 onValueChange={(value) => {
-                  setStatusFilter(value as PatientStatusEnum | "all");
+                  setStatusFilter(value as keyof typeof PatientStatusEnum | "all");
                 }}
               >
                 <SelectTrigger className="h-9 text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 w-[180px]">
@@ -385,7 +384,7 @@ export function PatientManagement() {
                           status === statusFilter ? "ring-1 ring-offset-1 ring-slate-200 dark:ring-slate-700 dark:ring-offset-slate-900" : "",
                           config.style
                         )}>
-                          {statusStats[status as PatientStatusEnum]}
+                          {statusStats[status as keyof typeof PatientStatusEnum]}
                         </Badge>
                       </div>
                     </SelectItem>

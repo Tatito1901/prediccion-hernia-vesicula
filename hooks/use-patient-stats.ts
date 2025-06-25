@@ -3,10 +3,10 @@
 import { useQuery } from '@tanstack/react-query';
 
 interface PatientStats {
-  totalPatients: number;
-  surveyCompletionRate: number;
-  pendingConsults: number;
-  operatedPatients: number;
+  total_patients: number;
+  survey_completion_rate: number;
+  pending_consults: number;
+  operated_patients: number;
 }
 
 const fetchPatientStats = async (): Promise<PatientStats> => {

@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { AppointmentStatusEnum, type AppointmentData } from "@/app/dashboard/data-model";
+import { AppointmentStatusEnum, type AppointmentData } from "@/lib/types";
 
 // Configuración estática fuera del componente
 const STATUS_CONFIG = {
@@ -164,7 +164,7 @@ const StatCard = memo(({
 
 const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData }) => {
   const fechaFormateada = formatDisplayDate(appointment.fechaConsulta);
-  const statusConfig = STATUS_CONFIG[appointment.estado as AppointmentStatusEnum] || 
+  const statusConfig = STATUS_CONFIG[appointment.estado as keyof typeof AppointmentStatusEnum] || 
                       STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
   const StatusIcon = statusConfig.icon;
 
@@ -217,7 +217,7 @@ const AppointmentCard = memo(({ appointment }: { appointment: AppointmentData })
         
         <div className="pt-2 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
           <Calendar size={12} />
-          <span>Registrado: {appointment.created_at ? formatDateTime(appointment.created_at) : 'Fecha actual'}</span>
+          <span>Registrado: {'Fecha actual'}</span>
         </div>
       </CardContent>
     </Card>
@@ -264,11 +264,11 @@ export const AppointmentHistory = memo<{
       };
     }
 
-    const counts = patientAppointments.reduce((acc: Record<AppointmentStatusEnum, number>, app: AppointmentData) => {
-      const estado = app.estado as AppointmentStatusEnum;
+    const counts = patientAppointments.reduce((acc: Record<keyof typeof AppointmentStatusEnum, number>, app: AppointmentData) => {
+      const estado = app.estado as keyof typeof AppointmentStatusEnum;
       acc[estado] = (acc[estado] || 0) + 1;
       return acc;
-    }, {} as Record<AppointmentStatusEnum, number>);
+    }, {} as Record<keyof typeof AppointmentStatusEnum, number>);
 
     const completadas = counts[AppointmentStatusEnum.COMPLETADA] || 0;
     const noAsistio = counts[AppointmentStatusEnum.NO_ASISTIO] || 0;
@@ -409,9 +409,8 @@ export const AppointmentHistory = memo<{
               </Badge>
             )}
           </div>
-          
           <div className="grid gap-4">
-            {patientAppointments.map((appointment) => (
+            {patientAppointments.map((appointment: AppointmentData) => (
               <AppointmentCard
                 key={appointment.id}
                 appointment={appointment}

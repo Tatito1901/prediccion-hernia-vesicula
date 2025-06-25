@@ -34,7 +34,7 @@ import { toast } from "sonner";
 
 import { AppointmentCard } from "./patient-card";
 import { usePatients } from "@/hooks/use-patients";
-import { AppointmentData, AppointmentStatusEnum } from "@/app/dashboard/data-model";
+import { AppointmentData, AppointmentStatusEnum, Patient } from "@/lib/types";
 import { useAppointments, useUpdateAppointmentStatus } from "@/hooks/use-appointments";
 import { useSurveyStore } from "@/lib/stores/survey-store";
 
@@ -48,10 +48,7 @@ import { SurveySelector } from '@/components/surveys/survey-selector';
 type TabValue = "newPatient" | "today" | "future" | "past";
 type ConfirmAction = "checkIn" | "cancel" | "complete" | "noShow" | "reschedule";
 
-interface Appointment extends AppointmentData {
-  dateTime: Date;
-  telefono: string;
-}
+// Usamos AppointmentData directamente de lib/types
 
 // Configuración estática
 const TABS_CONFIG = [
@@ -90,20 +87,6 @@ const formatDisplay = (date: Date | string): string => {
   
   dateFormatCache.set(key, formatted);
   return formatted;
-};
-
-const transformAppointment = (appointment: AppointmentData): Appointment => {
-  const nombreCompleto = appointment.paciente?.split(' ') || ['', ''];
-  const nombre = nombreCompleto[0] || '';
-  const apellidos = nombreCompleto.slice(1).join(' ') || '';
-  
-  return {
-    ...appointment,
-    nombre,
-    apellidos,
-    telefono: appointment.telefono || "",
-    dateTime: appointment.fechaConsulta,
-  };
 };
 
 // Hook personalizado para filtrar citas
@@ -184,7 +167,7 @@ const AppointmentsList = memo(({
   appointments: AppointmentData[];
   isLoading: boolean;
   emptyState: { title: string; description: string; icon: React.ComponentType<{ className?: string }> };
-  onAction: (action: ConfirmAction, id: string, appointment: Appointment) => void;
+  onAction: (action: ConfirmAction, id: string, appointment: AppointmentData) => void;
   onStartSurvey: (appointment: AppointmentData) => void;
   onViewHistory: (patientId: string) => void;
 }) => {
@@ -197,7 +180,7 @@ const AppointmentsList = memo(({
       {appointments.map((appointment) => (
         <AppointmentCard
           key={appointment.id}
-          appointment={transformAppointment(appointment)}
+          appointment={appointment}
           onAction={onAction}
           onStartSurvey={() => onStartSurvey(appointment)}
           onViewHistory={onViewHistory}
@@ -272,7 +255,7 @@ export default memo(function PatientAdmission() {
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     action: ConfirmAction | null;
-    appointment: Appointment | null;
+    appointment: AppointmentData | null;
   }>({
     isOpen: false,
     action: null,
@@ -299,15 +282,24 @@ export default memo(function PatientAdmission() {
     date: null as Date | null,
     time: null as string | null
   });
+  
+  // Wrapper para resolver la incompatibilidad de tipos entre useState y RescheduleDatePicker
+  const handleRescheduleStateChange = useCallback((newState: Partial<typeof rescheduleState>) => {
+    setRescheduleState(current => ({
+      ...current,
+      ...newState
+    }));
+  }, []);
 
   // Filtrar citas usando el hook personalizado
   const filteredAppointments = useFilteredAppointments(appointments);
 
   // Datos derivados memoizados
-  const currentAppointments = useMemo(() => 
-    filteredAppointments[activeTab] || [], 
-    [filteredAppointments, activeTab]
-  );
+  const currentAppointments = useMemo(() => {
+    // Si la pestaña activa es "newPatient", devolver un array vacío ya que no existe en filteredAppointments
+    if (activeTab === "newPatient") return [];
+    return filteredAppointments[activeTab] || [];
+  }, [filteredAppointments, activeTab]);
 
   const appointmentCounts = useMemo(() => ({
     today: filteredAppointments.today?.length || 0,
@@ -320,12 +312,12 @@ export default memo(function PatientAdmission() {
     setConfirmDialog({
       isOpen: true,
       action,
-      appointment: transformAppointment(appointment)
+      appointment: appointment
     });
   }, []);
 
   const handleStartSurvey = useCallback((appointment: AppointmentData) => {
-    const patient = patients?.find(p => p.id === appointment.patientId);
+    const patient = patients?.find((p: Patient) => p.id === appointment.patientId);
     
     if (!patient) {
       toast.error("No se encontró el paciente para esta cita.");
@@ -350,7 +342,7 @@ export default memo(function PatientAdmission() {
 
   const handleSurveyAssigned = useCallback((assignmentId: string) => {
     const patientId = surveySelector.data?.patientId;
-    const patient = patients?.find(p => p.id === patientId);
+    const patient = patients?.find((p: Patient) => p.id === patientId);
     const assignment = getAssignmentById(assignmentId);
     
     if (!patient || !assignment?.shareUrl) {
@@ -498,7 +490,7 @@ export default memo(function PatientAdmission() {
                     />
                   )
                 ) : (
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                  <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabValue)} className="w-full">
                     <TabsList className="grid grid-cols-4 w-full max-w-2xl">
                       {TABS_CONFIG.map((tab) => (
                         <TabsTrigger key={tab.value} value={tab.value} className="flex items-center gap-2">
@@ -542,7 +534,7 @@ export default memo(function PatientAdmission() {
           isOpen={surveySelector.isOpen}
           {...surveySelector.data}
           onClose={() => setSurveySelector({ isOpen: false, data: null })}
-          onAssigned={handleSurveyAssigned}
+          onSurveyAssigned={handleSurveyAssigned}
         />
       )}
       
@@ -605,12 +597,12 @@ export default memo(function PatientAdmission() {
                     <div className="pt-2 space-y-4 text-sm">
                       <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border">
                         <p className="font-semibold mb-3">
-                          {appointment.nombre} {appointment.apellidos}
+                          {appointment.paciente}
                         </p>
                         <div className="grid grid-cols-2 gap-3 text-sm text-slate-600 dark:text-slate-400">
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />
-                            <span>{formatDisplay(appointment.dateTime)}</span>
+                            <span>{formatDisplay(appointment.fechaConsulta)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4" />
@@ -622,7 +614,7 @@ export default memo(function PatientAdmission() {
                       {confirmDialog.action === "reschedule" ? (
                         <RescheduleDatePicker
                           rescheduleState={rescheduleState}
-                          onStateChange={setRescheduleState}
+                          onStateChange={handleRescheduleStateChange}
                         />
                       ) : (
                         <p className="text-slate-600 dark:text-slate-400 text-base leading-relaxed">
