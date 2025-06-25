@@ -1,55 +1,22 @@
-// hooks/use-chart-data.tsx
-import { useEffect, useMemo, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PatientData, DiagnosisData, GeneralStats } from '@/components/charts/use-chart-config';
-import { WEEKDAYS_SHORT } from '@/components/charts/use-chart-config';
-import { AppointmentStatusEnum, PatientStatusEnum, Patient, Appointment } from '@/lib/types';
+'use client';
 
-// Definimos el tipo AppointmentStatus para mantener compatibilidad con el código existente
-// Es importante notar que en AppointmentStatusEnum usamos NO_ASISTIO (con guiones bajos)
-// pero en el código original se usa 'NO ASISTIO' (con espacio)
-type AppointmentStatus = 
-  | 'PROGRAMADA'
-  | 'CONFIRMADA'
-  | 'CANCELADA'
-  | 'COMPLETADA'
-  | 'NO ASISTIO' // Mantenemos esta forma para compatibilidad
-  | 'PRESENTE'
-  | 'REAGENDADA';
+import { useQuery } from '@tanstack/react-query';
+import type {
+  PatientData,
+  DiagnosisData,
+  GeneralStats,
+  AppointmentStatusEnum,
+  PatientStatusEnum,
+  Patient,
+  Appointment,
+} from '@/components/charts/use-chart-config';
+import type { DateRangeOption } from '@/lib/types';
 
-// Constantes para mejorar mantenibilidad
-const DEFAULT_STALE_TIME = 60000; // 1 minuto
-const MIN_REFRESH_INTERVAL = 1000; // 1 segundo mínimo
-
-// Usando tipos centralizados de la base de datos en lugar de definiciones locales
-// Para referencia, las interfaces originales son reemplazadas por Patient y Appointment de lib/types
-
-// Extendemos los tipos centralizados para incluir campos específicos necesarios para visualizaciones
-// que podrían no estar en la base de datos original
-// Definimos un tipo que extiende Patient pero sin conflictos de tipos
-type ExtendedPatient = Patient & {
-  // Campos adicionales que no están en el tipo Patient original
-  origen_paciente?: string;
-  probabilidad_cirugia?: number;
-  ultimo_contacto?: string;
-  proximo_contacto?: string;
-  etiquetas?: string[];
-  fecha_cirugia_programada?: string;
-  doctor_info?: {
-    id: string;
-    full_name: string;
-  };
-};
-
-// Extensión para Appointment cuando sea necesario
-type ExtendedAppointment = Appointment & {
-  patient_name?: string;
-  doctor_info?: {
-    full_name: string;
-  };
+interface ChartDataResponse {
+  appointments: Appointment[];
+  patients: Patient[];
+  // Add any other data types returned by your API
 }
-
-export type DateRangeOption = '7dias' | '30dias' | '90dias' | 'ytd' | 'todos';
 
 interface UseChartDataParams {
   dateRange?: DateRangeOption;
@@ -59,9 +26,14 @@ interface UseChartDataParams {
   refreshInterval?: number;
 }
 
-interface ChartDataError {
-  appointments: string | null;
-  patients: string | null;
+const getChartData = async ({
+  dateRange,
+  patientId,
+  doctorId,
+  estado,
+}: UseChartDataParams): Promise<ChartDataResponse> => {
+  const startDate = dateRange === 'todos' ? '' : calculateDateRange(dateRange).startDate;
+  const endDate = calculateDateRange(dateRange).endDate;
 }
 
 interface ChartData {
