@@ -1,11 +1,7 @@
 // hooks/use-chart-data.tsx
 import { useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type {
-  DiagnosisData,
-  PatientData,
-  GeneralStats,
-} from '@/components/charts/use-chart-config';
+import type { PatientData, DiagnosisData, GeneralStats } from '@/components/charts/use-chart-config';
 import { WEEKDAYS_SHORT } from '@/components/charts/use-chart-config';
 import { AppointmentStatusEnum, PatientStatusEnum, Patient, Appointment } from '@/lib/types';
 
@@ -318,7 +314,7 @@ export function useChartData({
       telefono: p.telefono || '',
       email: p.email || '',
     }));
-    }), [patients]);
+  }, [patients]);
 
   // Calcular datos de diagnósticos
   const diagnosisData: DiagnosisData[] = useMemo(() => {

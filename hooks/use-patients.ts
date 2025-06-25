@@ -53,7 +53,35 @@ export const usePatient = (id: string | null) => {
   });
 };
 
-// 4. Hook para crear un nuevo paciente (mutación)
+// 4. Hook para actualizar un paciente (mutación)
+export const useUpdatePatient = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updatedData }: { id: string; updatedData: Partial<PatientData> }) => {
+      const response = await fetch(`/api/patients/${id}`, {
+        method: 'PATCH', // o 'PUT'
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedData),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error al actualizar el paciente.');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast.success('Paciente actualizado exitosamente.');
+      // Invalida tanto la lista como el detalle para refrescar los datos
+      queryClient.invalidateQueries({ queryKey: patientKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: patientKeys.detail(data.id) });
+    },
+    onError: (error) => {
+      toast.error('Fallo al actualizar paciente', { description: error.message });
+    },
+  });
+};
+
+// 5. Hook para crear un nuevo paciente (mutación)
 export const useCreatePatient = () => {
   const queryClient = useQueryClient();
   return useMutation({

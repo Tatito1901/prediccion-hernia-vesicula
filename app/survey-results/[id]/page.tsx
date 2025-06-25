@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowLeft, Loader2, ClipboardCheck, AlertCircle } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { toast } from "sonner"
-import { usePatientStore } from "@/lib/stores/patient-store"
+import { usePatient } from "@/hooks/use-patients";
 import { generateSurveyId } from "@/lib/form-utils"
 import type { PatientData } from "@/app/dashboard/data-model"
 
@@ -19,60 +19,27 @@ export default function SurveyResultsPage() {
   const patientId = patientIdFromParams;
   
   // Obtenemos los datos de los pacientes directamente desde el Zustand store
-  const { patients, getPatientById } = usePatientStore();
+  
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [patientData, setPatientData] = useState<PatientData | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [surveyNotCompleted, setSurveyNotCompleted] = useState(false)
+    const { 
+    data: patientData, 
+    isLoading, 
+    isError,
+    error 
+  } = usePatient(patientId);
 
-  useEffect(() => {
-    const fetchPatientData = async () => {
-      setIsLoading(true)
-      setError(null)
+    // React Query maneja el fetching, el estado de carga y los errores automáticamente.
+  // El useEffect para obtener datos ya no es necesario.
 
-      try {
-        console.log("Buscando datos para el paciente ID:", patientId)
-        
-        // Simular una pequeña demora para dar feedback visual
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        
-        // Usar la función getPatientById del store de Zustand
-        const patient = await getPatientById(patientId);
-        
-        if (!patient) {
-          throw new Error(`No se encontró un paciente con ID ${patientId}`);
-        }
-        
-        // Verificar si el paciente tiene encuesta completada
-        if (patient && patient.encuesta) {
-          setPatientData(patient);
-        } else {
-          setSurveyNotCompleted(true);
-          setPatientData(patient);
-        }
-      } catch (error) {
-        console.error("Error al obtener datos del paciente:", error)
-        setError(error instanceof Error ? error.message : "Error al cargar los datos del paciente")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    if (patientId) {
-      fetchPatientData()
-    }
-  }, [patientIdFromParams])
-
-  useEffect(() => {
-    if (patientData && !patientData.encuesta && surveyNotCompleted) {
-      // If survey is not completed, redirect to patients page with a toast
+    useEffect(() => {
+    // Si tenemos datos del paciente y la encuesta no está completada, redirigimos.
+    if (patientData && !patientData.encuesta) {
       toast.error("El paciente no ha completado la encuesta", {
         description: "No se puede mostrar el análisis sin datos de la encuesta",
       })
       router.push("/pacientes")
     }
-  }, [patientData, router, surveyNotCompleted])
+  }, [patientData, router])
 
   const handleGeneratePDF = () => {
     toast.success("Generando PDF...", {
@@ -122,7 +89,7 @@ export default function SurveyResultsPage() {
     )
   }
 
-  if (error) {
+    if (isError) {
     return (
       <div className="container mx-auto py-6 px-4">
         <div className="flex items-center mb-6">
@@ -137,7 +104,7 @@ export default function SurveyResultsPage() {
               <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Error al cargar los resultados</p>
-                <p className="text-sm">{error}</p>
+                                <p className="text-sm">{error?.message || 'Ocurrió un error inesperado.'}</p>
                 <Button variant="outline" size="sm" className="mt-3" onClick={() => router.back()}>
                   Volver a la lista de pacientes
                 </Button>

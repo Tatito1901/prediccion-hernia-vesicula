@@ -36,6 +36,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { useUpdatePatient } from "@/hooks/use-patients"
+import { toast } from "sonner"
 
 // Importar directamente del store de Zustand
 
@@ -568,7 +570,7 @@ export default function PatientSurveyForm({
   initialData,
 }: PatientSurveyFormProps) {
   const router = useRouter() // Initialize the router
-  const { updatePatient } = usePatientStore()
+  const { mutate: updatePatient, isPending: isUpdating } = useUpdatePatient();
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -799,47 +801,50 @@ export default function PatientSurveyForm({
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  const onSubmit = async (data: SurveyFormValues) => {
+    const onSubmit = async (data: SurveyFormValues) => {
     setIsSubmitting(true)
     setSubmitError(null)
 
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+    // Guardar los datos de la encuesta (simulado)
+    // Aquí iría la lógica para guardar los datos de la encuesta en la base de datos,
+    // probablemente usando el `assignedSurveyId`.
+    console.log("Guardando datos de la encuesta para assignedSurveyId:", assignedSurveyId, data);
 
-      // TODO: Replace mock 'updatePatient' with actual Supabase call.
-      // Your Supabase function should handle:
-      // 1. Saving/updating the survey responses (data) linked to 'assignedSurveyId'.
-      // 2. Updating the status of the 'AssignedSurvey' record (identified by 'assignedSurveyId') to 'completed'.
-      // 3. Potentially linking this to the 'patientId' and 'surveyTemplateId' as needed in your DB schema.
-
-      if (patientId && updatePatient) { // This is the mock call, replace it.
-        console.log(
-          "Mock updatePatient called. For Supabase, use: patientId:", patientId, 
-          ", assignedSurveyId:", assignedSurveyId, 
-          ", surveyTemplateId:", surveyTemplateId, 
-          ", surveyData:", data
-        );
-        await updatePatient(patientId, {
-          encuesta: data, // surveyData
-          estado: "Pendiente de consulta", // Example status, manage this via AssignedSurveys table
-          // Potentially pass assignedSurveyId here if your mock updatePatient can take it
-        });
-      }
-      
-      console.log("Form submission processed. Actual data for Supabase would include: patientId:", patientId, ", assignedSurveyId:", assignedSurveyId, ", surveyTemplateId:", surveyTemplateId, ", surveyData:", data);
-      localStorage.removeItem(`survey_${surveyTemplateId}`) // Clear saved data on successful submission
-      setLastSaved(null)
+    // Una vez que la encuesta se guarda, actualizamos el estado del paciente.
+    if (patientId) {
+      updatePatient(
+        {
+          id: String(patientId),
+          updatedData: { encuesta: true, estado: "Pendiente de consulta" },
+        },
+        {
+          onSuccess: () => {
+            toast.success("Encuesta enviada y estado del paciente actualizado.")
+            localStorage.removeItem(`survey_${surveyTemplateId}`)
+            setLastSaved(null)
+            if (onSubmitSuccess) onSubmitSuccess(data)
+            if (onComplete) onComplete(data)
+            router.push('/survey/gracias')
+          },
+          onError: (error) => {
+            console.error("Error al actualizar el paciente:", error)
+            setSubmitError("No se pudo actualizar el estado del paciente. Por favor, intente de nuevo.")
+            toast.error("Error al actualizar el paciente", {
+              description: error.message,
+            })
+          },
+          onSettled: () => {
+            setIsSubmitting(false)
+          },
+        },
+      )
+    } else {
+      // Si no hay patientId, solo se completa el formulario (modo standalone)
+      toast.info("Encuesta completada (modo standalone).")
+      localStorage.removeItem(`survey_${surveyTemplateId}`)
       if (onSubmitSuccess) onSubmitSuccess(data)
-      if (onComplete) onComplete(data) // Call onComplete if provided
-
-      // Redirect to the gracias page after successful submission
+      if (onComplete) onComplete(data)
       router.push('/survey/gracias')
-
-    } catch (error) {
-      console.error("Error al enviar la encuesta:", error)
-      setSubmitError("Ha ocurrido un error al procesar su información. Por favor, inténtelo nuevamente.")
-    } finally {
       setIsSubmitting(false)
     }
   }
