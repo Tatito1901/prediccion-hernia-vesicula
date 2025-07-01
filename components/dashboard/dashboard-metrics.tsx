@@ -25,7 +25,26 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type ClinicMetrics, PatientOriginEnum } from "@/app/dashboard/data-model";
+
+export interface ClinicMetrics {
+  totalPacientes: number;
+  pacientesNuevosMes: number;
+  pacientesOperados: number;
+  pacientesNoOperados: number;
+  pacientesSeguimiento: number;
+  tasaConversion: number;
+  tiempoPromedioDecision: number;
+  fuentePrincipalPacientes: PatientOriginEnum;
+  diagnosticosMasComunes: { tipo: string; cantidad: number }[];
+}
+
+export enum PatientOriginEnum {
+  GOOGLE = "Google",
+  FACEBOOK = "Facebook",
+  INSTAGRAM = "Instagram",
+  REFERRAL = "Referral",
+  OTHER = "Other",
+}
 
 //#region Types
 export type MetricDetail = {
@@ -63,17 +82,7 @@ const metricInfo = {
   pacientesNuevosMes: { fuente: "Citas", significado: "Pacientes nuevos este mes" },
 } as const;
 
-const EMPTY_METRICS: Readonly<ClinicMetrics> = {
-  totalPacientes: 0,
-  pacientesNuevosMes: 0,
-  pacientesOperados: 0,
-  pacientesNoOperados: 0,
-  pacientesSeguimiento: 0,
-  tasaConversion: 0,
-  tiempoPromedioDecision: 0,
-  fuentePrincipalPacientes: PatientOriginEnum.GOOGLE,
-  diagnosticosMasComunes: [],
-};
+
 
 const pct = (numerator: number, denominator: number): string =>
   denominator === 0 ? "N/A" : `${((numerator / denominator) * 100).toFixed(0)}%`;
@@ -150,7 +159,18 @@ MemoizedMetricCard.displayName = "MetricCard";
 
 //#region Main
 export const DashboardMetrics = ({ metrics, loading = false }: DashboardMetricsProps): JSX.Element => {
-  const metricsData = useMemo(() => metrics ?? EMPTY_METRICS, [metrics]);
+  const DEFAULT_METRICS: ClinicMetrics = {
+    totalPacientes: 0,
+    pacientesNuevosMes: 0,
+    pacientesOperados: 0,
+    pacientesNoOperados: 0,
+    pacientesSeguimiento: 0,
+    tasaConversion: 0,
+    tiempoPromedioDecision: 0,
+    fuentePrincipalPacientes: PatientOriginEnum.GOOGLE,
+    diagnosticosMasComunes: [],
+  };
+  const metricsData = useMemo(() => metrics ?? DEFAULT_METRICS, [metrics]);
 
   if (loading) {
     return (

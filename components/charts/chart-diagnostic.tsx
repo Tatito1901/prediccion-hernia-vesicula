@@ -257,154 +257,84 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
 
   return { metrics, insights };
 };
-
-/* ============================================================================
- * COMPONENTE CLIENTE PRINCIPAL OPTIMIZADO
- * ============================================================================ */
-
-interface ChartDiagnosticClientProps {
-  initialPatientsData?: PatientData[];
-  apiPatients?: PatientData[];
-  diagnosisData?: ChartData[];
-  lastUpdated: string;
-  isLoading?: boolean;
-}
-
 export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
-  initialPatientsData = [],
+  metrics,
+  timeline,
+  insights,
   lastUpdated,
-  apiPatients = [],
-  diagnosisData = [],
   isLoading = false,
 }) => {
-  
   const [activeTab, setActiveTab] = useState<'distribution' | 'timeline' | 'analysis'>('distribution');
-
-  // Procesamiento de datos memoizado y optimizado
-  const { metrics, insights } = useMemo(() => 
-    processPatientData(apiPatients?.length ? apiPatients : initialPatientsData), 
-    [apiPatients, initialPatientsData]
-  );
-
-  // Datos de tarjetas de estadísticas memoizados
-  const statCardsData = useMemo(() => [
-    {
-      title: 'Total Pacientes',
-      value: metrics.totalPacientes,
-      subtitle: 'Casos analizados',
-      icon: <Users className="h-5 w-5" />,
-      variant: 'blue' as const,
-    },
-    {
-      title: 'Casos de Hernia',
-      value: metrics.totalHernias,
-      subtitle: `${metrics.porcentajeHernias.toFixed(0)}% del total`,
-      icon: <Target className="h-5 w-5" />,
-      variant: 'green' as const,
-    },
-    {
-      title: 'Vesícula/Colecistitis',
-      value: metrics.totalVesicula,
-      subtitle: `${metrics.porcentajeVesicula.toFixed(0)}% del total`,
-      icon: <PieChartIcon className="h-5 w-5" />,
-      variant: 'purple' as const,
-    },
-    {
-      title: 'Diversidad Diagnóstica',
-      value: metrics.diversidadDiagnostica.toFixed(1),
-      subtitle: 'Índice Shannon',
-      icon: <ChartLine className="h-5 w-5" />,
-      variant: 'orange' as const,
-    },
-  ], [metrics]);
 
   // Callback memoizado para cambio de tab
   const handleTabChange = useCallback((value: string) => {
     setActiveTab(value as typeof activeTab);
   }, []);
 
-  // Datos de pacientes consolidados
-  const consolidatedPatients = useMemo(() => 
-    apiPatients?.length ? apiPatients : initialPatientsData,
-    [apiPatients, initialPatientsData]
-  );
+  if (isLoading) {
+    return <DiagnosticLoadingSkeleton />;
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Insights optimizados */}
-      {insights.length > 0 && (
-        <div className="grid gap-3">
-          {insights.slice(0, 2).map((insight, index) => (
-            <Alert key={`${insight.type}-${index}`} className="border-l-4 border-l-blue-500">
-              <Brain className="h-4 w-4" />
-              <AlertDescription>
-                <strong>{insight.title}:</strong> {insight.description}
-              </AlertDescription>
-            </Alert>
-          ))}
-        </div>
-      )}
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Análisis de Diagnósticos</CardTitle>
+          <CardDescription>Basado en {metrics.totalPacientes} pacientes. Última act: {lastUpdated}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="distribution">Distribución</TabsTrigger>
+              <TabsTrigger value="timeline">Tendencias</TabsTrigger>
+              <TabsTrigger value="analysis">Análisis</TabsTrigger>
+            </TabsList>
 
-      {/* Métricas Principales optimizadas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {statCardsData.map((stat) => (
-          <StatCard key={stat.title} {...stat} />
-        ))}
-      </div>
-
-      {/* Tabs de Contenido optimizados */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-muted/60 dark:bg-muted/30">
-          <TabsTrigger value="distribution" className="gap-2 data-[state=active]:bg-background">
-            <PieChartIcon className="h-4 w-4" />
-            Distribución
-          </TabsTrigger>
-          <TabsTrigger value="timeline" className="gap-2 data-[state=active]:bg-background">
-            <ChartLine className="h-4 w-4" />
-            Tendencias
-          </TabsTrigger>
-          <TabsTrigger value="analysis" className="gap-2 data-[state=active]:bg-background">
-            <BarChart3 className="h-4 w-4" />
-            Análisis
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="distribution" className="space-y-6">
-          <div className="grid lg:grid-cols-2 gap-6">
-            <Suspense fallback={<ChartSkeleton />}>
-              <DiagnosisChart
-                data={metrics.diagnosticosMasComunes}
-                title="Distribución General"
-                description="Todos los diagnósticos por frecuencia"
-              />
-            </Suspense>
-
-            {metrics.distribucionHernias.length > 0 && (
-              <Suspense fallback={<ChartSkeleton />}>
-                <DiagnosisTypeDistribution 
-                  patients={consolidatedPatients}
-                  isLoading={isLoading}
+            <TabsContent value="distribution" className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <MetricCard
+                  title="Total Pacientes"
+                  value={metrics.totalPacientes.toString()}
+                  icon={Users}
                 />
-              </Suspense>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="timeline" className="space-y-6">
-          <Suspense fallback={<ChartSkeleton height="h-80" />}>
-            <DiagnosisTimelineChart patients={consolidatedPatients} />
-          </Suspense>
-        </TabsContent>
-
-        <TabsContent value="analysis" className="space-y-6">
-          <Suspense fallback={<ChartSkeleton />}>
-            <DiagnosisBarChart
-              data={metrics.diagnosticosMasComunes}
-              title="Análisis Comparativo de Frecuencias"
-            />
-          </Suspense>
-        </TabsContent>
-      </Tabs>
+                <MetricCard
+                  title="Casos de Hernia"
+                  value={`${metrics.totalHernias} (${metrics.porcentajeHernias.toFixed(0)}%)`}
+                  icon={Target}
+                />
+                <MetricCard
+                  title="Índice de Diversidad"
+                  value={metrics.diversidadDiagnostica.toFixed(1)}
+                  icon={BarChart3}
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <ChartWrapper title="Distribución de Diagnósticos">
+                  <CommonDiagnosesChart data={metrics.diagnosticosMasComunes} />
+                </ChartWrapper>
+                <ChartWrapper title="Distribución de Hernias">
+                  <HerniaDistributionChart data={metrics.distribucionHernias} />
+                </ChartWrapper>
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="timeline" className="space-y-4">
+              <ChartWrapper title="Tendencia Temporal">
+                <TimelineChart data={timeline} />
+              </ChartWrapper>
+            </TabsContent>
+            
+            <TabsContent value="analysis" className="space-y-4">
+              <div className="grid gap-4">
+                {insights.map((insight, index) => (
+                  <InsightCard key={index} insight={insight} />
+                ))}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
 
       {/* Footer optimizado */}
       <div className="text-right">
@@ -412,7 +342,7 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
           Última actualización: {lastUpdated}
         </p>
       </div>
-    </div>
+    </>
   );
 });
 

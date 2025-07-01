@@ -7,35 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { FileBarChart, PieChartIcon, ActivitySquare, TrendingUp, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useIsMobile, useCurrentBreakpoint } from "@/hooks/use-breakpoint"
-import { usePatients } from "@/hooks/use-patients";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PatientData, ChartData, DiagnosticInsight } from "@/components/charts/chart-diagnostic";
-
-// Definición local de la interfaz MetricsResult anteriormente importada
-interface MetricsResult {
-  metrics: {
-    totalPacientes: number;
-    totalHernias: number;
-    totalVesicula: number;
-    totalApendicitis: number;
-    diagnosticosMasComunes: ChartData[];
-    distribucionHernias: ChartData[];
-    porcentajeHernias: number;
-    porcentajeVesicula: number;
-    porcentajeApendicitis: number;
-    ratioHerniaVesicula: number;
-    diversidadDiagnostica: number;
-    riesgoPromedio: 'baja' | 'media' | 'alta';
-    tendenciaGeneral: number;
-  };
-  timeline: Array<{
-    date: string;
-    cantidad: number;
-    formattedDate: string;
-  }>;
-  insights: DiagnosticInsight[];
-}
-import { DiagnosisEnum } from '@/app/dashboard/data-model';
+import { useStatisticsData, type StatisticsResult } from "@/hooks/use-statistics-data";
 
 
 import { useChartData, type DateRangeOption } from '@/hooks/use-chart-data';
@@ -214,143 +188,56 @@ export default function EstadisticasPage() {
   const isMobile = useIsMobile()
   const currentBreakpoint = useCurrentBreakpoint()
   
-  // Usar el hook de React Query para obtener los datos de pacientes
-  const { data: patientsData, isLoading: isLoadingPatients } = usePatients(1, 1000); // Ajusta según sea necesario
-  const patients = useMemo(() => patientsData?.patients || [], [patientsData]);
-  
-  // Obtener datos reales de la API usando nuestro hook personalizado
+  // Obtener datos estadísticos usando el nuevo hook de estadísticas
   const {
-    loading,
+    data: statisticsData,
+    isLoading: loading,
     error,
-    chartData,
-    refresh
-  } = useChartData({
+    refresh,
+    lastUpdated
+  } = useStatisticsData({
+
     dateRange,
     estado,
     refreshInterval: 0 // Sin actualización automática
   });
+  
+  // Función para manejar el click en el botón de reintentar
+  const handleRetry = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    refresh();
+  }, [refresh]);
+  
+  // Datos de pacientes para compatibilidad con componentes existentes
+  const chartData = useMemo(() => ({
+    transformedPatients: statisticsData?.metrics ? [] : [],
+    diagnosisData: statisticsData?.metrics?.diagnosticosMasComunes?.map(item => ({
+      tipo: item.tipo,
+      cantidad: item.cantidad,
+      porcentaje: 0
+    })) || []
+  }), [statisticsData]);
 
-  // Helper function to standardize diagnosis names - optimizado y memoizado fuera del render loop
-  const formatDiagnosisName = useMemo(() => {
-    // Creamos un mapa de diagnósticos para búsqueda más rápida en O(1) en lugar de múltiples includes O(n)
-    const diagnosisMap: Record<string, DiagnosisEnum> = {
-      'hernia inguinal recidivante': DiagnosisEnum.HERNIA_INGUINAL_RECIDIVANTE,
-      'hernia inguinal bilateral': DiagnosisEnum.HERNIA_INGUINAL_BILATERAL,
-      'hernia inguinal': DiagnosisEnum.HERNIA_INGUINAL,
-      'hernia umbilical': DiagnosisEnum.HERNIA_UMBILICAL,
-      'hernia incisional': DiagnosisEnum.HERNIA_INCISIONAL,
-      'hernia hiatal': DiagnosisEnum.HERNIA_HIATAL,
-      'eventracion abdominal': DiagnosisEnum.EVENTRACION_ABDOMINAL,
-      'vesicula': DiagnosisEnum.COLELITIASIS,
-      'colelitiasis': DiagnosisEnum.COLELITIASIS,
-      'apendicitis': DiagnosisEnum.APENDICITIS,
-      'lipoma': DiagnosisEnum.LIPOMA_GRANDE,
-      'quiste sebaceo': DiagnosisEnum.QUISTE_SEBACEO_INFECTADO
-    };
-    
-    // Función optimizada que usa el mapa
-    return (name: string | undefined): DiagnosisEnum => {
-      if (!name) return DiagnosisEnum.OTRO;
-      const lowerCaseName = name.toLowerCase();
-      
-      // Buscar en las claves del mapa
-      for (const [key, value] of Object.entries(diagnosisMap)) {
-        if (lowerCaseName.includes(key)) {
-          return value;
-        }
-      }
-      return DiagnosisEnum.OTRO;
-    };
-  }, []); // No hay dependencias, solo se crea una vez
-
-  const initialMetricsResult = useMemo<MetricsResult>(() => {
-    // Optimizando: pre-calculamos los contadores para reducir bucles repetitivos
-    const timelineData: { [key: string]: number } = {};
-    const diagnosisCounts = new Map<string, number>();
-    let totalHernias = 0;
-    let totalVesicula = 0;
-    let totalApendicitis = 0;
-
-    // Un solo bucle para procesar todos los datos
-    patients.forEach((patient: PatientData) => {
-      // Contar diagnósticos por tipo
-      if (patient.diagnostico_principal) {
-        const formattedDiagnosis = formatDiagnosisName(patient.diagnostico_principal);
-        const diagnosisKey = formattedDiagnosis.toString();
-        diagnosisCounts.set(diagnosisKey, (diagnosisCounts.get(diagnosisKey) || 0) + 1);
-        
-        // Contadores específicos
-        const lowerDiag = patient.diagnostico_principal.toLowerCase();
-        if (lowerDiag.includes('hernia')) totalHernias++;
-        if (lowerDiag.includes('vesícula') || lowerDiag.includes('colelitiasis')) totalVesicula++;
-        if (lowerDiag.includes('apendicitis')) totalApendicitis++;
-      }
-      
-      // Datos de timeline
-      if (patient.fecha_registro) {
-        const date = new Date(patient.fecha_registro).toISOString().split('T')[0];
-        timelineData[date] = (timelineData[date] || 0) + 1;
-      }
-    });
-
-    const totalPacientes = patients.length;
-    
-    // Cálculos de porcentajes
-    const porcentajeHernias = totalPacientes > 0 ? (totalHernias / totalPacientes) * 100 : 0;
-    const porcentajeVesicula = totalPacientes > 0 ? (totalVesicula / totalPacientes) * 100 : 0;
-    const porcentajeApendicitis = totalPacientes > 0 ? (totalApendicitis / totalPacientes) * 100 : 0;
-    const ratioHerniaVesicula = totalVesicula > 0 ? totalHernias / totalVesicula : 0;
-
-    // Convertir Map a array para aggregatedDiagnoses
-    const aggregatedDiagnoses: ChartData[] = Array.from(diagnosisCounts.entries())
-      .map(([tipo, cantidad]) => ({ tipo, cantidad }))
-      .sort((a: ChartData, b: ChartData) => b.cantidad - a.cantidad);
-
-    // Filtrar solo diagnósticos de hernias para distribucionHernias
-    const herniasData: ChartData[] = aggregatedDiagnoses
-      .filter(item => item.tipo.toLowerCase().includes('hernia'))
-      .sort((a: ChartData, b: ChartData) => b.cantidad - a.cantidad);
-
-    // Format timeline data
-    const formattedTimeline = Object.entries(timelineData)
-      .map(([date, cantidad]: [string, number]) => ({
-        date,
-        cantidad,
-        formattedDate: new Date(date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }),
-      }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    // Cálculo simplificado de diversidad (Shannon Index)
-    const diversidadDiagnostica = Math.log2(Math.max(1, diagnosisCounts.size));
-    const riesgoPromedio: 'baja' | 'media' | 'alta' = 'baja'; // Placeholder
-    const tendenciaGeneral = 0; // Placeholder
-
-    const metrics = {
-      totalPacientes,
-      totalHernias,
-      totalVesicula,
-      totalApendicitis,
-      diagnosticosMasComunes: aggregatedDiagnoses,
-      distribucionHernias: herniasData,
-      porcentajeHernias,
-      porcentajeVesicula,
-      porcentajeApendicitis,
-      ratioHerniaVesicula,
-      diversidadDiagnostica,
-      riesgoPromedio,
-      tendenciaGeneral
-    };
-
-    const insights: DiagnosticInsight[] = []; // Placeholder
-
-    return {
-      metrics,
-      timeline: formattedTimeline,
-      insights,
-    };
-  }, [patients, formatDiagnosisName]); // Añadimos formatDiagnosisName como dependencia
-
-  const lastUpdated = useMemo(() => new Date().toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }), [patients]);
+  // Utilizar directamente los datos de la API, sin necesidad de procesamiento local
+  const metricsData = useMemo(() => statisticsData || {
+    metrics: {
+      totalPacientes: 0,
+      totalHernias: 0,
+      totalVesicula: 0,
+      totalApendicitis: 0,
+      diagnosticosMasComunes: [],
+      distribucionHernias: [],
+      porcentajeHernias: 0,
+      porcentajeVesicula: 0,
+      porcentajeApendicitis: 0,
+      ratioHerniaVesicula: 0,
+      diversidadDiagnostica: 0,
+      riesgoPromedio: 'baja' as const,
+      tendenciaGeneral: 0
+    },
+    timeline: [],
+    insights: []
+  }, [statisticsData]);
 
   // Configuración de pestañas
   const tabsConfig = useMemo(() => [
@@ -429,7 +316,7 @@ export default function EstadisticasPage() {
                           <AlertDescription>
                             <strong>Error al cargar datos:</strong> {error}
                             <button 
-                              onClick={refresh}
+                              onClick={handleRetry}
                               className="ml-3 px-2 py-0.5 bg-primary text-primary-foreground rounded-md text-xs"
                             >
                               Reintentar
@@ -456,7 +343,7 @@ export default function EstadisticasPage() {
                           <AlertDescription>
                             <strong>Error al cargar datos:</strong> {error}
                             <button 
-                              onClick={refresh}
+                              onClick={handleRetry}
                               className="ml-3 px-2 py-0.5 bg-primary text-primary-foreground rounded-md text-xs"
                             >
                               Reintentar
@@ -466,9 +353,9 @@ export default function EstadisticasPage() {
                       )}
                   
                   <ChartDiagnostic 
-                    initialPatientsData={patients}
+                    initialPatientsData={[]}
                     apiPatients={chartData.transformedPatients}
-                    diagnosisData={chartData.diagnosisData}
+                    diagnosisData={metricsData.metrics.diagnosticosMasComunes || []}
                     isLoading={loading}
                     lastUpdated={lastUpdated}
                   />
