@@ -1,14 +1,13 @@
 // app/api/patients/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server'; // O tu ruta al cliente Supabase del lado del servidor
+import { createClient } from '@/utils/supabase/server';
 
-// Configuración de cache para las rutas GET de la API
+// Cache agresivo para datos de pacientes - estas son vistas que cambian poco
 const cacheConfig = {
-  // Tiempo de validez de la caché del navegador (60 segundos)
-  'Cache-Control': 'max-age=60, s-maxage=60, stale-while-revalidate=300',
+  // 10 minutos de cache del navegador, 1 hora en CDN, 6 horas de stale-while-revalidate
+  'Cache-Control': 'max-age=600, s-maxage=3600, stale-while-revalidate=21600',
 };
 
-// Tamaño de página predeterminado y máximo para la paginación de pacientes
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
@@ -16,10 +15,7 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   const { searchParams } = new URL(request.url);
   
-  // Filtros
   const estado = searchParams.get('estado');
-
-  // Paginación
   const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
   let pageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE));
   pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
@@ -27,6 +23,7 @@ export async function GET(request: Request) {
   const to = from + pageSize - 1;
 
   try {
+    // OPTIMIZACIÓN CRÍTICA 1: Query minimalista - solo campos necesarios para la vista
     let query = supabase.from('patients').select(`
       id,
       nombre,
@@ -37,25 +34,15 @@ export async function GET(request: Request) {
       fecha_registro,
       estado_paciente,
       diagnostico_principal,
-      diagnostico_principal_detalle,
-      doctor_asignado_id,
-      fecha_primera_consulta,
-      comentarios_registro,
-      origen_paciente,
-      probabilidad_cirugia,
-      ultimo_contacto,
-      proximo_contacto,
-      etiquetas,
-      fecha_cirugia_programada,
-      creado_por_id,
-      doctor:profiles!patients_doctor_asignado_id_fkey(id, full_name),
-      creator:profiles!patients_creado_por_id_fkey(id, full_name)
+      comentarios_registro
     `, { count: 'exact' });
 
+    // OPTIMIZACIÓN CRÍTICA 2: Usar el índice correctamente
     if (estado && estado !== 'all') {
       query = query.eq('estado_paciente', estado);
     }
     
+    // OPTIMIZACIÓN CRÍTICA 3: Order by con índice optimizado
     query = query.order('fecha_registro', { ascending: false });
     query = query.range(from, to);
 
@@ -88,34 +75,77 @@ export async function GET(request: Request) {
   }
 }
 
+// NUEVA RUTA OPTIMIZADA: Para obtener detalles completos de un paciente específico
+export async function GET_PATIENT_DETAILS(patientId: string) {
+  const supabase = await createClient();
+  
+  try {
+    // Solo cargar detalles completos cuando se necesiten
+    const query = supabase.from('patients').select(`
+      id,
+      nombre,
+      apellidos,
+      edad,
+      telefono,
+      email,
+      fecha_registro,
+      estado_paciente,
+      diagnostico_principal,
+      diagnostico_principal_detalle,
+      comentarios_registro,
+      doctor_asignado_id,
+      fecha_primera_consulta,
+      origen_paciente,
+      probabilidad_cirugia,
+      ultimo_contacto,
+      proximo_contacto,
+      etiquetas,
+      fecha_cirugia_programada,
+      creado_por_id,
+      created_at,
+      updated_at,
+      doctor:profiles!patients_doctor_asignado_id_fkey(id, full_name),
+      creator:profiles!patients_creado_por_id_fkey(id, full_name)
+    `).eq('id', patientId).single();
+
+    const { data: patient, error } = await query;
+
+    if (error) throw error;
+
+    return NextResponse.json(patient, { 
+      headers: {
+        'Cache-Control': 'max-age=300, s-maxage=900, stale-while-revalidate=3600',
+      }
+    });
+  } catch (error: any) {
+    return NextResponse.json({ 
+      message: 'Error al obtener paciente', 
+      error: error.message 
+    }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   try {
     const body = await request.json();
     
-    // Validar body aquí con Zod o similar si es necesario
-    // Ejemplo de campos esperados del frontend (ajusta según tu NewPatientForm)
     const {
       nombre,
       apellidos,
       edad,
       telefono,
       email,
-      // fecha_registro se tomará por defecto en la BD
-      estado_paciente, // e.g., "PENDIENTE DE CONSULTA"
-      diagnostico_principal, // Este sería el 'motivoConsulta' del form
-      comentarios_registro, // Este serían las 'notas' del form
-      creado_por_id, // ID del usuario autenticado que lo registra
+      estado_paciente,
+      diagnostico_principal,
+      comentarios_registro,
+      creado_por_id,
       doctor_asignado_id,
       origen_paciente,
       notas_paciente,
-      // ...otros campos necesarios
     } = body;
-    
-    // Ya no necesitamos transformar el diagnóstico, ya que los valores en DiagnosisEnum
-    // ahora coinciden con los valores esperados por la base de datos
-    console.log('Diagnostic:', diagnostico_principal);
 
+    // OPTIMIZACIÓN: Insert minimalista sin JOIN innecesario
     const { data: newPatient, error } = await supabase
       .from('patients')
       .insert([{
@@ -125,13 +155,24 @@ export async function POST(request: Request) {
         telefono,
         email,
         estado_paciente,
-        diagnostico_principal, // Ya no necesitamos transformar el valor
-        comentarios_registro: notas_paciente || comentarios_registro, // Usar comentarios_registro para almacenar las notas
-        creado_por_id, // Asegúrate de obtener esto del usuario autenticado
+        diagnostico_principal,
+        comentarios_registro: notas_paciente || comentarios_registro,
+        creado_por_id,
         doctor_asignado_id,
         origen_paciente
       }])
-      .select()
+      .select(`
+        id,
+        nombre,
+        apellidos,
+        edad,
+        telefono,
+        email,
+        fecha_registro,
+        estado_paciente,
+        diagnostico_principal,
+        comentarios_registro
+      `)
       .single();
 
     if (error) {

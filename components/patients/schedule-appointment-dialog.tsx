@@ -1,6 +1,4 @@
-"use client";
-
-import { useMemo } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,21 +8,18 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { useCreateAppointment } from "@/hooks/use-appointments";
 import { Patient, AppointmentStatusEnum } from "@/lib/types";
 import { toast } from "sonner";
 
-const FORM_SCHEMA = z.object({
-  fechaConsulta: z.date({ required_error: "Selecciona una fecha" }),
-  horaConsulta: z.string().min(5, "Selecciona hora"),
-  motivoConsulta: z.string().optional(),
-  notas: z.string().optional(),
-});
-
-type FormValues = z.infer<typeof FORM_SCHEMA>;
+// Horarios estáticos - calculados una vez en build time en lugar de en runtime
+const HOUR_OPTIONS = (() => {
+  const options: string[] = [];
+  for (let h = 7; h <= 20; h++) {
+    ["00", "30"].forEach((m) => options.push(`${String(h).padStart(2, "0")}:${m}`));
+  }
+  return options;
+})();
 
 interface ScheduleAppointmentDialogProps {
   isOpen: boolean;
@@ -34,45 +29,73 @@ interface ScheduleAppointmentDialogProps {
 
 export function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppointmentDialogProps) {
   const { mutateAsync: addAppointment, isPending } = useCreateAppointment();
-  const form = useForm<FormValues>({
-    resolver: zodResolver(FORM_SCHEMA),
-    defaultValues: {
-      fechaConsulta: new Date(),
-      horaConsulta: "08:00",
-      motivoConsulta: "",
-      notas: "",
-    },
+  
+  // Estado simplificado sin react-hook-form para reducir bundle size
+  const [formData, setFormData] = useState({
+    fechaConsulta: new Date(),
+    horaConsulta: "08:00",
+    motivoConsulta: "",
+    notas: "",
   });
 
-  const handleSubmit = async (values: FormValues) => {
-    if (!patient) return;
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Validación simple sin zod
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    
+    if (!formData.fechaConsulta) {
+      newErrors.fechaConsulta = "Selecciona una fecha";
+    }
+    
+    if (!formData.horaConsulta) {
+      newErrors.horaConsulta = "Selecciona una hora";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!patient || !validateForm()) return;
+
     const promise = addAppointment({
       patient_id: patient.id,
-      fecha_hora_cita: `${format(values.fechaConsulta, "yyyy-MM-dd")}T${values.horaConsulta}:00`,
+      fecha_hora_cita: `${format(formData.fechaConsulta, "yyyy-MM-dd")}T${formData.horaConsulta}:00`,
       estado_cita: AppointmentStatusEnum.PROGRAMADA,
-      motivo_cita: values.motivoConsulta || "",
-      notas_cita_seguimiento: values.notas || "",
+      motivo_cita: formData.motivoConsulta || "",
+      notas_cita_seguimiento: formData.notas || "",
       doctor_id: "default-doctor", // TODO: obtener ID real
-      es_primera_vez: false, // Defaulting to false as the UI doesn't specify
+      es_primera_vez: false,
     });
 
     toast.promise(promise, {
       loading: "Agendando cita...",
       success: () => {
         onClose();
+        // Reset form
+        setFormData({
+          fechaConsulta: new Date(),
+          horaConsulta: "08:00",
+          motivoConsulta: "",
+          notas: "",
+        });
+        setErrors({});
         return "Cita agendada con éxito";
       },
       error: (err) => err.message || "Error al agendar la cita",
     });
   };
 
-  const hourOptions = useMemo(() => {
-    const opts: string[] = [];
-    for (let h = 7; h <= 20; h++) {
-      ["00", "30"].forEach((m) => opts.push(`${String(h).padStart(2, "0")}:${m}`));
+  const updateFormData = (field: keyof typeof formData, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Limpiar error del campo cuando el usuario empiece a escribir
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: "" }));
     }
-    return opts;
-  }, []);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -83,56 +106,88 @@ export function ScheduleAppointmentDialog({ isOpen, patient, onClose }: Schedule
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-sm font-medium">Fecha</label>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start text-left font-normal mt-1">
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start text-left font-normal mt-1"
+                  type="button"
+                >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(form.watch("fechaConsulta"), "PPP", { locale: es })}
+                  {format(formData.fechaConsulta, "PPP", { locale: es })}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="p-0" align="start">
                 <Calendar
                   mode="single"
-                  selected={form.watch("fechaConsulta")}
-                  onSelect={(d) => d && form.setValue("fechaConsulta", d)}
+                  selected={formData.fechaConsulta}
+                  onSelect={(date) => date && updateFormData("fechaConsulta", date)}
                   locale={es}
+                  disabled={(date) => date < new Date()} // No permitir fechas pasadas
                 />
               </PopoverContent>
             </Popover>
+            {errors.fechaConsulta && (
+              <p className="text-sm text-red-600 mt-1">{errors.fechaConsulta}</p>
+            )}
           </div>
 
           <div>
             <label className="text-sm font-medium">Hora</label>
             <select
-              {...form.register("horaConsulta")}
-              className="mt-1 w-full border rounded px-2 py-1 text-sm"
+              value={formData.horaConsulta}
+              onChange={(e) => updateFormData("horaConsulta", e.target.value)}
+              className="mt-1 w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              {hourOptions.map((h) => (
-                <option key={h} value={h}>
-                  {h}
+              {HOUR_OPTIONS.map((hour) => (
+                <option key={hour} value={hour}>
+                  {hour}
                 </option>
               ))}
             </select>
+            {errors.horaConsulta && (
+              <p className="text-sm text-red-600 mt-1">{errors.horaConsulta}</p>
+            )}
           </div>
 
           <div>
             <label className="text-sm font-medium">Motivo</label>
-            <Input {...form.register("motivoConsulta")} className="mt-1" />
+            <Input 
+              value={formData.motivoConsulta}
+              onChange={(e) => updateFormData("motivoConsulta", e.target.value)}
+              className="mt-1" 
+              placeholder="Motivo de la consulta (opcional)"
+            />
           </div>
 
           <div>
             <label className="text-sm font-medium">Notas</label>
-            <Textarea rows={3} {...form.register("notas")} className="mt-1" />
+            <Textarea 
+              rows={3} 
+              value={formData.notas}
+              onChange={(e) => updateFormData("notas", e.target.value)}
+              className="mt-1" 
+              placeholder="Notas adicionales (opcional)"
+            />
           </div>
 
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="secondary" onClick={onClose}>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button 
+              type="button" 
+              variant="secondary" 
+              onClick={onClose}
+              disabled={isPending}
+            >
               Cancelar
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button 
+              type="submit" 
+              disabled={isPending}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
               {isPending ? "Guardando..." : "Guardar"}
             </Button>
           </div>

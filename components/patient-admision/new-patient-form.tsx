@@ -49,8 +49,8 @@ import {
   AppointmentStatusEnum,
   type TimeString
 } from "@/lib/types"
-import { useCreatePatient } from "@/hooks/use-patients";
-import { useAppointments, useCreateAppointment } from "@/hooks/use-appointments";
+import { useAdmitPatient } from "@/hooks/use-patients";
+import { useAppointments } from "@/hooks/use-appointments";
 
 // Esquema de validación
 const FORM_SCHEMA = z.object({
@@ -174,8 +174,7 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
   
   // Usar hooks de React Query
   const { data: appointmentsData } = useAppointments(1, 100);
-  const createPatientMutation = useCreatePatient();
-  const createAppointmentMutation = useCreateAppointment();
+  const { mutateAsync: admitPatient, isPending: isSubmitting } = useAdmitPatient();
   
   const appointments = appointmentsData?.appointments || [];
   const isLoadingAppointments = !appointmentsData;
@@ -273,48 +272,40 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
 
   const handleSubmit = useCallback(async (values: FormValues) => {
     try {
-      // Crear paciente - adaptado al tipo NewPatient (snake_case)
-      const newPatient = await createPatientMutation.mutateAsync({
+      // Crear la fecha y hora de la cita combinando los campos
+      const fechaHoraCita = new Date(values.fechaConsulta);
+      const [horas, minutos] = values.horaConsulta.split(':').map(Number);
+      fechaHoraCita.setHours(horas, minutos, 0, 0);
+      
+      // Llamar a la mutación atómica que registra paciente y cita en una sola transacción
+      await admitPatient({
         // Datos personales
         nombre: values.nombre.trim(),
         apellidos: values.apellidos.trim(),
         telefono: values.telefono.trim(),
         edad: values.edad ?? null,
+        email: undefined, // Campo opcional, no incluido en el formulario actual
         
-        // Datos clínicos
+        // Datos de la cita y diagnóstico
         diagnostico_principal: values.motivoConsulta,
-        estado_paciente: PatientStatusEnum.PENDIENTE_DE_CONSULTA,
-        probabilidad_cirugia: 0.5, // Default value, can be updated later
         comentarios_registro: values.notas?.trim() || "",
-        
-        // Metadata
-        fecha_registro: new Date().toISOString(),
-      });
-
-      // Combinar fecha y hora en un único string ISO
-      const fechaHoraCita = new Date(values.fechaConsulta);
-      const [horas, minutos] = values.horaConsulta.split(':').map(Number);
-      fechaHoraCita.setHours(horas, minutos, 0, 0);
-      
-      // Crear cita - adaptado al tipo NewAppointment (snake_case)
-      await createAppointmentMutation.mutateAsync({
-        patient_id: newPatient.id,
         fecha_hora_cita: fechaHoraCita.toISOString(),
-        estado_cita: AppointmentStatusEnum.PROGRAMADA,
         motivo_cita: values.motivoConsulta,
-        notas_cita_seguimiento: values.notas?.trim() || "",
-        es_primera_vez: true,
+        
+        // IDs opcionales que pueden provenir del contexto de autenticación
+        // doctor_asignado_id: undefined, 
+        // creado_por_id: undefined,
       });
 
       setOpen(false);
       onSuccess?.();
     } catch (error) {
-      // Los errores ya son manejados por los mutations
-      console.error("Registration error:", error);
+      // Los errores ya son manejados por la mutación
+      console.error("Admission error:", error);
     }
-  }, [createPatientMutation, createAppointmentMutation, onSuccess]);
+  }, [admitPatient, onSuccess]);
 
-  const isSubmitting = createPatientMutation.isPending || createAppointmentMutation.isPending;
+  // Ya no necesitamos crear isSubmitting aquí porque viene del hook useAdmitPatient
   const isLoading = isLoadingAppointments;
   const canSubmit = form.formState.isValid && !isSubmitting && !isLoading;
 

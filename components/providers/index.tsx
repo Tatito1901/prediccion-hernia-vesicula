@@ -1,11 +1,19 @@
 'use client';
 
 import QueryProvider from './query-provider';
+import { ThemeProvider } from "@/components/theme/theme-provider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <QueryProvider>
-      {children}
-    </QueryProvider>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <QueryProvider>
+        {children}
+      </QueryProvider>
+    </ThemeProvider>
   );
 }

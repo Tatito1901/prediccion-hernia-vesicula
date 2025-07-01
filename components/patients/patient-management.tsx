@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -10,16 +10,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { 
-  SearchIcon, 
+  Search, 
   X, 
-  ChevronLeft, 
-  ChevronRight, 
   Users, 
   UserPlus,
-  Activity,
-  TrendingUp,
-  Calendar,
-  FileText,
   SlidersHorizontal,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -38,16 +32,17 @@ import {
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
+import { StatsCard } from "@/components/ui/stats-card";
+import { SimplePagination } from "@/components/ui/simple-pagination";
+import { useProcessedPatients } from "@/hooks/use-processed-patients";
+import { usePatientStats } from "@/hooks/use-patient-stats";
+
+// Importaciones directas - eliminamos lazy loading para componentes críticos
 import PatientTable from "./patient-table";
 import { NewPatientForm } from "@/components/patient-admision/new-patient-form";
 import { SurveyShareDialog } from "@/components/surveys/survey-share-dialog";
 import PatientDetailsDialog from "./patient-details-dialog";
 import { ScheduleAppointmentDialog } from "./schedule-appointment-dialog";
-import { StatsCard } from "@/components/ui/stats-card";
-import { SimplePagination } from "@/components/ui/simple-pagination";
-import { useProcessedPatients } from "@/hooks/use-processed-patients";
-import { usePatientStats } from "@/hooks/use-patient-stats";
 
 export interface EnrichedPatient extends Patient {
   nombreCompleto: string;
@@ -58,374 +53,358 @@ export interface EnrichedPatient extends Patient {
 
 const PAGE_SIZE = 15;
 
+// Configuración estática simplificada - eliminamos Map para mejor rendimiento
 const STATUS_CONFIG = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: {
-    label: "Pend. Consulta",
-    style: "bg-amber-50 text-amber-700 border-amber-200"
+  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: { 
+    label: "Pend. Consulta", 
+    className: "bg-amber-50 text-amber-700 border-amber-200" 
   },
-  [PatientStatusEnum.CONSULTADO]: {
+  [PatientStatusEnum.CONSULTADO]: { 
     label: "Consultado", 
-    style: "bg-blue-50 text-blue-700 border-blue-200"
+    className: "bg-blue-50 text-blue-700 border-blue-200" 
   },
-  [PatientStatusEnum.EN_SEGUIMIENTO]: {
-    label: "Seguimiento",
-    style: "bg-purple-50 text-purple-700 border-purple-200"
+  [PatientStatusEnum.EN_SEGUIMIENTO]: { 
+    label: "Seguimiento", 
+    className: "bg-purple-50 text-purple-700 border-purple-200" 
   },
-  [PatientStatusEnum.OPERADO]: {
-    label: "Operado",
-    style: "bg-emerald-50 text-emerald-700 border-emerald-200"
+  [PatientStatusEnum.OPERADO]: { 
+    label: "Operado", 
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200" 
   },
-  [PatientStatusEnum.NO_OPERADO]: {
-    label: "No Operado",
-    style: "bg-red-50 text-red-700 border-red-200"
+  [PatientStatusEnum.NO_OPERADO]: { 
+    label: "No Operado", 
+    className: "bg-red-50 text-red-700 border-red-200" 
   },
-  [PatientStatusEnum.INDECISO]: {
-    label: "Indeciso",
-    style: "bg-slate-50 text-slate-700 border-slate-200"
+  [PatientStatusEnum.INDECISO]: { 
+    label: "Indeciso", 
+    className: "bg-slate-50 text-slate-700 border-slate-200" 
   }
 } as const;
 
-// El componente StatsCard ahora se importa desde @/components/ui/stats-card
+// Estado simplificado - eliminamos el reducer complejo
+interface AppState {
+  currentPage: number;
+  statusFilter: keyof typeof PatientStatusEnum | "all";
+  searchTerm: string;
+  modals: {
+    newPatient: boolean;
+    shareDialog: boolean;
+    detailsDialog: boolean;
+    appointmentDialog: boolean;
+    mobileFilters: boolean;
+  };
+  selectedPatient: Patient | null;
+  patientForAppointment: Patient | null;
+  surveyLink: string;
+}
 
 // Loading skeleton simplificado
 const LoadingSkeleton = () => (
-  <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-    <div className="p-4 sm:p-6 space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-20 sm:h-24 bg-slate-100 dark:bg-slate-800/50 rounded-lg animate-pulse" />
-        ))}
-      </div>
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-12 sm:h-16 bg-slate-100 dark:bg-slate-800/50 rounded-lg animate-pulse" />
-        ))}
-      </div>
+  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} className="h-20 bg-slate-100 rounded-lg animate-pulse" />
+      ))}
+    </div>
+    <div className="space-y-3">
+      {Array.from({ length: 5 }, (_, i) => (
+        <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+      ))}
     </div>
   </div>
 );
 
-// El componente SimplePagination ahora se importa desde @/components/ui/simple-pagination
-
-export function PatientManagement() {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<keyof typeof PatientStatusEnum | "all">("all");
-
-  const { 
-    data: patientData, 
-    isLoading: isLoadingPatients, 
-    error: patientError 
-  } = usePatients(currentPage, PAGE_SIZE, statusFilter === 'all' ? undefined : statusFilter);
-
-  const patients = patientData?.data || [];
-  const pagination = patientData?.pagination;
-  const totalPages = pagination?.totalPages || 1;
-
-  // Cargar todas las citas (sin paginación por ahora para el enriquecimiento)
-  const { data: appointmentsData } = useAppointments(1, 1000); // TODO: Considerar una mejor estrategia si hay muchas citas
-  const appointments = appointmentsData?.appointments || [];
-  
-  const router = useRouter();
-
-  // Estados para filtros locales (aplicados a la página actual)
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
-
-  // Estados para modales
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [selectedPatientForSurvey, setSelectedPatientForSurvey] = useState<Patient | null>(null);
-  const [surveyLink, setSurveyLink] = useState("");
-  const [isNewPatientFormOpen, setIsNewPatientFormOpen] = useState(false);
-
-  // Estado para detalles de paciente
-  const [selectedPatientDetails, setSelectedPatientDetails] = useState<Patient | null>(null);
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-
-  // Estado para agendar cita
-  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
-  const [patientForAppointment, setPatientForAppointment] = useState<Patient | null>(null);
-
-  // Usar el hook personalizado para procesamiento de datos
-  const {
-    enrichedPatients,
-    filteredAndEnrichedPatients, 
-    statusStats
-  } = useProcessedPatients(
-    patients,
-    appointments,
-    searchTerm,
-    statusFilter
-  );
-
-  // Estadísticas principales desde la API
-  const { 
-    data: mainStats,
-    isLoading: isLoadingStats,
-    error: statsError
-  } = usePatientStats();
-
-  // Handlers simplificados
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSelectPatient = (patient: Patient) => {
-    setSelectedPatientDetails(patient);
-    setDetailsDialogOpen(true);
-  };
-
-  const handleShareSurvey = (patient: Patient) => {
-    setSelectedPatientForSurvey(patient);
-    setSurveyLink(`${window.location.origin}/survey/${generateSurveyId()}?patientId=${patient.id}`);
-    setShareDialogOpen(true);
-  };
-
-  const handleEditPatient = (patient: Patient) => {
-    toast.info(`Editar paciente: ${patient.nombre} ${patient.apellidos}`);
-  };
-
-  const handleAnswerSurvey = (patient: Patient) => {
-    router.push(`/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`);
-  };
-
-  const handleScheduleAppointment = (patient: Patient) => {
-    setPatientForAppointment(patient);
-    setAppointmentDialogOpen(true);
-  };
-
-  const clearAllFilters = () => {
-    setSearchTerm("");
-    setStatusFilter("all");
-    setIsMobileFiltersOpen(false);
-  };
-
-  const hasActiveFilters = !!searchTerm || statusFilter !== "all";
-
-  // Componente de filtros
-  const FilterContent = ({ isMobile = false }: { isMobile?: boolean }) => (
-    <div className="space-y-3">
-      <Select
-        value={statusFilter}
-        onValueChange={(value) => {
-          setStatusFilter(value as keyof typeof PatientStatusEnum | "all");
-          if (isMobile) setIsMobileFiltersOpen(false);
-        }}
-      >
-        <SelectTrigger className={cn(
-          "h-8 sm:h-9 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700",
-          "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70",
-          isMobile ? "w-full" : "w-full sm:w-[180px]"
-        )}>
-          <SelectValue placeholder="Filtrar por estado" className="text-slate-600 dark:text-slate-300" />
-        </SelectTrigger>
-        <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
-          <SelectItem value="all" className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
+// Componente de filtros simplificado
+const FilterContent = ({ 
+  statusFilter, 
+  onStatusChange, 
+  onClearFilters, 
+  statusStats, 
+  isMobile = false 
+}: {
+  statusFilter: string;
+  onStatusChange: (value: string) => void;
+  onClearFilters: () => void;
+  statusStats: any;
+  isMobile?: boolean;
+}) => (
+  <div className="space-y-3">
+    <Select value={statusFilter} onValueChange={onStatusChange}>
+      <SelectTrigger className={cn(
+        "h-9 text-sm bg-slate-50 border-slate-200",
+        isMobile ? "w-full" : "w-[180px]"
+      )}>
+        <SelectValue placeholder="Filtrar por estado" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">
+          <div className="flex items-center justify-between w-full">
+            <span>Todos los estados</span>
+            <Badge variant="secondary" className="ml-2">
+              {statusStats.all}
+            </Badge>
+          </div>
+        </SelectItem>
+        {Object.entries(STATUS_CONFIG).map(([status, config]) => (
+          <SelectItem key={status} value={status}>
             <div className="flex items-center justify-between w-full">
-              <span>Todos los estados</span>
-              <Badge variant="secondary" className="ml-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                {statusStats.all}
+              <span>{config.label}</span>
+              <Badge variant="outline" className={cn("ml-2", config.className)}>
+                {statusStats[status as keyof typeof PatientStatusEnum]}
               </Badge>
             </div>
           </SelectItem>
-          {Object.entries(STATUS_CONFIG).map(([status, config]) => (
-            <SelectItem key={status} value={status} className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
-              <div className="flex items-center justify-between w-full">
-                <span>{config.label}</span>
-                <Badge variant="outline" className={cn(
-                  "ml-2 shadow-sm font-medium", 
-                  status === statusFilter ? "ring-1 ring-offset-1 ring-slate-200 dark:ring-slate-700 dark:ring-offset-slate-900" : "",
-                  config.style
-                )}>
-                  {status === "all" ? statusStats.all : statusStats[status as keyof typeof PatientStatusEnum]}
-                </Badge>
-              </div>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      
-        <Button 
-          variant="ghost" 
-          size="sm"
-          onClick={clearAllFilters}
-          className={cn(
-            "text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100",
-            "hover:bg-slate-100 dark:hover:bg-slate-800 h-8 sm:h-9",
-            isMobile ? "w-full" : ""
-          )}
-        >
-          Limpiar Filtros
-        </Button>
-    </div>
-  );
+        ))}
+      </SelectContent>
+    </Select>
+    
+    <Button 
+      variant="ghost" 
+      size="sm"
+      onClick={onClearFilters}
+      className={cn("text-slate-600 hover:bg-slate-100", isMobile ? "w-full" : "")}
+    >
+      Limpiar Filtros
+    </Button>
+  </div>
+);
+
+// Componente principal optimizado
+export const PatientManagement = () => {
+  // Estado simplificado
+  const [state, setState] = useState<AppState>({
+    currentPage: 1,
+    statusFilter: "all",
+    searchTerm: "",
+    modals: {
+      newPatient: false,
+      shareDialog: false,
+      detailsDialog: false,
+      appointmentDialog: false,
+      mobileFilters: false,
+    },
+    selectedPatient: null,
+    patientForAppointment: null,
+    surveyLink: ''
+  });
+
+  const router = useRouter();
+
+  // Data fetching
+  const { 
+    data: patientData, 
+    isLoading: isLoadingPatients, 
+  } = usePatients(state.currentPage, PAGE_SIZE, state.statusFilter === 'all' ? undefined : state.statusFilter);
+
+  const { data: appointmentsData } = useAppointments(1, 1000);
+  const { 
+    data: mainStats,
+    isLoading: isLoadingStats,
+  } = usePatientStats();
+
+  const patients = patientData?.data || [];
+  const appointments = appointmentsData?.appointments || [];
+  const pagination = patientData?.pagination;
+  const totalPages = pagination?.totalPages || 1;
+
+  // Procesamiento de datos optimizado
+  const {
+    filteredAndEnrichedPatients, 
+    statusStats
+  } = useProcessedPatients(patients, appointments, state.searchTerm, state.statusFilter);
+
+  // Función helper para actualizar estado
+  const updateState = useCallback((updates: Partial<AppState>) => {
+    setState(prev => ({ ...prev, ...updates }));
+  }, []);
+
+  const updateModals = useCallback((updates: Partial<AppState['modals']>) => {
+    setState(prev => ({ 
+      ...prev, 
+      modals: { ...prev.modals, ...updates }
+    }));
+  }, []);
+
+  // Handlers simplificados
+  const handlePageChange = useCallback((page: number) => {
+    updateState({ currentPage: page });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [updateState]);
+
+  const handleSelectPatient = useCallback((patient: Patient) => {
+    updateState({ selectedPatient: patient });
+    updateModals({ detailsDialog: true });
+  }, [updateState, updateModals]);
+
+  const handleShareSurvey = useCallback((patient: Patient) => {
+    const link = `${window.location.origin}/survey/${generateSurveyId()}?patientId=${patient.id}`;
+    updateState({ selectedPatient: patient, surveyLink: link });
+    updateModals({ shareDialog: true });
+  }, [updateState, updateModals]);
+
+  const handleEditPatient = useCallback((patient: Patient) => {
+    toast.info(`Editar paciente: ${patient.nombre} ${patient.apellidos}`);
+  }, []);
+
+  const handleAnswerSurvey = useCallback((patient: Patient) => {
+    router.push(`/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`);
+  }, [router]);
+
+  const handleScheduleAppointment = useCallback((patient: Patient) => {
+    updateState({ patientForAppointment: patient });
+    updateModals({ appointmentDialog: true });
+  }, [updateState, updateModals]);
+
+  const handleStatusFilterChange = useCallback((value: string) => {
+    updateState({ statusFilter: value as keyof typeof PatientStatusEnum | "all" });
+    if (state.modals.mobileFilters) {
+      updateModals({ mobileFilters: false });
+    }
+  }, [updateState, updateModals, state.modals.mobileFilters]);
+
+  const handleClearFilters = useCallback(() => {
+    updateState({ searchTerm: "", statusFilter: "all" });
+    updateModals({ mobileFilters: false });
+  }, [updateState, updateModals]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    updateState({ searchTerm: e.target.value });
+  }, [updateState]);
+
+  const clearSearch = useCallback(() => {
+    updateState({ searchTerm: "" });
+  }, [updateState]);
+
+  // Cálculos memoizados simplificados
+  const hasActiveFilters = state.searchTerm || state.statusFilter !== "all";
+  const activeFiltersCount = Number(!!state.searchTerm) + Number(state.statusFilter !== "all");
+
+  // Stats con fallbacks simples
+  const statsData = {
+    totalPatients: mainStats?.total_patients ?? 0,
+    surveyRate: mainStats?.survey_completion_rate ?? 0,
+    pendingConsults: mainStats?.pending_consults ?? 0,
+    operatedPatients: mainStats?.operated_patients ?? 0
+  };
 
   if (isLoadingPatients) {
     return <LoadingSkeleton />;
   }
 
   return (
-    <div className="w-full space-y-3 sm:space-y-4 pb-8">
+    <div className="w-full space-y-4 pb-8">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-lg sm:rounded-xl border shadow-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-        <div className="relative p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">
-                Gestión de Pacientes
-              </h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 sm:mt-2 max-w-xl">
-                Sistema integral para seguimiento médico, historiales y citas.
-              </p>
-            </div>
-            <Button 
-              onClick={() => setIsNewPatientFormOpen(true)} 
-              size="sm" 
-              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white"
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Nuevo Paciente
-            </Button>
+      <div className="bg-white rounded-xl border shadow-sm border-slate-200 p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-800">
+              Gestión de Pacientes
+            </h1>
+            <p className="text-sm text-slate-500 mt-2 max-w-xl">
+              Sistema integral para seguimiento médico, historiales y citas.
+            </p>
           </div>
+          <Button 
+            onClick={() => updateModals({ newPatient: true })}
+            size="sm" 
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            <UserPlus className="h-4 w-4 mr-2" />
+            Nuevo Paciente
+          </Button>
+        </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6">
-            <StatsCard 
-              icon={<Users className="h-4 w-4 sm:h-5 sm:w-5" />} 
-              label="Total Pacientes" 
-              value={isLoadingStats ? "..." : `${mainStats?.total_patients ?? 0}`} 
-              color="blue" 
-            />
-            <StatsCard 
-              icon={<FileText className="h-4 w-4 sm:h-5 sm:w-5" />} 
-              label="Encuestas Comp." 
-              value={isLoadingStats ? "..." : `${mainStats?.survey_completion_rate ?? 0}%`} 
-              trend={mainStats?.survey_completion_rate && mainStats.survey_completion_rate > 70 ? 5 : -2}
-              color="purple" 
-            />
-            <StatsCard 
-              icon={<Calendar className="h-4 w-4 sm:h-5 sm:w-5" />} 
-              label="Pend. Consulta" 
-              value={isLoadingStats ? "..." : mainStats?.pending_consults ?? 0} 
-              color="amber" 
-            />
-            <StatsCard 
-              icon={<Activity className="h-4 w-4 sm:h-5 sm:w-5" />} 
-              label="Pac. Operados" 
-              value={isLoadingStats ? "..." : mainStats?.operated_patients ?? 0} 
-              trend={2}
-              color="emerald" 
-            />
-          </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+          <StatsCard 
+            icon={<Users className="h-5 w-5" />} 
+            label="Total Pacientes" 
+            value={isLoadingStats ? "..." : `${statsData.totalPatients}`} 
+            color="blue" 
+          />
+          <StatsCard 
+            icon="📊" 
+            label="Encuestas Comp." 
+            value={isLoadingStats ? "..." : `${statsData.surveyRate}%`} 
+            trend={statsData.surveyRate > 70 ? 5 : -2}
+            color="purple" 
+          />
+          <StatsCard 
+            icon="📅" 
+            label="Pend. Consulta" 
+            value={isLoadingStats ? "..." : statsData.pendingConsults} 
+            color="amber" 
+          />
+          <StatsCard 
+            icon="⚕️" 
+            label="Pac. Operados" 
+            value={isLoadingStats ? "..." : statsData.operatedPatients} 
+            trend={2}
+            color="emerald" 
+          />
         </div>
       </div>
 
       {/* Filtros */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 px-3 py-2">
-        {/* Contenedor de filtros mejorado */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 px-3 py-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          {/* Sección de búsqueda - priorizada */}
-          <div className="flex-grow max-w-md order-1">
+          {/* Búsqueda */}
+          <div className="flex-grow max-w-md">
             <div className="relative">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 placeholder="Buscar pacientes..."
-                className="pl-9 h-9 text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus-visible:ring-slate-400 dark:focus-visible:ring-slate-500"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                }}
+                className="pl-9 h-9 text-sm bg-slate-50 border-slate-200"
+                value={state.searchTerm}
+                onChange={handleSearchChange}
               />
-              {searchTerm && (
+              {state.searchTerm && (
                 <Button 
                   variant="ghost" 
                   size="icon"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  onClick={clearSearch}
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
                 >
-                  <X className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                  <X className="h-4 w-4" />
                 </Button>
               )}
             </div>
           </div>
           
-          {/* Filtros desktop - alineados a la derecha */}
-          <div className="hidden sm:flex items-center gap-3 order-2">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                <h2 className="text-sm font-medium text-slate-800 dark:text-slate-200">Filtros:</h2>
-              </div>
-              
-              <Select
-                value={statusFilter}
-                onValueChange={(value) => {
-                  setStatusFilter(value as keyof typeof PatientStatusEnum | "all");
-                }}
-              >
-                <SelectTrigger className="h-9 text-sm bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 w-[180px]">
-                  <SelectValue placeholder="Filtrar por estado" className="text-slate-600 dark:text-slate-300" />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
-                  <SelectItem value="all" className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
-                    <div className="flex items-center justify-between w-full">
-                      <span>Todos los estados</span>
-                      <Badge variant="secondary" className="ml-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                        {statusStats.all}
-                      </Badge>
-                    </div>
-                  </SelectItem>
-                  {Object.entries(STATUS_CONFIG).map(([status, config]) => (
-                    <SelectItem key={status} value={status} className="focus:bg-slate-100 dark:focus:bg-slate-800 cursor-pointer">
-                      <div className="flex items-center justify-between w-full">
-                        <span>{config.label}</span>
-                        <Badge variant="outline" className={cn(
-                          "ml-2 shadow-sm font-medium", 
-                          status === statusFilter ? "ring-1 ring-offset-1 ring-slate-200 dark:ring-slate-700 dark:ring-offset-slate-900" : "",
-                          config.style
-                        )}>
-                          {statusStats[status as keyof typeof PatientStatusEnum]}
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              {hasActiveFilters && (
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={clearAllFilters}
-                  className="text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 h-9"
-                >
-                  Limpiar Filtros
-                </Button>
-              )}
-            </div>
+          {/* Filtros desktop */}
+          <div className="hidden sm:flex items-center gap-3">
+            <FilterContent
+              statusFilter={state.statusFilter}
+              onStatusChange={handleStatusFilterChange}
+              onClearFilters={handleClearFilters}
+              statusStats={statusStats}
+            />
           </div>
           
           {/* Filtros móvil */}
-          <Sheet open={isMobileFiltersOpen} onOpenChange={setIsMobileFiltersOpen}>
-            <SheetTrigger asChild className="sm:hidden order-2">
-              <Button 
-                variant="outline" 
-                className="h-9 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70"
-              >
-                <SlidersHorizontal className="h-4 w-4 mr-2 text-slate-500 dark:text-slate-400" /> 
+          <Sheet open={state.modals.mobileFilters} onOpenChange={(open) => updateModals({ mobileFilters: open })}>
+            <SheetTrigger asChild className="sm:hidden">
+              <Button variant="outline" className="h-9">
+                <SlidersHorizontal className="h-4 w-4 mr-2" /> 
                 Filtros {hasActiveFilters && (
-                  <span className="ml-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-full h-5 w-5 inline-flex items-center justify-center text-xs font-medium">
-                    {Number(!!searchTerm) + Number(statusFilter !== "all")}
+                  <span className="ml-1 bg-blue-100 text-blue-700 rounded-full h-5 w-5 inline-flex items-center justify-center text-xs font-medium">
+                    {activeFiltersCount}
                   </span>
                 )}
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="rounded-t-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+            <SheetContent side="bottom" className="rounded-t-lg">
               <SheetHeader className="pb-3">
-                <SheetTitle className="text-slate-900 dark:text-slate-100">Filtros</SheetTitle>
+                <SheetTitle>Filtros</SheetTitle>
               </SheetHeader>
               <div className="px-4 py-4">
-                <FilterContent isMobile />
+                <FilterContent
+                  statusFilter={state.statusFilter}
+                  onStatusChange={handleStatusFilterChange}
+                  onClearFilters={handleClearFilters}
+                  statusStats={statusStats}
+                  isMobile
+                />
               </div>
             </SheetContent>
           </Sheet>
@@ -434,20 +413,20 @@ export function PatientManagement() {
 
       {/* Tabla */}
       <PatientTable 
-        patients={filteredAndEnrichedPatients} // Usar los datos filtrados de la página actual
+        patients={filteredAndEnrichedPatients}
         onSelectPatient={handleSelectPatient}
         onShareSurvey={handleShareSurvey}
         onEditPatient={handleEditPatient}
         onAnswerSurvey={handleAnswerSurvey}
         onScheduleAppointment={handleScheduleAppointment}
-        loading={isLoadingPatients} // Corregido: de isLoading a loading
+        loading={isLoadingPatients}
       />
 
       {/* Paginación */}
       {totalPages > 1 && (
-        <div className="mt-6 sm:mt-8 pb-4">
+        <div className="mt-8 pb-4">
           <SimplePagination 
-            currentPage={currentPage} 
+            currentPage={state.currentPage} 
             totalPages={totalPages} 
             onPageChange={handlePageChange} 
             loading={isLoadingPatients} 
@@ -456,51 +435,44 @@ export function PatientManagement() {
       )}
 
       {/* Modales */}
-      {isNewPatientFormOpen && (
+      {state.modals.newPatient && (
         <NewPatientForm 
-          onSuccess={() => setIsNewPatientFormOpen(false)}
+          onSuccess={() => updateModals({ newPatient: false })}
         />
       )}
       
-      {selectedPatientForSurvey && shareDialogOpen && (
+      {state.selectedPatient && state.modals.shareDialog && (
         <SurveyShareDialog 
-          isOpen={shareDialogOpen} 
-          patient={selectedPatientForSurvey} 
-          surveyLink={surveyLink}
+          isOpen={state.modals.shareDialog} 
+          patient={state.selectedPatient} 
+          surveyLink={state.surveyLink}
           onStartInternal={() => {
-            if(selectedPatientForSurvey) {
-              router.push(`/survey/${generateSurveyId()}?patientId=${selectedPatientForSurvey.id}&mode=internal`);
-              setShareDialogOpen(false);
+            if(state.selectedPatient) {
+              router.push(`/survey/${generateSurveyId()}?patientId=${state.selectedPatient.id}&mode=internal`);
+              updateModals({ shareDialog: false });
             }
           }}
-          onClose={() => {
-            setShareDialogOpen(false);
-            setSelectedPatientForSurvey(null);
-          }} 
+          onClose={() => updateModals({ shareDialog: false })} 
         />
       )}
       
-      {selectedPatientDetails && detailsDialogOpen && (
+      {state.selectedPatient && state.modals.detailsDialog && (
         <PatientDetailsDialog
-          isOpen={detailsDialogOpen}
-          patient={selectedPatientDetails}
-          onClose={() => {
-            setDetailsDialogOpen(false);
-            setSelectedPatientDetails(null);
-          }}
+          isOpen={state.modals.detailsDialog}
+          patient={state.selectedPatient}
+          onClose={() => updateModals({ detailsDialog: false })}
         />
       )}
       
-      {patientForAppointment && appointmentDialogOpen && (
+      {state.patientForAppointment && state.modals.appointmentDialog && (
         <ScheduleAppointmentDialog
-          isOpen={appointmentDialogOpen}
-          patient={patientForAppointment}
-          onClose={() => {
-            setAppointmentDialogOpen(false);
-            setPatientForAppointment(null);
-          }}
+          isOpen={state.modals.appointmentDialog}
+          patient={state.patientForAppointment}
+          onClose={() => updateModals({ appointmentDialog: false })}
         />
       )}
     </div>
   );
-}
+};
+
+PatientManagement.displayName = "PatientManagement";

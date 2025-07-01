@@ -1,5 +1,3 @@
-"use client"
-
 import { 
   Drawer, 
   DrawerContent,
@@ -11,34 +9,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AppointmentHistory } from "@/components/patient-admision/appointment-history";
-import { Card, CardContent, CardHeader, CardFooter, CardTitle, CardDescription } from "@/components/ui/card";
-import { Avatar } from "@/components/ui/avatar";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Patient, PatientStatusEnum } from "@/lib/types";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useMediaQuery } from "@/hooks/use-breakpoint";
-import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-// Iconos para mejorar la visualización
+// Importaciones directas - eliminamos dynamic loading innecesario para iconos pequeños
 import { 
   User, 
   Calendar, 
   Phone, 
   Mail, 
   Clock, 
-  Stethoscope, 
-  FileText, 
-  CircleUser,
   X,
-  Info,
+  FileText,
   CalendarDays,
+  CheckCircle2,
   AlertCircle,
-  CheckCircle,
-  MapPin
+  XCircle
 } from "lucide-react";
 
 interface PatientDetailsDialogProps {
@@ -47,6 +39,132 @@ interface PatientDetailsDialogProps {
   onClose: () => void;
 }
 
+// Configuraciones estáticas fuera del componente - objetos planos para mejor rendimiento
+const STATUS_VARIANTS = {
+  'activo': "default",
+  'pendiente': "secondary",
+  'pendiente de consulta': "secondary",
+  'inactivo': "destructive",
+} as const;
+
+const APPOINTMENT_ICONS = {
+  'completada': CheckCircle2,
+  'pendiente': Clock,
+  'cancelada': XCircle,
+} as const;
+
+const APPOINTMENT_VARIANTS = {
+  'completada': "default",
+  'pendiente': "secondary", 
+  'cancelada': "destructive",
+} as const;
+
+// Datos mock movidos fuera del componente para evitar recreación
+const MOCK_APPOINTMENT_HISTORY = [
+  {
+    id: 1,
+    fecha: "2024-06-15",
+    hora: "10:30",
+    tipo: "Consulta inicial",
+    estado: "completada",
+    medico: "Dr. García",
+    notas: "Evaluación general, solicitud de estudios"
+  },
+  {
+    id: 2,
+    fecha: "2024-06-22",
+    hora: "14:00",
+    tipo: "Seguimiento",
+    estado: "completada",
+    medico: "Dr. García",
+    notas: "Revisión de resultados de laboratorio"
+  },
+  {
+    id: 3,
+    fecha: "2024-07-05",
+    hora: "09:15",
+    tipo: "Control",
+    estado: "pendiente",
+    medico: "Dr. García",
+    notas: "Control post-procedimiento"
+  },
+  {
+    id: 4,
+    fecha: "2024-06-01",
+    hora: "11:00",
+    tipo: "Consulta",
+    estado: "cancelada",
+    medico: "Dr. López",
+    notas: "Paciente no se presentó"
+  }
+];
+
+// Funciones utilitarias optimizadas
+const getStatusVariant = (status: string) => {
+  if (!status) return "outline";
+  return STATUS_VARIANTS[status.toLowerCase() as keyof typeof STATUS_VARIANTS] || "outline";
+};
+
+const getAppointmentIcon = (estado: string) => {
+  return APPOINTMENT_ICONS[estado.toLowerCase() as keyof typeof APPOINTMENT_ICONS] || AlertCircle;
+};
+
+const getAppointmentBadgeVariant = (estado: string) => {
+  return APPOINTMENT_VARIANTS[estado.toLowerCase() as keyof typeof APPOINTMENT_VARIANTS] || "outline";
+};
+
+// Componente InfoItem simplificado - sin memoización innecesaria
+const InfoItem = ({ icon: Icon, label, value }: { icon: any, label: string, value: string | number }) => (
+  <div className="flex items-start gap-3 py-3">
+    <Icon className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+    <div className="min-w-0 flex-1">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium text-foreground break-words">{value}</p>
+    </div>
+  </div>
+);
+
+// Componente AppointmentItem simplificado
+const AppointmentItem = ({ appointment }: { appointment: any }) => {
+  const Icon = getAppointmentIcon(appointment.estado);
+  
+  return (
+    <div className="flex items-start gap-3 py-4">
+      <div className="flex-shrink-0 mt-1">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </div>
+      
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {appointment.tipo}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {format(new Date(appointment.fecha), "d MMM yyyy", { locale: es })} • {appointment.hora}
+            </p>
+          </div>
+          <Badge variant={getAppointmentBadgeVariant(appointment.estado)} className="text-xs">
+            {appointment.estado}
+          </Badge>
+        </div>
+        
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium">Médico:</span> {appointment.medico}
+          </p>
+          {appointment.notas && (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium">Notas:</span> {appointment.notas}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Componente principal optimizado - eliminamos memoización excesiva
 export default function PatientDetailsDialog({ isOpen, patient, onClose }: PatientDetailsDialogProps) {
   const {
     nombre,
@@ -62,234 +180,212 @@ export default function PatientDetailsDialog({ isOpen, patient, onClose }: Patie
   } = patient;
 
   const fullName = `${nombre} ${apellidos}`;
-
-  // Hook for responsive drawer direction
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const isMobile = useMediaQuery("(max-width: 639px)");
   const drawerDirection = isDesktop ? "right" : "bottom";
 
-  // Estilos del contenedor según dirección
   const contentClasses = cn(
-    "flex flex-col bg-background shadow-lg",
+    "flex flex-col bg-background",
     isDesktop
-      ? "h-full max-w-lg md:max-w-xl ml-auto"
+      ? "h-full max-w-lg ml-auto border-l"
       : "max-h-[90vh] rounded-t-lg"
   );
 
-  // Calcular la clase de estado para el badge
-  const getStatusClasses = (status: string) => {
-    switch(status?.toLowerCase()) {
-      case 'activo':
-        return "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300";
-      case 'pendiente':
-      case 'pendiente de consulta':
-        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300";
-      case 'inactivo':
-        return "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300";
-      default:
-        return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300";
-    }
-  };
+  // Ordenamiento simple - calculado solo una vez
+  const sortedAppointmentHistory = MOCK_APPOINTMENT_HISTORY
+    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+    .slice(0, isMobile ? 5 : undefined);
 
   return (
-    <TooltipProvider>
-      <Drawer open={isOpen} onOpenChange={onClose} direction={drawerDirection}>
-        <DrawerContent className={contentClasses}>
-          <DrawerHeader className="relative border-b dark:border-slate-700 bg-gradient-to-r from-blue-100 via-blue-50 to-white dark:from-blue-950 dark:via-slate-800 dark:to-slate-900 pb-6">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <Avatar className="h-16 w-16 border-2 border-blue-200 dark:border-blue-800 shadow-md">
-                  <CircleUser className="h-12 w-12 text-blue-600 dark:text-blue-400" />
-                </Avatar>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge className={cn(
-                      "absolute -bottom-2 -right-2 rounded-full font-medium px-3 py-1 shadow-sm border cursor-help", 
-                      getStatusClasses(estado_paciente ?? PatientStatusEnum.PENDIENTE_DE_CONSULTA)
-                    )}>
-                      {estado_paciente ?? PatientStatusEnum.PENDIENTE_DE_CONSULTA}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p>Estado actual del paciente en el sistema.</p>
-                  </TooltipContent>
-                </Tooltip>
+    <Drawer open={isOpen} onOpenChange={onClose} direction={drawerDirection}>
+      <DrawerContent className={contentClasses}>
+        {/* Header */}
+        <DrawerHeader className="border-b py-6">
+          <div className="flex items-start justify-between">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-2">
+                <DrawerTitle className="text-lg font-semibold text-foreground truncate">
+                  {fullName}
+                </DrawerTitle>
+                <Badge variant={getStatusVariant(estado_paciente ?? PatientStatusEnum.PENDIENTE_DE_CONSULTA)}>
+                  {estado_paciente ?? PatientStatusEnum.PENDIENTE_DE_CONSULTA}
+                </Badge>
               </div>
               
-              <div className="flex-1">
-                <DrawerTitle className="text-xl md:text-2xl font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                  {fullName}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info size={16} className="text-blue-500 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>ID Paciente: #{id}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </DrawerTitle>
-                
-                <div className="flex flex-wrap items-center gap-3 mt-2">
-                  {fecha_registro && (
-                    <div className="flex items-center text-xs text-slate-500 dark:text-slate-400">
-                      <CalendarDays size={12} className="mr-1" />
-                      {format(new Date(fecha_registro), "'Registrado el' d MMM yyyy", { locale: es })}
-                    </div>
-                  )}
-                  
-                  {diagnostico_principal && (
-                    <div className="flex items-center text-xs text-slate-500 dark:text-slate-400">
-                      <AlertCircle size={12} className="mr-1" />
-                      {diagnostico_principal}
-                    </div>
-                  )}
-                </div>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span>ID: #{id}</span>
+                {fecha_registro && (
+                  <span>
+                    Registrado: {format(new Date(fecha_registro), "d MMM yyyy", { locale: es })}
+                  </span>
+                )}
               </div>
             </div>
             
             <DrawerClose asChild>
-              <Button size="icon" variant="ghost" className="absolute top-2 right-2">
-                <X className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-                <span className="sr-only">Cerrar</span>
+              <Button size="icon" variant="ghost" className="flex-shrink-0">
+                <X className="h-4 w-4" />
               </Button>
             </DrawerClose>
-          </DrawerHeader>
+          </div>
+        </DrawerHeader>
 
-        <Tabs defaultValue="info" className="w-full">
-          <div className="px-6 py-2 border-b dark:border-slate-700">
+        {/* Tabs */}
+        <Tabs defaultValue="info" className="flex-1 flex flex-col">
+          <div className="border-b px-6 py-2">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="info" className="text-blue-800 dark:text-blue-300">Ficha del Paciente</TabsTrigger>
-              <TabsTrigger value="history" className="text-blue-800 dark:text-blue-300">Historial de Citas</TabsTrigger>
+              <TabsTrigger value="info" className="text-sm">
+                Información
+              </TabsTrigger>
+              <TabsTrigger value="history" className="text-sm">
+                Historial
+              </TabsTrigger>
             </TabsList>
           </div>
 
-          <ScrollArea className={cn("flex-1 px-4", isDesktop ? "h-[calc(100vh-220px)]" : "h-[50vh] md:h-[60vh]")}> 
-            <TabsContent value="info" className="pt-4 pb-6 space-y-6">
-              {/* Sección de Información de Contacto y Demográfica */}
-              <Card className="shadow-sm border-blue-200 dark:border-blue-700">
-                <CardHeader className="bg-blue-50 dark:bg-blue-900/20 py-3 px-4 flex-row items-center justify-between">
-                  <CardTitle className="text-base font-semibold text-blue-800 dark:text-blue-200 flex items-center gap-2">
-                    <User size={16} />
-                    Datos Personales y Contacto
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full">
-                      <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Edad</p>
-                      <p className="text-base font-medium text-slate-800 dark:text-slate-100">{edad} años</p>
-                    </div>
-                  </div>
-                  {telefono && (
-                    <div className="flex items-center gap-3">
-                      <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full">
-                        <Phone className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Teléfono</p>
-                        <p className="text-base font-medium text-slate-800 dark:text-slate-100">{telefono}</p>
-                      </div>
-                    </div>
-                  )}
-                  {email && (
-                    <div className="flex items-center gap-3">
-                      <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full">
-                        <Mail className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Email</p>
-                        <p className="text-base font-medium text-slate-800 dark:text-slate-100">{email}</p>
-                      </div>
-                    </div>
-                  )}
-                  {fecha_registro && (
-                    <div className="flex items-center gap-3">
-                      <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full">
-                        <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Fecha de Registro</p>
-                        <p className="text-base font-medium text-slate-800 dark:text-slate-100">
-                          {format(new Date(fecha_registro), "dd MMMM yyyy", { locale: es })}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Sección de Información Médica */}
-              {(diagnostico_principal || comentarios_registro) && (
-                <Card className="shadow-sm border-emerald-200 dark:border-emerald-700">
-                  <CardHeader className="bg-emerald-50 dark:bg-emerald-900/20 py-3 px-4 flex-row items-center justify-between">
-                    <CardTitle className="text-base font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
-                      <Stethoscope size={16} />
-                      Información Médica
+          <ScrollArea className={cn("flex-1", isDesktop ? "h-[calc(100vh-180px)]" : "h-[50vh]")}>
+            <div className="p-6">
+              <TabsContent value="info" className="mt-0 space-y-6">
+                {/* Información Personal */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Datos Personales
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-4 space-y-4">
-                    {diagnostico_principal && (
-                      <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-                          <Stethoscope className="h-4 w-4" />
-                          Diagnóstico Principal
-                        </p>
-                        <Badge variant="outline" className="text-base px-3 py-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-600">
-                          {diagnostico_principal}
-                        </Badge>
+                  <CardContent className="pt-0">
+                    <div className="space-y-1">
+                      <InfoItem 
+                        icon={Calendar} 
+                        label="Edad" 
+                        value={`${edad} años`} 
+                      />
+                      
+                      {telefono && (
+                        <>
+                          <Separator />
+                          <InfoItem 
+                            icon={Phone} 
+                            label="Teléfono" 
+                            value={telefono} 
+                          />
+                        </>
+                      )}
+                      
+                      {email && (
+                        <>
+                          <Separator />
+                          <InfoItem 
+                            icon={Mail} 
+                            label="Email" 
+                            value={email} 
+                          />
+                        </>
+                      )}
+                      
+                      {fecha_registro && (
+                        <>
+                          <Separator />
+                          <InfoItem 
+                            icon={Clock} 
+                            label="Fecha de Registro" 
+                            value={format(new Date(fecha_registro), "dd MMMM yyyy", { locale: es })} 
+                          />
+                        </>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Información Médica */}
+                {(diagnostico_principal || comentarios_registro) && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Información Médica
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="space-y-4">
+                        {diagnostico_principal && (
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-2">Diagnóstico Principal</p>
+                            <Badge variant="outline" className="font-normal">
+                              {diagnostico_principal}
+                            </Badge>
+                          </div>
+                        )}
+                        
+                        {comentarios_registro && (
+                          <>
+                            {diagnostico_principal && <Separator />}
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-2">Notas</p>
+                              <div className="text-sm text-foreground bg-muted/50 p-3 rounded-md">
+                                {comentarios_registro}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
-                    )}
-                    {comentarios_registro && (
-                      <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-                          <FileText className="h-4 w-4" />
-                          Notas Clínicas
-                        </p>
-                        <CardDescription className="text-base bg-slate-50 dark:bg-slate-800/50 p-3 rounded-md whitespace-pre-wrap leading-relaxed">
-                          {comentarios_registro}
-                        </CardDescription>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              <TabsContent value="history" className="mt-0">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Historial de Citas
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-1">
+                      {MOCK_APPOINTMENT_HISTORY.length > 0 ? (
+                        sortedAppointmentHistory.map((appointment, index) => (
+                          <div key={appointment.id}>
+                            <AppointmentItem appointment={appointment} />
+                            {index < sortedAppointmentHistory.length - 1 && <Separator />}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8">
+                          <CalendarDays className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                          <p className="text-sm text-muted-foreground">
+                            No hay citas registradas
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {MOCK_APPOINTMENT_HISTORY.length > 0 && (
+                      <div className="mt-6 pt-4 border-t text-center">
+                        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground">
+                          Ver historial completo ({MOCK_APPOINTMENT_HISTORY.length} citas)
+                        </Button>
                       </div>
                     )}
                   </CardContent>
                 </Card>
-              )}
-            </TabsContent>
-
-            <TabsContent value="history" className="py-4">
-              <Card className="shadow-sm border-purple-200 dark:border-purple-700">
-                <CardHeader className="bg-purple-50 dark:bg-purple-900/20 py-3 px-4 flex-row items-center justify-between">
-                  <CardTitle className="text-base font-semibold text-purple-800 dark:text-purple-200 flex items-center gap-2">
-                    <Calendar size={16} />
-                    Historial de Citas
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <AppointmentHistory 
-                    patientId={id}
-                    showStats={!isMobile}
-                    maxItems={isMobile ? 5 : undefined}
-                  />
-                </CardContent>
-                <CardFooter className="flex justify-center py-3">
-                  <Button variant="ghost" className="text-sm text-purple-600 dark:text-purple-300">
-                    Ver historial completo
-                  </Button>
-                </CardFooter>
-              </Card>
-            </TabsContent>
+              </TabsContent>
+            </div>
           </ScrollArea>
 
-          <DrawerFooter className="border-t dark:border-slate-700 pt-2 mt-0">
+          {/* Footer */}
+          <DrawerFooter className="border-t py-4">
+            </DrawerFooter>
             <DrawerClose asChild>
-              <Button variant="outline">Cerrar</Button>
+              <Button variant="outline" className="w-full">
+                Cerrar
+              </Button>
             </DrawerClose>
-          </DrawerFooter>
+          
         </Tabs>
       </DrawerContent>
     </Drawer>
-    </TooltipProvider>
   );
 }

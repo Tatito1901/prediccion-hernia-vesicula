@@ -1,4 +1,5 @@
-// lib/types/index.ts
+// lib/types/index.ts - CORREGIDO SEGÚN ESQUEMA DE BASE DE DATOS
+
 // Single source of truth for database types
 import type { Database } from './database.types';
 
@@ -6,6 +7,12 @@ import type { Database } from './database.types';
 export type Patient = Database['public']['Tables']['patients']['Row'];
 export type Appointment = Database['public']['Tables']['appointments']['Row'];
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type AssignedSurvey = Database['public']['Tables']['assigned_surveys']['Row'];
+export type SurveyResponse = Database['public']['Tables']['survey_responses']['Row'];
+export type SurveyAnswerItem = Database['public']['Tables']['survey_answer_items']['Row'];
+export type SurveyTemplate = Database['public']['Tables']['survey_templates']['Row'];
+export type SurveyQuestion = Database['public']['Tables']['questions']['Row'];
+export type SurveyQuestionOption = Database['public']['Tables']['survey_question_options']['Row'];
 
 // --- Extended Types with Joined Relations ---
 
@@ -17,9 +24,9 @@ export interface ExtendedAppointment {
   created_at: string | null;
   fecha_hora_cita: string;
   motivo_cita: string;
-  estado_cita: AppointmentStatus;
+  estado_cita: string; // Nota: en el esquema esto es string, no enum
   notas_cita_seguimiento: string | null;
-  es_primera_vez: boolean;
+  es_primera_vez: boolean | null;
   paciente?: {
     id: string;
     nombre?: string;
@@ -46,6 +53,7 @@ export type UpdateProfile = Database['public']['Tables']['profiles']['Update'];
 export type PatientStatus = Database['public']['Enums']['patient_status_enum'];
 export type DiagnosisEnum = Database['public']['Enums']['diagnosis_enum'];
 export type AppointmentStatus = Database['public']['Enums']['appointment_status_enum'];
+export type UserRole = Database['public']['Enums']['user_role_enum'];
 
 // Mantenemos los objetos CONST para usarlos fácilmente en el código, 
 // pero ahora están validados por el tipo de arriba.
@@ -54,45 +62,49 @@ export const PatientStatusEnum = {
   CONSULTADO: 'CONSULTADO' as PatientStatus,
   EN_SEGUIMIENTO: 'EN SEGUIMIENTO' as PatientStatus,
   OPERADO: 'OPERADO' as PatientStatus,
-  NO_OPERADO: 'NO_OPERADO' as PatientStatus,
+  NO_OPERADO: 'NO OPERADO' as PatientStatus,
   INDECISO: 'INDECISO' as PatientStatus,
 };
 
 export const AppointmentStatusEnum = {
-    PROGRAMADA: 'PROGRAMADA' as AppointmentStatus,
-    CONFIRMADA: 'CONFIRMADA' as AppointmentStatus,
-    CANCELADA: 'CANCELADA' as AppointmentStatus,
-    COMPLETADA: 'COMPLETADA' as AppointmentStatus,
-    NO_ASISTIO: 'NO ASISTIO' as AppointmentStatus,
-    PRESENTE: 'PRESENTE' as AppointmentStatus,
-    REAGENDADA: 'REAGENDADA' as AppointmentStatus,
+  PROGRAMADA: 'PROGRAMADA' as AppointmentStatus,
+  CONFIRMADA: 'CONFIRMADA' as AppointmentStatus,
+  CANCELADA: 'CANCELADA' as AppointmentStatus,
+  COMPLETADA: 'COMPLETADA' as AppointmentStatus,
+  NO_ASISTIO: 'NO ASISTIO' as AppointmentStatus,
+  PRESENTE: 'PRESENTE' as AppointmentStatus,
+  REAGENDADA: 'REAGENDADA' as AppointmentStatus,
 };
 
+// CORREGIDO: Diagnósticos exactos según el esquema
 export const DiagnosisEnum = {
-  // Diagnósticos de hernias
-  EVENTRACION_ABDOMINAL: 'EVENTRACION ABDOMINAL' as DiagnosisEnum,
-  HERNIA_HIATAL: 'HERNIA HIATAL' as DiagnosisEnum,
+  // Hernias
   HERNIA_INGUINAL: 'HERNIA INGUINAL' as DiagnosisEnum,
-  HERNIA_INGUINAL_BILATERAL: 'HERNIA INGUINAL BILATERAL' as DiagnosisEnum,
-  HERNIA_INGUINAL_RECIDIVANTE: 'HERNIA INGUINAL RECIDIVANTE' as DiagnosisEnum,
-  HERNIA_INCISIONAL: 'HERNIA INCISIONAL' as DiagnosisEnum,
-  HERNIA_SPIGEL: 'HERNIA DE SPIGEL' as DiagnosisEnum,
   HERNIA_UMBILICAL: 'HERNIA UMBILICAL' as DiagnosisEnum,
-  HERNIA_VENTRAL: 'HERNIA VENTRAL' as DiagnosisEnum,
+  HERNIA_HIATAL: 'HERNIA HIATAL' as DiagnosisEnum,
+  HERNIA_INGUINAL_RECIDIVANTE: 'HERNIA INGUINAL RECIDIVANTE' as DiagnosisEnum,
+  HERNIA_SPIGEL: 'HERNIA SPIGEL' as DiagnosisEnum,
+  EVENTRACION_ABDOMINAL: 'EVENTRACION ABDOMINAL' as DiagnosisEnum,
   
-  // Diagnósticos de vesícula
-  COLANGITIS: 'COLANGITIS' as DiagnosisEnum, 
-  COLECISTITIS: 'COLECISTITIS / COLECISTITIS CRONICA' as DiagnosisEnum,
-  COLEDOCOLITIASIS: 'COLEDOCOLITIASIS' as DiagnosisEnum, 
-  COLELITIASIS: 'COLELITIASIS' as DiagnosisEnum,
+  // Vesícula
+  COLECISTITIS: 'COLECISTITIS' as DiagnosisEnum,
+  VESICULA_COLECISTITIS_CRONICA: 'VESICULA (COLECISTITIS CRONICA)' as DiagnosisEnum,
+  COLEDOCOLITIASIS: 'COLEDOCOLITIASIS' as DiagnosisEnum,
+  COLANGITIS: 'COLANGITIS' as DiagnosisEnum,
   
-  // Otros diagnósticos
+  // Otros
   APENDICITIS: 'APENDICITIS' as DiagnosisEnum,
   LIPOMA_GRANDE: 'LIPOMA GRANDE' as DiagnosisEnum,
   QUISTE_SEBACEO_INFECTADO: 'QUISTE SEBACEO INFECTADO' as DiagnosisEnum,
   
   // Misceláneos
   OTRO: 'OTRO' as DiagnosisEnum
+};
+
+export const UserRoleEnum = {
+  DOCTOR: 'doctor' as UserRole,
+  ADMIN: 'admin' as UserRole,
+  RECEPCION: 'recepcion' as UserRole,
 };
 
 // --- Helper Types ---
@@ -105,34 +117,26 @@ export type EmailString = string;
 
 // --- Survey Types ---
 /**
- * Represents a survey template from the 'survey_templates' table.
+ * Representa un survey template completo con preguntas
  */
-export type SurveyTemplate = Database['public']['Tables']['survey_templates']['Row'];
+export type SurveyTemplateWithQuestions = SurveyTemplate & {
+  questions: (SurveyQuestion & {
+    options: SurveyQuestionOption[];
+  })[];
+};
 
 /**
- * Represents a single question within a survey template from the 'questions' table.
+ * Representa un survey asignado con toda la información
  */
-export type SurveyQuestion = Database['public']['Tables']['questions']['Row'];
-
-/**
- * Represents an option for a multiple-choice question from the 'survey_question_options' table.
- */
-export type SurveyQuestionOption = Database['public']['Tables']['survey_question_options']['Row'];
-
-/**
- * Represents a survey that has been assigned to a patient from the 'assigned_surveys' table.
- */
-export type AssignedSurvey = Database['public']['Tables']['assigned_surveys']['Row'];
-
-/**
- * Represents a patient's response submission to a survey from the 'survey_responses' table.
- */
-export type SurveyResponse = Database['public']['Tables']['survey_responses']['Row'];
-
-/**
- * Represents a single answer item within a survey response from the 'survey_answer_items' table.
- */
-export type SurveyAnswerItem = Database['public']['Tables']['survey_answer_items']['Row'];
+export type CompleteSurvey = AssignedSurvey & {
+  template: SurveyTemplateWithQuestions;
+  response?: SurveyResponse & {
+    answers: (SurveyAnswerItem & {
+      question: SurveyQuestion;
+      selected_option?: SurveyQuestionOption;
+    })[];
+  };
+};
 
 /**
  * An enriched survey response that includes the full list of answers.
@@ -142,21 +146,82 @@ export type PatientSurvey = SurveyResponse & {
   answers: (SurveyAnswerItem & { question: SurveyQuestion | null })[];
 };
 
+// --- Frontend-Specific Enriched Types ---
+
+/**
+ * Representa un objeto de Paciente después de haber sido procesado y enriquecido
+ * en el frontend con datos adicionales que no existen en la tabla 'patients' de la base de datos.
+ * Se usa para alimentar componentes de UI complejos como tablas y tarjetas.
+ */
+export interface EnrichedPatient extends Patient {
+  // Propiedades añadidas durante el procesamiento en el frontend.
+  nombreCompleto: string;
+  displayDiagnostico: string;
+  encuesta_completada: boolean;
+  fecha_proxima_cita_iso?: string;
+  
+  // La propiedad que causaba el error, ahora definida formalmente.
+  // Es opcional ('?') porque no todos los pacientes tendrán una encuesta asociada.
+  encuesta?: PatientSurvey | null;
+}
+
+// --- Stats Types ---
+export interface PatientStats {
+  total_patients: number;
+  pending_consults: number;
+  operated_patients: number;
+  surgery_rate: number;
+  survey_completion_rate: number;
+}
+
+// --- API Response Types ---
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+}
+
+export type PaginatedPatients = PaginatedResponse<Patient>;
+export type PaginatedAppointments = PaginatedResponse<Appointment>;
+
+// --- Form Types ---
+export interface PatientFormData {
+  nombre: string;
+  apellidos: string;
+  edad: number | null;
+  telefono?: string;
+  email?: string;
+  diagnostico_principal?: DiagnosisEnum;
+  comentarios_registro?: string;
+  doctor_asignado_id?: string;
+  origen_paciente?: string;
+}
+
+export interface AppointmentFormData {
+  patient_id: string;
+  fecha_hora_cita: string;
+  motivo_cita: string;
+  doctor_id?: string;
+  notas_cita_seguimiento?: string;
+  es_primera_vez?: boolean;
+}
+
+// --- Tipos Deprecados para Compatibilidad ---
+
 /**
  * @deprecated Use `PatientSurvey` or specific survey types instead.
- * This type is for legacy compatibility and represents a flattened structure
- * of survey data that was previously used.
  */
 export type PatientSurveyData = {
-  id: string; // Corresponds to SurveyResponse ID
+  id: string;
   patient_id: string;
   submitted_at: string | null;
-  // The old format included dynamically named properties based on question text.
-  // Using an index signature for compatibility during refactoring.
   [key: string]: any;
 };
-
-// --- Adapters for Backward Compatibility with the old data-model.ts ---
 
 /**
  * @deprecated Usar el tipo `Appointment` y transformar los datos en el componente si es necesario.
@@ -179,16 +244,6 @@ export interface AppointmentData {
   costo: number;
   doctor: string;
   raw_doctor_id: string;
-}
-
-/**
- * @deprecated Usar el tipo `Patient` y transformar los datos en el componente si es necesario.
- */
-export interface PatientData extends Omit<Patient, 'id'> {
-  id: string;
-  // Add any additional fields that were in the original PatientData interface
-  // but are not in the Patient type from the database
-  estado?: PatientStatus; // Property that might have been renamed or moved
 }
 
 // --- Export Database Type for Advanced Use Cases ---
