@@ -17,7 +17,7 @@ interface SurveyShareDialogProps {
   onClose: () => void
 }
 
-export function SurveyShareDialog({ isOpen, patient, surveyLink, onStartInternal, onClose }: SurveyShareDialogProps) {
+function SurveyShareDialog({ isOpen, patient, surveyLink, onStartInternal, onClose }: SurveyShareDialogProps) {
   const [activeTab, setActiveTab] = useState("qr")
   const [copied, setCopied] = useState(false)
 
@@ -179,3 +179,5 @@ export function SurveyShareDialog({ isOpen, patient, surveyLink, onStartInternal
     </Dialog>
   )
 }
+
+export default SurveyShareDialog

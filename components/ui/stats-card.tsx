@@ -6,7 +6,7 @@ import { TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface StatsCardProps {
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   label: string;
   value: number | string;
   trend?: number;

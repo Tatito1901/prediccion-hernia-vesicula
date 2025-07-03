@@ -169,7 +169,7 @@ interface NewPatientFormProps {
   triggerButton?: React.ReactNode;
 }
 
-export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerButton }) => {
+const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerButton }) => {
   const [open, setOpen] = useState(false);
   
   // Usar hooks de React Query
@@ -620,4 +620,6 @@ export const NewPatientForm = memo<NewPatientFormProps>(({ onSuccess, triggerBut
       </DialogContent>
     </Dialog>
   )
-});
+})
+
+export default NewPatientFormComponent;

@@ -27,7 +27,7 @@ interface ScheduleAppointmentDialogProps {
   onClose: () => void;
 }
 
-export function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppointmentDialogProps) {
+function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppointmentDialogProps) {
   const { mutateAsync: addAppointment, isPending } = useCreateAppointment();
   
   // Estado simplificado sin react-hook-form para reducir bundle size
@@ -196,3 +196,5 @@ export function ScheduleAppointmentDialog({ isOpen, patient, onClose }: Schedule
     </Dialog>
   );
 }
+
+export default ScheduleAppointmentDialog;

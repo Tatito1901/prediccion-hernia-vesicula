@@ -13,260 +13,269 @@ import {
   Activity,
 } from "lucide-react"
 
-// Configuración estática simplificada - objetos planos para mejor rendimiento
-const STATUS_CONFIG = {
+type StatusSize = "sm" | "md" | "lg"
+
+interface StatusConfig {
+  readonly label: string
+  readonly icon: React.ElementType
+  readonly className: string
+}
+
+const STATUS_CONFIG: Record<PatientStatusEnum, StatusConfig> = {
   [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: {
     label: "Pendiente",
     icon: Clock,
-    className: "bg-amber-100 text-amber-900 border-amber-300",
-    priority: 1
+    className: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   },
   [PatientStatusEnum.CONSULTADO]: {
     label: "Consultado", 
     icon: Stethoscope,
-    className: "bg-blue-100 text-blue-900 border-blue-300",
-    priority: 3
+    className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   },
   [PatientStatusEnum.EN_SEGUIMIENTO]: {
     label: "Seguimiento",
     icon: Activity, 
-    className: "bg-purple-100 text-purple-900 border-purple-300",
-    priority: 2
+    className: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
   },
   [PatientStatusEnum.OPERADO]: {
     label: "Operado",
     icon: CheckCircle2,
-    className: "bg-emerald-100 text-emerald-900 border-emerald-300",
-    priority: 5
+    className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
   },
   [PatientStatusEnum.NO_OPERADO]: {
     label: "No operado",
     icon: XCircle,
-    className: "bg-red-100 text-red-900 border-red-300",
-    priority: 4
+    className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   },
   [PatientStatusEnum.INDECISO]: {
     label: "Indeciso",
     icon: AlertTriangle,
-    className: "bg-orange-100 text-orange-900 border-orange-300", 
-    priority: 3
+    className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200", 
   },
 } as const
 
-const SURVEY_PENDING_CONFIG = {
+const SURVEY_PENDING_CONFIG: StatusConfig = {
   label: "Encuesta pendiente",
   icon: ClipboardList,
-  className: "bg-yellow-100 text-yellow-900 border-yellow-300",
-  priority: 1
-}
-
-const DEFAULT_CONFIG = {
-  label: "Sin estado",
-  icon: User,
-  className: "bg-gray-100 text-gray-900 border-gray-300",
-  priority: 0
-}
-
-// Tamaños simplificados - constantes para evitar cálculos
-const SIZE_CLASSES = {
-  sm: "px-2.5 py-0.5 text-xs h-6",
-  md: "px-3 py-1 text-xs h-7", 
-  lg: "px-3.5 py-1.5 text-sm h-8"
+  className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
 } as const
 
-const ICON_SIZE_CLASSES = {
+const DEFAULT_CONFIG: StatusConfig = {
+  label: "Sin estado",
+  icon: User,
+  className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+} as const
+
+const SIZE_CLASSES: Record<StatusSize, string> = {
+  sm: "px-2 py-0.5 text-xs h-6 gap-1",
+  md: "px-2.5 py-1 text-xs h-7 gap-1.5", 
+  lg: "px-3 py-1.5 text-sm h-8 gap-2"
+} as const
+
+const ICON_SIZE_CLASSES: Record<StatusSize, string> = {
   sm: "h-3 w-3",
   md: "h-3.5 w-3.5", 
   lg: "h-4 w-4"
 } as const
 
 interface PatientStatusProps {
-  status: Patient["estado_paciente"]
-  surveyCompleted?: boolean
-  size?: "sm" | "md" | "lg"
-  showIcon?: boolean
-  className?: string
+  readonly status: Patient["estado_paciente"]
+  readonly surveyCompleted?: boolean
+  readonly size?: StatusSize
+  readonly showIcon?: boolean
+  readonly className?: string
 }
 
-// Función utilitaria optimizada para obtener la configuración del estado
-const getStatusConfig = (status: Patient["estado_paciente"], surveyCompleted: boolean) => {
-  // Priorizar encuesta pendiente para estados no operados
-  if (!surveyCompleted && status !== PatientStatusEnum.OPERADO) {
-    return SURVEY_PENDING_CONFIG;
-  }
-  
-  // Retornar configuración específica del estado
-  if (status && status in STATUS_CONFIG) {
-    return STATUS_CONFIG[status as keyof typeof STATUS_CONFIG];
-  }
-  
-  return DEFAULT_CONFIG;
-};
+interface PatientStatusItem {
+  readonly status: Patient["estado_paciente"]
+  readonly surveyCompleted?: boolean
+}
 
-// Componente principal optimizado - sin memoization innecesaria
-const PatientStatus = ({
+interface PatientStatusGroupProps {
+  readonly statuses: readonly PatientStatusItem[]
+  readonly size?: StatusSize
+  readonly className?: string
+  readonly maxVisible?: number
+}
+
+interface PatientStatusCompactProps {
+  readonly status: Patient["estado_paciente"]
+  readonly surveyCompleted?: boolean
+  readonly size?: StatusSize
+  readonly className?: string
+}
+
+const getStatusConfig = (
+  status: Patient["estado_paciente"], 
+  surveyCompleted: boolean
+): StatusConfig => {
+  if (!surveyCompleted && status && status !== PatientStatusEnum.OPERADO) {
+    return SURVEY_PENDING_CONFIG
+  }
+  
+  return status ? STATUS_CONFIG[status] ?? DEFAULT_CONFIG : DEFAULT_CONFIG
+}
+
+const PatientStatus: React.FC<PatientStatusProps> = ({
   status,
   surveyCompleted = false,
   size = "md",
   showIcon = true,
   className
-}: PatientStatusProps) => {
-  const config = getStatusConfig(status, surveyCompleted);
-  const Icon = config.icon;
+}) => {
+  const config = getStatusConfig(status, surveyCompleted)
+  const Icon = config.icon
+  const sizeClasses = SIZE_CLASSES[size]
+  const iconSizeClasses = ICON_SIZE_CLASSES[size]
 
   return (
     <Badge
       variant="outline"
       className={cn(
-        "inline-flex items-center gap-1.5 font-medium border transition-colors",
-        "shadow-sm hover:shadow-md",
-        SIZE_CLASSES[size],
+        "inline-flex items-center font-medium",
+        sizeClasses,
         config.className,
         className
       )}
-      aria-label={`Estado: ${config.label}`}
+      aria-label={`Estado del paciente: ${config.label}`}
+      role="status"
     >
-      {showIcon && <Icon className={cn("shrink-0", ICON_SIZE_CLASSES[size])} />}
-      <span className="truncate max-w-[120px]">{config.label}</span>
+      {showIcon && (
+        <Icon 
+          className={cn("flex-shrink-0", iconSizeClasses)} 
+          aria-hidden="true" 
+        />
+      )}
+      <span className="truncate max-w-[120px] font-medium">
+        {config.label}
+      </span>
     </Badge>
-  );
-};
-
-// Componente para mostrar múltiples estados - simplificado
-interface PatientStatusGroupProps {
-  statuses: Array<{
-    status: Patient["estado_paciente"]
-    surveyCompleted?: boolean
-  }>
-  size?: "sm" | "md" | "lg"
-  className?: string
-  maxVisible?: number
+  )
 }
 
-const PatientStatusGroup = ({
+const PatientStatusGroup: React.FC<PatientStatusGroupProps> = ({
   statuses,
   size = "sm",
   className,
   maxVisible = 3
-}: PatientStatusGroupProps) => {
-  if (!statuses.length) return null;
-
-  // Para mostrar solo el más importante (móviles)
-  const getHighestPriorityStatus = () => {
-    return statuses.reduce((prev, current) => {
-      const prevConfig = getStatusConfig(prev.status, prev.surveyCompleted ?? false);
-      const currentConfig = getStatusConfig(current.status, current.surveyCompleted ?? false);
-      return currentConfig.priority > prevConfig.priority ? current : prev;
-    }, statuses[0]);
-  };
-
-  const visibleStatuses = statuses.slice(0, maxVisible);
-  const hiddenCount = statuses.length - maxVisible;
+}) => {
+  if (!statuses.length) return null
 
   return (
-    <div className={cn("flex flex-wrap gap-1.5", className)}>
-      {/* En móviles, mostrar solo el más importante */}
+    <div className={cn("flex flex-wrap gap-1.5", className)} role="group" aria-label="Estados del paciente">
+      {/* Vista móvil - Solo el primer estado */}
       <div className="block sm:hidden">
         <PatientStatus
-          status={getHighestPriorityStatus().status}
-          surveyCompleted={getHighestPriorityStatus().surveyCompleted}
+          status={statuses[0].status}
+          surveyCompleted={statuses[0].surveyCompleted}
           size={size}
         />
       </div>
       
-      {/* En desktop, mostrar varios */}
+      {/* Vista desktop - Múltiples estados */}
       <div className="hidden sm:flex flex-wrap gap-1.5">
-        {visibleStatuses.map((statusInfo, index) => (
+        {statuses.slice(0, maxVisible).map((statusItem, index) => (
           <PatientStatus
-            key={`${statusInfo.status}-${index}`}
-            status={statusInfo.status}
-            surveyCompleted={statusInfo.surveyCompleted}
+            key={`${statusItem.status}-${index}`}
+            status={statusItem.status}
+            surveyCompleted={statusItem.surveyCompleted}
             size={size}
           />
         ))}
         
-        {hiddenCount > 0 && (
+        {statuses.length > maxVisible && (
           <Badge 
             variant="outline" 
             className={cn(
-              "bg-gray-100 text-gray-700",
+              "bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-400",
               SIZE_CLASSES[size]
             )}
-            title={`${hiddenCount} estados adicionales`}
+            title={`${statuses.length - maxVisible} estados adicionales`}
+            aria-label={`${statuses.length - maxVisible} estados adicionales`}
           >
-            +{hiddenCount}
+            <span className="font-medium">+{statuses.length - maxVisible}</span>
           </Badge>
         )}
       </div>
     </div>
-  );
-};
-
-// Componente compacto para vista móvil optimizada
-interface PatientStatusCompactProps {
-  status: Patient["estado_paciente"]
-  surveyCompleted?: boolean
-  size?: "sm" | "md" | "lg"
-  className?: string
+  )
 }
 
-const PatientStatusCompact = ({
+const PatientStatusCompact: React.FC<PatientStatusCompactProps> = ({
   status,
   surveyCompleted = false,
-  size = "md",
+  size = "sm",
   className
-}: PatientStatusCompactProps) => {
-  const config = getStatusConfig(status, surveyCompleted);
-  const Icon = config.icon;
+}) => {
+  const config = getStatusConfig(status, surveyCompleted)
+  const Icon = config.icon
+  const sizeClasses = SIZE_CLASSES[size]
+  const iconSizeClasses = ICON_SIZE_CLASSES[size]
 
   return (
     <Badge
       variant="outline"
       className={cn(
-        "inline-flex items-center gap-1 font-medium border px-2 py-0.5",
-        SIZE_CLASSES[size],
+        "inline-flex items-center justify-center font-medium px-1.5",
+        sizeClasses,
         config.className,
         className
       )}
-      aria-label={config.label}
+      aria-label={`Estado: ${config.label}`}
       title={config.label}
+      role="status"
     >
-      <Icon className={cn(ICON_SIZE_CLASSES[size])} />
+      <Icon className={cn("flex-shrink-0", iconSizeClasses)} aria-hidden="true" />
     </Badge>
-  );
-};
+  )
+}
 
-// Hook simplificado para obtener información del estado
 export const usePatientStatusInfo = (
   status: Patient["estado_paciente"],
   surveyCompleted: boolean = false
 ) => {
-  const config = getStatusConfig(status, surveyCompleted);
+  const config = getStatusConfig(status, surveyCompleted)
   
   return {
     label: config.label,
     icon: config.icon,
     className: config.className,
-    priority: config.priority,
-    needsAttention: config.priority <= 2,
-    isComplete: config.priority >= 4
-  };
+    needsAttention: status === PatientStatusEnum.PENDIENTE_DE_CONSULTA
+  } as const
 }
 
-// Función utilitaria simplificada para ordenar por prioridad de estado
-export const sortByStatusPriority = (
-  patients: Array<{ 
-    status: Patient["estado_paciente"]
-    surveyCompleted?: boolean 
-  }>
-) => {
+export const sortByStatusPriority = <T extends PatientStatusItem>(
+  patients: readonly T[]
+): T[] => {
+  if (!patients.length) return []
+  
   return [...patients].sort((a, b) => {
-    const aConfig = getStatusConfig(a.status, a.surveyCompleted ?? false);
-    const bConfig = getStatusConfig(b.status, b.surveyCompleted ?? false);
-    return bConfig.priority - aConfig.priority;
-  });
+    // Priorizar pacientes pendientes primero
+    if (a.status === PatientStatusEnum.PENDIENTE_DE_CONSULTA && 
+        b.status !== PatientStatusEnum.PENDIENTE_DE_CONSULTA) {
+      return -1
+    }
+    if (b.status === PatientStatusEnum.PENDIENTE_DE_CONSULTA && 
+        a.status !== PatientStatusEnum.PENDIENTE_DE_CONSULTA) {
+      return 1
+    }
+    
+    // Luego pacientes con encuesta pendiente
+    if (!a.surveyCompleted && b.surveyCompleted) return -1
+    if (!b.surveyCompleted && a.surveyCompleted) return 1
+    
+    // Orden alfabético por estado como último criterio
+    return (a.status || "").localeCompare(b.status || "")
+  })
 }
 
-// Exportar componentes
-export default PatientStatus;
-export { PatientStatusGroup, PatientStatusCompact };
+export default PatientStatus
+export { 
+  PatientStatusGroup, 
+  PatientStatusCompact,
+  type PatientStatusProps,
+  type PatientStatusGroupProps,
+  type PatientStatusCompactProps,
+  type PatientStatusItem,
+  type StatusSize
+}
