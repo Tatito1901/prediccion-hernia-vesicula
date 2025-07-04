@@ -1,47 +1,80 @@
-import { useState } from "react";
+import { useState, memo, useCallback, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar as CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
+import { Calendar as CalendarIcon, Clock } from "lucide-react";
+import { format, isBefore, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateAppointment } from "@/hooks/use-appointments";
-import { Patient, AppointmentStatusEnum } from "@/lib/types";
+import { Patient, AppointmentStatusEnum, EnrichedPatient } from "@/lib/types";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 // Horarios estáticos - calculados una vez en build time en lugar de en runtime
-const HOUR_OPTIONS = (() => {
-  const options: string[] = [];
-  for (let h = 7; h <= 20; h++) {
-    ["00", "30"].forEach((m) => options.push(`${String(h).padStart(2, "0")}:${m}`));
+const TIME_SLOTS = [
+  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
+  "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
+  "18:00", "18:30", "19:00", "19:30"
+] as const;
+
+// Cache para formateo de fechas - mejora de rendimiento
+const dateDisplayCache = new Map<string, string>();
+
+// Función de formateo con cache - consistente con patient-admission.reschedule.tsx
+const formatDisplayDate = (date: Date | null): string => {
+  if (!date) return "Fecha inválida";
+  
+  const key = date.toISOString();
+  const cached = dateDisplayCache.get(key);
+  if (cached) return cached;
+  
+  try {
+    const formatted = format(date, "EEEE, d 'de' MMMM", { locale: es });
+    dateDisplayCache.set(key, formatted);
+    return formatted;
+  } catch {
+    return "Error de formato";
   }
-  return options;
-})();
+};
 
 interface ScheduleAppointmentDialogProps {
   isOpen: boolean;
-  patient: Patient | null;
+  patient: EnrichedPatient | null;
   onClose: () => void;
 }
 
-function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppointmentDialogProps) {
+interface FormState {
+  fechaConsulta: Date;
+  horaConsulta: string;
+  motivoConsulta: string;
+  notas: string;
+}
+
+// Componente memoizado para mejor rendimiento
+const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({ 
+  isOpen, 
+  patient, 
+  onClose 
+}: ScheduleAppointmentDialogProps) {
   const { mutateAsync: addAppointment, isPending } = useCreateAppointment();
   
-  // Estado simplificado sin react-hook-form para reducir bundle size
-  const [formData, setFormData] = useState({
+  // Estado del formulario
+  const [formData, setFormData] = useState<FormState>({
     fechaConsulta: new Date(),
-    horaConsulta: "08:00",
+    horaConsulta: "09:00",
     motivoConsulta: "",
     notas: "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Validación simple sin zod
-  const validateForm = () => {
+  // Validación de formulario memoizada
+  const validateForm = useCallback(() => {
     const newErrors: Record<string, string> = {};
     
     if (!formData.fechaConsulta) {
@@ -54,9 +87,19 @@ function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppoint
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData.fechaConsulta, formData.horaConsulta]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Función para actualizar campos del formulario
+  const updateFormData = useCallback((field: keyof FormState, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Limpiar error del campo cuando el usuario empiece a escribir
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: "" }));
+    }
+  }, [errors]);
+
+  // Función para envío del formulario
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!patient || !validateForm()) return;
@@ -78,7 +121,7 @@ function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppoint
         // Reset form
         setFormData({
           fechaConsulta: new Date(),
-          horaConsulta: "08:00",
+          horaConsulta: "09:00",
           motivoConsulta: "",
           notas: "",
         });
@@ -87,15 +130,17 @@ function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppoint
       },
       error: (err) => err.message || "Error al agendar la cita",
     });
-  };
-
-  const updateFormData = (field: keyof typeof formData, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    // Limpiar error del campo cuando el usuario empiece a escribir
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
-    }
-  };
+  }, [patient, validateForm, addAppointment, formData, onClose]);
+  
+  // Función para deshabilitar fechas pasadas
+  const disabledDates = useCallback((date: Date) => {
+    return isBefore(date, startOfDay(new Date()));
+  }, []);
+  
+  // Texto del botón de fecha memoizado
+  const dateButtonText = useMemo(() => {
+    return formatDisplayDate(formData.fechaConsulta);
+  }, [formData.fechaConsulta]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -117,7 +162,7 @@ function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppoint
                   type="button"
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(formData.fechaConsulta, "PPP", { locale: es })}
+                  {dateButtonText}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="p-0" align="start">
@@ -126,7 +171,7 @@ function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppoint
                   selected={formData.fechaConsulta}
                   onSelect={(date) => date && updateFormData("fechaConsulta", date)}
                   locale={es}
-                  disabled={(date) => date < new Date()} // No permitir fechas pasadas
+                  disabled={disabledDates}
                 />
               </PopoverContent>
             </Popover>
@@ -137,56 +182,62 @@ function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppoint
 
           <div>
             <label className="text-sm font-medium">Hora</label>
-            <select
+            <Select
               value={formData.horaConsulta}
-              onChange={(e) => updateFormData("horaConsulta", e.target.value)}
-              className="mt-1 w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onValueChange={(value) => updateFormData("horaConsulta", value)}
             >
-              {HOUR_OPTIONS.map((hour) => (
-                <option key={hour} value={hour}>
-                  {hour}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="mt-1 w-full">
+                <SelectValue placeholder="Seleccionar hora" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIME_SLOTS.map((time) => (
+                  <SelectItem key={time} value={time} className="text-sm">
+                    <span className="flex items-center gap-2">
+                      <Clock className="h-3.5 w-3.5" />
+                      {time}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.horaConsulta && (
               <p className="text-sm text-red-600 mt-1">{errors.horaConsulta}</p>
             )}
           </div>
 
           <div>
-            <label className="text-sm font-medium">Motivo</label>
-            <Input 
+            <label className="text-sm font-medium">Motivo de la consulta</label>
+            <Input
+              type="text"
               value={formData.motivoConsulta}
               onChange={(e) => updateFormData("motivoConsulta", e.target.value)}
-              className="mt-1" 
-              placeholder="Motivo de la consulta (opcional)"
+              placeholder="Motivo de la consulta"
+              className="mt-1"
             />
           </div>
 
           <div>
-            <label className="text-sm font-medium">Notas</label>
-            <Textarea 
-              rows={3} 
+            <label className="text-sm font-medium">Notas adicionales</label>
+            <Textarea
               value={formData.notas}
               onChange={(e) => updateFormData("notas", e.target.value)}
-              className="mt-1" 
-              placeholder="Notas adicionales (opcional)"
+              placeholder="Notas adicionales"
+              className="mt-1"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button 
-              type="button" 
-              variant="secondary" 
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
               onClick={onClose}
-              disabled={isPending}
             >
               Cancelar
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={isPending}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-blue-600 hover:bg-blue-700"
             >
               {isPending ? "Guardando..." : "Guardar"}
             </Button>
@@ -195,6 +246,6 @@ function ScheduleAppointmentDialog({ isOpen, patient, onClose }: ScheduleAppoint
       </DialogContent>
     </Dialog>
   );
-}
+});
 
 export default ScheduleAppointmentDialog;

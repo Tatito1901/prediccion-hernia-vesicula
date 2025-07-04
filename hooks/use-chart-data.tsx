@@ -1,6 +1,7 @@
 'use client';
 
 import type { Patient, Appointment, DiagnosisEnum, PatientStatus, AppointmentStatus } from '@/lib/types';
+import { PatientOriginEnum } from '@/components/dashboard/dashboard-metrics';
 import React, { useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -64,8 +65,8 @@ interface ClinicMetrics {
   pacientesSeguimiento: number;
   tasaConversion: number;
   tiempoPromedioDecision: number;
-  fuentePrincipalPacientes: string;
-  diagnosticosMasComunes: Array<{ name: string; count: number }>;
+  fuentePrincipalPacientes: PatientOriginEnum;
+  diagnosticosMasComunes: Array<{ tipo: string; cantidad: number }>;
   lastUpdated: string;
 }
 
@@ -518,8 +519,8 @@ export function useChartData({
     });
 
     const diagnosticosMasComunes = Array.from(diagnosticosCount.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
+      .map(([name, count]) => ({ tipo: name, cantidad: count }))
+      .sort((a, b) => b.cantidad - a.cantidad)
       .slice(0, 5);
 
     return {
@@ -530,7 +531,7 @@ export function useChartData({
       pacientesSeguimiento,
       tasaConversion,
       tiempoPromedioDecision,
-      fuentePrincipalPacientes: 'REFERIDO', // TODO: Calcular dinámicamente basado en origen_paciente
+      fuentePrincipalPacientes: PatientOriginEnum.REFERRAL, // TODO: Calcular dinámicamente basado en origen_paciente
       diagnosticosMasComunes,
       lastUpdated: new Date().toISOString(),
     };

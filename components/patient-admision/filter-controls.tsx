@@ -9,8 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { FilterState, AppointmentStatusEnum } from "./types";
+import { AppointmentStatusEnum, type AppointmentStatus } from "@/lib/types";
 import { STATUS_CONFIGS } from "./utils";
+
+// Define FilterState type that was previously imported
+interface FilterState {
+  searchTerm: string;
+  statusFilter: AppointmentStatus | 'all';
+}
 
 interface FilterControlsProps {
   readonly filters: FilterState;
@@ -26,7 +32,7 @@ interface FilterControlsProps {
 const STATUS_OPTIONS = [
   { value: "all" as const, label: "Todos los Estados" },
   ...Object.entries(STATUS_CONFIGS).map(([status, config]) => ({
-    value: status as AppointmentStatusEnum,
+    value: status as AppointmentStatus,
     label: config.label,
   }))
 ];
@@ -68,8 +74,8 @@ SearchInput.displayName = "SearchInput";
 
 // Componente de selector de estado
 const StatusSelect = memo<{
-  value: AppointmentStatusEnum | "all";
-  onChange: (value: AppointmentStatusEnum | "all") => void;
+  value: AppointmentStatus | "all";
+  onChange: (value: AppointmentStatus | "all") => void;
   disabled?: boolean;
   className?: string;
 }>(({ value, onChange, disabled, className }) => (
@@ -148,7 +154,7 @@ export const FilterControls = memo<FilterControlsProps>(({
     onUpdateFilters({ searchTerm });
   };
 
-  const handleStatusChange = (statusFilter: AppointmentStatusEnum | "all") => {
+  const handleStatusChange = (statusFilter: AppointmentStatus | "all") => {
     onUpdateFilters({ statusFilter });
   };
 

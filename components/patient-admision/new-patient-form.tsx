@@ -1,20 +1,9 @@
-// new-patient-form.tsx - Actualizado para usar React Query
-import React, { useState, useEffect, useMemo, useCallback, memo } from "react"
+// new-patient-form.tsx - Versión optimizada y responsiva
+import React, { useState, useMemo, useCallback, memo } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import { 
-  setHours, 
-  setMinutes, 
-  isToday, 
-  isBefore, 
-  addMonths, 
-  startOfDay, 
-  format,
-  addDays,
-  isSunday
-} from "date-fns"
-import { UserPlus, Loader2, Clock } from "lucide-react"
+import { UserPlus, Loader2, Clock, Calendar, Phone, FileText, Stethoscope } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -45,79 +34,82 @@ import { cn } from "@/lib/utils"
 
 import { 
   DiagnosisEnum,
-  PatientStatusEnum,
   AppointmentStatusEnum,
   type TimeString
 } from "@/lib/types"
-import { useAdmitPatient } from "@/hooks/use-patients";
-import { useAppointments } from "@/hooks/use-appointments";
+import { useAdmitPatient } from "@/hooks/use-patients"
+import { useAppointments } from "@/hooks/use-appointments"
 
-// Esquema de validación
+// ==================== ESQUEMAS Y TIPOS ====================
+
 const FORM_SCHEMA = z.object({
   nombre: z.string()
     .trim()
-    .min(2, "El nombre debe tener al menos 2 caracteres.")
-    .max(50, "Máximo 50 caracteres."),
+    .min(2, "Mínimo 2 caracteres")
+    .max(50, "Máximo 50 caracteres"),
   apellidos: z.string()
     .trim()
-    .min(2, "Los apellidos deben tener al menos 2 caracteres.")
-    .max(50, "Máximo 50 caracteres."),
+    .min(2, "Mínimo 2 caracteres")
+    .max(50, "Máximo 50 caracteres"),
   edad: z.coerce.number()
     .int()
-    .min(0, "La edad no puede ser negativa.")
-    .max(120, "Edad no válida.")
+    .min(0, "Edad inválida")
+    .max(120, "Edad inválida")
     .optional()
     .nullable(),
   telefono: z.string()
     .trim()
-    .min(10, "El teléfono debe tener al menos 10 dígitos.")
-    .max(15, "Máximo 15 dígitos.")
-    .regex(/^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s./0-9]*$/, "Formato de teléfono no válido."),
+    .min(10, "Mínimo 10 dígitos")
+    .max(15, "Máximo 15 dígitos")
+    .regex(/^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s./0-9]*$/, "Formato inválido"),
   motivoConsulta: z.enum(Object.values(DiagnosisEnum) as [DiagnosisEnum, ...DiagnosisEnum[]], {
-    required_error: "Por favor seleccione un motivo de consulta.",
+    required_error: "Seleccione un motivo",
   }),
   fechaConsulta: z.date({
-    required_error: "Por favor seleccione una fecha para la consulta.",
+    required_error: "Seleccione una fecha",
   }),
   horaConsulta: z.string({
-    required_error: "Por favor seleccione una hora para la consulta.",
+    required_error: "Seleccione una hora",
   }),
   notas: z.string()
-    .max(500, "Máximo 500 caracteres.")
+    .max(500, "Máximo 500 caracteres")
     .optional(),
-});
+})
 
 type FormValues = z.infer<typeof FORM_SCHEMA>
 
-// Configuración estática
+// ==================== CONFIGURACIONES ESTÁTICAS ====================
+
 const DIAGNOSIS_GROUPS = {
-  Hernias: [
+  "🔸 Hernias": [
     DiagnosisEnum.EVENTRACION_ABDOMINAL,
     DiagnosisEnum.HERNIA_HIATAL,
     DiagnosisEnum.HERNIA_INGUINAL,
-    DiagnosisEnum.HERNIA_INGUINAL_BILATERAL,
     DiagnosisEnum.HERNIA_INGUINAL_RECIDIVANTE,
-    DiagnosisEnum.HERNIA_INCISIONAL,
     DiagnosisEnum.HERNIA_SPIGEL,
     DiagnosisEnum.HERNIA_UMBILICAL,
-    DiagnosisEnum.HERNIA_VENTRAL,
   ],
-  "Vesícula y Vías Biliares": [
+  "🟡 Vesícula y Vías Biliares": [
     DiagnosisEnum.COLANGITIS,
     DiagnosisEnum.COLECISTITIS,
     DiagnosisEnum.COLEDOCOLITIASIS,
-    DiagnosisEnum.COLELITIASIS,
+    DiagnosisEnum.VESICULA_COLECISTITIS_CRONICA,
   ],
-  "Otros Diagnósticos": [
+  "🔹 Otros Diagnósticos": [
     DiagnosisEnum.APENDICITIS,
     DiagnosisEnum.LIPOMA_GRANDE,
     DiagnosisEnum.QUISTE_SEBACEO_INFECTADO,
     DiagnosisEnum.OTRO,
   ],
-};
+} as const
 
-const WORKING_HOURS = { start: 9, end: 15, interval: 30 };
-const MAX_MONTHS_AHEAD = 3;
+// Horarios simplificados - Solo lunes a sábado, 9:00-14:00
+const WORK_SCHEDULE = {
+  startHour: 9,
+  endHour: 14,
+  intervalMinutes: 30,
+  workDays: [1, 2, 3, 4, 5, 6], // Lun-Sáb
+} as const
 
 const DEFAULT_VALUES: FormValues = {
   nombre: "",
@@ -128,498 +120,550 @@ const DEFAULT_VALUES: FormValues = {
   fechaConsulta: null as any,
   horaConsulta: "",
   motivoConsulta: null as any,
-};
-
-// Cache para formateo
-const diagnosisFormatCache = new Map<string, string>();
-
-const formatDiagnosis = (diagnosis: DiagnosisEnum): string => {
-  const cached = diagnosisFormatCache.get(diagnosis);
-  if (cached) return cached;
-  
-  const formatted = diagnosis
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-  
-  diagnosisFormatCache.set(diagnosis, formatted);
-  return formatted;
-};
-
-// Generar slots de tiempo - memoizado
-const TIME_SLOTS = (() => {
-  const slots: TimeString[] = [];
-  const totalSlots = (WORKING_HOURS.end - WORKING_HOURS.start) * 2;
-  
-  for (let i = 0; i < totalSlots; i++) {
-    const hour = WORKING_HOURS.start + Math.floor(i / 2);
-    const minute = (i % 2) * 30;
-    
-    if (hour >= WORKING_HOURS.end) continue;
-    
-    const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}` as TimeString;
-    slots.push(timeStr);
-  }
-  
-  return slots;
-})();
-
-interface NewPatientFormProps {
-  onSuccess?: () => void;
-  triggerButton?: React.ReactNode;
 }
 
+// ==================== UTILIDADES OPTIMIZADAS ====================
+
+// Cache simple para formateo de diagnósticos
+const diagnosisLabels = new Map<DiagnosisEnum, string>()
+
+const getDiagnosisLabel = (diagnosis: DiagnosisEnum): string => {
+  if (!diagnosisLabels.has(diagnosis)) {
+    const label = diagnosis
+      .split('_')
+      .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+      .join(' ')
+    diagnosisLabels.set(diagnosis, label)
+  }
+  return diagnosisLabels.get(diagnosis)!
+}
+
+// Generar slots de tiempo - función pura y optimizada
+const generateTimeSlots = (): TimeString[] => {
+  const slots: TimeString[] = []
+  const { startHour, endHour, intervalMinutes } = WORK_SCHEDULE
+  const totalSlots = ((endHour - startHour) * 60) / intervalMinutes
+  
+  for (let i = 0; i < totalSlots; i++) {
+    const totalMinutes = startHour * 60 + i * intervalMinutes
+    const hour = Math.floor(totalMinutes / 60)
+    const minute = totalMinutes % 60
+    
+    slots.push(`${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}` as TimeString)
+  }
+  
+  return slots
+}
+
+const TIME_SLOTS = generateTimeSlots()
+
+// Validaciones de fecha simplificadas
+const isWorkDay = (date: Date): boolean => {
+  return WORK_SCHEDULE.workDays.includes(date.getDay())
+}
+
+const isDateInRange = (date: Date): boolean => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  const maxDate = new Date()
+  maxDate.setMonth(maxDate.getMonth() + 3)
+  maxDate.setHours(23, 59, 59, 999)
+  
+  return date >= today && date <= maxDate
+}
+
+const isValidAppointmentDate = (date: Date): boolean => {
+  return isWorkDay(date) && isDateInRange(date)
+}
+
+// ==================== INTERFACES ====================
+
+interface NewPatientFormProps {
+  onSuccess?: () => void
+  triggerButton?: React.ReactNode
+}
+
+// ==================== COMPONENTE PRINCIPAL ====================
+
 const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerButton }) => {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false)
   
-  // Usar hooks de React Query
-  const { data: appointmentsData } = useAppointments(1, 100);
-  const { mutateAsync: admitPatient, isPending: isSubmitting } = useAdmitPatient();
-  
-  const appointments = appointmentsData?.appointments || [];
-  const isLoadingAppointments = !appointmentsData;
+  // React Query hooks
+  const { data: appointmentsData } = useAppointments(1, 100)
+  const { mutateAsync: admitPatient, isPending: isSubmitting } = useAdmitPatient()
   
   const form = useForm<FormValues>({
     resolver: zodResolver(FORM_SCHEMA),
     defaultValues: DEFAULT_VALUES,
     mode: "onChange",
-  });
+  })
 
-  const selectedDate = form.watch("fechaConsulta");
+  const selectedDate = form.watch("fechaConsulta")
 
-  // Reset form cuando se cierra
-  useEffect(() => {
-    if (!open) {
-      form.reset(DEFAULT_VALUES);
-    }
-  }, [open, form]);
-
-  // Calcular slots disponibles - memoizado
+  // Calcular slots disponibles de forma optimizada
   const availableTimeSlots = useMemo(() => {
-    if (!selectedDate || !appointments) return [];
+    if (!selectedDate || !isValidAppointmentDate(selectedDate)) return []
     
-    const now = new Date();
-    const isSelectedDateToday = isToday(selectedDate);
-    const startOfSelectedDay = startOfDay(selectedDate);
+    const appointments = appointmentsData?.appointments || []
+    const today = new Date()
+    const isToday = selectedDate.toDateString() === today.toDateString()
     
-    // Crear Set de citas ocupadas para búsqueda O(1)
-    const dayAppointments = new Set<TimeString>();
+    // Crear Set de horarios ocupados para búsqueda O(1)
+    const occupiedSlots = new Set<string>()
     
-    const selectedDayTime = startOfSelectedDay.getTime();
     appointments.forEach((app: any) => {
       if (
         app.estado !== AppointmentStatusEnum.CANCELADA &&
-        startOfDay(new Date(app.fechaConsulta)).getTime() === selectedDayTime
+        new Date(app.fechaConsulta).toDateString() === selectedDate.toDateString()
       ) {
-        dayAppointments.add(app.horaConsulta as TimeString);
+        occupiedSlots.add(app.horaConsulta)
       }
-    });
+    })
     
     // Filtrar slots disponibles
-    return TIME_SLOTS.filter(timeStr => {
-      if (dayAppointments.has(timeStr)) return false;
+    return TIME_SLOTS.filter(timeSlot => {
+      if (occupiedSlots.has(timeSlot)) return false
       
-      if (isSelectedDateToday) {
-        const [hour, minute] = timeStr.split(':').map(Number);
-        const slotDateTime = setMinutes(setHours(new Date(startOfSelectedDay), hour), minute);
-        if (isBefore(slotDateTime, now)) return false;
+      // Si es hoy, excluir horarios pasados
+      if (isToday) {
+        const [hour, minute] = timeSlot.split(':').map(Number)
+        const slotTime = new Date()
+        slotTime.setHours(hour, minute, 0, 0)
+        if (slotTime <= today) return false
       }
       
-      return true;
-    });
-  }, [selectedDate, appointments]);
+      return true
+    })
+  }, [selectedDate, appointmentsData])
 
-  // Función para filtrar fechas disponibles - memoizada
-  const filterAvailableDates = useCallback((date: Date) => {
-    // Excluir domingos
-    if (isSunday(date)) return false;
-    
-    // Excluir fechas pasadas
-    const today = startOfDay(new Date());
-    return date >= today;
-  }, []);
-
-  // Calcular fechas mínima y máxima - memoizado
-  const { minDate, maxDate } = useMemo(() => ({
-    minDate: new Date(),
-    maxDate: addMonths(new Date(), MAX_MONTHS_AHEAD)
-  }), []);
-
+  // Handlers optimizados
   const handleDateChange = useCallback((date: Date | undefined) => {
-    if (date) {
-      const today = startOfDay(new Date());
-      
-      if (date < today) {
-        toast.error("No se puede seleccionar una fecha anterior a hoy");
-        return;
-      }
-      
-      form.setValue("fechaConsulta", date, { shouldValidate: true });
-    } else {
-      form.setValue("fechaConsulta", undefined as any, { shouldValidate: true });
+    if (!date) {
+      form.setValue("fechaConsulta", undefined as any, { shouldValidate: true })
+      form.setValue("horaConsulta", "", { shouldValidate: true })
+      return
     }
     
-    // Limpiar hora al cambiar fecha
-    form.setValue("horaConsulta", "", { shouldValidate: true });
-  }, [form]);
+    if (!isValidAppointmentDate(date)) {
+      toast.error("Seleccione un día laboral dentro del rango permitido")
+      return
+    }
+    
+    form.setValue("fechaConsulta", date, { shouldValidate: true })
+    form.setValue("horaConsulta", "", { shouldValidate: true })
+  }, [form])
 
   const handleAgeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    form.setValue("edad", value === "" ? null : Number(value), {
-      shouldValidate: true
-    });
-  }, [form]);
+    const value = e.target.value
+    form.setValue("edad", value === "" ? null : Number(value), { shouldValidate: true })
+  }, [form])
 
   const handleSubmit = useCallback(async (values: FormValues) => {
     try {
-      // Crear la fecha y hora de la cita combinando los campos
-      const fechaHoraCita = new Date(values.fechaConsulta);
-      const [horas, minutos] = values.horaConsulta.split(':').map(Number);
-      fechaHoraCita.setHours(horas, minutos, 0, 0);
+      // Construir fecha y hora de la cita
+      const appointmentDateTime = new Date(values.fechaConsulta)
+      const [hours, minutes] = values.horaConsulta.split(':').map(Number)
+      appointmentDateTime.setHours(hours, minutes, 0, 0)
       
-      // Llamar a la mutación atómica que registra paciente y cita en una sola transacción
       await admitPatient({
-        // Datos personales
         nombre: values.nombre.trim(),
         apellidos: values.apellidos.trim(),
         telefono: values.telefono.trim(),
         edad: values.edad ?? null,
-        email: undefined, // Campo opcional, no incluido en el formulario actual
-        
-        // Datos de la cita y diagnóstico
         diagnostico_principal: values.motivoConsulta,
         comentarios_registro: values.notas?.trim() || "",
-        fecha_hora_cita: fechaHoraCita.toISOString(),
+        fecha_hora_cita: appointmentDateTime.toISOString(),
         motivo_cita: values.motivoConsulta,
-        
-        // IDs opcionales que pueden provenir del contexto de autenticación
-        // doctor_asignado_id: undefined, 
-        // creado_por_id: undefined,
-      });
+      })
 
-      setOpen(false);
-      onSuccess?.();
+      setOpen(false)
+      form.reset(DEFAULT_VALUES)
+      toast.success("Paciente registrado exitosamente")
+      onSuccess?.()
     } catch (error) {
-      // Los errores ya son manejados por la mutación
-      console.error("Admission error:", error);
+      console.error("Error al registrar paciente:", error)
+      toast.error("Error al registrar el paciente")
     }
-  }, [admitPatient, onSuccess]);
+  }, [admitPatient, onSuccess, form])
 
-  // Ya no necesitamos crear isSubmitting aquí porque viene del hook useAdmitPatient
-  const isLoading = isLoadingAppointments;
-  const canSubmit = form.formState.isValid && !isSubmitting && !isLoading;
+  const handleDialogChange = useCallback((isOpen: boolean) => {
+    setOpen(isOpen)
+    if (!isOpen) {
+      form.reset(DEFAULT_VALUES)
+    }
+  }, [form])
+
+  const canSubmit = form.formState.isValid && !isSubmitting
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleDialogChange}>
       <DialogTrigger asChild>
         {triggerButton || (
           <Button
             variant="default"
-            size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white shadow-md dark:bg-blue-500 dark:hover:bg-blue-600"
+            size="lg"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg border-0 font-medium"
           >
-            <UserPlus className="mr-2 h-4 w-4" />
+            <UserPlus className="mr-2 h-5 w-5" />
             Nuevo Paciente
           </Button>
         )}
       </DialogTrigger>
       
       <DialogContent 
-        className="sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90dvh] flex flex-col p-0 rounded-lg shadow-2xl border-0"
+        className="sm:max-w-4xl max-w-[95vw] max-h-[95vh] h-auto flex flex-col p-0 gap-0 rounded-xl shadow-2xl border-0 bg-white dark:bg-slate-900"
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-white dark:from-slate-800 dark:to-blue-950 border-slate-200 dark:border-slate-700 rounded-t-lg">
-          <DialogTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-            Registrar Nuevo Paciente
-          </DialogTitle>
-          <DialogDescription className="text-sm text-slate-600 dark:text-slate-400">
-            Complete los datos para crear un nuevo paciente y agendar su consulta
-          </DialogDescription>
+        {/* Header mejorado */}
+        <DialogHeader className="px-6 py-5 bg-gradient-to-r from-blue-50 via-white to-blue-50 dark:from-slate-800 dark:via-slate-800 dark:to-slate-700 border-b border-slate-200 dark:border-slate-600 rounded-t-xl">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+              <UserPlus className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Registrar Nuevo Paciente
+              </DialogTitle>
+              <DialogDescription className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                Complete los datos para crear un nuevo paciente y agendar su consulta
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="flex-grow overflow-y-auto px-6 py-5 bg-white dark:bg-slate-900">
+        {/* Contenido del formulario */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 bg-gradient-to-b from-white to-slate-50/50 dark:from-slate-900 dark:to-slate-900/95">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-              {/* Datos del Paciente */}
-              <section className="space-y-4 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                <h3 className="text-base font-medium text-slate-800 dark:text-slate-100 flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
-                  <UserPlus size={16} className="text-blue-600 dark:text-blue-400" />
-                  Datos del Paciente
-                </h3>
+              
+              {/* Grid principal responsivo - Layout más ancho */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="nombre"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Nombre(s) <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="Ej: Ana Sofía" 
-                            {...field} 
-                            className="h-9 text-sm"
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                        <FormMessage className="text-xs mt-1" />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="apellidos"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Apellidos <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="Ej: García Rodríguez" 
-                            {...field} 
-                            className="h-9 text-sm"
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                        <FormMessage className="text-xs mt-1" />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="telefono"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Teléfono <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="tel" 
-                            placeholder="Ej: 55 1234 5678" 
-                            {...field} 
-                            className="h-9 text-sm"
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                        <FormMessage className="text-xs mt-1" />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="edad"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Edad (Opcional)
-                        </FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="Ej: 35" 
-                            value={field.value === null || field.value === undefined ? '' : String(field.value)}
-                            onChange={handleAgeChange}
-                            className="h-9 text-sm"
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                        <FormMessage className="text-xs mt-1" />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </section>
-
-              {/* Información de la Consulta */}
-              <section className="space-y-4 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                <h3 className="text-base font-medium text-slate-800 dark:text-slate-100 flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
-                  <Clock size={16} className="text-blue-600 dark:text-blue-400" />
-                  Información de la Consulta
-                </h3>
-                
-                <FormField
-                  control={form.control}
-                  name="motivoConsulta"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                        Motivo de Consulta <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                        <FormControl>
-                          <SelectTrigger className="h-9 text-sm">
-                            <SelectValue placeholder="Seleccione un motivo..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent className="max-h-60">
-                          {Object.entries(DIAGNOSIS_GROUPS).map(([groupName, diagnoses]) => (
-                            <SelectGroup key={groupName}>
-                              <SelectLabel className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                                {groupName}
-                              </SelectLabel>
-                              {diagnoses.map((diag) => (
-                                <SelectItem key={diag} value={diag} className="text-sm">
-                                  {formatDiagnosis(diag)}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage className="text-xs mt-1" />
-                    </FormItem>
-                  )}
-                />
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="fechaConsulta"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Fecha de Consulta <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <DatePicker
-                          date={field.value}
-                          onDateChange={field.onChange}
-                          minDate={minDate}
-                          maxDate={maxDate}
-                          placeholder="Seleccionar fecha"
-                          filterDate={filterAvailableDates}
-                          className="h-9 text-sm"
-                          disabled={isSubmitting}
-                        />
-                        <FormMessage className="text-xs mt-1" />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="horaConsulta"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          Hora de Consulta <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <Select 
-                          onValueChange={field.onChange} 
-                          value={field.value} 
-                          disabled={!selectedDate || isLoading || isSubmitting}
-                        >
-                          <FormControl>
-                            <SelectTrigger className={cn("h-9 text-sm", !selectedDate && "text-slate-400")}>
-                              <SelectValue 
-                                placeholder={selectedDate 
-                                  ? (isLoading ? "Cargando horarios..." : "Seleccione hora") 
-                                  : "Seleccione fecha primero"} 
+                {/* Columna 1: Datos Personales */}
+                <div className="lg:col-span-1 space-y-4">
+                  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+                      <Phone className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+                        Datos Personales
+                      </h3>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="nombre"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Nombre(s) <span className="text-red-500">*</span>
+                            </FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="Ana Sofía" 
+                                {...field} 
+                                className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                                disabled={isSubmitting}
                               />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent className="max-h-60">
-                            {isLoading ? (
-                              <div className="flex items-center justify-center py-4">
-                                <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-                                <span className="ml-2 text-sm">Cargando...</span>
-                              </div>
-                            ) : availableTimeSlots.length > 0 ? (
-                              availableTimeSlots.map((slot) => (
-                                <SelectItem key={slot} value={slot} className="text-sm">
-                                  <div className="flex items-center gap-2">
-                                    <Clock className="h-3 w-3" />
-                                    <span>{slot}</span>
-                                  </div>
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <div className="p-4 text-center text-sm text-slate-500">
-                                {selectedDate ? "No hay horarios disponibles" : "Seleccione una fecha"}
-                              </div>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage className="text-xs mt-1" />
-                        {selectedDate && !isLoading && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            {availableTimeSlots.length} horarios disponibles
-                          </p>
+                            </FormControl>
+                            <FormMessage className="text-xs" />
+                          </FormItem>
                         )}
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </section>
-
-              {/* Notas */}
-              <section className="space-y-4 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                <h3 className="text-base font-medium text-slate-800 dark:text-slate-100">
-                  Notas Adicionales (Opcional)
-                </h3>
-                <FormField
-                  control={form.control}
-                  name="notas"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Información relevante sobre el paciente, alergias, etc."
-                          className="resize-none min-h-[80px] text-sm"
-                          disabled={isSubmitting}
-                          {...field}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="apellidos"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Apellidos <span className="text-red-500">*</span>
+                            </FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="García Rodríguez" 
+                                {...field} 
+                                className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                                disabled={isSubmitting}
+                              />
+                            </FormControl>
+                            <FormMessage className="text-xs" />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField
+                          control={form.control}
+                          name="telefono"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Teléfono <span className="text-red-500">*</span>
+                              </FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="tel" 
+                                  placeholder="55 1234 5678" 
+                                  {...field} 
+                                  className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                                  disabled={isSubmitting}
+                                />
+                              </FormControl>
+                              <FormMessage className="text-xs" />
+                            </FormItem>
+                          )}
                         />
-                      </FormControl>
-                      <div className="flex justify-between mt-1">
-                        <FormMessage className="text-xs" />
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                          {field.value?.length || 0}/500
-                        </span>
+                        
+                        <FormField
+                          control={form.control}
+                          name="edad"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                Edad
+                              </FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  placeholder="35" 
+                                  value={field.value === null || field.value === undefined ? '' : String(field.value)}
+                                  onChange={handleAgeChange}
+                                  className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                                  disabled={isSubmitting}
+                                />
+                              </FormControl>
+                              <FormMessage className="text-xs" />
+                            </FormItem>
+                          )}
+                        />
                       </div>
-                    </FormItem>
-                  )}
-                />
-              </section>
+                    </div>
+                  </div>
+                </div>
 
-              <DialogFooter className="pt-4 border-t border-slate-200 dark:border-slate-800 px-0 pb-0">
-                <DialogClose asChild>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    disabled={isSubmitting}
-                  >
-                    Cancelar
-                  </Button>
-                </DialogClose>
-                <Button
-                  type="submit"
-                  disabled={!canSubmit}
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Registrando...
-                    </>
-                  ) : (
-                    "Registrar y Agendar"
-                  )}
-                </Button>
-              </DialogFooter>
+                {/* Columna 2: Información Médica */}
+                <div className="lg:col-span-1 space-y-4">
+                  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+                      <Stethoscope className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+                        Información Médica
+                      </h3>
+                    </div>
+                    
+                    <FormField
+                      control={form.control}
+                      name="motivoConsulta"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Motivo de Consulta <span className="text-red-500">*</span>
+                          </FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                            <FormControl>
+                              <SelectTrigger className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
+                                <SelectValue placeholder="Seleccione un motivo..." />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="max-h-72">
+                              {Object.entries(DIAGNOSIS_GROUPS).map(([groupName, diagnoses]) => (
+                                <SelectGroup key={groupName}>
+                                  <SelectLabel className="text-xs font-semibold text-slate-600 dark:text-slate-400 py-2">
+                                    {groupName}
+                                  </SelectLabel>
+                                  {diagnoses.map((diag) => (
+                                    <SelectItem key={diag} value={diag} className="text-sm py-2">
+                                      {getDiagnosisLabel(diag)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage className="text-xs" />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="mt-4">
+                      <FormField
+                        control={form.control}
+                        name="notas"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Notas Adicionales
+                            </FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Información relevante, alergias, etc."
+                                className="resize-none h-24 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                                disabled={isSubmitting}
+                                {...field}
+                              />
+                            </FormControl>
+                            <div className="flex justify-between items-center mt-1">
+                              <FormMessage className="text-xs" />
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {field.value?.length || 0}/500
+                              </span>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Columna 3: Programación de Cita */}
+                <div className="lg:col-span-1 space-y-4">
+                  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+                      <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+                        Programar Cita
+                      </h3>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="fechaConsulta"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Fecha <span className="text-red-500">*</span>
+                            </FormLabel>
+                            <DatePicker
+                              date={field.value}
+                              onDateChange={handleDateChange}
+                              minDate={new Date()}
+                              maxDate={new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)}
+                              placeholder="Seleccionar fecha"
+                              filterDate={isValidAppointmentDate}
+                              className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                              disabled={isSubmitting}
+                            />
+                            <FormMessage className="text-xs" />
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                              Disponible: Lun-Sáb, 9:00-14:00
+                            </p>
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name="horaConsulta"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Hora <span className="text-red-500">*</span>
+                            </FormLabel>
+                            <Select 
+                              onValueChange={field.onChange} 
+                              value={field.value} 
+                              disabled={!selectedDate || !isValidAppointmentDate(selectedDate) || isSubmitting}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
+                                  <SelectValue 
+                                    placeholder={
+                                      !selectedDate 
+                                        ? "Seleccione fecha primero" 
+                                        : !isValidAppointmentDate(selectedDate)
+                                          ? "Fecha no válida"
+                                          : "Seleccione hora"
+                                    } 
+                                  />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="max-h-60">
+                                {availableTimeSlots.length > 0 ? (
+                                  availableTimeSlots.map((slot) => (
+                                    <SelectItem key={slot} value={slot} className="text-sm">
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="h-3 w-3" />
+                                        <span>{slot}</span>
+                                      </div>
+                                    </SelectItem>
+                                  ))
+                                ) : (
+                                  <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                                    {selectedDate && isValidAppointmentDate(selectedDate) 
+                                      ? "No hay horarios disponibles" 
+                                      : "Seleccione una fecha válida"
+                                    }
+                                  </div>
+                                )}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage className="text-xs" />
+                            {availableTimeSlots.length > 0 && (
+                              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                ✓ {availableTimeSlots.length} horarios disponibles
+                              </p>
+                            )}
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </form>
           </Form>
         </div>
+
+        {/* Footer con botones */}
+        <DialogFooter className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 rounded-b-xl">
+          <div className="flex justify-between items-center w-full">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              <FileText className="inline h-3 w-3 mr-1" />
+              Todos los campos marcados con * son obligatorios
+            </div>
+            <div className="flex gap-3">
+              <DialogClose asChild>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="default"
+                  disabled={isSubmitting}
+                  className="border-slate-300 dark:border-slate-600"
+                >
+                  Cancelar
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                form="patient-form"
+                onClick={form.handleSubmit(handleSubmit)}
+                disabled={!canSubmit}
+                size="default"
+                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border-0 font-medium min-w-[140px]"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Registrando...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Registrar Paciente
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 })
 
-export default NewPatientFormComponent;
+NewPatientFormComponent.displayName = "NewPatientForm"
+
+export default NewPatientFormComponent

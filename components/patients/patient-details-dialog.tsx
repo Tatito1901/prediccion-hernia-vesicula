@@ -302,42 +302,86 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
                 </Card>
 
                 {/* Sección Médica */}
-                {(diagnostico_principal || comentarios_registro) && (
-                  <Card className="border-slate-200 dark:border-slate-800">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-emerald-500" />
-                        Información Médica
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0 space-y-3">
-                      {diagnostico_principal && (
-                        <div>
-                          <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
-                            Diagnóstico Principal
-                          </p>
+                {/* Sección de Información Médica - Mejorada */}
+                <Card className="border-slate-200 dark:border-slate-800">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-emerald-500" />
+                      Información Médica
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 space-y-3">
+                    {/* Diagnóstico con indicador visual */}
+                    {diagnostico_principal && (
+                      <div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
+                          Diagnóstico Principal
+                        </p>
+                        <div className="flex items-center gap-2 mb-2">
                           <p className="text-sm font-medium">
                             {diagnostico_principal}
                           </p>
+                          {diagnostico_principal.includes("HERNIA") && (
+                            <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                              <span className="mr-1">🔸</span> Hernia
+                            </Badge>
+                          )}
+                          {diagnostico_principal.includes("VESICULA") && (
+                            <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                              <span className="mr-1">🟡</span> Vesícula
+                            </Badge>
+                          )}
                         </div>
-                      )}
-                      
-                      {comentarios_registro && (
-                        <>
-                          {diagnostico_principal && <Separator className="my-2" />}
-                          <div>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
-                              Notas Médicas
-                            </p>
-                            <p className="text-sm text-slate-700 dark:text-slate-300">
-                              {comentarios_registro}
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
+                      </div>
+                    )}
+                    
+                    {/* Fecha de diagnóstico */}
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
+                        Fecha de diagnóstico
+                      </p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        {fecha_registro ? format(new Date(fecha_registro), "d MMMM yyyy", { locale: es }) : "No disponible"}
+                      </p>
+                    </div>
+                    
+                    <Separator className="my-2" />
+                    
+                    {/* Notas médicas */}
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
+                        Notas Médicas
+                      </p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-md border border-slate-100 dark:border-slate-700">
+                        {comentarios_registro || "Sin notas médicas"}
+                      </p>
+                    </div>
+                    
+                    {/* Indicadores de riesgo */}
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
+                        Indicadores
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {estado_paciente === PatientStatusEnum.EN_SEGUIMIENTO && (
+                          <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                            Seguimiento
+                          </Badge>
+                        )}
+                        {edad && edad > 60 && (
+                          <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
+                            Edad avanzada
+                          </Badge>
+                        )}
+                        {diagnostico_principal?.includes("RECIDIVANTE") && (
+                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                            Recidiva
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
 
               <TabsContent value="history" className="pt-4">

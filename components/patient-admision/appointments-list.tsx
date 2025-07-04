@@ -1,12 +1,12 @@
-// AppointmentsList.tsx - Refactorizado para SSoT
-import React, { memo } from "react";
+// AppointmentsList.tsx - Optimized for performance and typing
+import React, { memo, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { ExtendedAppointment } from '@/lib/types';
-import { AppointmentCard, ConfirmAction } from "./patient-card"; // Actualizado
+import type { ExtendedAppointment } from '@/lib/types';
+import { AppointmentCard, type ConfirmAction } from "./patient-card";
 
-// Definición de Props con tipos centralizados
+// Centralized Props with stricter typing
 interface AppointmentListProps {
   appointments: ExtendedAppointment[];
   isLoading: boolean;
@@ -15,14 +15,14 @@ interface AppointmentListProps {
     description: string;
     icon: React.ComponentType<{ className?: string }>;
   };
-  onAction: (action: ConfirmAction, appointmentId: string, appointmentData: ExtendedAppointment) => void;
-  onStartSurvey: (appointmentId: string, patientId?: string, appointmentData?: ExtendedAppointment) => void;
+  onAction: (action: ConfirmAction, appointment: ExtendedAppointment) => void;
+  onStartSurvey: (appointment: ExtendedAppointment) => void;
   onViewHistory: (patientId: string) => void;
   className?: string;
   disabled?: boolean;
 }
 
-// Loading skeleton elegante
+// Memoized Loading Skeleton
 const LoadingSkeleton = memo(() => (
   <div className="space-y-4" role="status" aria-label="Cargando citas">
     {Array.from({ length: 3 }, (_, i) => (
@@ -66,7 +66,7 @@ const LoadingSkeleton = memo(() => (
 
 LoadingSkeleton.displayName = "LoadingSkeleton";
 
-// Estado vacío elegante
+// Memoized Empty State with explicit typing
 const EmptyState = memo<{
   title: string;
   description: string;
@@ -96,71 +96,75 @@ const EmptyState = memo<{
 
 EmptyState.displayName = "EmptyState";
 
-// Componente principal
-export const AppointmentsList = memo<AppointmentListProps>(
-  ({
-    appointments,
-    isLoading,
-    emptyStateConfig,
-    onAction,
-    onStartSurvey,
-    onViewHistory,
-    className,
-    disabled = false,
-  }) => {
-    // Loading state
-    if (isLoading && appointments.length === 0) {
-      return (
-        <div className={cn("space-y-6", className)}>
-          <LoadingSkeleton />
-        </div>
-      );
-    }
+// Main Component with optimizations
+export const AppointmentsList = memo<AppointmentListProps>(({
+  appointments,
+  isLoading,
+  emptyStateConfig,
+  onAction,
+  onStartSurvey,
+  onViewHistory,
+  className,
+  disabled = false,
+}) => {
+  // Optimized render functions
+  const renderAppointments = useCallback(() => (
+    appointments.map((appointment, index) => (
+      <div
+        key={appointment.id}
+        className="animate-in fade-in-0 slide-in-from-bottom-4"
+        style={{ animationDelay: `${index * 50}ms` }}
+      >
+        <AppointmentCard
+          appointment={appointment}
+          onAction={onAction}
+          onStartSurvey={onStartSurvey}
+          onViewHistory={onViewHistory}
+          disableActions={disabled}
+        />
+      </div>
+    ))
+  ), [appointments, disabled, onAction, onStartSurvey, onViewHistory]);
 
-    // Empty state
-    if (!isLoading && appointments.length === 0) {
-      return (
-        <div className={className}>
-          <EmptyState
-            title={emptyStateConfig.title}
-            description={emptyStateConfig.description}
-            icon={emptyStateConfig.icon}
-          />
-        </div>
-      );
-    }
+  const renderLoadingIndicator = useCallback(() => (
+    <div className="flex justify-center py-4">
+      <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+        <span>Cargando más citas...</span>
+      </div>
+    </div>
+  ), []);
 
-    // Lista de citas
+  // Loading state
+  if (isLoading && appointments.length === 0) {
     return (
-      <div className={cn("space-y-4", className)}>
-        {appointments.map((appointment, index) => (
-          <div
-            key={appointment.id}
-            className="animate-in fade-in-0 slide-in-from-bottom-4"
-            style={{ animationDelay: `${index * 50}ms` }}
-          >
-            <AppointmentCard
-              appointment={appointment}
-              onAction={onAction}
-              onStartSurvey={onStartSurvey}
-              onViewHistory={onViewHistory}
-              disableActions={disabled}
-            />
-          </div>
-        ))}
-        
-        {/* Indicador de carga al final si hay más datos */}
-        {isLoading && appointments.length > 0 && (
-          <div className="flex justify-center py-4">
-            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
-              <span>Cargando más citas...</span>
-            </div>
-          </div>
-        )}
+      <div className={cn("space-y-6", className)}>
+        <LoadingSkeleton />
       </div>
     );
   }
-);
+
+  // Empty state
+  if (!isLoading && appointments.length === 0) {
+    return (
+      <div className={className}>
+        <EmptyState
+          title={emptyStateConfig.title}
+          description={emptyStateConfig.description}
+          icon={emptyStateConfig.icon}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("space-y-4", className)}>
+      {renderAppointments()}
+      
+      {/* Conditional loading indicator */}
+      {isLoading && appointments.length > 0 && renderLoadingIndicator()}
+    </div>
+  );
+});
 
 AppointmentsList.displayName = "AppointmentsList";
