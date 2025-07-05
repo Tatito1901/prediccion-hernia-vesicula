@@ -18,6 +18,8 @@ import {
   Sun,
   Moon,
   FileBarChart,
+  Activity,
+  Stethoscope,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -46,6 +48,7 @@ const CLINIC_INFO = {
   fullName: "Clínica de Hernia y Vesícula",
   shortName: "CHV",
   abbreviation: "C.H.V",
+  tagline: "Centro de Excelencia Médica"
 } as const
 
 const NAV_MAIN = [
@@ -72,7 +75,7 @@ interface AppSidebarProps
 }
 
 /* ──────────────────────────────────────────────────────────────────────────── */
-/* Componente del Header Adaptativo                                           */
+/* Componente del Header Elegante                                              */
 /* ──────────────────────────────────────────────────────────────────────────── */
 const ClinicHeader = ({ 
   isCollapsed, 
@@ -84,61 +87,59 @@ const ClinicHeader = ({
   onNavigate: () => void 
 }) => {
   return (
-    <Link 
-      href="/dashboard" 
-      onClick={onNavigate} 
-      className={cn(
-        "flex items-center gap-3 px-2 py-3 rounded-lg transition-all duration-200",
-        "hover:bg-accent/50 group relative overflow-hidden"
-      )}
-      title={CLINIC_INFO.fullName}
-    >
-      {/* Icono principal */}
-      <div className={cn(
-        "flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-red-600",
-        "flex items-center justify-center shadow-sm transition-transform duration-200",
-        "group-hover:scale-105"
-      )}>
-        <HeartPulseIcon className="h-4 w-4 text-white" />
-      </div>
-
-      {/* Texto adaptativo */}
-      <div className={cn(
-        "flex flex-col transition-all duration-200 min-w-0",
-        isCollapsed && !isMobile && "opacity-0 w-0 overflow-hidden"
-      )}>
-        {isMobile ? (
-          // En móvil: Nombre completo en dos líneas si es necesario
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold leading-tight text-foreground">
-              Clínica de Hernia
-            </span>
-            <span className="text-xs font-medium text-muted-foreground leading-tight">
-              y Vesícula
-            </span>
-          </div>
-        ) : (
-          // En desktop expandido: Nombre completo
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold leading-tight text-foreground truncate">
-              {CLINIC_INFO.fullName}
-            </span>
-            <span className="text-xs text-muted-foreground leading-tight">
-              Centro Especializado
-            </span>
-          </div>
+    <div className="space-y-6">
+      {/* Logo y nombre principal */}
+      <Link 
+        href="/dashboard" 
+        onClick={onNavigate} 
+        className={cn(
+          "flex items-center gap-4 px-2 py-2 group",
+          "focus-visible:outline-none focus-visible:ring-2",
+          "focus-visible:ring-primary/20 focus-visible:ring-offset-2",
+          "transition-colors duration-200"
         )}
-      </div>
+        title={CLINIC_INFO.fullName}
+        aria-label={`Ir al dashboard de ${CLINIC_INFO.fullName}`}
+      >
+        {/* Icono principal elegante */}
+        <div className={cn(
+          "flex-shrink-0 w-11 h-11 rounded-2xl",
+          "bg-gradient-to-br from-primary/90 to-primary",
+          "flex items-center justify-center",
+          "shadow-sm border border-primary/10",
+          "relative"
+        )}>
+          <HeartPulseIcon className="h-5 w-5 text-white" />
+        </div>
 
-      {/* Indicador de hover */}
-      <div className={cn(
-        "absolute right-2 opacity-0 transition-opacity duration-200",
-        "group-hover:opacity-50",
-        isCollapsed && !isMobile && "hidden"
-      )}>
-        <ChevronRight className="h-3 w-3 text-muted-foreground" />
-      </div>
-    </Link>
+        {/* Texto elegante y minimalista */}
+        <div className={cn(
+          "flex flex-col min-w-0 transition-all duration-300",
+          isCollapsed && !isMobile && "opacity-0 w-0 overflow-hidden"
+        )}>
+          <div className="flex flex-col space-y-0.5">
+            <span className="text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-50 leading-none">
+              {isMobile ? "Clínica de Hernia" : CLINIC_INFO.fullName}
+            </span>
+            {isMobile && (
+              <span className="text-[13px] font-medium text-primary/80 leading-none">
+                y Vesícula
+              </span>
+            )}
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 leading-none mt-1">
+              {isMobile ? "Centro Especializado" : CLINIC_INFO.tagline}
+            </span>
+          </div>
+        </div>
+      </Link>
+
+      {/* Separador minimalista */}
+      {(!isCollapsed || isMobile) && (
+        <div className="mx-2">
+          <div className="h-[1px] bg-slate-200/60 dark:bg-slate-700/60" />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -237,27 +238,31 @@ export function AppSidebar({
   /* ──────────────────────────────────────────────────────────────────────── */
   return (
     <>
-      {/* Overlay para mobile */}
+      {/* Overlay elegante para mobile */}
       {isMobile && isMobileOpen && (
         <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 md:hidden"
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 md:hidden transition-opacity duration-200"
           onClick={() => setIsMobileOpen(false)}
           aria-hidden="true"
         />
       )}
 
-      {/* Botón hamburguesa (solo mobile) */}
+      {/* Botón hamburguesa elegante */}
       <Button
-        variant="ghost"
+        variant="outline"
         size="icon"
         className={cn(
-          "md:hidden fixed top-4 left-4 z-50 bg-background/80 backdrop-blur-sm",
-          "border shadow-sm hover:bg-accent transition-all duration-200",
-          isMobileOpen && "bg-background"
+          "md:hidden fixed top-6 left-6 z-50",
+          "bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm",
+          "border-slate-200/60 dark:border-slate-700/60",
+          "shadow-lg hover:shadow-xl transition-all duration-200",
+          "focus-visible:ring-2 focus-visible:ring-primary/20",
+          isMobileOpen && "bg-white dark:bg-slate-900"
         )}
         onClick={toggleMobile}
         aria-label={isMobileOpen ? "Cerrar menú" : "Abrir menú"}
         aria-expanded={isMobileOpen}
+        aria-controls="sidebar"
       >
         <div className="relative w-5 h-5">
           <MenuIcon 
@@ -278,25 +283,31 @@ export function AppSidebar({
       <Sidebar
         ref={sidebarRef}
         collapsible={isMobile ? "offcanvas" : "icon"}
+        id="sidebar"
+        role="navigation"
+        aria-label="Navegación principal"
         className={cn(
-          "transition-all duration-300 ease-in-out will-change-transform z-50",
-          "border-r bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          "transition-all duration-300 ease-out z-50",
+          "border-r border-slate-200/50 dark:border-slate-700/50",
+          "bg-white/98 dark:bg-slate-900/98 backdrop-blur-sm",
           isMobile
             ? cn(
-                "fixed left-0 top-0 h-full",
-                isMobileOpen ? "translate-x-0" : "-translate-x-full"
+                "fixed left-0 top-0 h-full shadow-xl",
+                isMobileOpen 
+                  ? "translate-x-0" 
+                  : "-translate-x-full"
               )
             : cn(
-                "relative",
-                isCollapsed ? "w-16" : "w-64"
+                "relative shadow-sm",
+                isCollapsed ? "w-20" : "w-72"
               )
         )}
         {...sidebarProps}
       >
-        {/* Header */}
+        {/* Header elegante */}
         <SidebarHeader className={cn(
-          "px-3 py-4 border-b bg-background/50",
-          isCollapsed && !isMobile && "px-2"
+          "px-6 py-8 border-b border-slate-200/30 dark:border-slate-700/30",
+          isCollapsed && !isMobile && "px-4 py-6"
         )}>
           <ClinicHeader 
             isCollapsed={isCollapsed}
@@ -305,8 +316,8 @@ export function AppSidebar({
           />
         </SidebarHeader>
 
-        {/* Contenido */}
-        <SidebarContent className="px-2 py-2 flex-1 overflow-y-auto">
+        {/* Contenido elegante */}
+        <SidebarContent className="px-4 py-6 flex-1 overflow-y-auto scrollbar-thin">
           <NavMain
             items={[...NAV_MAIN]}
             pathname={pathname}
@@ -324,28 +335,34 @@ export function AppSidebar({
           )}
         </SidebarContent>
 
-        {/* Footer */}
+        {/* Footer elegante */}
         <SidebarFooter className={cn(
-          "px-2 py-3 border-t bg-background/50",
-          "space-y-2"
+          "px-4 py-6 border-t border-slate-200/30 dark:border-slate-700/30",
+          "space-y-4"
         )}>
-          {/* Control de tema */}
+          {/* Control de tema elegante */}
           <div className={cn(
-            "flex items-center",
-            isCollapsed && !isMobile ? "justify-center" : "justify-between px-2"
+            "flex items-center gap-3 p-3 rounded-xl",
+            "bg-slate-50/50 dark:bg-slate-800/30",
+            "border border-slate-200/40 dark:border-slate-700/40",
+            isCollapsed && !isMobile ? "justify-center p-2" : "justify-between"
           )}>
-            {!isCollapsed || isMobile ? (
-              <span className="text-sm font-medium text-muted-foreground">
-                Tema
-              </span>
-            ) : null}
+            {(!isCollapsed || isMobile) && (
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Apariencia
+                </span>
+              </div>
+            )}
             
             <Button
               variant="ghost"
               size="icon"
               className={cn(
-                "h-8 w-8 rounded-lg transition-colors",
-                "hover:bg-accent hover:text-accent-foreground"
+                "h-8 w-8 rounded-lg",
+                "hover:bg-slate-200/50 dark:hover:bg-slate-700/50",
+                "focus-visible:ring-2 focus-visible:ring-primary/20"
               )}
               onClick={toggleTheme}
               aria-label="Cambiar tema"
@@ -353,12 +370,16 @@ export function AppSidebar({
               {mounted && (
                 <div className="relative w-4 h-4">
                   <Sun className={cn(
-                    "h-4 w-4 absolute transition-all duration-200",
-                    theme === "dark" ? "rotate-0 scale-100" : "rotate-90 scale-0"
+                    "h-4 w-4 absolute transition-all duration-200 text-amber-500",
+                    theme === "dark" 
+                      ? "rotate-0 scale-100 opacity-100" 
+                      : "rotate-90 scale-0 opacity-0"
                   )} />
                   <Moon className={cn(
-                    "h-4 w-4 absolute transition-all duration-200",
-                    theme === "dark" ? "rotate-90 scale-0" : "rotate-0 scale-100"
+                    "h-4 w-4 absolute transition-all duration-200 text-slate-600",
+                    theme === "dark" 
+                      ? "rotate-90 scale-0 opacity-0" 
+                      : "rotate-0 scale-100 opacity-100"
                   )} />
                 </div>
               )}
@@ -371,26 +392,33 @@ export function AppSidebar({
             collapsed={isCollapsed && !isMobile}
           />
 
-          {/* Botón colapsar (solo desktop) */}
+          {/* Botón colapsar elegante (solo desktop) */}
           {!isMobile && (
             <Button
               variant="ghost"
               size="sm"
               className={cn(
                 "w-full transition-all duration-200",
+                "text-slate-600 dark:text-slate-400",
+                "hover:text-slate-900 dark:hover:text-slate-100",
+                "hover:bg-slate-100/50 dark:hover:bg-slate-800/50",
+                "focus-visible:ring-2 focus-visible:ring-primary/20",
                 isCollapsed 
                   ? "justify-center px-2" 
-                  : "justify-start px-2"
+                  : "justify-start px-3"
               )}
               onClick={toggleCollapsedDesktop}
-              aria-label={isCollapsed ? "Expandir sidebar" : "Colapsar sidebar"}
+              aria-label={isCollapsed ? "Expandir barra lateral" : "Contraer barra lateral"}
+              aria-expanded={!isCollapsed}
             >
               <ChevronLeft className={cn(
                 "h-4 w-4 transition-transform duration-200",
                 isCollapsed && "rotate-180"
               )} />
               {!isCollapsed && (
-                <span className="ml-2 text-sm">Colapsar</span>
+                <span className="ml-2 text-sm">
+                  Contraer
+                </span>
               )}
             </Button>
           )}
@@ -399,3 +427,58 @@ export function AppSidebar({
     </>
   )
 }
+
+/* ──────────────────────────────────────────────────────────────────────────── */
+/* Estilos CSS personalizados (agregar a tu archivo CSS global)                 */
+/* ──────────────────────────────────────────────────────────────────────────── */
+
+/* 
+  Agregar estos colores a tu tailwind.config.js:
+
+  theme: {
+    extend: {
+      colors: {
+        medical: {
+          50: '#f0f9ff',
+          100: '#e0f2fe',
+          200: '#bae6fd',
+          300: '#7dd3fc',
+          400: '#38bdf8',
+          500: '#0ea5e9',
+          600: '#0284c7',
+          700: '#0369a1',
+          800: '#075985',
+          900: '#0c4a6e',
+        }
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.3s ease-out',
+        'slide-in-left': 'slideInLeft 0.3s ease-out',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' }
+        },
+        slideInLeft: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(0)' }
+        }
+      }
+    }
+  }
+
+  Y agregar esta utilidad para scrollbar:
+
+  @layer utilities {
+    .scrollbar-thin {
+      scrollbar-width: thin;
+    }
+    .scrollbar-thumb-slate-300 {
+      scrollbar-color: rgb(203 213 225) transparent;
+    }
+    .dark .scrollbar-thumb-slate-600 {
+      scrollbar-color: rgb(71 85 105) transparent;
+    }
+  }
+*/

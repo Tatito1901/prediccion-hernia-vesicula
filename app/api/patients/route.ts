@@ -16,6 +16,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   
   const estado = searchParams.get('estado');
+  const startDate = searchParams.get('startDate');
+  const endDate = searchParams.get('endDate');
   const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
   let pageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE));
   pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
@@ -40,6 +42,14 @@ export async function GET(request: Request) {
     // OPTIMIZACIÓN CRÍTICA 2: Usar el índice correctamente
     if (estado && estado !== 'all') {
       query = query.eq('estado_paciente', estado);
+    }
+
+    // Filtrado por rango de fechas
+    if (startDate) {
+      query = query.gte('fecha_registro', startDate);
+    }
+    if (endDate) {
+      query = query.lte('fecha_registro', endDate);
     }
     
     // OPTIMIZACIÓN CRÍTICA 3: Order by con índice optimizado

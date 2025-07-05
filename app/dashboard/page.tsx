@@ -1,12 +1,12 @@
 "use client";
 
-import React, { Suspense, useCallback, useMemo } from "react";
+import React from "react";
 import dynamic from "next/dynamic";
 import { AppSidebar } from "../../components/navigation/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { useChartData } from "@/hooks/use-chart-data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInView } from "react-intersection-observer";
+import { DashboardProvider } from "@/contexts/dashboard-context";
 
 const DashboardMetrics = dynamic(
   () => import("../../components/dashboard/dashboard-metrics").then(mod => mod.DashboardMetrics),
@@ -21,6 +21,14 @@ const PatientAnalytics = dynamic(
   {
     ssr: false, 
     loading: () => <PatientAnalyticsSkeleton />,
+  }
+);
+
+const PatientTrendsChart = dynamic(
+  () => import("../../components/dashboard/patients-chart").then(mod => mod.PatientTrendsChart),
+  {
+    ssr: false, 
+    loading: () => <Skeleton className="h-[400px] w-full" />,
   }
 );
 
@@ -57,64 +65,36 @@ const CardSkeleton: React.FC = () => (
     </div>
 );
 
-
 export default function DashboardPage() {
-  const {
-    chartData,
-    loading,
-    error,
-    refresh,
-  } = useChartData({
-    dateRange: 'ytd',
-    refreshInterval: 0,
-  });
-
-  const clinicMetrics = useMemo(() => chartData?.clinicMetrics, [chartData]);
-
-  const { ref: analyticsRef, inView: isAnalyticsVisible } = useInView({
+  const [analyticsRef, isAnalyticsVisible] = useInView({
     triggerOnce: true,
-    rootMargin: '300px 0px',
+    threshold: 0.1
   });
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div className="p-8 text-center bg-card border border-destructive/50 rounded-lg shadow-lg">
-          <h2 className="text-xl font-bold text-destructive">Error al Cargar los Datos</h2>
-          <p className="text-muted-foreground mt-2">No pudimos obtener la información de la clínica.</p>
-          <p className="text-xs text-muted-foreground mt-4">{error}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="mt-6 px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary/90"
-          >
-            Intentar de Nuevo
-          </button>
-        </div>
-      </div>
-    );
-  }
+  
+  // All error handling is now done inside components via the context
 
   return (
-    <SidebarProvider>
-      <AppSidebar variant="inset" />
-      <SidebarInset>
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <div className="flex flex-col gap-8 md:gap-12 max-w-7xl mx-auto">
-            
-            <section>
-              <DashboardMetrics
-                metrics={clinicMetrics}
-                loading={loading}
-              />
-            </section>
+    <DashboardProvider>
+      <SidebarProvider>
+        <AppSidebar variant="inset" />
+        <SidebarInset>
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <div className="flex flex-col gap-8 md:gap-12 max-w-7xl mx-auto">
+              
+              <section>
+                <DashboardMetrics />
+              </section>
 
-            <section ref={analyticsRef} className="min-h-[400px]">
-              {isAnalyticsVisible && <PatientAnalytics />}
-            </section>
 
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+
+              <section>
+                <PatientTrendsChart />
+              </section>
+
+            </div>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </DashboardProvider>
   );
 }

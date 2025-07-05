@@ -1,568 +1,299 @@
 'use client';
 
-import type { Patient, Appointment, DiagnosisEnum, PatientStatus, AppointmentStatus } from '@/lib/types';
-import { PatientOriginEnum } from '@/components/dashboard/dashboard-metrics';
-import React, { useMemo, useCallback, useEffect } from 'react';
+import { useMemo, useCallback } from 'react';
+import { format } from 'date-fns';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-// Constantes que faltaban definir
-const DEFAULT_STALE_TIME = 5 * 60 * 1000; // 5 minutos
-const MIN_REFRESH_INTERVAL = 30 * 1000; // 30 segundos
-const WEEKDAYS_SHORT = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'];
+import type { Patient, Appointment, DiagnosisEnum, PatientStatus, AppointmentStatus } from '@/lib/types';
+import { calculateDateRange, buildQueryParams, fetchData, isValidISODate } from '@/lib/utils';
 
-// Clase para errores personalizados
-class ChartDataError extends Error {
-  appointments: string | null;
-  patients: string | null;
-  
-  constructor(message: string, appointments: string | null = null, patients: string | null = null) {
-    super(message);
-    this.name = 'ChartDataError';
-    this.appointments = appointments;
-    this.patients = patients;
-  }
-}
+// Increased stale time for better caching in production
+const DEFAULT_STALE_TIME = process.env.NODE_ENV === 'development' 
+  ? 1000 * 60 * 5  // 5 minutes for development
+  : 1000 * 60 * 15; // 15 minutes for production
 
-type DateRangeOption = '7dias' | '30dias' | '90dias' | 'ytd' | 'todos';
-
-interface UseChartDataParams {
-  dateRange?: DateRangeOption;
-  patientId?: string;
-  doctorId?: string;
-  estado?: string;
-  refreshInterval?: number;
-}
-
-interface GeneralStats {
-  totalPatients?: number;
-  attendedAppointments?: number;
-  total?: number;
-  attendance?: number;
-  cancellation?: number;
-  pending?: number;
-  present?: number;
-  completed?: number;
-  cancelled?: number;
-  pendingCount?: number;
-  presentCount?: number;
-  period?: DateRangeOption;
-  allStatusCounts?: Record<string, number>;
-  [key: string]: any;
-}
-
-interface WeekdayData {
-  name: string;
-  total: number;
-  attended: number;
-  rate: number;
-}
-
-interface ClinicMetrics {
+export interface ClinicMetrics {
   totalPacientes: number;
   pacientesNuevosMes: number;
   pacientesOperados: number;
-  pacientesNoOperados: number;
-  pacientesSeguimiento: number;
   tasaConversion: number;
   tiempoPromedioDecision: number;
-  fuentePrincipalPacientes: PatientOriginEnum;
-  diagnosticosMasComunes: Array<{ tipo: string; cantidad: number }>;
+  fuentePrincipalPacientes: string;
+  diagnosticosMasComunes: { tipo: string; cantidad: number }[];
   lastUpdated: string;
-}
-
-interface ChartDataResponse {
-  appointments: Appointment[];
-  patients: Patient[];
-}
-
-interface ChartData {
-  transformedPatients: TransformedPatientData[];
-  diagnosisData: TransformedDiagnosisData[];
-  generalStats: GeneralStats;
-  weekdayDistribution: WeekdayData[];
-  clinicMetrics: ClinicMetrics;
 }
 
 interface TransformedPatientData {
   id: string;
-  paciente: string;
-  diagnostico?: string;
-  diagnostico_principal?: string;
-  fecha_registro?: string;
-  fecha_primera_consulta?: string;
-  edad?: number;
-  genero?: string;
-  estado?: PatientStatus;
-  notas?: string;
-  telefono?: string;
-  email?: string;
+  nombre: string;
+  telefono: string;
+  estado: PatientStatus | 'SIN ESTADO';
+  fechaRegistro: string;
+  diagnostico: DiagnosisEnum | 'NO ESPECIFICADO';
 }
 
 interface TransformedDiagnosisData {
-  diagnosis?: string;
-  count?: number;
-  tipo?: string;
-  cantidad?: number;
-  porcentaje?: number;
-  descripcion?: string;
+  name: DiagnosisEnum | 'NO ESPECIFICADO';
+  value: number;
 }
 
-const getChartData = async ({
-  dateRange,
-  patientId,
-  doctorId,
-  estado,
-}: UseChartDataParams): Promise<ChartDataResponse> => {
-  const startDate = dateRange === 'todos' ? '' : calculateDateRange(dateRange || '30dias').startDate;
-  const endDate = calculateDateRange(dateRange || '30dias').endDate;
-
-  // This function is intended to return a ChartDataResponse, but the implementation is missing.
-  // For now, returning a placeholder to satisfy the type.
-  return { appointments: [], patients: [] };
+interface GeneralStats {
+  total: number;
+  nuevos: number;
+  operados: number;
+  seguimiento: number;
 }
 
-// Helper para validar fechas ISO
-function isValidISODate(dateString: string): boolean {
-  try {
-    const date = new Date(dateString);
-    return !isNaN(date.getTime());
-  } catch {
-    return false;
-  }
+interface WeekdayData {
+  name: string;
+  value: number;
 }
 
-// Helper para fetch con manejo de errores mejorado, timeout y caché
-async function fetchData<T>(url: string, errorMessage: string, timeout = 30000): Promise<T> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    // Añadir configuración de caché para optimizar rendimiento
-    const res = await fetch(url, { 
-      signal: controller.signal,
-      next: { revalidate: 60 }, // Revalidar en el servidor cada 60 segundos
-      headers: { 'Cache-Control': 'max-age=60' } // Cache para navegador
-    });
-    clearTimeout(timeoutId);
-    
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(`${errorMessage}: ${errorBody.message || res.statusText} (${res.status})`);
-    }
-    
-    const data = await res.json();
-    return data as T;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        throw new Error(`${errorMessage}: Tiempo de espera agotado`);
-      }
-      throw error;
-    }
-    throw new Error(`${errorMessage}: Error desconocido`);
-  }
+interface UseChartDataProps {
+  dateRange: string;
+  patientId?: string;
+  doctorId?: string;
+  estado?: PatientStatus | AppointmentStatus | 'todos';
 }
 
-// Helper para construir parámetros de consulta con validación
-function buildQueryParams(params: Record<string, string | undefined>): string {
-  const validParams = Object.entries(params)
-    .filter(([, value]) => value !== undefined && value !== '')
-    .map(([key, value]) => {
-      const sanitizedKey = encodeURIComponent(key);
-      const sanitizedValue = encodeURIComponent(value!);
-      return `${sanitizedKey}=${sanitizedValue}`;
-    });
-  
-  return validParams.length > 0 ? validParams.join('&') : '';
-}
-
-// Helper para calcular rangos de fechas
-function calculateDateRange(dateRange: DateRangeOption): { startDate: string; endDate: string } {
-  const today = new Date();
-  const currentEndDate = today.toISOString().split('T')[0];
-  let currentStartDate = '';
-
-  switch (dateRange) {
-    case '7dias': {
-      const date = new Date(today);
-      date.setDate(date.getDate() - 7);
-      currentStartDate = date.toISOString().split('T')[0];
-      break;
-    }
-    case '30dias': {
-      const date = new Date(today);
-      date.setDate(date.getDate() - 30);
-      currentStartDate = date.toISOString().split('T')[0];
-      break;
-    }
-    case '90dias': {
-      const date = new Date(today);
-      date.setDate(date.getDate() - 90);
-      currentStartDate = date.toISOString().split('T')[0];
-      break;
-    }
-    case 'ytd': {
-      currentStartDate = `${today.getFullYear()}-01-01`;
-      break;
-    }
-    case 'todos':
-    default:
-      currentStartDate = '';
-      break;
-  }
-  
-  return { startDate: currentStartDate, endDate: currentEndDate };
-}
-
-export function useChartData({
-  dateRange = '30dias',
-  patientId,
-  doctorId,
-  estado,
-  refreshInterval = 0,
-}: UseChartDataParams = {}) {
+export function useChartData({ 
+  dateRange, 
+  patientId, 
+  doctorId, 
+  estado = 'todos' 
+}: UseChartDataProps) {
   const queryClient = useQueryClient();
 
-  // Validar refreshInterval
-  const validRefreshInterval = refreshInterval > 0 ? Math.max(refreshInterval, MIN_REFRESH_INTERVAL) : 0;
-
-  // Calcular rangos de fechas
+  // Calculate date range based on selected range option
   const { startDate, endDate } = useMemo(() => calculateDateRange(dateRange), [dateRange]);
 
-  // Unified query key para datos del dashboard
+  // Create stable query key for React Query caching
   const dashboardQueryKey = useMemo(() => 
-    ['dashboard-data', dateRange, patientId, doctorId, estado, startDate, endDate],
-    [dateRange, patientId, doctorId, estado, startDate, endDate]
+    ['dashboard-data', startDate?.toISOString() || '', endDate?.toISOString() || '', patientId || '', doctorId || '', estado],
+    [startDate, endDate, patientId, doctorId, estado]
   );
 
-  // Para compatibilidad retroactiva mantenemos estas keys
-  const appointmentsQueryKey = useMemo(() => 
-    ['appointments', dateRange, patientId, doctorId, estado, startDate, endDate],
-    [dateRange, patientId, doctorId, estado, startDate, endDate]
-  );
-
-  const patientsQueryKey = useMemo(() => ['patients', estado], [estado]);
-
-  // Query unificada para ambos recursos (optimización de fetching en paralelo)
+  // Main data fetching query with React Query
   const {
-    data = { appointments: [], patients: [] },
+    data = { appointments: [], patients: [], metrics: null },
     isLoading: loading,
     error,
   } = useQuery({
     queryKey: dashboardQueryKey,
     queryFn: async () => {
-      const appointmentsParams = buildQueryParams({ 
-        startDate, 
-        endDate, 
+      // Skip fetching if date range is invalid
+      if (!startDate || !endDate) {
+        return { appointments: [], patients: [], metrics: null };
+      }
+      
+      // Build API query parameters
+      const params = { 
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
         patientId, 
         doctorId, 
         estado: estado !== 'todos' ? estado : undefined 
-      });
+      };
+
+      const queryParams = `?${buildQueryParams(params)}`;
       
-      const patientsParams = buildQueryParams({ 
-        estado: estado !== 'todos' ? estado : undefined 
-      });
+      // Special handling for appointment dates (full ISO string)
+      const appointmentsParams = {
+        ...params,
+        startDate: `${params.startDate}T00:00:00Z`,
+        endDate: `${params.endDate}T23:59:59Z`
+      };
+      const appointmentsQueryParams = `?${buildQueryParams(appointmentsParams)}`;
 
-      // Ejecutar ambas peticiones en paralelo para optimizar rendimiento
-      const [appointmentsData, patientsData] = await Promise.all([
-        fetchData<Appointment[]>(
-          `/api/appointments${appointmentsParams ? `?${appointmentsParams}` : ''}`, 
-          'Error al obtener citas'
-        ),
-        fetchData<{ data: Patient[], pagination: unknown }>(`/api/patients${patientsParams ? `?${patientsParams}` : ''}`, 'Error al obtener pacientes')
+      // Parallel fetching with error handling for each request
+      const [appointmentsResult, patientsResult, metricsResult] = await Promise.allSettled([
+        fetchData<{ data: Appointment[] }>(`/api/appointments${appointmentsQueryParams}`, "Error al cargar citas"),
+        fetchData<{ data: Patient[] }>(`/api/patients${queryParams}`, "Error al cargar pacientes"),
+        fetchData<ClinicMetrics>(`/api/metrics${queryParams}`, "Error al cargar métricas")
       ]);
-
-      const safeAppointments = Array.isArray(appointmentsData) ? appointmentsData : [];
-      const safePatients = (patientsData && typeof patientsData === 'object' && Array.isArray(patientsData.data)) 
-        ? patientsData.data 
-        : [];
+      
+      // Handle API errors but continue with available data
+      if (appointmentsResult.status === 'rejected') {
+        console.error('Failed to fetch appointments:', appointmentsResult.reason);
+      }
+      if (patientsResult.status === 'rejected') {
+        console.error('Failed to fetch patients:', patientsResult.reason);
+      }
+      if (metricsResult.status === 'rejected') {
+        console.error('Failed to fetch metrics:', metricsResult.reason);
+      }
 
       return { 
-        appointments: safeAppointments, 
-        patients: safePatients 
+        appointments: appointmentsResult.status === 'fulfilled' ? appointmentsResult.value?.data ?? [] : [],
+        patients: patientsResult.status === 'fulfilled' ? patientsResult.value?.data ?? [] : [],
+        metrics: metricsResult.status === 'fulfilled' ? metricsResult.value : null
       };
     },
     staleTime: DEFAULT_STALE_TIME,
-    retry: (failureCount, error: any) => {
-      // No reintentar en errores 4xx (cliente)
-      if (error?.status >= 400 && error?.status < 500) return false;
-      return failureCount < 2; // Máximo 2 reintentos para otros errores
-    },
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-    // Usar placeholderData para mostrar datos de la caché mientras se cargan nuevos
-    placeholderData: (oldData) => oldData,
+    enabled: !!startDate && !!endDate,
   });
 
-  // Extraer datos para mantener compatibilidad con el resto del código
-  const appointments = Array.isArray(data?.appointments) ? data.appointments : [];
-  const patients = Array.isArray(data?.patients) ? data.patients : [];
-  
-  // Errores separados para retrocompatibilidad
-  const loadingAppointments = loading;
-  const loadingPatients = loading;
-  const errorAppointments = error;
-  const errorPatients = error;
+  const { appointments, patients, metrics: clinicMetrics } = data;
 
-  // Estados de carga y error ya definidos anteriormente, usamos directamente 'loading'
-  
-  const errors = useMemo(() => new ChartDataError(
-    'Error en la carga de datos',
-    errorAppointments instanceof Error ? errorAppointments.message : null,
-    errorPatients instanceof Error ? errorPatients.message : null
-  ), [errorAppointments, errorPatients]);
-  
-  const hasError = Boolean(errors.appointments || errors.patients);
-
-  // Configurar refresco automático
-  useEffect(() => {
-    if (validRefreshInterval > 0) {
-      const intervalId = setInterval(() => {
-        void queryClient.invalidateQueries({ queryKey: appointmentsQueryKey });
-        void queryClient.invalidateQueries({ queryKey: patientsQueryKey });
-      }, validRefreshInterval);
-      
-      return () => clearInterval(intervalId);
-    }
-  }, [validRefreshInterval, queryClient, appointmentsQueryKey, patientsQueryKey]);
-
-  // Transformar pacientes con validación
-  const transformedPatients: TransformedPatientData[] = useMemo(() => {
+  const transformedPatients = useMemo((): TransformedPatientData[] => {
+    if (!patients || patients.length === 0) return [];
     return patients.map(p => ({
       id: p.id,
-      paciente: `${p.nombre} ${p.apellidos}`.trim(),
-      diagnostico: p.diagnostico_principal || 'Sin diagnóstico',
-      diagnostico_principal: p.diagnostico_principal || 'Sin diagnóstico',
-      fecha_registro: p.fecha_registro || '',
-      fecha_primera_consulta: p.fecha_primera_consulta || undefined,
-      edad: p.edad || 0,
-      genero: undefined,
-      estado: p.estado_paciente as PatientStatus,
-      notas: p.comentarios_registro || '',
-      telefono: p.telefono || '',
-      email: p.email || '',
+      nombre: `${p.nombre} ${p.apellidos}`,
+      telefono: p.telefono ?? 'N/A',
+      estado: p.estado_paciente ?? 'SIN ESTADO',
+      fechaRegistro: p.fecha_registro ? new Date(p.fecha_registro).toLocaleDateString() : 'N/A',
+      diagnostico: p.diagnostico_principal ?? 'NO ESPECIFICADO',
     }));
   }, [patients]);
 
-  const diagnosisData: TransformedDiagnosisData[] = useMemo(() => {
-    const counts = new Map<string, number>();
-    
+  const diagnosisData = useMemo((): TransformedDiagnosisData[] => {
+    const count: Record<string, number> = {};
+    if (!patients) return [];
     patients.forEach(p => {
-      if (p.diagnostico_principal?.trim()) {
-        const diag = p.diagnostico_principal.trim();
-        counts.set(diag, (counts.get(diag) || 0) + 1);
-      }
+      const diag = p.diagnostico_principal ?? 'NO ESPECIFICADO';
+      count[diag] = (count[diag] || 0) + 1;
     });
-    
-    appointments.forEach(a => {
-      if (a.motivo_cita?.trim()) {
-        const motivo = a.motivo_cita.trim();
-        counts.set(motivo, (counts.get(motivo) || 0) + 1);
-      }
-    });
+    return Object.entries(count).map(([name, value]) => ({ name: name as DiagnosisEnum | 'NO ESPECIFICADO', value }));
+  }, [patients]);
 
-    const totalDiagnoses = Array.from(counts.values()).reduce((sum, current) => sum + current, 0);
-
-    return Array.from(counts.entries())
-      .map(([tipo, cantidad]) => ({
-        tipo,
-        cantidad,
-        porcentaje: totalDiagnoses > 0 ? parseFloat(((cantidad / totalDiagnoses) * 100).toFixed(2)) : 0,
-        descripcion: `${tipo} - ${cantidad} caso${cantidad !== 1 ? 's' : ''}`,
-      }))
-      .sort((a, b) => b.cantidad - a.cantidad);
-  }, [patients, appointments]);
-
-  // Calcular estadísticas generales
   const generalStats = useMemo((): GeneralStats => {
-    // Usamos un objeto con claves específicas para mantener compatibilidad
-    const statusCounts = {
-      PROGRAMADA: 0,
-      CONFIRMADA: 0,
-      CANCELADA: 0,
-      COMPLETADA: 0,
-      'NO ASISTIO': 0, // Mantenemos la clave con espacio para compatibilidad
-      PRESENTE: 0,
-      REAGENDADA: 0,
-    };
-
-    appointments.forEach(a => {
-      // Necesitamos mapear de NO_ASISTIO (con guiones bajos) a 'NO ASISTIO' (con espacio)
-      const estadoCita = a.estado_cita === 'NO_ASISTIO' ? 'NO ASISTIO' : a.estado_cita;
-      
-      // Verificar si existe la clave en statusCounts
-      if (estadoCita && estadoCita in statusCounts) {
-        // @ts-ignore - Ignoramos error de índice porque sabemos que las claves existen
-        statusCounts[estadoCita]++;
-      }
-    });
-
-    const total = appointments.length;
-    const attendedCount = statusCounts.COMPLETADA + statusCounts.PRESENTE;
-    const cancelledOrNoShowCount = statusCounts.CANCELADA + statusCounts['NO ASISTIO'];
+    if (!patients) return { total: 0, nuevos: 0, operados: 0, seguimiento: 0 };
     
-    const attendance = total > 0 ? (attendedCount / total) * 100 : 0;
-    const cancellation = total > 0 ? (cancelledOrNoShowCount / total) * 100 : 0;
-
-    return {
-      total,
-      attendance: parseFloat(attendance.toFixed(2)),
-      cancellation: parseFloat(cancellation.toFixed(2)),
-      pending: statusCounts.PROGRAMADA + statusCounts.CONFIRMADA,
-      present: statusCounts.PRESENTE,
-      completed: statusCounts.COMPLETADA,
-      cancelled: statusCounts.CANCELADA,
-      pendingCount: statusCounts.PROGRAMADA,
-      presentCount: statusCounts.PRESENTE,
-      period: dateRange,
-      allStatusCounts: statusCounts,
-    };
-  }, [appointments, dateRange]);
-
-  // Calcular distribución por día de la semana
-  const weekdayDistribution = useMemo((): WeekdayData[] => {
-    // Inicializar con los días de la semana
-    const data = WEEKDAYS_SHORT.map(name => ({ name, total: 0, attended: 0 }));
-    
-    appointments.forEach(a => {
-      if (!a.fecha_hora_cita || !isValidISODate(a.fecha_hora_cita)) {
-        console.warn(`Fecha inválida para cita ID ${a.id}: ${a.fecha_hora_cita}`);
-        return;
-      }
-      
-      try {
-        const date = new Date(a.fecha_hora_cita);
-        const dayOfWeek = date.getDay(); // 0 (Dom) a 6 (Sáb)
-        
-        if (dayOfWeek >= 0 && dayOfWeek < 7) {
-          data[dayOfWeek].total++;
-          if (a.estado_cita === 'COMPLETADA' || a.estado_cita === 'PRESENTE') {
-            data[dayOfWeek].attended++;
-          }
-        }
-      } catch (e) {
-        console.error(`Error procesando fecha para cita ID ${a.id}:`, e);
-      }
-    });
-
-    return data.map(d => ({
-      name: d.name,
-      total: d.total,
-      attended: d.attended,
-      rate: d.total > 0 ? parseFloat(((d.attended / d.total) * 100).toFixed(2)) : 0,
-    }));
-  }, [appointments]);
-
-  // Calcular métricas de clínica
-  const clinicMetrics = useMemo((): ClinicMetrics => {
-    const totalPacientes = patients.length;
-    
-    const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    
-    // Pacientes nuevos del mes
-    const pacientesNuevosMes = patients.filter(p => {
-      if (!p.fecha_registro || !isValidISODate(p.fecha_registro)) return false;
-      try {
-        return new Date(p.fecha_registro) >= startOfMonth;
-      } catch {
-        return false;
-      }
+    const nuevos = patients.filter(p => {
+      if (!p.fecha_registro) return false;
+      const regDate = new Date(p.fecha_registro);
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      return regDate >= startOfMonth;
     }).length;
 
-    // Conteo por estado
-    const pacientesOperados = patients.filter(p => p.estado_paciente === 'OPERADO').length;
-    const pacientesNoOperados = patients.filter(p => p.estado_paciente === 'NO OPERADO').length;
-    const pacientesSeguimiento = patients.filter(p => p.estado_paciente === 'EN SEGUIMIENTO').length;
-    
-    // Tasa de conversión
-    const tasaConversion = totalPacientes > 0 
-      ? parseFloat(((pacientesOperados / totalPacientes) * 100).toFixed(2)) 
-      : 0;
-
-    // Tiempo promedio de decisión
-    let totalDiasDecision = 0;
-    let conteoDecision = 0;
-    
-    patients.forEach(p => {
-      if ((p.estado_paciente === 'OPERADO' || p.estado_paciente === 'NO OPERADO') && 
-          p.fecha_primera_consulta && 
-          p.fecha_cirugia_programada &&
-          isValidISODate(p.fecha_primera_consulta) &&
-          isValidISODate(p.fecha_cirugia_programada)) {
-        try {
-          const fechaConsulta = new Date(p.fecha_primera_consulta);
-          const fechaDecision = new Date(p.fecha_cirugia_programada);
-          const dias = Math.ceil((fechaDecision.getTime() - fechaConsulta.getTime()) / (1000 * 3600 * 24));
-          
-          if (dias >= 0 && dias < 365) { // Validar que sea un rango razonable
-            totalDiasDecision += dias;
-            conteoDecision++;
-          }
-        } catch (e) {
-          console.error(`Error calculando días de decisión para paciente ${p.id}:`, e);
-        }
-      }
-    });
-    
-    const tiempoPromedioDecision = conteoDecision > 0 
-      ? Math.round(totalDiasDecision / conteoDecision) 
-      : 0;
-
-    // Diagnósticos más comunes
-    const diagnosticosCount = new Map<string, number>();
-    patients.forEach(p => {
-      if (p.diagnostico_principal?.trim()) {
-        const diag = p.diagnostico_principal.trim();
-        diagnosticosCount.set(diag, (diagnosticosCount.get(diag) || 0) + 1);
-      }
-    });
-
-    const diagnosticosMasComunes = Array.from(diagnosticosCount.entries())
-      .map(([name, count]) => ({ tipo: name, cantidad: count }))
-      .sort((a, b) => b.cantidad - a.cantidad)
-      .slice(0, 5);
-
     return {
-      totalPacientes,
-      pacientesNuevosMes,
-      pacientesOperados,
-      pacientesNoOperados,
-      pacientesSeguimiento,
-      tasaConversion,
-      tiempoPromedioDecision,
-      fuentePrincipalPacientes: PatientOriginEnum.REFERRAL, // TODO: Calcular dinámicamente basado en origen_paciente
-      diagnosticosMasComunes,
-      lastUpdated: new Date().toISOString(),
+      total: patients.length,
+      nuevos,
+      operados: patients.filter(p => p.estado_paciente === 'OPERADO').length,
+      seguimiento: patients.filter(p => p.estado_paciente === 'EN SEGUIMIENTO').length,
     };
   }, [patients]);
 
-  // Función de refresco manual
-  const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: appointmentsQueryKey });
-    void queryClient.invalidateQueries({ queryKey: patientsQueryKey });
-  }, [queryClient, appointmentsQueryKey, patientsQueryKey]);
+  const weekdayDistribution = useMemo((): WeekdayData[] => {
+    const distribution: { [key: string]: number } = {
+      Lunes: 0, Martes: 0, Miércoles: 0, Jueves: 0, Viernes: 0, Sábado: 0, Domingo: 0
+    };
+    if (!appointments || appointments.length === 0) {
+      return Object.entries(distribution).map(([name, value]) => ({ name, value }));
+    }
 
-  // Datos procesados
-  const chartData: ChartData = useMemo(() => ({
+    const dayMapping: { [key: number]: string } = {
+      1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 0: 'Domingo'
+    };
+
+    appointments.forEach(appointment => {
+      if (isValidISODate(appointment.fecha_hora_cita)) {
+        const dayOfWeek = new Date(appointment.fecha_hora_cita).getDay();
+        const dayName = dayMapping[dayOfWeek];
+        if (dayName) {
+          distribution[dayName] += 1;
+        }
+      }
+    });
+
+    return Object.entries(distribution).map(([name, value]) => ({ name, value }));
+  }, [appointments]);
+
+  const chart = useMemo(() => {
+    const dailyDataMap = new Map<string, { name: string; consultas: number; operados: number }>();
+    
+    if (!startDate || !endDate) {
+      return { series: [], categories: [] };
+    }
+
+    const currentDate = new Date(startDate);
+    const end = new Date(endDate);
+
+    // Initialize data map with all dates in range
+    while (currentDate <= end) {
+      const key = format(currentDate, 'yyyy-MM-dd');
+      dailyDataMap.set(key, {
+        name: format(currentDate, 'd'),
+        consultas: 0,
+        operados: 0,
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Process valid appointments
+    if (appointments) {
+      appointments.forEach((appointment) => {
+        // Skip appointments without valid dates or cancelled
+        if (!appointment.fecha_hora_cita || !isValidISODate(appointment.fecha_hora_cita)) {
+          return;
+        }
+        
+        const appointmentDate = new Date(appointment.fecha_hora_cita);
+        if (isNaN(appointmentDate.getTime())) {
+          return;
+        }
+
+        const key = format(appointmentDate, 'yyyy-MM-dd');
+        const dayEntry = dailyDataMap.get(key);
+        
+        // Skip if outside date range or cancelled
+        if (!dayEntry || appointment.estado_cita === 'CANCELADA') {
+          return;
+        }
+
+        // Valid appointment, count it
+        dayEntry.consultas += 1;
+      });
+    }
+
+    // Process operated patients
+    if (patients) {
+      patients.forEach(p => {
+        if (p.estado_paciente === 'OPERADO' && p.updated_at && isValidISODate(p.updated_at)) {
+          const opDate = new Date(p.updated_at);
+          if (isNaN(opDate.getTime())) return;
+          
+          const key = format(opDate, 'yyyy-MM-dd');
+          const dayEntry = dailyDataMap.get(key);
+          
+          if (!dayEntry) return;
+          
+          dayEntry.operados += 1;
+        }
+      });
+    }
+    
+    const dataForChart = Array.from(dailyDataMap.values());
+
+    return {
+      series: [
+        { name: 'Consultas', data: dataForChart.map(d => d.consultas) },
+        { name: 'Operados', data: dataForChart.map(d => d.operados) },
+      ],
+      categories: dataForChart.map(d => d.name),
+    };
+  }, [appointments, patients, startDate, endDate]);
+
+  // Create a refresh function to invalidate cache and trigger refetch
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: dashboardQueryKey });
+  }, [queryClient, dashboardQueryKey]);
+  
+  return {
+    loading,
+    error: error ? (error as Error).message : null,
+    appointments,
+    patients,
     transformedPatients,
     diagnosisData,
     generalStats,
     weekdayDistribution,
     clinicMetrics,
-  }), [transformedPatients, diagnosisData, generalStats, weekdayDistribution, clinicMetrics]);
-
-  return {
-    loading,
-    error: hasError ? (errors.appointments || errors.patients || 'Error desconocido') : null,
-    errors,
-    rawData: { appointments, patients },
-    chartData,
+    chart,
     refresh,
-    // Exponer métodos útiles adicionales
-    isStale: {
-      appointments: queryClient.getQueryState(appointmentsQueryKey)?.isInvalidated ?? false,
-      patients: queryClient.getQueryState(patientsQueryKey)?.isInvalidated ?? false,
-    },
+    rawData: data, // Added for convenience in some components
   };
 }

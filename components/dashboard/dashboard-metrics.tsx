@@ -25,6 +25,9 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { useDashboard } from '@/contexts/dashboard-context';
+import { format } from 'date-fns';
+
 // --- Tipos y Constantes (Sin cambios) ---
 
 export interface ClinicMetrics {
@@ -161,7 +164,20 @@ MemoizedMetricCard.displayName = "MetricCard";
 
 // --- Componente Principal con Responsividad Robusta ---
 
-export const DashboardMetrics = ({ metrics, loading = false }: DashboardMetricsProps): JSX.Element => {
+export function DashboardMetrics({
+  className,
+}: {
+  className?: string;
+}) {
+  // Use the centralized dashboard context instead of making a separate API call
+  const {
+    loading,
+    error,
+    clinicMetrics,
+    generalStats,
+    dateRange,
+  } = useDashboard();
+
   const DEFAULT_METRICS: ClinicMetrics = useMemo(() => ({
     totalPacientes: 0,
     pacientesNuevosMes: 0,
@@ -174,7 +190,25 @@ export const DashboardMetrics = ({ metrics, loading = false }: DashboardMetricsP
     diagnosticosMasComunes: [],
   }), []);
 
-  const metricsData = metrics ?? DEFAULT_METRICS;
+  // Define lastUpdated using useMemo before any conditional returns
+  const lastUpdated = useMemo(() => {
+    if (clinicMetrics?.lastUpdated) {
+      try {
+        const date = new Date(clinicMetrics.lastUpdated);
+        if (!isNaN(date.getTime())) {
+          return `Actualizado: ${format(date, 'dd/MM/yyyy HH:mm')}`;
+        }
+      } catch (e) {
+        // Handle error silently in production
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error al formatear fecha de actualización:', e);
+        }
+      }
+    }
+    return 'Actualizado recientemente';
+  }, [clinicMetrics?.lastUpdated]);
+  
+  const metricsData = clinicMetrics ?? DEFAULT_METRICS;
 
   /**
    * MEJORA DE RESPONSIVIDAD #1: Grid Fluido
@@ -199,13 +233,15 @@ export const DashboardMetrics = ({ metrics, loading = false }: DashboardMetricsP
     );
   }
 
-  if (!metrics) {
+  if (!clinicMetrics) {
     return (
       <div className="p-4 sm:p-6 flex items-center justify-center h-64 rounded-lg bg-muted/50">
         <p className="text-muted-foreground text-center">No hay datos de métricas disponibles en este momento.</p>
       </div>
     );
   }
+
+  // lastUpdated hook moved to the top of the component
 
   return (
     // No necesitamos @container/main si el grid es fluido por sí mismo.

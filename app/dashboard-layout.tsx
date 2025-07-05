@@ -1,3 +1,5 @@
+
+"use client"
 import type React from "react"
 // No hay cambios significativos en las importaciones aquí, ya que el layout es principalmente estructural.
 // Los hooks useIsMobile y useIsTablet se asume que están correctamente implementados en "@/hooks/use-breakpoint"
