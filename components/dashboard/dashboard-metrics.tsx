@@ -94,7 +94,7 @@ const pct = (numerator: number, denominator: number): string =>
  * Se ha simplificado para asegurar consistencia visual.
  */
 const MetricCardSkeleton = (): JSX.Element => (
-  <Card className="flex flex-col">
+  <Card className="flex flex-col animate-pulse">
     <CardHeader className="pb-3 pt-4 px-4">
       <Skeleton className="h-4 w-3/4 mb-2" />
       <Skeleton className="h-8 w-1/2" />
@@ -123,7 +123,7 @@ const MemoizedMetricCard = memo(function MetricCard({
 
   return (
     <Dialog>
-      <Card className="@container/card relative flex flex-col justify-between hover:shadow-lg transition-all duration-300 ease-in-out">
+      <Card className="@container/card group relative flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-800/70 backdrop-blur-sm shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 ease-out">
         <CardHeader className="pb-3 pt-4 px-4">
           <div className="flex justify-between items-start gap-2">
             {/* El min-w-0 es crucial para que text-truncation funcione en flexbox */}
@@ -216,7 +216,7 @@ export function DashboardMetrics({
    * El grid creará tantas columnas como quepan, con un mínimo de 280px.
    * Esto es mucho más robusto y se adapta a CUALQUIER tamaño de contenedor.
    */
-  const responsiveGridClasses = "grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4";
+  const responsiveGridClasses = "grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-6";
 
   if (loading) {
     return (
@@ -262,7 +262,7 @@ export function DashboardMetrics({
           <div className={responsiveGridClasses}>
             <MemoizedMetricCard
               metricKey="tasaConversion"
-              value={`${(metricsData.tasaConversion * 100).toFixed(1)}%`}
+              value={metricsData.tasaConversion ? `${Math.round(metricsData.tasaConversion * 100)}%` : '0%'}
               description="Tasa de Conversión"
               badge={<Badge variant="outline" className="text-xs">+5%</Badge>}
               footerContent="Mejora vs. mes anterior"
@@ -289,8 +289,12 @@ export function DashboardMetrics({
               value={String(metricsData.fuentePrincipalPacientes)}
               description="Fuente Principal"
               badge={<TrendingUpIcon className="h-4 w-4 text-muted-foreground" />}
-              footerContent="Canal de adquisición más efectivo"
-              footerDetail="Oportunidad de optimización"
+              footerContent={metricsData.fuentePrincipalPacientes === 'No disponible' 
+                ? "Configure canales de adquisición" 
+                : "Canal de adquisición más efectivo"}
+              footerDetail={metricsData.fuentePrincipalPacientes === 'No disponible' 
+                ? "Datos no disponibles" 
+                : "Oportunidad de optimización"}
             />
           </div>
         </TabsContent>

@@ -101,15 +101,27 @@ export async function GET(request: Request) {
       : 0;
 
     const origenCount = new Map<string, number>();
+    let totalPacientesConOrigen = 0;
+    
     patients.forEach(p => {
       if (p.origen_paciente?.trim()) {
         const origen = p.origen_paciente.trim() as PatientOriginEnum;
         origenCount.set(origen, (origenCount.get(origen) || 0) + 1);
+        totalPacientesConOrigen++;
       }
     });
 
-    const fuentePrincipalPacientes = (Array.from(origenCount.entries())
-      .sort((a, b) => b[1] - a[1])[0]?.[0] as PatientOriginEnum) || PatientOriginEnum.OTHER;
+    // Solo asignar una fuente principal si hay datos reales
+    let fuentePrincipalPacientes: PatientOriginEnum | string;
+    
+    if (totalPacientesConOrigen > 0) {
+      // Si hay datos, usar el más frecuente (incluye OTHER solo si realmente hay pacientes con ese valor)
+      fuentePrincipalPacientes = Array.from(origenCount.entries())
+        .sort((a, b) => b[1] - a[1])[0][0] as PatientOriginEnum;
+    } else {
+      // Si no hay ningún dato de origen, mostrar valor más informativo
+      fuentePrincipalPacientes = 'No disponible';
+    }
 
     const diagnosticosCount = new Map<string, number>();
     patients.forEach(p => {

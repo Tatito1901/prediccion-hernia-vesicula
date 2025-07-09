@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useMemo } from 'react';
 import { useChartData } from '@/hooks/use-chart-data';
 
-type DateRange = '7dias' | '30dias' | '60dias' | '90dias' | 'ytd';
+type DateRange = '7dias' | '30dias' | '90dias' | 'ytd';
 
 // Define more precise types for the data structures
 interface Appointment {

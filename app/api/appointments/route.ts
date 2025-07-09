@@ -2,6 +2,17 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 
+// Helper para validar fechas ISO
+function isValidISODate(dateString: string): boolean {
+  if (!dateString) return false;
+  try {
+    const date = new Date(dateString);
+    return !isNaN(date.getTime());
+  } catch {
+    return false;
+  }
+}
+
 // Configuración de cache para las rutas GET de la API
 const cacheConfig = {
   // Tiempo de validez de la caché del navegador (60 segundos)
@@ -35,6 +46,22 @@ export async function GET(request: Request) {
   const to = from + pageSize - 1;
 
   try {
+    // Validar que el rango de fechas no sea extremadamente amplio para prevenir sobrecarga
+    if (startDate && endDate && isValidISODate(startDate) && isValidISODate(endDate)) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
+      
+      // Si el rango es más de 12 meses, limitar a últimos 12 meses para evitar consultas excesivas
+      if (diffMonths > 12) {
+        console.warn('Rango de fechas demasiado amplio (>12 meses). Limitando a últimos 12 meses.');
+        const limitedStart = new Date(end);
+        limitedStart.setMonth(end.getMonth() - 12);
+        const limitedStartStr = limitedStart.toISOString().split('T')[0];
+        searchParams.set('startDate', limitedStartStr);
+      }
+    }
+    
     // Iniciar la consulta con count para obtener el total de registros
     let query = supabase.from('appointments').select(`
       id,
@@ -52,8 +79,22 @@ export async function GET(request: Request) {
     // Aplicar filtros
     if (patientId) query = query.eq('patient_id', patientId);
     if (doctorId) query = query.eq('doctor_id', doctorId);
-    if (startDate) query = query.gte('fecha_hora_cita', `${startDate}T00:00:00Z`);
-    if (endDate) query = query.lte('fecha_hora_cita', `${endDate}T23:59:59Z`);
+    // Mejorar validación de fechas para evitar errores 500
+    if (startDate && isValidISODate(startDate)) {
+      try {
+        query = query.gte('fecha_hora_cita', `${startDate}T00:00:00Z`);
+      } catch (e) {
+        console.warn(`Error al establecer fecha inicial: ${e}. Usando valor sin filtro.`);
+      }
+    }
+    
+    if (endDate && isValidISODate(endDate)) {
+      try {
+        query = query.lte('fecha_hora_cita', `${endDate}T23:59:59Z`);
+      } catch (e) {
+        console.warn(`Error al establecer fecha final: ${e}. Usando valor sin filtro.`);
+      }
+    }
     if (estado && estado !== 'todos') query = query.eq('estado_cita', estado);
     
     // Ordenar por fecha de consulta
