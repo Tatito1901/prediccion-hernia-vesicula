@@ -112,7 +112,7 @@ export const useProcessedPatients = (
       [PatientStatusEnum.NO_OPERADO]: 0,
       [PatientStatusEnum.INDECISO]: 0,
     } as Record<keyof typeof PatientStatusEnum, number>);
-
+@
     return {
       filteredAndEnrichedPatients: currentViewPatients,
       statusStats: { ...stats, all: enrichedPatients.length }

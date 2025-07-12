@@ -1,16 +1,28 @@
 'use client';
 
 import { useMemo, useCallback } from 'react';
-import { format } from 'date-fns';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { format, parseISO, addDays } from 'date-fns';
+import { useQueryClient } from '@tanstack/react-query';
 
-import type { Patient, Appointment, DiagnosisEnum, PatientStatus, AppointmentStatus } from '@/lib/types';
-import { calculateDateRange, buildQueryParams, fetchData, isValidISODate } from '@/lib/utils';
+import type { Database } from '@/lib/types/database.types';
+import { calculateDateRange, isValidISODate } from '@/lib/utils';
+import { useAppointments } from './use-appointments';
 
-// Increased stale time for better caching in production
-const DEFAULT_STALE_TIME = process.env.NODE_ENV === 'development' 
-  ? 1000 * 60 * 5  // 5 minutes for development
-  : 1000 * 60 * 15; // 15 minutes for production
+// Tipos de la base de datos para mayor claridad
+type Patient = Database['public']['Tables']['patients']['Row'];
+type Appointment = Database['public']['Tables']['appointments']['Row'];
+type DiagnosisEnum = Database['public']['Enums']['diagnosis_enum'];
+type PatientStatus = Database['public']['Enums']['patient_status_enum'];
+type AppointmentStatus = Database['public']['Enums']['appointment_status_enum'];
+
+// Tipo para citas enriquecidas que viene de useAppointments
+export interface ExtendedAppointment extends Appointment {
+  paciente: Patient | null;
+  doctor: { full_name?: string | null } | null;
+  // Las propiedades fecha_hora_cita y estado_cita ya vienen del tipo base Appointment
+  // Solo añadimos status como alias opcional para compatibilidad
+  status?: AppointmentStatus;
+}
 
 export interface ClinicMetrics {
   totalPacientes: number;
@@ -29,13 +41,13 @@ interface TransformedPatientData {
   id: string;
   nombre: string;
   telefono: string;
-  estado: PatientStatus | 'SIN ESTADO';
+  estado: string;
   fechaRegistro: string;
-  diagnostico: DiagnosisEnum | 'NO ESPECIFICADO';
+  diagnostico: string;
 }
 
 interface TransformedDiagnosisData {
-  name: DiagnosisEnum | 'NO ESPECIFICADO';
+  name: string;
   value: number;
 }
 
@@ -51,6 +63,15 @@ interface WeekdayData {
   value: number;
 }
 
+interface BiWeeklyDataItem {
+  name: string;
+  label: string;
+  consultas: number;
+  operados: number;
+  nuevos: number;
+  seguimiento: number;
+}
+
 interface UseChartDataProps {
   dateRange: string;
   patientId?: string;
@@ -58,156 +79,230 @@ interface UseChartDataProps {
   estado?: PatientStatus | AppointmentStatus | 'todos';
 }
 
-export function useChartData({ 
-  dateRange, 
-  patientId, 
-  doctorId, 
-  estado = 'todos' 
+export function useChartData({
+  dateRange,
+  patientId,
+  doctorId,
+  estado = 'todos'
 }: UseChartDataProps) {
   const queryClient = useQueryClient();
 
-  // Calculate date range based on selected range option
-  const { startDate, endDate } = useMemo(() => calculateDateRange(dateRange), [dateRange]);
+  const { data, isLoading: loading, error } = useAppointments();
+  const allAppointments = data?.appointments as ExtendedAppointment[] || [];
 
-  // Create stable query key for React Query caching with proper structure for individual resources
-  const baseQueryParams = useMemo(() => {
-    if (!startDate || !endDate) {
-      return null;
+  // Extraemos los pacientes únicos de las citas
+  const patients = useMemo(() => {
+    if (!allAppointments || allAppointments.length === 0) return [];
+    
+    const patientMap = new Map<string, Patient>();
+    allAppointments.forEach(appt => {
+      if (appt.paciente) {
+        patientMap.set(appt.paciente.id, appt.paciente);
+      }
+    });
+    
+    return Array.from(patientMap.values());
+  }, [allAppointments]);
+
+  // Calculamos el rango de fechas basado en el dateRange seleccionado
+  const { startDate, endDate } = useMemo(() => 
+    calculateDateRange(dateRange), [dateRange]);
+
+  // Filtramos las citas según rango de fechas, doctorId, patientId y estado
+  const filteredAppointments = useMemo(() => {
+    if (!allAppointments || allAppointments.length === 0 || !startDate || !endDate) {
+      return [];
     }
-
-    return { 
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0],
-      patientId, 
-      doctorId, 
-      estado: estado !== 'todos' ? estado : undefined 
-    };
-  }, [startDate, endDate, patientId, doctorId, estado]);
-
-  // Query keys for individual resources - helps with targeted invalidation and prefetching
-  const appointmentsQueryKey = useMemo(() => 
-    baseQueryParams ? ['appointments', baseQueryParams] as const : ['appointments', {}] as const, 
-    [baseQueryParams]
-  );
-
-  const patientsQueryKey = useMemo(() => 
-    baseQueryParams ? ['patients', baseQueryParams] as const : ['patients', {}] as const, 
-    [baseQueryParams]
-  );
-
-  const metricsQueryKey = useMemo(() => 
-    baseQueryParams ? ['metrics', baseQueryParams] as const : ['metrics', {}] as const, 
-    [baseQueryParams]
-  );
-
-  // Combined query key for invalidation
-  const dashboardQueryKey = useMemo(() => 
-    ['dashboard-data', startDate?.toISOString() || '', endDate?.toISOString() || '', patientId || '', doctorId || '', estado],
-    [startDate, endDate, patientId, doctorId, estado]
-  );
-
-  // Appointments query with special date handling
-  const appointmentsQuery = useQuery({
-    queryKey: appointmentsQueryKey,
-    queryFn: async () => {
-      if (!baseQueryParams) return [];
+    
+    return allAppointments.filter(appointment => {
+      // Verificamos que la fecha sea válida
+      const appointmentDateStr = appointment.fecha_hora_cita || '';
+      if (!appointmentDateStr) return false;
       
-      // Special handling for appointment dates (full ISO string for precise time filtering)
-      const appointmentsParams = {
-        ...baseQueryParams,
-        startDate: `${baseQueryParams.startDate}T00:00:00Z`,
-        endDate: `${baseQueryParams.endDate}T23:59:59Z`
-      };
-      const appointmentsQueryParams = buildQueryParams(appointmentsParams);
+      const appointmentDate = isValidISODate(appointmentDateStr)
+        ? parseISO(appointmentDateStr)
+        : new Date(appointmentDateStr);
       
-      try {
-        // Verificamos que los parámetros estén bien formateados antes de hacer el fetch
-        console.log(`Fetching appointments with params: ${appointmentsQueryParams}`);
+      // Si está fuera del rango, se excluye
+      if (appointmentDate < startDate || appointmentDate > endDate) {
+        return false;
+      }
+      
+      // Filtro por doctorId
+      if (doctorId && appointment.doctor_id !== doctorId) {
+        return false;
+      }
+      
+      // Filtro por patientId
+      if (patientId && appointment.patient_id !== patientId) {
+        return false;
+      }
+      
+      // Filtro por estado (si existe y no es 'todos')
+      if (estado && estado !== 'todos') {
+        const appointmentStatus = appointment.status || appointment.estado_cita as AppointmentStatus;
+        if (appointmentStatus !== estado) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }, [allAppointments, startDate, endDate, doctorId, patientId, estado]);
+
+  // Filtramos los pacientes según el rango de fechas y otros filtros
+  const filteredPatients = useMemo(() => {
+    if (!patients || patients.length === 0) {
+      return [];
+    }
+    
+    // Si hay filtro de paciente específico, solo incluimos ese paciente
+    if (patientId) {
+      return patients.filter(p => p.id === patientId);
+    }
+    
+    // Creamos un conjunto con los IDs de pacientes de las citas filtradas
+    const patientIds = new Set<string>();
+    filteredAppointments.forEach(appointment => {
+      if (appointment.patient_id) {
+        patientIds.add(appointment.patient_id);
+      }
+    });
+    
+    // Solo incluimos los pacientes que tienen citas en el período
+    return patients.filter(p => patientIds.has(p.id));
+  }, [patients, filteredAppointments, patientId]);
+
+  // Generamos datos para gráficos por semanas
+  const biWeeklyDataMap = useMemo(() => {
+    if (!startDate || !endDate) {
+      return new Map<string, BiWeeklyDataItem>();
+    }
+    
+    const dataMap = new Map<string, BiWeeklyDataItem>();
+    
+    // Inicializamos el mapa con las semanas en el rango de fechas
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const weekKey = format(currentDate, 'yyyy-MM-dd');
+      const weekLabel = format(currentDate, 'dd/MM');
+      
+      dataMap.set(weekKey, {
+        name: weekKey,
+        label: weekLabel,
+        consultas: 0,
+        operados: 0,
+        nuevos: 0,
+        seguimiento: 0
+      });
+      
+      // Avanzamos una semana
+      currentDate = addDays(currentDate, 7);
+    }
+    
+    // Contamos las citas por semana
+    filteredAppointments.forEach(appointment => {
+      const appointmentDateStr = appointment.fecha_hora_cita;
+      if (!appointmentDateStr) return;
+      
+      const appointmentDate = isValidISODate(appointmentDateStr)
+        ? parseISO(appointmentDateStr)
+        : new Date(appointmentDateStr);
+      
+      const weekKey = format(appointmentDate, 'yyyy-MM-dd');
+      
+      // Si la semana existe en nuestro mapa
+      const weekData = dataMap.get(weekKey);
+      if (weekData) {
+        // Incrementamos contador de consultas
+        weekData.consultas += 1;
         
-        // Nos aseguramos de que la URL esté bien formada con el signo de interrogación
-        const url = `/api/appointments${appointmentsQueryParams ? `?${appointmentsQueryParams}` : ''}`;
-        console.log(`URL final: ${url}`);
-        
-        // Agregamos un timeout más largo para darle tiempo al servidor
-        const result = await fetchData<{ data: Appointment[] }>(
-          url,
-          "Error al cargar citas",
-          60000 // Aumentamos el timeout a 60 segundos
-        );
-        return result?.data ?? [];
-      } catch (error) {
-        console.error('Failed to fetch appointments:', error);
-        // Propagamos el error para que React Query lo maneje correctamente
-        // pero evitamos que la app se rompa completamente
-        throw error;
+        // Incrementamos contadores según el diagnóstico del paciente
+        if (appointment.paciente) {
+          const diagnostico = appointment.paciente.diagnostico_principal || '';
+          if (diagnostico.includes('OPERADO')) {
+            weekData.operados += 1;
+          } else if (diagnostico.includes('NUEVO')) {
+            weekData.nuevos += 1;
+          } else if (diagnostico.includes('SEGUIMIENTO')) {
+            weekData.seguimiento += 1;
+          }
+        }
       }
-    },
-    staleTime: DEFAULT_STALE_TIME,
-    enabled: !!baseQueryParams,
-    refetchOnWindowFocus: false, // Prevent unnecessary refetches when window regains focus
-    retry: 2, // Intentar hasta 2 veces más si falla
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Backoff exponencial
-  });
+    });
+    
+    return dataMap;
+  }, [filteredAppointments, startDate, endDate]);
 
-  // Patients query
-  const patientsQuery = useQuery({
-    queryKey: patientsQueryKey,
-    queryFn: async () => {
-      if (!baseQueryParams) return [];
-      
-      const queryParams = `?${buildQueryParams(baseQueryParams)}`;
-      
-      try {
-        const result = await fetchData<{ data: Patient[] }>(
-          `/api/patients${queryParams}`, 
-          "Error al cargar pacientes"
-        );
-        return result?.data ?? [];
-      } catch (error) {
-        console.error('Failed to fetch patients:', error);
-        return [];
-      }
-    },
-    staleTime: DEFAULT_STALE_TIME,
-    enabled: !!baseQueryParams,
-    refetchOnWindowFocus: false,
-  });
+  // Convertimos el mapa a un array para los gráficos, ordenado por fecha
+  const dataForChart = useMemo(() => {
+    return Array.from(biWeeklyDataMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [biWeeklyDataMap]);
 
-  // Metrics query
-  const metricsQuery = useQuery({
-    queryKey: metricsQueryKey,
-    queryFn: async () => {
-      if (!baseQueryParams) return null;
-      
-      const queryParams = `?${buildQueryParams(baseQueryParams)}`;
-      
-      try {
-        return await fetchData<ClinicMetrics>(
-          `/api/metrics${queryParams}`, 
-          "Error al cargar métricas"
-        );
-      } catch (error) {
-        console.error('Failed to fetch metrics:', error);
-        return null;
-      }
-    },
-    staleTime: DEFAULT_STALE_TIME,
-    enabled: !!baseQueryParams,
-    refetchOnWindowFocus: false,
-  });
+  // Métricas clínicas principales
+  const clinicMetrics = useMemo<ClinicMetrics>(() => {
+    const now = new Date();
+    
+    // Calculamos diagnósticos más comunes
+    const diagnosisCounts = new Map<string, number>();
+    filteredPatients.forEach(patient => {
+      // Usamos diagnostico_principal en lugar de diagnosis
+      const diagnosis = patient.diagnostico_principal || 'NO ESPECIFICADO';
+      diagnosisCounts.set(diagnosis, (diagnosisCounts.get(diagnosis) || 0) + 1);
+    });
+    
+    // Convertimos el mapa a un array y ordenamos por cantidad
+    const diagnosticosMasComunes = Array.from(diagnosisCounts.entries())
+      .map(([tipo, cantidad]) => ({ tipo, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad)
+      .slice(0, 5); // Top 5
 
-  // Consolidate loading and error states
-  const loading = appointmentsQuery.isLoading || patientsQuery.isLoading || metricsQuery.isLoading;
-  const error = appointmentsQuery.error || patientsQuery.error || metricsQuery.error;
+    // Calculamos pacientes nuevos en el último mes
+    const lastMonth = new Date();
+    lastMonth.setMonth(lastMonth.getMonth() - 1);
+    const pacientesNuevosMes = filteredPatients.filter(
+      p => p.created_at && parseISO(p.created_at) >= lastMonth
+    ).length;
 
-  // Extract data from queries
-  const appointments = appointmentsQuery.data || [];
-  const patients = patientsQuery.data || [];
-  const clinicMetrics = metricsQuery.data;
+    // Contamos por estado, asumiendo que status podría no existir y usando operador
+    // de encadenamiento opcional para evitar errores
+    const operados = filteredPatients.filter(p => 
+      p.status === 'OPERADO' || p.diagnostico_principal === 'HERNIA OPERADA'
+    ).length;
+    
+    const noOperados = filteredPatients.filter(p => 
+      p.status !== 'OPERADO' && p.status !== 'SEGUIMIENTO' && 
+      p.diagnostico_principal !== 'HERNIA OPERADA'
+    ).length;
+    
+    const seguimiento = filteredPatients.filter(p => 
+      p.status === 'SEGUIMIENTO' || p.diagnostico_principal?.includes('SEGUIMIENTO')
+    ).length;
+    
+    // Calculamos tasa de conversión (operados/total)
+    const tasaConversion = filteredPatients.length > 0 ? 
+      operados / filteredPatients.length : 0;
+    
+    // Fuente principal de pacientes (simulación - esta lógica debe ajustarse)
+    const fuentePrincipal = 'REFERIDO';
+    
+    // Tiempo promedio de decisión (simulación - esta lógica debe ajustarse)
+    const tiempoPromedioDecision = 15; // días
+    
+    return {
+      totalPacientes: filteredPatients.length,
+      pacientesNuevosMes,
+      pacientesOperados: operados,
+      pacientesNoOperados: noOperados,
+      pacientesSeguimiento: seguimiento,
+      tasaConversion,
+      tiempoPromedioDecision,
+      fuentePrincipalPacientes: fuentePrincipal,
 
   const transformedPatients = useMemo((): TransformedPatientData[] => {
-    if (!patients || patients.length === 0) return [];
-    return patients.map(p => ({
+    if (!filteredPatients || filteredPatients.length === 0) return [];
+    return filteredPatients.map(p => ({
       id: p.id,
       nombre: `${p.nombre} ${p.apellidos}`,
       telefono: p.telefono ?? 'N/A',
@@ -215,50 +310,46 @@ export function useChartData({
       fechaRegistro: p.fecha_registro ? new Date(p.fecha_registro).toLocaleDateString() : 'N/A',
       diagnostico: p.diagnostico_principal ?? 'NO ESPECIFICADO',
     }));
-  }, [patients]);
+  }, [filteredPatients]);
 
   const diagnosisData = useMemo((): TransformedDiagnosisData[] => {
     const count: Record<string, number> = {};
-    if (!patients) return [];
-    patients.forEach(p => {
+    if (!filteredPatients) return [];
+    filteredPatients.forEach(p => {
       const diag = p.diagnostico_principal ?? 'NO ESPECIFICADO';
       count[diag] = (count[diag] || 0) + 1;
     });
     return Object.entries(count).map(([name, value]) => ({ name: name as DiagnosisEnum | 'NO ESPECIFICADO', value }));
-  }, [patients]);
+  }, [filteredPatients]);
 
   const generalStats = useMemo((): GeneralStats => {
-    if (!patients) return { total: 0, nuevos: 0, operados: 0, seguimiento: 0 };
+    if (!filteredPatients) return { total: 0, nuevos: 0, operados: 0, seguimiento: 0 };
     
-    // Calculate new patients in current month more accurately
-    const nuevos = patients.filter(p => {
-      if (!p.fecha_registro) return false;
-      const regDate = new Date(p.fecha_registro);
+    const nuevos = filteredPatients.filter(p => {
+      if (!p.fecha_registro || !isValidISODate(p.fecha_registro)) return false;
+      const regDate = parseISO(p.fecha_registro);
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
       return regDate >= startOfMonth;
     }).length;
 
-    // Count operated patients
-    const operados = patients.filter(p => p.estado_paciente === 'OPERADO').length;
-    
-    // Count patients in follow-up
-    const seguimiento = patients.filter(p => p.estado_paciente === 'EN SEGUIMIENTO').length;
+    const operados = filteredPatients.filter(p => p.estado_paciente === 'OPERADO').length;
+    const seguimiento = filteredPatients.filter(p => p.estado_paciente === 'EN SEGUIMIENTO').length;
     
     return {
-      total: patients.length,
+      total: filteredPatients.length,
       nuevos,
       operados,
       seguimiento,
     };
-  }, [patients]);
+  }, [filteredPatients]);
 
   const weekdayDistribution = useMemo((): WeekdayData[] => {
     const distribution: { [key: string]: number } = {
       Lunes: 0, Martes: 0, Miércoles: 0, Jueves: 0, Viernes: 0, Sábado: 0, Domingo: 0
     };
-    if (!appointments || appointments.length === 0) {
+    if (!filteredAppointments || filteredAppointments.length === 0) {
       return Object.entries(distribution).map(([name, value]) => ({ name, value }));
     }
 
@@ -266,9 +357,9 @@ export function useChartData({
       1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado', 0: 'Domingo'
     };
 
-    appointments.forEach(appointment => {
+    filteredAppointments.forEach(appointment => {
       if (isValidISODate(appointment.fecha_hora_cita)) {
-        const dayOfWeek = new Date(appointment.fecha_hora_cita).getDay();
+        const dayOfWeek = parseISO(appointment.fecha_hora_cita).getDay();
         const dayName = dayMapping[dayOfWeek];
         if (dayName) {
           distribution[dayName] += 1;
@@ -277,16 +368,14 @@ export function useChartData({
     });
 
     return Object.entries(distribution).map(([name, value]) => ({ name, value }));
-  }, [appointments]);
+  }, [filteredAppointments]);
 
   const chart = useMemo(() => {
-    // Enhanced chart data structure to include more patient metrics
     if (!startDate || !endDate) {
       return { series: [], categories: [] };
     }
 
     let dataForChart;
-    // Use monthly aggregation for year-to-date view
     if (dateRange === 'ytd') {
       const monthlyDataMap = new Map<string, { 
         name: string; 
@@ -314,29 +403,29 @@ export function useChartData({
         currentDate.setMonth(currentDate.getMonth() + 1);
       }
 
-      if (appointments) {
-        appointments.forEach((appointment) => {
+      if (filteredAppointments) {
+        filteredAppointments.forEach((appointment) => {
           if (!appointment.fecha_hora_cita || !isValidISODate(appointment.fecha_hora_cita) || appointment.estado_cita === 'CANCELADA') return;
-          const key = format(new Date(appointment.fecha_hora_cita), 'yyyy-MM');
+          const key = format(parseISO(appointment.fecha_hora_cita), 'yyyy-MM');
           const monthEntry = monthlyDataMap.get(key);
           if (monthEntry) monthEntry.consultas += 1;
         });
       }
 
-      if (patients) {
-        patients.forEach(p => {
+      if (filteredPatients) {
+        filteredPatients.forEach(p => {
           if (p.fecha_registro && isValidISODate(p.fecha_registro)) {
-            const key = format(new Date(p.fecha_registro), 'yyyy-MM');
+            const key = format(parseISO(p.fecha_registro), 'yyyy-MM');
             const monthEntry = monthlyDataMap.get(key);
             if (monthEntry) monthEntry.nuevos += 1;
           }
           if (p.estado_paciente === 'OPERADO' && p.updated_at && isValidISODate(p.updated_at)) {
-            const key = format(new Date(p.updated_at), 'yyyy-MM');
+            const key = format(parseISO(p.updated_at), 'yyyy-MM');
             const monthEntry = monthlyDataMap.get(key);
             if (monthEntry) monthEntry.operados += 1;
           }
           if (p.estado_paciente === 'EN SEGUIMIENTO' && p.updated_at && isValidISODate(p.updated_at)) {
-            const key = format(new Date(p.updated_at), 'yyyy-MM');
+            const key = format(parseISO(p.updated_at), 'yyyy-MM');
             const monthEntry = monthlyDataMap.get(key);
             if (monthEntry) monthEntry.seguimiento += 1;
           }
@@ -344,9 +433,8 @@ export function useChartData({
       }
 
       dataForChart = Array.from(monthlyDataMap.values()).sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime());
-    } else if (dateRange === '30dias') {
-      // Weekly aggregation for 30-day view
-      const weeklyDataMap = new Map<string, { 
+    } else {
+      const dailyDataMap = new Map<string, { 
         name: string; 
         label: string;
         consultas: number; 
@@ -354,142 +442,81 @@ export function useChartData({
         nuevos: number;
         seguimiento: number; 
       }>();
-
+      
       const currentDate = new Date(startDate);
       const end = new Date(endDate);
 
       while (currentDate <= end) {
-        // Use Monday as the start of the week for consistency
-        const dayOfWeek = currentDate.getDay();
-        const weekStartDate = new Date(currentDate);
-        weekStartDate.setDate(currentDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); // Get the Monday
-        
-        const weekKey = format(weekStartDate, 'yyyy-MM-dd');
-        if (!weeklyDataMap.has(weekKey)) {
-          // More descriptive label with month included
-          const weekEndDate = new Date(weekStartDate);
-          weekEndDate.setDate(weekStartDate.getDate() + 6);
-          
-          weeklyDataMap.set(weekKey, {
-            name: weekKey,
-            label: `${format(weekStartDate, 'dd')}-${format(weekEndDate, 'dd MMM')}`, // Format: "01-07 Jul"
-            consultas: 0,
-            operados: 0,
-            nuevos: 0,
-            seguimiento: 0,
-          });
-        }
+        const key = format(currentDate, 'yyyy-MM-dd');
+        dailyDataMap.set(key, {
+          name: format(currentDate, 'yyyy-MM-dd'),
+          label: format(currentDate, 'dd/MM'),
+          consultas: 0,
+          operados: 0,
+          nuevos: 0,
+          seguimiento: 0,
+        });
         currentDate.setDate(currentDate.getDate() + 1);
       }
       
-      // Process appointment and patient data for weekly view
-      if (appointments) {
-        appointments.forEach((appointment) => {
+      if (filteredAppointments) {
+        filteredAppointments.forEach((appointment) => {
           if (!appointment.fecha_hora_cita || !isValidISODate(appointment.fecha_hora_cita) || appointment.estado_cita === 'CANCELADA') return;
-          const appointmentDate = new Date(appointment.fecha_hora_cita);
-          const dayOfWeek = appointmentDate.getDay();
-          const weekStartDate = new Date(appointmentDate);
-          weekStartDate.setDate(appointmentDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); // Get the Monday
-          
-          const weekKey = format(weekStartDate, 'yyyy-MM-dd');
-          const weekEntry = weeklyDataMap.get(weekKey);
-          if (weekEntry) weekEntry.consultas += 1;
+          const key = format(parseISO(appointment.fecha_hora_cita), 'yyyy-MM-dd');
+          const dailyEntry = dailyDataMap.get(key);
+          if (dailyEntry) dailyEntry.consultas += 1;
         });
       }
 
-      if (patients) {
-        patients.forEach(p => {
+      if (filteredPatients) {
+        filteredPatients.forEach(p => {
           if (p.fecha_registro && isValidISODate(p.fecha_registro)) {
-            const regDate = new Date(p.fecha_registro);
-            const dayOfWeek = regDate.getDay();
-            const weekStartDate = new Date(regDate);
-            weekStartDate.setDate(regDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-            
-            const weekKey = format(weekStartDate, 'yyyy-MM-dd');
-            const weekEntry = weeklyDataMap.get(weekKey);
-            if (weekEntry) weekEntry.nuevos += 1;
+            const key = format(parseISO(p.fecha_registro), 'yyyy-MM-dd');
+            const dailyEntry = dailyDataMap.get(key);
+            if (dailyEntry) dailyEntry.nuevos += 1;
           }
+          
           if (p.estado_paciente === 'OPERADO' && p.updated_at && isValidISODate(p.updated_at)) {
-            const opDate = new Date(p.updated_at);
-            const dayOfWeek = opDate.getDay();
-            const weekStartDate = new Date(opDate);
-            weekStartDate.setDate(opDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-            
-            const weekKey = format(weekStartDate, 'yyyy-MM-dd');
-            const weekEntry = weeklyDataMap.get(weekKey);
-            if (weekEntry) weekEntry.operados += 1;
+            const key = format(parseISO(p.updated_at), 'yyyy-MM-dd');
+            const dailyEntry = dailyDataMap.get(key);
+            if (dailyEntry) dailyEntry.operados += 1;
           }
+          
           if (p.estado_paciente === 'EN SEGUIMIENTO' && p.updated_at && isValidISODate(p.updated_at)) {
-            const followupDate = new Date(p.updated_at);
-            const dayOfWeek = followupDate.getDay();
-            const weekStartDate = new Date(followupDate);
-            weekStartDate.setDate(followupDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-            
-            const weekKey = format(weekStartDate, 'yyyy-MM-dd');
-            const weekEntry = weeklyDataMap.get(weekKey);
-            if (weekEntry) weekEntry.seguimiento += 1;
+            const key = format(parseISO(p.updated_at), 'yyyy-MM-dd');
+            const dailyEntry = dailyDataMap.get(key);
+            if (dailyEntry) dailyEntry.seguimiento += 1;
           }
         });
       }
-
-      dataForChart = Array.from(weeklyDataMap.values())
-        .sort((a, b) => a.name.localeCompare(b.name));
-        
-    } else if (dateRange === '90dias') {
-      // Bi-weekly aggregation for 90-day view to reduce clutter
-      const biWeeklyDataMap = new Map<string, { 
-        name: string; 
-        label: string;
-        consultas: number; 
-        operados: number;
-        nuevos: number;
-        seguimiento: number; 
-      }>();
-
-      const currentDate = new Date(startDate);
-      const end = new Date(endDate);
       
-      // Set to the 1st or 15th of the month for bi-weekly periods
-      let periodStart = new Date(currentDate);
-      if (periodStart.getDate() > 15) {
-        // Set to the 15th of current month
-        periodStart.setDate(15);
-      } else {
-        // Set to the 1st of current month
-        periodStart.setDate(1);
-      }
+      dataForChart = Array.from(dailyDataMap.values())
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+    
+    return {
+      series: [
+        { name: 'Consultas', data: dataForChart.map(d => d.consultas) },
+        { name: 'Operados', data: dataForChart.map(d => d.operados) },
+        { name: 'Nuevos', data: dataForChart.map(d => d.nuevos) },
+        { name: 'Seguimiento', data: dataForChart.map(d => d.seguimiento) },
+      ],
+      categories: dataForChart.map(d => d.label),
+    };
+  }, [filteredAppointments, filteredPatients, startDate, endDate, dateRange]);
 
-      while (periodStart <= end) {
-        // Determine if this is the first or second half of the month
-        const isFirstHalf = periodStart.getDate() === 1;
-        const periodKey = format(periodStart, 'yyyy-MM') + (isFirstHalf ? '-1' : '-2');
-        
-        // Create period end date (14th or end of month)
-        const periodEnd = new Date(periodStart);
-        if (isFirstHalf) {
-          // First half ends on the 14th
-          periodEnd.setDate(14);
-        } else {
-          // Second half ends on the last day of the month
-          periodEnd.setMonth(periodEnd.getMonth() + 1);
-          periodEnd.setDate(0);
-        }
-        
-        if (!biWeeklyDataMap.has(periodKey)) {
-          biWeeklyDataMap.set(periodKey, {
-            name: periodKey,
-            label: isFirstHalf ? 
-              `1-15 ${format(periodStart, 'MMM')}` : 
-              `16-${format(periodEnd, 'dd MMM')}`,
-            consultas: 0,
-            operados: 0,
-            nuevos: 0,
-            seguimiento: 0,
-          });
-        }
-        
-        // Move to next bi-weekly period
-        if (isFirstHalf) {
+  const refresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['appointments'] });
+  }, [queryClient]);
+  
+  const enhancedMetrics = useMemo(() => {
+    if (!clinicMetrics) return null;
+    return {
+      ...clinicMetrics,
+      tasaConversion: filteredPatients.length > 0 ? (clinicMetrics.pacientesOperados / filteredPatients.length) : 0,
+    };
+  }, [clinicMetrics, filteredPatients]);
+
           // Move to 15th of current month
           periodStart.setDate(15);
         } else {
@@ -497,6 +524,24 @@ export function useChartData({
           periodStart.setMonth(periodStart.getMonth() + 1);
           periodStart.setDate(1);
         }
+  return {
+    loading,
+    error: error ? (error as Error).message : null,
+    appointments: filteredAppointments,
+    patients: filteredPatients,
+    transformedPatients,
+    diagnosisData,
+    generalStats,
+    weekdayDistribution,
+    clinicMetrics: enhancedMetrics,
+    chart,
+    refresh,
+    rawData: { 
+      appointments: filteredAppointments,
+      patients: filteredPatients,
+      metrics: clinicMetrics
+    }
+  };
       }
 
       // Process appointment and patient data for bi-weekly view

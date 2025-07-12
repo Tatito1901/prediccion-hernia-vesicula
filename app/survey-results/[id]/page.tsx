@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowLeft, Loader2, ClipboardCheck, AlertCircle } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { toast } from "sonner"
-import { usePatient } from "@/hooks/use-patients";
+import { usePatient } from "@/hooks/use-appointments";
 import { generateSurveyId } from "@/lib/form-utils"
 import type { PatientData } from "@/app/dashboard/data-model"
 

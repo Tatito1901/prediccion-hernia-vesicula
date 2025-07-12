@@ -1,5 +1,5 @@
-// appointment-history.tsx - Actualizado para usar React Query
-import { useMemo, memo } from "react";
+// appointment-history.tsx - Versión refactorizada con utilidades integradas
+import { useMemo, memo, useCallback } from "react";
 import { useAppointments } from "@/hooks/use-appointments";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
@@ -12,7 +12,6 @@ import {
   Clock,
   CheckCircle2,
   FileText,
-  BarChart3,
   Target,
   History
 } from "lucide-react";
@@ -29,7 +28,97 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { AppointmentStatusEnum, type ExtendedAppointment } from "@/lib/types";
 
-// Configuración estática fuera del componente
+// ==================== UTILIDADES INTEGRADAS ====================
+
+// Cache optimizado con LRU
+class LRUCache<K, V> {
+  private cache = new Map<K, V>();
+  private maxSize: number;
+
+  constructor(maxSize = 200) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+}
+
+// Caches para formateo
+const dateFormatCache = new LRUCache<string, string>(200);
+const timeFormatCache = new LRUCache<string, string>(100);
+
+// Funciones de formateo optimizadas
+const formatDateTime = (dateString: string | null): string => {
+  if (!dateString) return "N/A";
+  
+  const cached = dateFormatCache.get(dateString);
+  if (cached) return cached;
+  
+  try {
+    const date = parseISO(dateString);
+    if (!isValid(date)) {
+      const fallback = "Fecha inválida";
+      dateFormatCache.set(dateString, fallback);
+      return fallback;
+    }
+    const formatted = format(date, "dd MMM yyyy HH:mm", { locale: es });
+    dateFormatCache.set(dateString, formatted);
+    return formatted;
+  } catch {
+    const fallback = "Fecha inválida";
+    dateFormatCache.set(dateString, fallback);
+    return fallback;
+  }
+};
+
+const formatDisplayDate = (dateString: string | Date): string => {
+  const key = dateString.toString();
+  const cached = dateFormatCache.get(key);
+  if (cached) return cached;
+  
+  try {
+    const date = typeof dateString === 'string' ? parseISO(dateString) : dateString;
+    if (!isValid(date)) return "Fecha inválida";
+    const formatted = format(date, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es });
+    dateFormatCache.set(key, formatted);
+    return formatted;
+  } catch {
+    return "Fecha inválida";
+  }
+};
+
+const formatTime = (dateString: string): string => {
+  const cached = timeFormatCache.get(dateString);
+  if (cached) return cached;
+  
+  try {
+    const date = parseISO(dateString);
+    if (!isValid(date)) return "---";
+    const formatted = format(date, "hh:mm a", { locale: es }).toUpperCase();
+    timeFormatCache.set(dateString, formatted);
+    return formatted;
+  } catch {
+    return "---";
+  }
+};
+
+// Configuración de estado optimizada
 const STATUS_CONFIG = {
   [AppointmentStatusEnum.PROGRAMADA]: {
     label: "Programada",
@@ -68,66 +157,52 @@ const STATUS_CONFIG = {
   },
 };
 
-// Cache para formateo de fechas
-const dateFormatCache = new Map<string, string>();
-const timeFormatCache = new Map<string, string>();
+// Función de cálculo de estadísticas optimizada
+const calculateAppointmentStatistics = (appointments: ExtendedAppointment[]) => {
+  if (!appointments.length) {
+    return {
+      total: 0,
+      completadas: 0,
+      programadas: 0,
+      canceladas: 0,
+      noAsistio: 0,
+      completionRate: 0,
+      attendanceRate: 0,
+    };
+  }
 
-// Funciones de formateo optimizadas
-const formatDateTime = (dateString: string | null): string => {
-  if (!dateString) return "N/A";
-  
-  const cached = dateFormatCache.get(dateString);
-  if (cached) return cached;
-  
-  try {
-    const date = parseISO(dateString);
-    if (!isValid(date)) {
-      const fallback = format(new Date(), "dd MMM yyyy HH:mm", { locale: es });
-      dateFormatCache.set(dateString, fallback);
-      return fallback;
+  const counts = appointments.reduce((acc: Record<string, number>, app: ExtendedAppointment) => {
+    if (app.estado_cita) {
+      acc[app.estado_cita] = (acc[app.estado_cita] || 0) + 1;
     }
-    const formatted = format(date, "dd MMM yyyy HH:mm", { locale: es });
-    dateFormatCache.set(dateString, formatted);
-    return formatted;
-  } catch {
-    const fallback = format(new Date(), "dd MMM yyyy HH:mm", { locale: es });
-    dateFormatCache.set(dateString, fallback);
-    return fallback;
-  }
+    return acc;
+  }, {});
+
+  const completadas = counts[AppointmentStatusEnum.COMPLETADA] || 0;
+  const noAsistio = counts[AppointmentStatusEnum.NO_ASISTIO] || 0;
+  const canceladas = counts[AppointmentStatusEnum.CANCELADA] || 0;
+  const programadas = (counts[AppointmentStatusEnum.PROGRAMADA] || 0) +
+                     (counts[AppointmentStatusEnum.CONFIRMADA] || 0) +
+                     (counts[AppointmentStatusEnum.PRESENTE] || 0) +
+                     (counts[AppointmentStatusEnum.REAGENDADA] || 0);
+
+  const totalFinalizadas = completadas + noAsistio + canceladas;
+  const completionRate = totalFinalizadas > 0 ? (completadas / totalFinalizadas) * 100 : 0;
+  const attendanceRate = (completadas + noAsistio) > 0 ? (completadas / (completadas + noAsistio)) * 100 : 0;
+
+  return {
+    total: appointments.length,
+    completadas,
+    programadas,
+    canceladas,
+    noAsistio,
+    completionRate: Math.round(completionRate),
+    attendanceRate: Math.round(attendanceRate),
+  };
 };
 
-const formatDisplayDate = (dateString: string | Date): string => {
-  const key = dateString.toString();
-  const cached = dateFormatCache.get(key);
-  if (cached) return cached;
-  
-  try {
-    const date = typeof dateString === 'string' ? parseISO(dateString) : dateString;
-    if (!isValid(date)) return "Fecha inválida";
-    const formatted = format(date, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es });
-    dateFormatCache.set(key, formatted);
-    return formatted;
-  } catch {
-    return "Fecha inválida";
-  }
-};
+// ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
 
-const formatTime = (dateString: string): string => {
-  const cached = timeFormatCache.get(dateString);
-  if (cached) return cached;
-  
-  try {
-    const date = parseISO(dateString);
-    if (!isValid(date)) return "---";
-    const formatted = format(date, "hh:mm a", { locale: es }).toUpperCase();
-    timeFormatCache.set(dateString, formatted);
-    return formatted;
-  } catch {
-    return "---";
-  }
-};
-
-// Componentes internos memoizados
 const StatCard = memo(({ 
   title, 
   value, 
@@ -139,7 +214,7 @@ const StatCard = memo(({
   subtitle?: string;
   icon: React.ComponentType<{ className?: string }>;
 }) => (
-  <Card className="p-4 shadow-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col justify-between h-full">
+  <Card className="p-4 shadow-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col justify-between h-full transition-all duration-200 hover:shadow-md">
     <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 mb-3">
       <CardTitle className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
         {title}
@@ -168,7 +243,7 @@ const AppointmentCard = memo(({ appointment }: { appointment: ExtendedAppointmen
   const StatusIcon = statusConfig.icon;
 
   return (
-    <Card className="shadow-sm bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/80 backdrop-blur-sm rounded-xl">
+    <Card className="shadow-sm bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/80 backdrop-blur-sm rounded-xl transition-all duration-200 hover:shadow-md">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -185,16 +260,10 @@ const AppointmentCard = memo(({ appointment }: { appointment: ExtendedAppointmen
                 </>
               )}
             </CardDescription>
-            {appointment.motivo_cita && (
-              <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
-                <FileText size={14} className="inline-block mr-1" />
-                Motivo: {appointment.motivo_cita}
-              </p>
-            )}
           </div>
           
           <Badge className={cn(
-            "text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1.5",
+            "text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-all duration-200",
             statusConfig.className
           )}>
             <StatusIcon size={12} />
@@ -205,7 +274,7 @@ const AppointmentCard = memo(({ appointment }: { appointment: ExtendedAppointmen
       
       <CardContent className="pt-0 space-y-4">
         {appointment.motivo_cita && appointment.motivo_cita !== "N/A" && (
-          <div className="flex gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+          <div className="flex gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 transition-colors duration-200">
             <div className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800/60 flex items-center justify-center shrink-0">
               <FileText size={16} className="text-slate-600 dark:text-slate-300" />
             </div>
@@ -222,207 +291,212 @@ const AppointmentCard = memo(({ appointment }: { appointment: ExtendedAppointmen
         
         <div className="pt-2 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
           <Calendar size={12} />
-          <span>Registrado: {'Fecha actual'}</span>
+          <span>Registrado: {formatDateTime(appointment.fecha_hora_cita)}</span>
         </div>
       </CardContent>
     </Card>
   );
 });
 
-// Componente principal
-export const AppointmentHistory = memo<{
+const LoadingState = memo(() => (
+  <div className="space-y-6">
+    <div className="flex flex-col items-center justify-center py-12">
+      <div className="relative">
+        <CalendarClock className="h-12 w-12 text-blue-500 animate-pulse mb-4" />
+        <div className="absolute -inset-2 bg-blue-500/20 rounded-full animate-ping" />
+      </div>
+      <p className="text-base text-slate-600 dark:text-slate-400 mb-4 font-medium">
+        Cargando historial de citas...
+      </p>
+      <Progress value={75} className="h-2 w-64" />
+    </div>
+  </div>
+));
+
+const ErrorState = memo(({ error }: { error: Error }) => (
+  <Alert variant="destructive" className="animate-in fade-in-0 shadow-lg">
+    <AlertCircle className="h-5 w-5" />
+    <AlertTitle>Error al cargar el historial</AlertTitle>
+    <AlertDescription>
+      {error.message || "Ocurrió un error al cargar las citas del paciente."}
+    </AlertDescription>
+  </Alert>
+));
+
+const EmptyState = memo(() => (
+  <Card className="text-center py-16 shadow-lg bg-white dark:bg-slate-900">
+    <CardContent className="space-y-6">
+      <div className="relative">
+        <div className="h-20 w-20 mx-auto rounded-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center">
+          <Calendar className="h-10 w-10 text-slate-500 dark:text-slate-400" />
+        </div>
+        <div className="absolute -inset-2 bg-slate-300/50 dark:bg-slate-600/50 rounded-full animate-ping opacity-20" />
+      </div>
+      <div>
+        <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+          Sin historial de citas
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+          Este paciente no tiene citas registradas en el sistema.
+        </p>
+      </div>
+    </CardContent>
+  </Card>
+));
+
+const StatsSection = memo<{ statistics: ReturnType<typeof calculateAppointmentStatistics> }>(({ statistics }) => (
+  <Card className="shadow-lg border bg-white dark:bg-slate-900">
+    <CardHeader>
+      <div className="flex items-center gap-3">
+        <div className="h-12 w-12 rounded-xl bg-blue-600/10 dark:bg-blue-600/20 flex items-center justify-center">
+          <Activity className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+        </div>
+        <div>
+          <CardTitle className="text-xl font-bold">Resumen del Paciente</CardTitle>
+          <CardDescription className="text-sm">
+            Análisis completo de {statistics.total} cita{statistics.total !== 1 ? 's' : ''} registrada{statistics.total !== 1 ? 's' : ''}
+          </CardDescription>
+        </div>
+      </div>
+    </CardHeader>
+    
+    <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatCard
+        title="Total de Citas"
+        value={statistics.total}
+        subtitle="Historial completo"
+        icon={History}
+      />
+      <StatCard
+        title="Completadas"
+        value={statistics.completadas}
+        subtitle={`${statistics.completionRate}% tasa de éxito`}
+        icon={CheckCircle2}
+      />
+      <StatCard
+        title="Programadas"
+        value={statistics.programadas}
+        subtitle="Próximas citas"
+        icon={CalendarClock}
+      />
+      <StatCard
+        title="Asistencia"
+        value={`${statistics.attendanceRate}%`}
+        subtitle={`${statistics.noAsistio} inasistencias`}
+        icon={Target}
+      />
+    </CardContent>
+  </Card>
+));
+
+const AppointmentsList = memo<{
+  appointments: ExtendedAppointment[];
+  maxItems?: number;
+  statistics: ReturnType<typeof calculateAppointmentStatistics>;
+}>(({ appointments, maxItems, statistics }) => (
+  <div className="space-y-6">
+    <div className="flex items-center justify-between">
+      <div>
+        <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <History className="h-5 w-5" />
+          Historial de Citas
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Registro cronológico de todas las consultas
+        </p>
+      </div>
+      {maxItems && appointments.length >= maxItems && (
+        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+          Mostrando {maxItems} de {statistics.total}
+        </Badge>
+      )}
+    </div>
+    <div className="grid gap-4">
+      {appointments.map((appointment: ExtendedAppointment) => (
+        <AppointmentCard
+          key={appointment.id}
+          appointment={appointment}
+        />
+      ))}
+    </div>
+  </div>
+));
+
+// ==================== HOOK PERSONALIZADO OPTIMIZADO ====================
+
+const usePatientAppointments = (patientId: string, maxItems?: number) => {
+  const { data: appointmentsData, isLoading, error } = useAppointments(1, 100);
+  
+  return useMemo(() => {
+    const allAppointments = appointmentsData?.appointments || [];
+    
+    // Filtrar y ordenar citas del paciente de forma optimizada
+    const patientAppointments = allAppointments
+      .filter((app: ExtendedAppointment) => app.patient_id === patientId)
+      .sort((a: ExtendedAppointment, b: ExtendedAppointment) => {
+        const dateA = new Date(a.fecha_hora_cita);
+        const dateB = new Date(b.fecha_hora_cita);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+    const limitedAppointments = maxItems 
+      ? patientAppointments.slice(0, maxItems)
+      : patientAppointments;
+
+    const statistics = calculateAppointmentStatistics(patientAppointments);
+
+    return {
+      appointments: limitedAppointments,
+      allAppointments: patientAppointments,
+      statistics,
+      isLoading,
+      error: error as Error | null
+    };
+  }, [appointmentsData, patientId, maxItems, isLoading, error]);
+};
+
+// ==================== COMPONENTE PRINCIPAL ====================
+
+interface AppointmentHistoryProps {
   patientId: string;
   showStats?: boolean;
   maxItems?: number;
   className?: string;
-}>(({
+}
+
+export const AppointmentHistory = memo<AppointmentHistoryProps>(({
   patientId,
   showStats = true,
   maxItems,
   className
 }) => {
-  // Usar React Query hook
-  const { data: appointmentsData, isLoading, error } = useAppointments(1, 100); // useAppointments devuelve ExtendedAppointment
-  const appointments = appointmentsData?.appointments || [];
-  
-  // Filtrar y ordenar citas del paciente con memoización
-  const sortedAppointments = useMemo(() => {
-    if (!appointments) return [];
-    
-    return [...appointments].sort((a: ExtendedAppointment, b: ExtendedAppointment) => {
-      const dateA = parseISO(a.fecha_hora_cita);
-      const dateB = parseISO(b.fecha_hora_cita);
-      return dateB.getTime() - dateA.getTime();
-    }).filter((app: ExtendedAppointment) => app.patient_id === patientId).slice(0, maxItems);
-  }, [appointments, patientId, maxItems]);
+  const { appointments, statistics, isLoading, error } = usePatientAppointments(patientId, maxItems);
 
-  // Calcular estadísticas con memoización
-  const statistics = useMemo(() => {
-    if (!sortedAppointments.length) {
-      return {
-        total: 0,
-        completadas: 0,
-        programadas: 0,
-        canceladas: 0,
-        noAsistio: 0,
-        completionRate: 0,
-        attendanceRate: 0,
-      };
-    }
-
-    const counts = sortedAppointments.reduce((acc: Record<string, number>, app: ExtendedAppointment) => {
-      if (app.estado_cita) {
-        acc[app.estado_cita] = (acc[app.estado_cita] || 0) + 1;
-      }
-      return acc;
-    }, {});
-
-    const completadas = counts[AppointmentStatusEnum.COMPLETADA] || 0;
-    const noAsistio = counts[AppointmentStatusEnum.NO_ASISTIO] || 0;
-    const canceladas = counts[AppointmentStatusEnum.CANCELADA] || 0;
-    const programadas = (counts[AppointmentStatusEnum.PROGRAMADA] || 0) +
-                       (counts[AppointmentStatusEnum.CONFIRMADA] || 0) +
-                       (counts[AppointmentStatusEnum.PRESENTE] || 0) +
-                       (counts[AppointmentStatusEnum.REAGENDADA] || 0);
-
-    const totalFinalizadas = completadas + noAsistio + canceladas;
-    const completionRate = totalFinalizadas > 0 ? (completadas / totalFinalizadas) * 100 : 0;
-    const attendanceRate = (completadas + noAsistio) > 0 ? (completadas / (completadas + noAsistio)) * 100 : 0;
-
-    return {
-      total: sortedAppointments.length,
-      completadas,
-      programadas,
-      canceladas,
-      noAsistio,
-      completionRate: Math.round(completionRate),
-      attendanceRate: Math.round(attendanceRate),
-    };
-  }, [sortedAppointments]);
-
+  // Mostrar estado de carga inicial
   if (isLoading && !appointments.length) {
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="relative">
-            <CalendarClock className="h-12 w-12 text-blue-500 animate-pulse mb-4" />
-            <div className="absolute -inset-2 bg-blue-500/20 rounded-full animate-ping" />
-          </div>
-          <p className="text-base text-slate-600 dark:text-slate-400 mb-4 font-medium">
-            Cargando historial de citas...
-          </p>
-          <Progress value={75} className="h-2 w-64" />
-        </div>
-      </div>
-    );
+    return <LoadingState />;
   }
 
+  // Mostrar error si hay algún problema
   if (error) {
-    return (
-      <Alert variant="destructive" className="animate-in fade-in-0 shadow-lg">
-        <AlertCircle className="h-5 w-5" />
-        <AlertTitle>Error al cargar el historial</AlertTitle>
-        <AlertDescription>
-          {error instanceof Error ? error.message : "Ocurrió un error al cargar las citas del paciente."}
-        </AlertDescription>
-      </Alert>
-    );
+    return <ErrorState error={error} />;
+  }
+
+  // Mostrar estado vacío si no hay citas
+  if (appointments.length === 0) {
+    return <EmptyState />;
   }
 
   return (
     <div className={cn("space-y-6", className)}>
-      {showStats && (
-        <Card className="shadow-lg border bg-white dark:bg-slate-900">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-xl bg-blue-600/10 dark:bg-blue-600/20 flex items-center justify-center">
-                <Activity className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <CardTitle className="text-xl font-bold">Resumen del Paciente</CardTitle>
-                <CardDescription className="text-sm">
-                  Análisis completo de {statistics.total} cita{statistics.total !== 1 ? 's' : ''} registrada{statistics.total !== 1 ? 's' : ''}
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          
-          <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              title="Total de Citas"
-              value={appointments.length}
-              subtitle="Historial completo"
-              icon={History}
-            />
-            <StatCard
-              title="Completadas"
-              value={statistics.completadas}
-              subtitle={`${statistics.completionRate}% tasa de éxito`}
-              icon={CheckCircle2}
-            />
-            <StatCard
-              title="Programadas"
-              value={statistics.programadas}
-              subtitle="Próximas citas"
-              icon={CalendarClock}
-            />
-            <StatCard
-              title="Asistencia"
-              value={`${statistics.attendanceRate}%`}
-              subtitle={`${statistics.noAsistio} inasistencias`}
-              icon={Target}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {sortedAppointments.length === 0 ? (
-        <Card className="text-center py-16 shadow-lg bg-white dark:bg-slate-900">
-          <CardContent className="space-y-6">
-            <div className="relative">
-              <div className="h-20 w-20 mx-auto rounded-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center">
-                <Calendar className="h-10 w-10 text-slate-500 dark:text-slate-400" />
-              </div>
-              <div className="absolute -inset-2 bg-slate-300/50 dark:bg-slate-600/50 rounded-full animate-ping opacity-20" />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-                Sin historial de citas
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
-                Este paciente no tiene citas registradas en el sistema.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <History className="h-5 w-5" />
-                Historial de Citas
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Registro cronológico de todas las consultas
-              </p>
-            </div>
-            {maxItems && sortedAppointments.length >= maxItems && (
-              <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-                Mostrando {maxItems} de {statistics.total}
-              </Badge>
-            )}
-          </div>
-          <div className="grid gap-4">
-            {sortedAppointments.map((appointment: ExtendedAppointment) => (
-              <AppointmentCard
-                key={appointment.id}
-                appointment={appointment}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {showStats && <StatsSection statistics={statistics} />}
+      <AppointmentsList 
+        appointments={appointments}
+        maxItems={maxItems}
+        statistics={statistics}
+      />
     </div>
   );
 });
+
+AppointmentHistory.displayName = "AppointmentHistory";

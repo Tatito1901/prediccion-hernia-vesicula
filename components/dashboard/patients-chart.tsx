@@ -1,234 +1,189 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useDashboard } from '@/contexts/dashboard-context';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { Activity, AlertTriangle, Calendar, LineChart } from 'lucide-react';
 
-// --- TIPOS Y DATOS MOCK (PARA DESARROLLO INDEPENDIENTE) ---
+// --- TIPOS Y CONSTANTES ---
 
-type DateRange = '7dias' | '30dias' | '90dias' | 'ytd';
+type DateRange = '7dias' | '30dias' | '60dias' | '90dias' | 'ytd';
 
-interface PatientData {
-  id: string;
-  fecha_registro: string;
-  estado_paciente: 'REGISTRADO' | 'OPERADO' | 'ALTA';
-  updated_at: string;
-}
+const DATE_RANGE_DESCRIPTIONS: Record<DateRange, string> = {
+  '7dias': 'Mostrando datos de los últimos 7 días',
+  '30dias': 'Mostrando datos de los últimos 30 días',
+  '60dias': 'Mostrando datos de los últimos 60 días',
+  '90dias': 'Mostrando datos de los últimos 90 días',
+  'ytd': 'Mostrando datos de todo el año actual',
+};
 
 interface ChartDataPoint {
   date: string;
   label: string;
   pacientes: number;
   operados: number;
-  consultas?: number;
-  seguimiento?: number;
+  consultas: number;
+  seguimiento: number;
 }
 
-// Definición del tipo para los datos del chart
-interface ChartData {
-  categories: string[];
-  series: Array<{
-    name: string;
-    data: number[];
-  }>;
-}
+// --- FUNCIONES AUXILIARES ---
 
-// Hook simulado si no se proporciona uno real.
-const useMockDashboard = () => {
-  const [dateRange, setDateRange] = useState<DateRange>('30dias');
+// Función optimizada para generar datos mock (solo para desarrollo)
+function generateMockChartData(dateRange: DateRange): ChartDataPoint[] {
+  if (process.env.NODE_ENV === 'production') return [];
   
-  // Generar datos de pacientes de ejemplo
-  const patients = useMemo(() => {
-    const data: PatientData[] = [];
-    let currentDate = new Date();
-    for (let i = 0; i < 200; i++) {
-      const regDate = new Date(currentDate);
-      regDate.setDate(currentDate.getDate() - Math.floor(Math.random() * 365));
-      const isOperado = Math.random() > 0.6;
-      data.push({
-        id: `p${i}`,
-        fecha_registro: regDate.toISOString(),
-        estado_paciente: isOperado ? 'OPERADO' : 'REGISTRADO',
-        updated_at: new Date(regDate.setDate(regDate.getDate() + Math.floor(Math.random() * 14))).toISOString(),
-      });
-    }
-    return data;
-  }, []);
+  const today = new Date();
+  const isYearView = dateRange === 'ytd';
+  const numPoints = isYearView ? 12 : 
+    dateRange === '7dias' ? 7 : 
+    dateRange === '30dias' ? 30 : 90;
+
+  const data: ChartDataPoint[] = [];
   
-  // Datos simulados para el chart basado en el rango de fecha
-  const chart: ChartData = useMemo(() => {
-    // Generar categorías basadas en el rango de fecha seleccionado
-    const categories: string[] = [];
-    const today = new Date();
-    const numDays = dateRange === '7dias' ? 7 : dateRange === '30dias' ? 30 : dateRange === '90dias' ? 90 : 12;
+  for (let i = 0; i < numPoints; i++) {
+    let label: string;
     
-    if (dateRange === 'ytd') {
-      // Para año, mostrar los meses
-      for (let i = 0; i < 12; i++) {
-        const date = new Date(today.getFullYear(), i, 1);
-        categories.push(date.toLocaleDateString('es', { month: 'short' }));
-      }
+    if (isYearView) {
+      const date = new Date(today.getFullYear(), i, 1);
+      label = date.toLocaleDateString('es', { month: 'short' });
+      label = label.charAt(0).toUpperCase() + label.slice(1);
     } else {
-      // Para días, mostrar las fechas
-      for (let i = numDays - 1; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        categories.push(date.toLocaleDateString('es', { day: 'numeric', month: 'short' }));
-      }
+      const date = new Date(today);
+      date.setDate(date.getDate() - (numPoints - 1 - i));
+      label = date.toLocaleDateString('es', { day: 'numeric', month: 'short' });
     }
-    
-    // Generar datos simulados para cada serie
-    return {
-      categories,
-      series: [
-        {
-          name: 'Consultas',
-          data: Array.from({ length: categories.length }, () => Math.floor(Math.random() * 20) + 5),
-        },
-        {
-          name: 'Operados',
-          data: Array.from({ length: categories.length }, () => Math.floor(Math.random() * 15) + 3),
-        },
-        {
-          name: 'Pacientes',
-          data: Array.from({ length: categories.length }, () => Math.floor(Math.random() * 30) + 10),
-        },
-        {
-          name: 'Seguimiento',
-          data: Array.from({ length: categories.length }, () => Math.floor(Math.random() * 12) + 2),
-        },
-      ],
-    };
-  }, [dateRange]);
 
+    data.push({
+      date: `day-${i}`,
+      label,
+      consultas: Math.floor(Math.random() * 20) + 5,
+      operados: Math.floor(Math.random() * 15) + 3,
+      pacientes: Math.floor(Math.random() * 30) + 10,
+      seguimiento: Math.floor(Math.random() * 12) + 2
+    });
+  }
+  
+  return data;
+}
+
+// Función para transformar datos reales del chart
+function transformRealChartData(chart: any, dateRange: DateRange): ChartDataPoint[] {
+  if (!chart?.series || !chart.categories || chart.series.length === 0) return [];
+  
+  const isYearView = dateRange === 'ytd';
+  
+  return chart.categories.map((label: string, index: number) => {
+    const formattedLabel = isYearView ? 
+      label.charAt(0).toUpperCase() + label.slice(1) : 
+      label;
+    
+    return {
+      date: `day-${index}`,
+      label: formattedLabel,
+      pacientes: chart.series[2]?.data[index] || 0,
+      operados: chart.series[1]?.data[index] || 0, 
+      consultas: chart.series[0]?.data[index] || 0,
+      seguimiento: chart.series[3]?.data[index] || 0,
+    };
+  });
+}
+
+// --- COMPONENTES AUXILIARES ---
+
+function CustomTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length) return null;
+
+  return (
+    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg p-4 min-w-[200px] transition-all duration-300">
+      <p className="font-bold text-sm text-slate-800 dark:text-slate-100 mb-2">{label}</p>
+      <div className="space-y-1.5">
+        {payload.map((entry: any) => (
+          <div key={entry.dataKey} className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+              <p className="text-xs text-slate-600 dark:text-slate-300">{entry.name}</p>
+            </div>
+            <p className="font-medium text-sm text-slate-800 dark:text-slate-100">{entry.value.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LoadingState() {
+  return <Skeleton className="h-[300px] w-full rounded-xl bg-slate-100 dark:bg-slate-700/50" />;
+}
+
+function ErrorState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-[300px] text-center p-8 bg-amber-50 dark:bg-amber-900/20 rounded-xl">
+      <div className="p-3 rounded-full bg-amber-100 dark:bg-amber-900/50 mb-4">
+        <AlertTriangle className="h-8 w-8 text-amber-500" />
+      </div>
+      <h3 className="text-lg font-bold text-amber-900 dark:text-amber-200 mb-1">Error al cargar datos</h3>
+      <p className="text-sm text-amber-700 dark:text-amber-400 max-w-md">
+        No se pudo recuperar la información. Intente de nuevo más tarde.
+      </p>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-[300px] text-center p-8 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+      <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800 mb-4">
+        <LineChart className="h-10 w-10 text-slate-400 dark:text-slate-500" />
+      </div>
+      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-1">Sin datos disponibles</h3>
+      <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md">
+        No hay registros en el período seleccionado para generar un gráfico.
+      </p>
+    </div>
+  );
+}
+
+// Hook simplificado para datos mock (solo desarrollo)
+function useMockData(dateRange: DateRange) {
   return {
     loading: false,
     error: null,
-    patients,
+    chart: null, // No hay datos reales en mock
     dateRange,
-    setDateRange,
-    chart, // Incluir los datos del chart
+    setDateRange: () => {},
   };
-};
-
-// --- COMPONENTES REUTILIZABLES ---
-
-/**
- * Tooltip personalizado para el gráfico con un diseño profesional
- */
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg p-4 min-w-[200px] transition-all duration-300">
-        <p className="font-bold text-sm text-slate-800 dark:text-slate-100 mb-2">{label}</p>
-        <div className="space-y-1.5">
-          {payload.map((entry: any) => (
-            <div key={entry.dataKey} className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                <p className="text-xs text-slate-600 dark:text-slate-300">{entry.name}</p>
-              </div>
-              <p className="font-medium text-sm text-slate-800 dark:text-slate-100">{entry.value.toLocaleString()}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
+}
 
 // --- COMPONENTE PRINCIPAL ---
 
 export const PatientTrendsChart: React.FC = () => {
-  // Usar el hook real si existe, si no, el de ejemplo.
-  const { loading, error, patients = [], dateRange, setDateRange, chart } = typeof useDashboard === 'function' ? useDashboard() : useMockDashboard();
+  const [mockDateRange, setMockDateRange] = useState<DateRange>('30dias');
   
-  // Convertir los datos del chart en el formato esperado y aplicar filtro por fecha
-  const chartData = useMemo(() => {
-    if (!chart || !chart.series || chart.series.length === 0) return [];
-    
-    // Aplicar filtrado basado en dateRange y formatear etiquetas según corresponda
-    const isYearView = dateRange === 'ytd';
-    
-    return chart.categories.map((label: string, index: number) => {
-      // Para la vista de año, asegurarse que se muestren los nombres de los meses
-      let formattedLabel = label;
-      if (isYearView) {
-        // Si es posible, formatear el mes de forma más clara
-        try {
-          // Si el mes ya viene formateado como 'ene', 'feb', etc.
-          // lo capitalizamos para mejor presentación
-          formattedLabel = label.charAt(0).toUpperCase() + label.slice(1);
-        } catch (e) {
-          // Mantener el formato original si hay algún error
-        }
-      }
-      
-      return {
-        date: `day-${index}`,
-        label: formattedLabel,
-        pacientes: chart.series[2]?.data[index] || 0,
-        operados: chart.series[1]?.data[index] || 0,
-        consultas: chart.series[0]?.data[index] || 0,
-        seguimiento: chart.series[3]?.data[index] || 0,
-      };
-    });
-  }, [chart, dateRange]);
-
-
-
-  const description: Record<DateRange, string> = {
-    '7dias': 'Mostrando datos de los últimos 7 días',
-    '30dias': 'Mostrando datos de los últimos 30 días',
-    '90dias': 'Mostrando datos de los últimos 90 días',
-    'ytd': 'Mostrando datos de todo el año actual',
-  };
+  // Usar hook real si existe, si no, usar mock
+  const dashboardData = typeof useDashboard === 'function' ? useDashboard() : useMockData(mockDateRange);
+  const { loading, error, chart } = dashboardData;
   
-  // Función para manejar el cambio de rango de fecha
-  const handleDateRangeChange = (value: string) => {
-    // Aplicar el nuevo rango de fecha
+  // Determinar qué dateRange usar
+  const currentDateRange = dashboardData.dateRange || mockDateRange;
+  const setDateRange = dashboardData.setDateRange || setMockDateRange;
+  
+  // Transformar datos del chart
+  let chartData: ChartDataPoint[];
+  if (chart) {
+    chartData = transformRealChartData(chart, currentDateRange);
+  } else {
+    chartData = generateMockChartData(currentDateRange);
+  }
+
+  function handleDateRangeChange(value: string) {
     setDateRange(value as DateRange);
-  };
+  }
 
-  // --- RENDERIZADO DE ESTADOS ---
-
-  const renderContent = () => {
-    if (loading) {
-      return <Skeleton className="h-[300px] w-full rounded-xl bg-slate-100 dark:bg-slate-700/50" />;
-    }
-    
-    if (error) {
-      return (
-        <div className="flex flex-col items-center justify-center h-[300px] text-center p-8 bg-amber-50 dark:bg-amber-900/20 rounded-xl">
-          <div className="p-3 rounded-full bg-amber-100 dark:bg-amber-900/50 mb-4">
-            <AlertTriangle className="h-8 w-8 text-amber-500" />
-          </div>
-          <h3 className="text-lg font-bold text-amber-900 dark:text-amber-200 mb-1">Error al cargar datos</h3>
-          <p className="text-sm text-amber-700 dark:text-amber-400 max-w-md">
-            No se pudo recuperar la información. Intente de nuevo más tarde.
-          </p>
-        </div>
-      );
-    }
-    
-    if (chartData.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center h-[300px] text-center p-8 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-          <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800 mb-4">
-            <LineChart className="h-10 w-10 text-slate-400 dark:text-slate-500" />
-          </div>
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-1">Sin datos disponibles</h3>
-          <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md">
-            No hay registros en el período seleccionado para generar un gráfico.
-          </p>
-        </div>
-      );
-    }
+  function renderContent() {
+    if (loading) return <LoadingState />;
+    if (error) return <ErrorState />;
+    if (chartData.length === 0) return <EmptyState />;
     
     return (
       <Card className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm rounded-xl overflow-hidden">
@@ -276,11 +231,11 @@ export const PatientTrendsChart: React.FC = () => {
                   dy={5} 
                   tick={{
                     fontSize: 12,
-                    fill: dateRange === 'ytd' ? '#6366f1' : undefined,
-                    fontWeight: dateRange === 'ytd' ? 'bold' : undefined
+                    fill: currentDateRange === 'ytd' ? '#6366f1' : undefined,
+                    fontWeight: currentDateRange === 'ytd' ? 'bold' : undefined
                   }}
                   tickMargin={8}
-                  interval={dateRange === 'ytd' ? 0 : 'preserveEnd'}
+                  interval={currentDateRange === 'ytd' ? 0 : 'preserveEnd'}
                 />
                 <YAxis 
                   tickLine={false} 
@@ -337,7 +292,7 @@ export const PatientTrendsChart: React.FC = () => {
         </CardContent>
       </Card>
     );
-  };
+  }
 
   return (
     <Card className="bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 shadow-lg rounded-2xl overflow-hidden">
@@ -353,12 +308,12 @@ export const PatientTrendsChart: React.FC = () => {
               </CardTitle>
               <CardDescription className="mt-1.5 text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
                 <Calendar className="h-4 w-4" />
-                {description[dateRange]}
+                {DATE_RANGE_DESCRIPTIONS[currentDateRange]}
               </CardDescription>
             </div>
           </div>
-          <Tabs value={dateRange} onValueChange={handleDateRangeChange} className="w-full sm:w-auto">
-            <TabsList className="grid grid-cols-4 w-full sm:w-auto h-auto p-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl gap-1 shadow-sm">
+          <Tabs value={currentDateRange} onValueChange={handleDateRangeChange} className="w-full sm:w-auto">
+            <TabsList className="grid grid-cols-5 w-full sm:w-auto h-auto p-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl gap-1 shadow-sm">
               <TabsTrigger 
                 value="7dias" 
                 className="py-2 px-3 text-xs font-medium rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-300 data-[state=active]:shadow-sm transition-all"
@@ -370,6 +325,12 @@ export const PatientTrendsChart: React.FC = () => {
                 className="py-2 px-3 text-xs font-medium rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-300 data-[state=active]:shadow-sm transition-all"
               >
                 30 días
+              </TabsTrigger>
+              <TabsTrigger 
+                value="60dias" 
+                className="py-2 px-3 text-xs font-medium rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-300 data-[state=active]:shadow-sm transition-all"
+              >
+                60 días
               </TabsTrigger>
               <TabsTrigger 
                 value="90dias" 

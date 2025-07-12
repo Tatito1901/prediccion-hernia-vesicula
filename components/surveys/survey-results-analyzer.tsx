@@ -51,7 +51,7 @@ import {
   User,
   Zap,
 } from "lucide-react"
-import { usePatient } from "@/hooks/use-patients";
+import { usePatient } from "@/hooks/use-appointments";
 import { useCreateAppointment } from '@/hooks/use-appointments';
 // TODO: [Refactor] The helper file was not found. The logic for these functions needs to be restored.
 // import { calculateConversionScore, generateInsights, generateRecommendationCategories } from "@/lib/utils/survey-analyzer-helpers"
