@@ -1,6 +1,6 @@
 // app/dashboard/components/DashboardMetrics.tsx
 
-import React, { useMemo, ReactNode, memo } from "react";
+import React, { useMemo, memo } from "react";
 import {
   ArrowUpIcon,
   ArrowDownIcon,
@@ -9,9 +9,17 @@ import {
   TrendingUpIcon,
   InfoIcon,
   BarChart4Icon,
+  PercentIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ActivityIcon,
+  UserPlusIcon,
+  CalendarIcon,
+  RefreshCwIcon,
+  LucideProps,
 } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -27,8 +35,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { useDashboard } from '@/contexts/dashboard-context';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
-// --- Tipos y Constantes (Sin cambios) ---
+// --- Tipos y Constantes Mejoradas ---
+export enum PatientOriginEnum {
+  GOOGLE = "Google",
+  FACEBOOK = "Facebook",
+  INSTAGRAM = "Instagram",
+  REFERRAL = "Referral",
+  OTHER = "Other",
+}
 
 export interface ClinicMetrics {
   totalPacientes: number;
@@ -39,223 +55,267 @@ export interface ClinicMetrics {
   tasaConversion: number;
   tiempoPromedioDecision: number;
   fuentePrincipalPacientes: PatientOriginEnum;
-  diagnosticosMasComunes: { tipo: string; cantidad: number }[];
+  lastUpdated?: string | number | Date;
 }
 
-export enum PatientOriginEnum {
-  GOOGLE = "Google",
-  FACEBOOK = "Facebook",
-  INSTAGRAM = "Instagram",
-  REFERRAL = "Referral",
-  OTHER = "Other",
-}
+// Mover objeto fuera del componente para evitar recreación
+const METRIC_INFO = {
+  tasaConversion: { fuente: "Cálculo interno", significado: "% de pacientes que deciden operarse", description: "Tasa de Conversión" },
+  totalPacientes: { fuente: "Base de datos", significado: "Pacientes totales registrados en la historia", description: "Pacientes Totales" },
+  tiempoPromedioDecision: { fuente: "Registro de citas", significado: "Días promedio desde la primera consulta hasta la decisión de cirugía", description: "Tiempo de Decisión" },
+  fuentePrincipalPacientes: { fuente: "Formularios de registro", significado: "Canal de adquisición más común de nuevos pacientes", description: "Fuente Principal" },
+  pacientesOperados: { fuente: "Registros quirúrgicos", significado: "Pacientes que han completado su cirugía", description: "Pacientes Operados" },
+  pacientesNoOperados: { fuente: "Registros de seguimiento", significado: "Pacientes que decidieron no operarse o pospusieron", description: "Pacientes No Operados" },
+  pacientesSeguimiento: { fuente: "CRM", significado: "Pacientes en proceso de decisión o seguimiento activo", description: "En Seguimiento" },
+  pacientesNuevosMes: { fuente: "Citas registradas", significado: "Nuevos pacientes registrados en el rango de fechas seleccionado", description: "Nuevos Pacientes (Mes)" },
+} as const;
 
-export type MetricDetail = {
-  fuente: string;
-  significado: string;
-  [key: string]: string | undefined;
-};
-
-export type MetricKey = keyof typeof metricInfo;
+export type MetricKey = keyof typeof METRIC_INFO;
 
 interface MetricCardProps {
   metricKey: MetricKey;
   value: string | number;
-  description: string;
-  badge?: ReactNode;
-  footerContent: ReactNode;
+  footerContent: React.ReactNode;
   footerDetail: string;
-  loading?: boolean;
+  badge?: React.ReactNode;
+  trend?: 'up' | 'down' | 'neutral';
 }
 
-export interface DashboardMetricsProps {
-  metrics?: ClinicMetrics;
-  loading?: boolean;
-}
-
-const metricInfo = {
-  tasaConversion: { fuente: "Cálculo interno", significado: "% de pacientes que deciden operarse" },
-  totalPacientes: { fuente: "Base de datos", significado: "Pacientes registrados" },
-  tiempoPromedioDecision: { fuente: "Registro de citas", significado: "Días hasta decidir cirugía" },
-  fuentePrincipalPacientes: { fuente: "Formularios", significado: "Canal más común" },
-  pacientesOperados: { fuente: "Registros quirúrgicos", significado: "Pacientes con cirugía" },
-  pacientesNoOperados: { fuente: "Registros quirúrgicos", significado: "Pacientes sin cirugía" },
-  pacientesSeguimiento: { fuente: "CRM", significado: "Pacientes en seguimiento" },
-  pacientesNuevosMes: { fuente: "Citas", significado: "Pacientes nuevos este mes" },
-} as const;
-
-const pct = (numerator: number, denominator: number): string =>
+// Mover función de utilidad fuera del componente
+const formatPercentage = (numerator: number, denominator: number): string =>
   denominator === 0 ? "N/A" : `${((numerator / denominator) * 100).toFixed(0)}%`;
 
-// --- Componentes de UI Refactorizados ---
+// --- Componentes Optimizados ---
+const MetricIcon = ({ metricKey, ...props }: { metricKey: MetricKey } & LucideProps) => {
+  const icons: Record<MetricKey, React.ElementType> = {
+    tasaConversion: PercentIcon,
+    totalPacientes: UsersIcon,
+    tiempoPromedioDecision: ClockIcon,
+    fuentePrincipalPacientes: TrendingUpIcon,
+    pacientesOperados: CheckCircleIcon,
+    pacientesNoOperados: XCircleIcon,
+    pacientesSeguimiento: ActivityIcon,
+    pacientesNuevosMes: UserPlusIcon,
+  };
+  
+  const IconComponent = icons[metricKey] || BarChart4Icon;
+  return <IconComponent {...props} />;
+};
 
-/**
- * Skeleton para la tarjeta de métrica.
- * Se ha simplificado para asegurar consistencia visual.
- */
 const MetricCardSkeleton = (): JSX.Element => (
-  <Card className="flex flex-col">
-    <CardHeader className="pb-3 pt-4 px-4">
-      <Skeleton className="h-4 w-3/4 mb-2" />
-      <Skeleton className="h-8 w-1/2" />
+  <Card className="p-5 shadow-sm h-full">
+    <CardHeader className="p-0 flex-row justify-between items-start mb-3">
+      <Skeleton className="h-4 w-3/4" />
+      <Skeleton className="h-5 w-5 rounded-full" />
     </CardHeader>
-    <CardFooter className="flex-col items-start gap-2 pt-2 pb-3 px-4 mt-auto">
+    <CardContent className="p-0 mb-4">
+      <Skeleton className="h-8 w-1/2" />
+    </CardContent>
+    <CardFooter className="p-0 flex-col items-start space-y-2">
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-3 w-2/3" />
     </CardFooter>
   </Card>
 );
 
-/**
- * Tarjeta de Métrica Memoizada y Optimizada para Responsividad.
- * - Usa `@container` para adaptar su contenido interno.
- * - El layout de Flexbox previene el desbordamiento de contenido.
- */
 const MemoizedMetricCard = memo(function MetricCard({
   metricKey,
   value,
-  description,
-  badge,
   footerContent,
   footerDetail,
+  badge,
+  trend = 'neutral'
 }: MetricCardProps): JSX.Element {
-  const info = metricInfo[metricKey];
+  const { description, fuente, significado } = METRIC_INFO[metricKey];
+
+  const trendUI = useMemo(() => {
+    const trendColor = trend === 'up' ? 'text-green-600' : trend === 'down' ? 'text-destructive' : 'text-muted-foreground';
+    const TrendIcon = trend === 'up' ? ArrowUpIcon : trend === 'down' ? ArrowDownIcon : null;
+    
+    return { color: trendColor, Icon: TrendIcon };
+  }, [trend]);
 
   return (
     <Dialog>
-      <Card className="@container/card relative flex flex-col justify-between hover:shadow-lg transition-all duration-300 ease-in-out">
-        <CardHeader className="pb-3 pt-4 px-4">
-          <div className="flex justify-between items-start gap-2">
-            {/* El min-w-0 es crucial para que text-truncation funcione en flexbox */}
-            <CardDescription className="text-xs @[180px]/card:text-sm truncate min-w-0">{description}</CardDescription>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0 bg-primary/10 text-primary hover:bg-primary/20">
-                <InfoIcon className="h-4 w-4" />
-              </Button>
-            </DialogTrigger>
-          </div>
-          <CardTitle className="text-xl @[210px]/card:text-2xl font-bold tabular-nums">{value}</CardTitle>
-          {badge && <div className="absolute right-4 top-16">{badge}</div>}
+      <Card className="p-5 shadow-sm hover:shadow-lg transition-shadow duration-300 h-full group flex flex-col">
+        <CardHeader className="p-0 flex-row justify-between items-start gap-2 mb-3">
+          <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            {description}
+          </CardTitle>
+          <DialogTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-primary rounded-full"
+              aria-label={`Info sobre ${description}`}
+            >
+              <InfoIcon className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
         </CardHeader>
-        {/* mt-auto empuja el footer hacia abajo, asegurando altura consistente */}
-        <CardFooter className="flex-col items-start gap-1 text-xs pt-2 pb-3 px-4 mt-auto">
-          <div className="flex items-center gap-1.5">{footerContent}</div>
-          <div className="text-muted-foreground line-clamp-1">{footerDetail}</div>
-        </CardFooter>
-      </Card>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader className="mb-2">
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart4Icon className="h-5 w-5 text-primary" />
-            <DialogTitle>{description}</DialogTitle>
+        
+        <CardContent className="p-0 flex-grow">
+          <div className="text-2xl md:text-3xl font-bold text-foreground tabular-nums">
+            {value}
           </div>
-          <DialogDescription className="space-y-3 text-sm text-foreground">
-            <span className="font-medium text-lg text-primary text-center block mb-3">{value}</span>
-            <span className="block"><span className="font-semibold">Fuente:</span> {info.fuente}</span>
-            <span className="block"><span className="font-semibold">Significado:</span> {info.significado}</span>
+        </CardContent>
+
+        <CardFooter className="p-0 flex-col items-start gap-1.5 pt-4 border-t">
+          <div className={`flex items-center gap-1.5 text-xs font-medium ${trendUI.color}`}>
+            {trendUI.Icon && <trendUI.Icon className="h-3.5 w-3.5" />}
+            <span>{footerContent}</span>
+          </div>
+          <p className="text-xs text-muted-foreground truncate" title={footerDetail}>
+            {footerDetail}
+          </p>
+        </CardFooter>
+
+        {badge && <div className="absolute top-4 right-4">{badge}</div>}
+      </Card>
+      
+      <DialogContent className="sm:max-w-md rounded-xl">
+        <DialogHeader>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
+               <MetricIcon metricKey={metricKey} className="h-5 w-5" />
+            </div>
+            <DialogTitle className="text-lg font-semibold">{description}</DialogTitle>
+          </div>
+          <DialogDescription as="div" className="space-y-4 text-sm">
+            <div className="flex items-baseline gap-2 p-4 bg-muted rounded-lg">
+              <span className="font-bold text-3xl text-primary">{value}</span>
+              {badge && <span>{badge}</span>}
+            </div>
+            <div className="space-y-2 pt-2">
+              <div>
+                <span className="font-semibold text-foreground">Fuente de Datos:</span> 
+                <span className="ml-2 text-muted-foreground">{fuente}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-foreground">Significado:</span> 
+                <span className="ml-2 text-muted-foreground">{significado}</span>
+              </div>
+              <div className="pt-3 text-xs text-muted-foreground italic">
+                {footerDetail}
+              </div>
+            </div>
           </DialogDescription>
         </DialogHeader>
       </DialogContent>
     </Dialog>
   );
-}, (prev, next) => prev.value === next.value && prev.loading === next.loading); // Añadido `loading` a la comparación
+});
 
 MemoizedMetricCard.displayName = "MetricCard";
 
-// --- Componente Principal con Responsividad Robusta ---
+// Mover fuera del componente para evitar recreación
+const DEFAULT_METRICS: ClinicMetrics = {
+  totalPacientes: 0,
+  pacientesNuevosMes: 0,
+  pacientesOperados: 0,
+  pacientesNoOperados: 0,
+  pacientesSeguimiento: 0,
+  tasaConversion: 0,
+  tiempoPromedioDecision: 0,
+  fuentePrincipalPacientes: PatientOriginEnum.OTHER,
+};
 
-export function DashboardMetrics({
-  className,
-}: {
-  className?: string;
-}) {
-  // Use the centralized dashboard context instead of making a separate API call
-  const {
-    loading,
-    error,
-    clinicMetrics,
-    generalStats,
-    dateRange,
-  } = useDashboard();
-
-  const DEFAULT_METRICS: ClinicMetrics = useMemo(() => ({
-    totalPacientes: 0,
-    pacientesNuevosMes: 0,
-    pacientesOperados: 0,
-    pacientesNoOperados: 0,
-    pacientesSeguimiento: 0,
-    tasaConversion: 0,
-    tiempoPromedioDecision: 0,
-    fuentePrincipalPacientes: PatientOriginEnum.OTHER,
-    diagnosticosMasComunes: [],
-  }), []);
-
-  // Define lastUpdated using useMemo before any conditional returns
+export function DashboardMetrics() {
+  const { loading, error, clinicMetrics, refresh } = useDashboard();
+  
+  // Optimizar cálculo de fecha
   const lastUpdated = useMemo(() => {
-    if (clinicMetrics?.lastUpdated) {
-      try {
-        const date = new Date(clinicMetrics.lastUpdated);
-        if (!isNaN(date.getTime())) {
-          return `Actualizado: ${format(date, 'dd/MM/yyyy HH:mm')}`;
-        }
-      } catch (e) {
-        // Handle error silently in production
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Error al formatear fecha de actualización:', e);
-        }
-      }
+    if (!clinicMetrics?.lastUpdated) return 'Actualización en tiempo real';
+    
+    try {
+      const date = new Date(clinicMetrics.lastUpdated);
+      return isNaN(date.getTime()) 
+        ? 'Actualización en tiempo real' 
+        : `Actualizado: ${format(date, "dd 'de' MMMM, yyyy HH:mm", { locale: es })}`;
+    } catch {
+      return 'Actualización en tiempo real';
     }
-    return 'Actualizado recientemente';
   }, [clinicMetrics?.lastUpdated]);
   
   const metricsData = clinicMetrics ?? DEFAULT_METRICS;
 
-  /**
-   * MEJORA DE RESPONSIVIDAD #1: Grid Fluido
-   * En lugar de breakpoints fijos (sm, md, lg), usamos `auto-fit`.
-   * El grid creará tantas columnas como quepan, con un mínimo de 280px.
-   * Esto es mucho más robusto y se adapta a CUALQUIER tamaño de contenedor.
-   */
-  const responsiveGridClasses = "grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4";
+  // Mejorar responsividad con clases adaptativas
+  const responsiveGridClasses = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6";
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-6">
-        <div className="mb-6">
-          <Skeleton className="h-9 w-48" />
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <Skeleton className="h-8 w-56 rounded-lg" />
+          <Skeleton className="h-6 w-40 rounded-full" />
         </div>
         <div className={responsiveGridClasses}>
-          {Array.from({ length: 4 }).map((_, index) => (
-            <MetricCardSkeleton key={index} />
+          {Array(4).fill(0).map((_, i) => (
+            <MetricCardSkeleton key={i} />
           ))}
         </div>
       </div>
     );
   }
 
-  if (!clinicMetrics) {
+  if (error) {
     return (
-      <div className="p-4 sm:p-6 flex items-center justify-center h-64 rounded-lg bg-muted/50">
-        <p className="text-muted-foreground text-center">No hay datos de métricas disponibles en este momento.</p>
+      <div className="flex flex-col items-center justify-center min-h-[300px] rounded-xl bg-card border p-6 text-center">
+        <div className="p-3 rounded-full bg-destructive/10 text-destructive mb-4">
+          <XCircleIcon className="h-8 w-8" />
+        </div>
+        <h3 className="text-lg font-semibold text-foreground mb-2">Error al Cargar Métricas</h3>
+        <p className="text-muted-foreground max-w-md mb-6">
+          No pudimos obtener las métricas del dashboard.
+        </p>
+        <Button 
+          variant="outline" 
+          onClick={reloadData}
+          aria-label="Reintentar cargar datos"
+        >
+          <RefreshCwIcon className="h-4 w-4 mr-2" />
+          Reintentar
+        </Button>
       </div>
     );
   }
 
-  // lastUpdated hook moved to the top of the component
-
   return (
-    // No necesitamos @container/main si el grid es fluido por sí mismo.
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+              <BarChart4Icon className="h-6 w-6" />
+            </div>
+            <h2 className="text-2xl font-bold text-foreground truncate">
+              Métricas de la Clínica
+            </h2>
+          </div>
+          <p className="text-sm text-muted-foreground sm:ml-12 truncate">
+            Resumen de rendimiento y estadísticas clave
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted rounded-full px-3 py-1.5 w-full sm:w-auto truncate">
+          <CalendarIcon className="h-4 w-4 flex-shrink-0" />
+          <span className="truncate">{lastUpdated}</span>
+        </div>
+      </header>
+
       <Tabs defaultValue="general" className="w-full">
-        {/*
-         * MEJORA DE RESPONSIVIDAD #2: Tabs Adaptables
-         * - En pantallas pequeñas (móviles), los tabs ocupan el ancho completo (grid-cols-2).
-         * - En pantallas más grandes (`sm:`), se comportan como tabs normales (`w-auto`).
-         * Esto evita que se vean apretados en móviles.
-        */}
-        <TabsList className="mb-6 grid w-full grid-cols-2 h-auto sm:w-auto sm:inline-flex">
-          <TabsTrigger value="general" className="text-xs sm:text-sm">General</TabsTrigger>
-          <TabsTrigger value="pacientes" className="text-xs sm:text-sm">Pacientes</TabsTrigger>
+        <TabsList className="mb-6 bg-muted p-1 rounded-lg h-auto flex-wrap sm:flex-nowrap">
+          <TabsTrigger 
+            value="general" 
+            className="flex-1 px-4 py-2 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all truncate"
+          >
+            Visión General
+          </TabsTrigger>
+          <TabsTrigger 
+            value="pacientes" 
+            className="flex-1 px-4 py-2 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all truncate"
+          >
+            Análisis de Pacientes
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general">
@@ -263,70 +323,61 @@ export function DashboardMetrics({
             <MemoizedMetricCard
               metricKey="tasaConversion"
               value={`${(metricsData.tasaConversion * 100).toFixed(1)}%`}
-              description="Tasa de Conversión"
-              badge={<Badge variant="outline" className="text-xs">+5%</Badge>}
               footerContent="Mejora vs. mes anterior"
-              footerDetail="Pacientes que deciden operarse"
-            />
-            <MemoizedMetricCard
-              metricKey="totalPacientes"
-              value={metricsData.totalPacientes.toLocaleString()}
-              description="Pacientes Totales"
-              badge={<UsersIcon className="h-5 w-5 text-muted-foreground" />}
-              footerContent={`${metricsData.pacientesNuevosMes.toLocaleString()} nuevos este mes`}
-              footerDetail="Base de datos histórica"
+              footerDetail="Porcentaje de pacientes que deciden operarse"
+              trend="up"
             />
             <MemoizedMetricCard
               metricKey="tiempoPromedioDecision"
               value={`${metricsData.tiempoPromedioDecision} días`}
-              description="Tiempo Promedio Decisión"
-              badge={<ClockIcon className="h-5 w-5 text-muted-foreground" />}
-              footerContent={<><ArrowDownIcon className="h-3 w-3 text-green-600" /> 2 días menos</>}
-              footerDetail="vs. mes anterior"
+              footerContent="Reducción de 2 días"
+              footerDetail="Comparado con el promedio anterior"
+              trend="down"
+            />
+            <MemoizedMetricCard
+              metricKey="pacientesNuevosMes"
+              value={metricsData.pacientesNuevosMes.toLocaleString()}
+              footerContent="+15% vs mes anterior"
+              footerDetail="Indicador clave de crecimiento"
+              trend="up"
             />
             <MemoizedMetricCard
               metricKey="fuentePrincipalPacientes"
               value={String(metricsData.fuentePrincipalPacientes)}
-              description="Fuente Principal"
-              badge={<TrendingUpIcon className="h-4 w-4 text-muted-foreground" />}
-              footerContent="Canal de adquisición más efectivo"
-              footerDetail="Oportunidad de optimización"
+              footerContent="Canal más efectivo"
+              footerDetail="Oportunidad para enfocar marketing"
             />
           </div>
         </TabsContent>
         <TabsContent value="pacientes">
           <div className={responsiveGridClasses}>
             <MemoizedMetricCard
+              metricKey="totalPacientes"
+              value={metricsData.totalPacientes.toLocaleString()}
+              footerContent={`${metricsData.pacientesNuevosMes.toLocaleString()} nuevos este mes`}
+              footerDetail="Base de datos histórica de pacientes"
+            />
+            <MemoizedMetricCard
               metricKey="pacientesOperados"
               value={metricsData.pacientesOperados.toLocaleString()}
-              description="Pacientes Operados"
-              badge={<Badge variant="outline" className="text-xs">{pct(metricsData.pacientesOperados, metricsData.totalPacientes)}</Badge>}
+              badge={<Badge variant="secondary">{formatPercentage(metricsData.pacientesOperados, metricsData.totalPacientes)}</Badge>}
               footerContent="Del total de pacientes"
               footerDetail="Cirugías realizadas con éxito"
             />
             <MemoizedMetricCard
-              metricKey="pacientesNoOperados"
-              value={metricsData.pacientesNoOperados.toLocaleString()}
-              description="Pacientes No Operados"
-              badge={<Badge variant="outline" className="text-xs">{pct(metricsData.pacientesNoOperados, metricsData.totalPacientes)}</Badge>}
-              footerContent="Del total de pacientes"
-              footerDetail="Decidieron no operarse o posponer"
-            />
-            <MemoizedMetricCard
               metricKey="pacientesSeguimiento"
               value={metricsData.pacientesSeguimiento.toLocaleString()}
-              description="En Seguimiento"
-              badge={<Badge variant="outline" className="text-xs">{pct(metricsData.pacientesSeguimiento, metricsData.totalPacientes)}</Badge>}
-              footerContent="Potenciales conversiones futuras"
-              footerDetail="Pacientes en proceso de decisión"
+              badge={<Badge variant="secondary">{formatPercentage(metricsData.pacientesSeguimiento, metricsData.totalPacientes)}</Badge>}
+              footerContent="Potenciales conversiones"
+              footerDetail="Pacientes en proceso de decisión activo"
             />
             <MemoizedMetricCard
-              metricKey="pacientesNuevosMes"
-              value={metricsData.pacientesNuevosMes.toLocaleString()}
-              description="Nuevos Pacientes (Mes)"
-              badge={<TrendingUpIcon className="h-4 w-4 text-muted-foreground" />}
-              footerContent="Comparado con el mes anterior"
-              footerDetail="Indicador de crecimiento actual"
+              metricKey="pacientesNoOperados"
+              value={metricsData.pacientesNoOperados.toLocaleString()}
+              badge={<Badge variant="destructive">{formatPercentage(metricsData.pacientesNoOperados, metricsData.totalPacientes)}</Badge>}
+              footerContent="Oportunidad de re-contacto"
+              footerDetail="Decidieron no operarse o posponer"
+              trend="down"
             />
           </div>
         </TabsContent>
