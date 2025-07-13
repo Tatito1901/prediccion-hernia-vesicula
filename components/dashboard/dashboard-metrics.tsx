@@ -1,4 +1,3 @@
-// app/dashboard/components/DashboardMetrics.tsx
 
 import React, { useMemo, memo } from "react";
 import {
@@ -37,7 +36,6 @@ import { useDashboard } from '@/contexts/dashboard-context';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-// --- Tipos y Constantes Mejoradas ---
 export enum PatientOriginEnum {
   GOOGLE = "Google",
   FACEBOOK = "Facebook",
@@ -81,11 +79,9 @@ interface MetricCardProps {
   trend?: 'up' | 'down' | 'neutral';
 }
 
-// Mover función de utilidad fuera del componente
 const formatPercentage = (numerator: number, denominator: number): string =>
   denominator === 0 ? "N/A" : `${((numerator / denominator) * 100).toFixed(0)}%`;
 
-// --- Componentes Optimizados ---
 const MetricIcon = ({ metricKey, ...props }: { metricKey: MetricKey } & LucideProps) => {
   const icons: Record<MetricKey, React.ElementType> = {
     tasaConversion: PercentIcon,
