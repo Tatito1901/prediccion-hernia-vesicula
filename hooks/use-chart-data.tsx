@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
