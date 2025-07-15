@@ -2,22 +2,10 @@
 
 import React, { useMemo, memo } from "react"
 import {
-  ArrowUpIcon,
-  ArrowDownIcon,
-  UsersIcon,
-  ClockIcon,
-  TrendingUpIcon,
-  InfoIcon,
-  BarChart4Icon,
-  PercentIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ActivityIcon,
-  UserPlusIcon,
-  CalendarIcon,
-  RefreshCwIcon,
-  type LucideProps,
-  Sparkles,
+  ArrowUp, ArrowDown, Users, Clock, TrendingUp, 
+  Info, BarChart, PercentCircle, CheckCircle2, 
+  XCircle, Activity, UserPlus, Calendar, RefreshCw,
+  BarChart4
 } from "lucide-react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -54,49 +42,49 @@ const METRIC_INFO = {
     fuente: "Cálculo interno basado en conversiones",
     significado: "Porcentaje de pacientes que deciden operarse del total consultado",
     description: "Tasa de Conversión",
-    category: "performance",
+    icon: PercentCircle,
   },
   totalPacientes: {
     fuente: "Base de datos principal de pacientes",
     significado: "Número total de pacientes registrados en el sistema",
     description: "Pacientes Totales",
-    category: "volume",
+    icon: Users,
   },
   tiempoPromedioDecision: {
     fuente: "Análisis de registro de citas y seguimientos",
     significado: "Días promedio que toma un paciente en decidir sobre la cirugía",
     description: "Tiempo de Decisión",
-    category: "efficiency",
+    icon: Clock,
   },
   fuentePrincipalPacientes: {
     fuente: "Formularios de registro y análisis de marketing",
     significado: "Canal de adquisición de pacientes más efectivo",
     description: "Fuente Principal",
-    category: "acquisition",
+    icon: TrendingUp,
   },
   pacientesOperados: {
     fuente: "Registros quirúrgicos y procedimientos completados",
     significado: "Pacientes que han completado exitosamente su cirugía",
     description: "Pacientes Operados",
-    category: "success",
+    icon: CheckCircle2,
   },
   pacientesNoOperados: {
     fuente: "Registros de seguimiento y decisiones de pacientes",
     significado: "Pacientes que decidieron posponer o declinar la cirugía",
     description: "Pacientes No Operados",
-    category: "opportunity",
+    icon: XCircle,
   },
   pacientesSeguimiento: {
     fuente: "Sistema CRM y seguimiento activo",
     significado: "Pacientes en proceso activo de toma de decisión",
     description: "En Seguimiento",
-    category: "pipeline",
+    icon: Activity,
   },
   pacientesNuevosMes: {
     fuente: "Citas registradas y consultas iniciales",
     significado: "Nuevos pacientes que se registraron en el período actual",
     description: "Nuevos Pacientes",
-    category: "growth",
+    icon: UserPlus,
   },
 } as const
 
@@ -110,164 +98,120 @@ interface MetricCardProps {
   trend?: "up" | "down" | "neutral"
 }
 
-const MetricIcon = memo(({ metricKey, ...props }: { metricKey: MetricKey } & LucideProps) => {
-  const IconComponent = useMemo(
-    () =>
-      ({
-        tasaConversion: PercentIcon,
-        totalPacientes: UsersIcon,
-        tiempoPromedioDecision: ClockIcon,
-        fuentePrincipalPacientes: TrendingUpIcon,
-        pacientesOperados: CheckCircleIcon,
-        pacientesNoOperados: XCircleIcon,
-        pacientesSeguimiento: ActivityIcon,
-        pacientesNuevosMes: UserPlusIcon,
-      })[metricKey],
-    [metricKey],
-  )
-
+const MetricIcon = memo(({ metricKey, ...props }: { metricKey: MetricKey } & React.SVGAttributes<SVGElement>) => {
+  const IconComponent = METRIC_INFO[metricKey].icon
   return <IconComponent {...props} />
 })
 
+MetricIcon.displayName = "MetricIcon"
+
 const MetricCardSkeleton = memo(() => (
-  <Card className="relative overflow-hidden border-0 bg-background shadow-sm hover:shadow-md transition-shadow">
+  <Card className="border border-border/50">
     <CardHeader className="pb-3">
-      <div className="flex justify-between items-start">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-6 w-6 rounded-full" />
+      <div className="flex justify-between items-center">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-4 rounded" />
       </div>
     </CardHeader>
     <CardContent className="pb-2">
-      <Skeleton className="h-10 w-24 mb-2" />
+      <Skeleton className="h-8 w-16 mb-2" />
     </CardContent>
-    <CardFooter className="pt-4 border-t border-border/20">
-      <div className="space-y-2 w-full">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-3/4" />
-      </div>
+    <CardFooter>
+      <Skeleton className="h-3 w-full" />
     </CardFooter>
   </Card>
 ))
 
+MetricCardSkeleton.displayName = "MetricCardSkeleton"
+
 const MetricCard = memo(({ metricKey, value, footerContent, badge, trend = "neutral" }: MetricCardProps) => {
-  const { description, fuente, significado, category } = METRIC_INFO[metricKey]
-
-  const trendConfig = useMemo(
-    () =>
-      ({
-        up: {
-          color: "text-emerald-600",
-          bgColor: "bg-emerald-50",
-          Icon: ArrowUpIcon,
-        },
-        down: {
-          color: "text-red-600",
-          bgColor: "bg-red-50",
-          Icon: ArrowDownIcon,
-        },
-        neutral: {
-          color: "text-muted-foreground",
-          bgColor: "bg-muted/20",
-          Icon: null,
-        },
-      })[trend],
-    [trend],
-  )
-
-  const categoryColors = useMemo(
-    () =>
-      ({
-        performance: "border-blue-200",
-        volume: "border-purple-200",
-        efficiency: "border-emerald-200",
-        acquisition: "border-amber-200",
-        success: "border-green-200",
-        opportunity: "border-red-200",
-        pipeline: "border-cyan-200",
-        growth: "border-violet-200",
-      })[category],
-    [category],
-  )
+  const { description, fuente, significado } = METRIC_INFO[metricKey]
+  
+  const trendConfig = useMemo(() => ({
+    up: { 
+      color: "text-emerald-600 dark:text-emerald-400", 
+      icon: ArrowUp,
+    },
+    down: { 
+      color: "text-red-600 dark:text-red-400", 
+      icon: ArrowDown,
+    },
+    neutral: { 
+      color: "text-muted-foreground", 
+      icon: null,
+    }
+  }), [])[trend]
 
   return (
     <Dialog>
-      <Card
-        className={`relative overflow-hidden border bg-background shadow-sm hover:shadow-md transition-all duration-300 group ${categoryColors}`}
-      >
-        <CardHeader className="pb-3 relative">
-          <div className="flex justify-between items-start">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      <Card className="group border border-border/50 bg-card hover:border-border transition-colors duration-200">
+        <CardHeader className="pb-3">
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               {description}
             </CardTitle>
             <DialogTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-primary rounded-full opacity-80 group-hover:opacity-100 transition-all duration-200"
-                aria-label={`Información sobre ${description}`}
+                className="h-6 w-6 text-muted-foreground hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity duration-200"
               >
-                <InfoIcon className="h-4 w-4" />
+                <Info className="h-4 w-4" />
               </Button>
             </DialogTrigger>
           </div>
         </CardHeader>
 
-        <CardContent className="pb-2 relative">
+        <CardContent className="pb-3">
           <div className="flex items-baseline gap-3">
-            <div className="text-2xl font-bold text-foreground tabular-nums">{value}</div>
-            {badge && <div className="flex-shrink-0">{badge}</div>}
+            <div className="text-2xl font-semibold text-foreground">
+              {value}
+            </div>
+            {badge && <div>{badge}</div>}
           </div>
         </CardContent>
 
-        <CardFooter className="pt-4 border-t border-border/20 relative">
-          <div
-            className={`flex items-center gap-2 text-sm font-medium rounded-lg px-3 py-1.5 ${trendConfig.bgColor} ${trendConfig.color} w-full`}
-          >
-            {trendConfig.Icon && <trendConfig.Icon className="h-4 w-4 flex-shrink-0" />}
-            <span className="truncate">{footerContent}</span>
+        <CardFooter className="pt-3 border-t border-border/30">
+          <div className={`flex items-center gap-2 text-sm ${trendConfig.color}`}>
+            {trendConfig.icon && <trendConfig.icon className="h-4 w-4" />}
+            <span>{footerContent}</span>
           </div>
         </CardFooter>
 
-        <div className="absolute top-4 right-4">
-          <div className="p-2 rounded-lg bg-primary/10 text-primary">
-            <MetricIcon metricKey={metricKey} className="h-5 w-5" />
-          </div>
+        <div className="absolute top-4 right-12 opacity-30 group-hover:opacity-50 transition-opacity duration-200">
+          <MetricIcon metricKey={metricKey} className="h-5 w-5" />
         </div>
       </Card>
 
-      <DialogContent className="sm:max-w-lg rounded-xl">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 rounded-xl bg-primary/10 text-primary">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="p-3 rounded-lg bg-muted">
               <MetricIcon metricKey={metricKey} className="h-6 w-6" />
             </div>
             <div>
-              <DialogTitle className="text-xl font-bold text-foreground">{description}</DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">Información detallada</p>
+              <DialogTitle className="text-xl font-semibold">
+                {description}
+              </DialogTitle>
+              <p className="text-sm text-muted-foreground">Información detallada</p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center gap-4 p-4 bg-muted/20 rounded-xl border border-border">
-              <div className="text-3xl font-bold text-primary tabular-nums">{value}</div>
-              {badge && <div className="flex-shrink-0">{badge}</div>}
+            <div className="p-4 bg-muted/50 rounded-lg border">
+              <div className="text-2xl font-semibold mb-2">{value}</div>
+              {badge && <div>{badge}</div>}
             </div>
 
-            <div className="grid gap-3">
-              <div className="p-4 rounded-lg bg-muted/20 border border-border">
-                <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Fuente de Datos
-                </h4>
-                <p className="text-muted-foreground text-sm">{fuente}</p>
+            <div className="space-y-3">
+              <div className="p-4 rounded-lg bg-muted/30">
+                <h4 className="font-medium mb-2">Fuente de Datos</h4>
+                <p className="text-sm text-muted-foreground">{fuente}</p>
               </div>
 
-              <div className="p-4 rounded-lg bg-muted/20 border border-border">
-                <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                  <InfoIcon className="h-4 w-4 text-primary" />
-                  Significado
-                </h4>
-                <p className="text-muted-foreground text-sm">{significado}</p>
+              <div className="p-4 rounded-lg bg-muted/30">
+                <h4 className="font-medium mb-2">Significado</h4>
+                <p className="text-sm text-muted-foreground">{significado}</p>
               </div>
             </div>
           </div>
@@ -276,6 +220,8 @@ const MetricCard = memo(({ metricKey, value, footerContent, badge, trend = "neut
     </Dialog>
   )
 })
+
+MetricCard.displayName = "MetricCard"
 
 const DEFAULT_METRICS: ClinicMetrics = {
   totalPacientes: 0,
@@ -295,39 +241,38 @@ export function DashboardMetrics() {
     if (!clinicMetrics?.lastUpdated) return "Actualizando..."
     try {
       const date = new Date(clinicMetrics.lastUpdated)
-      return isNaN(date.getTime())
-        ? "Actualizando..."
+      return isNaN(date.getTime()) 
+        ? "Actualizando..." 
         : `Actualizado: ${format(date, "dd 'de' MMMM, yyyy HH:mm", { locale: es })}`
     } catch {
       return "Actualizando..."
     }
   }, [clinicMetrics?.lastUpdated])
 
-  const metricsData = clinicMetrics ?? DEFAULT_METRICS
+  const metricsData = useMemo(() => clinicMetrics ?? DEFAULT_METRICS, [clinicMetrics])
 
-  const formatPercentage = (num: number, den: number) => (den === 0 ? "0%" : `${Math.round((num / den) * 100)}%`)
+  const formatPercentage = useMemo(() => 
+    (num: number, den: number) => den === 0 ? "0%" : `${Math.round((num / den) * 100)}%`,
+  [])
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[300px] rounded-xl bg-background border p-6 text-center">
-        <div className="mb-6">
-          <div className="p-6 rounded-full bg-red-100">
-            <XCircleIcon className="h-12 w-12 text-red-600" />
-          </div>
+      <div className="flex flex-col items-center justify-center min-h-[300px] bg-card border rounded-lg p-8 text-center">
+        <div className="p-4 rounded-full bg-red-50 dark:bg-red-950/20 mb-6">
+          <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
         </div>
         <div className="space-y-3 max-w-md">
-          <h3 className="text-xl font-bold text-foreground">Error al cargar métricas</h3>
+          <h3 className="text-lg font-semibold">Error al cargar métricas</h3>
           <p className="text-muted-foreground">
-            No se pudieron obtener los datos del dashboard. Por favor, verifica tu conexión.
+            No se pudieron obtener los datos del dashboard.
           </p>
         </div>
         <Button
           variant="outline"
           onClick={refresh}
-          aria-label="Reintentar cargar datos"
           className="mt-6 gap-2"
         >
-          <RefreshCwIcon className="h-4 w-4" />
+          <RefreshCw className="h-4 w-4" />
           Reintentar
         </Button>
       </div>
@@ -335,55 +280,45 @@ export function DashboardMetrics() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20">
-            <BarChart4Icon className="h-6 w-6 text-primary" />
+    <div className="space-y-8">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 rounded-lg bg-muted">
+            <BarChart4 className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Métricas de la Clínica</h1>
+            <h1 className="text-2xl font-semibold">Métricas de la Clínica</h1>
             <p className="text-muted-foreground">Resumen ejecutivo de rendimiento</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 rounded-full border border-border">
-          <CalendarIcon className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-muted-foreground">{lastUpdated}</span>
+        <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+          <Calendar className="h-4 w-4" />
+          <span>{lastUpdated}</span>
         </div>
-      </header>
+      </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {Array.from({ length: 8 }).map((_, i) => (
             <MetricCardSkeleton key={i} />
           ))}
         </div>
       ) : (
         <Tabs defaultValue="general" className="space-y-6">
-          <TabsList className="bg-muted/20 p-1 rounded-lg border border-border">
-            <TabsTrigger
-              value="general"
-              className="px-4 py-2 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm"
-            >
-              <div className="flex items-center gap-2">
-                <BarChart4Icon className="h-4 w-4" />
-                <span>Visión General</span>
-              </div>
+          <TabsList className="bg-muted/50 h-auto p-1">
+            <TabsTrigger value="general" className="px-4 py-2 data-[state=active]:bg-background">
+              <BarChart className="h-4 w-4 mr-2" />
+              Visión General
             </TabsTrigger>
-            <TabsTrigger
-              value="pacientes"
-              className="px-4 py-2 rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm"
-            >
-              <div className="flex items-center gap-2">
-                <UsersIcon className="h-4 w-4" />
-                <span>Análisis de Pacientes</span>
-              </div>
+            <TabsTrigger value="pacientes" className="px-4 py-2 data-[state=active]:bg-background">
+              <Users className="h-4 w-4 mr-2" />
+              Análisis de Pacientes
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="general">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <TabsContent value="general" className="space-y-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <MetricCard
                 metricKey="tasaConversion"
                 value={`${(metricsData.tasaConversion * 100).toFixed(1)}%`}
@@ -410,8 +345,8 @@ export function DashboardMetrics() {
             </div>
           </TabsContent>
 
-          <TabsContent value="pacientes">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <TabsContent value="pacientes" className="space-y-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <MetricCard
                 metricKey="totalPacientes"
                 value={metricsData.totalPacientes.toLocaleString()}
@@ -422,7 +357,7 @@ export function DashboardMetrics() {
                 value={metricsData.pacientesOperados.toLocaleString()}
                 footerContent="Del total de pacientes"
                 badge={
-                  <Badge variant="secondary">
+                  <Badge variant="secondary" className="text-xs">
                     {formatPercentage(metricsData.pacientesOperados, metricsData.totalPacientes)}
                   </Badge>
                 }
@@ -432,7 +367,7 @@ export function DashboardMetrics() {
                 value={metricsData.pacientesSeguimiento.toLocaleString()}
                 footerContent="Potenciales conversiones"
                 badge={
-                  <Badge variant="secondary">
+                  <Badge variant="secondary" className="text-xs">
                     {formatPercentage(metricsData.pacientesSeguimiento, metricsData.totalPacientes)}
                   </Badge>
                 }
@@ -442,7 +377,7 @@ export function DashboardMetrics() {
                 value={metricsData.pacientesNoOperados.toLocaleString()}
                 footerContent="Oportunidad de re-contacto"
                 badge={
-                  <Badge variant="destructive">
+                  <Badge variant="destructive" className="text-xs">
                     {formatPercentage(metricsData.pacientesNoOperados, metricsData.totalPacientes)}
                   </Badge>
                 }

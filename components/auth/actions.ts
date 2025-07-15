@@ -3,27 +3,39 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/utils/supabase/server'
+import { z } from 'zod'
+
+// Esquema de validación con Zod
+const LoginSchema = z.object({
+  email: z.string().email({ message: "Por favor, ingrese un correo electrónico válido." }),
+  password: z.string().min(8, { message: "La contraseña debe tener al menos 8 caracteres." }),
+});
 
 export async function login(formData: FormData) {
-    const supabase = await createClient();
+  const rawFormData = Object.fromEntries(formData.entries());
 
-  const email = formData.get('email')?.toString() ?? ''
-  const password = formData.get('password')?.toString() ?? ''
+  // 1. Validar los datos con el esquema de Zod
+  const validatedFields = LoginSchema.safeParse(rawFormData);
 
-  if (!email || !password) {
-    throw new Error('Correo y contraseña son requeridos.')
+  // 2. Si la validación falla, redirigir con el primer error
+  if (!validatedFields.success) {
+    const firstError = validatedFields.error.errors[0]?.message;
+    return redirect(`/login?message=${encodeURIComponent(firstError || 'Datos inválidos.')}`);
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { email, password } = validatedFields.data;
+
+  // 3. Proceder con la autenticación de Supabase
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({
     email,
     password,
-  })
+  });
 
   if (error) {
-    console.error('Autenticación fallida:', error.message)
-    // Podrías usar cookies/flash messages en lugar de query params
-    redirect(`/login?error=${encodeURIComponent(error.message)}`)
+    console.error('Autenticación fallida:', error.message);
+    return redirect(`/login?message=${encodeURIComponent(error.message)}`);
   }
 
   // Limpia el cache del layout o ruta que dependa de la sesión

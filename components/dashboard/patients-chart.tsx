@@ -23,12 +23,12 @@ interface ChartDataPoint {
 const CustomTooltip = memo(({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-background/95 backdrop-blur-sm border border-border/50 rounded-xl shadow-xl p-4 min-w-[180px] transition-all duration-150">
+      <div className="bg-background border border-border/50 rounded-lg shadow-lg p-4 min-w-[180px]">
         <div className="flex items-center gap-2 mb-3">
-          <Calendar className="h-4 w-4 text-primary" />
-          <p className="font-semibold text-foreground">{label}</p>
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <p className="font-medium text-foreground text-sm">{label}</p>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {payload.map((entry: any) => (
             <div key={entry.dataKey} className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -38,7 +38,7 @@ const CustomTooltip = memo(({ active, payload, label }: any) => {
                 />
                 <span className="text-sm text-muted-foreground">{entry.name}</span>
               </div>
-              <span className="font-bold text-foreground">{entry.value}</span>
+              <span className="font-semibold text-foreground text-sm">{entry.value}</span>
             </div>
           ))}
         </div>
@@ -48,10 +48,39 @@ const CustomTooltip = memo(({ active, payload, label }: any) => {
   return null
 })
 
+CustomTooltip.displayName = "CustomTooltip"
+
 const PatientsChart = memo(() => {
-  const { loading, error, patients = [], dateRange } = useDashboard()
+  const { loading, error, patients = [], dateRange, chart } = useDashboard()
 
   const { chartData, metrics } = useMemo(() => {
+    if (chart?.series && chart.categories) {
+      const consultasSeries = chart.series.find(s => s.name === "Consultas")
+      const operadosSeries = chart.series.find(s => s.name === "Operados")
+      
+      if (consultasSeries && operadosSeries) {
+        const chartData = chart.categories.map((category, index) => ({
+          date: category,
+          label: category,
+          pacientes: consultasSeries.data[index] || 0,
+          operados: operadosSeries.data[index] || 0,
+        }))
+        
+        const pacientesTotal = consultasSeries.data.reduce((sum, val) => sum + val, 0)
+        const operadosTotal = operadosSeries.data.reduce((sum, val) => sum + val, 0)
+        const ratio = pacientesTotal > 0 ? (operadosTotal / pacientesTotal * 100).toFixed(1) : "0.0"
+        
+        return {
+          chartData,
+          metrics: {
+            pacientes: pacientesTotal,
+            operados: operadosTotal,
+            ratio
+          }
+        }
+      }
+    }
+    
     if (!patients || patients.length === 0) return { chartData: [], metrics: null }
     
     const today = new Date()
@@ -132,38 +161,36 @@ const PatientsChart = memo(() => {
         ratio
       }
     }
-  }, [patients, dateRange])
+  }, [patients, dateRange, chart])
 
   if (loading) {
     return (
-      <div className="h-[400px] flex flex-col space-y-6 p-1">
-        <div className="flex flex-col sm:flex-row justify-between gap-4">
+      <div className="h-[350px] flex flex-col space-y-4">
+        <div className="flex flex-col md:flex-row justify-between gap-4">
           <div className="space-y-2">
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-4 w-64" />
           </div>
           <div className="flex gap-2">
-            <Skeleton className="h-8 w-16" />
-            <Skeleton className="h-8 w-16" />
-            <Skeleton className="h-8 w-16" />
+            {[1, 2, 3].map(i => (
+              <Skeleton key={i} className="h-20 w-full rounded-lg" />
+            ))}
           </div>
         </div>
-        <Skeleton className="h-full w-full rounded-2xl" />
+        <Skeleton className="h-full w-full rounded-lg" />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] text-center p-8 space-y-6">
-        <div className="relative">
-          <div className="p-6 rounded-full bg-destructive/10 border border-destructive/20">
-            <AlertTriangle className="h-10 w-10 text-destructive" />
-          </div>
+      <div className="flex flex-col items-center justify-center h-[350px] text-center p-6 space-y-4">
+        <div className="p-4 rounded-full bg-red-50 dark:bg-red-950/20">
+          <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
         </div>
-        <div className="space-y-3">
-          <h3 className="text-xl font-semibold">Error al cargar datos</h3>
-          <p className="text-muted-foreground max-w-md leading-relaxed">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold">Error al cargar datos</h3>
+          <p className="text-muted-foreground max-w-md">
             No se pudieron cargar los datos para el gráfico
           </p>
         </div>
@@ -177,15 +204,13 @@ const PatientsChart = memo(() => {
 
   if (chartData.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] text-center p-8 space-y-6">
-        <div className="relative">
-          <div className="p-6 rounded-full bg-primary/10 border border-primary/20">
-            <Users className="h-10 w-10 text-primary" />
-          </div>
+      <div className="flex flex-col items-center justify-center h-[350px] text-center p-6 space-y-4">
+        <div className="p-4 rounded-full bg-muted">
+          <Users className="h-8 w-8 text-muted-foreground" />
         </div>
-        <div className="space-y-3">
-          <h3 className="text-xl font-semibold">Sin datos disponibles</h3>
-          <p className="text-muted-foreground max-w-md leading-relaxed">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold">Sin datos disponibles</h3>
+          <p className="text-muted-foreground max-w-md">
             No hay suficientes datos para mostrar tendencias
           </p>
         </div>
@@ -194,65 +219,67 @@ const PatientsChart = memo(() => {
   }
 
   return (
-    <div className="h-[400px] flex flex-col space-y-6">
+    <div className="h-[350px] flex flex-col space-y-6">
       <div className="flex flex-col lg:flex-row justify-between gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
-              <TrendingUp className="h-5 w-5 text-primary" />
+            <div className="p-2 rounded-lg bg-muted">
+              <TrendingUp className="h-5 w-5 text-muted-foreground" />
             </div>
             <h3 className="text-xl font-semibold">Tendencia de Pacientes</h3>
           </div>
           <p className="text-muted-foreground">Evolución de nuevos pacientes y operaciones</p>
         </div>
 
-        <div className="flex flex-wrap gap-4 lg:gap-6">
-          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-muted/30 border">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Nuevos</p>
-              <p className="text-lg font-bold">{metrics?.pacientes.toLocaleString()}</p>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+              <span className="text-xs font-medium text-muted-foreground">Nuevos</span>
             </div>
+            <p className="text-lg font-semibold">{metrics?.pacientes.toLocaleString()}</p>
           </div>
 
-          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-muted/30 border">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Operados</p>
-              <p className="text-lg font-bold">
-                {metrics?.operados.toLocaleString()}
-              </p>
+          <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+              <span className="text-xs font-medium text-muted-foreground">Operados</span>
             </div>
+            <p className="text-lg font-semibold">
+              {metrics?.operados.toLocaleString()}
+            </p>
           </div>
 
-          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-muted/30 border">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Ratio</p>
-              <p className="text-lg font-bold">{metrics?.ratio}%</p>
-            </div>
+          <div className="text-center p-3 rounded-lg bg-muted/30 border border-border/50">
+            <span className="text-xs font-medium text-muted-foreground mb-1 block">Ratio</span>
+            <p className="text-lg font-semibold">{metrics?.ratio}%</p>
           </div>
         </div>
       </div>
 
       <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
             <defs>
               <linearGradient id="pacientesGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02} />
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
+                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="operadosGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
               </linearGradient>
             </defs>
 
-            <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted/20" />
+            <CartesianGrid 
+              strokeDasharray="3 3" 
+              vertical={false} 
+              className="stroke-border/30" 
+            />
 
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 11 }}
               axisLine={false}
               tickLine={false}
               className="fill-muted-foreground"
@@ -260,10 +287,10 @@ const PatientsChart = memo(() => {
             />
 
             <YAxis
-              width={40}
+              width={35}
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 11 }}
               className="fill-muted-foreground"
             />
 
@@ -274,9 +301,8 @@ const PatientsChart = memo(() => {
               dataKey="pacientes"
               stroke="#3b82f6"
               fill="url(#pacientesGradient)"
-              strokeWidth={2.5}
+              strokeWidth={2}
               name="Nuevos Pacientes"
-              activeDot={{ r: 6, stroke: "#3b82f6", strokeWidth: 2, fill: "#ffffff" }}
             />
 
             <Area
@@ -284,9 +310,8 @@ const PatientsChart = memo(() => {
               dataKey="operados"
               stroke="#10b981"
               fill="url(#operadosGradient)"
-              strokeWidth={2.5}
+              strokeWidth={2}
               name="Pacientes Operados"
-              activeDot={{ r: 6, stroke: "#10b981", strokeWidth: 2, fill: "#ffffff" }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -295,8 +320,10 @@ const PatientsChart = memo(() => {
   )
 })
 
+PatientsChart.displayName = "PatientsChart"
+
 export const PatientTrendsChart: React.FC = () => {
-  const { dateRange, setDateRange } = useDashboard()
+  const { dateRange, setDateRange, generalStats } = useDashboard()
 
   const descriptions = useMemo(() => ({
     "7dias": "Análisis de la última semana",
@@ -305,18 +332,34 @@ export const PatientTrendsChart: React.FC = () => {
     ytd: "Resumen anual completo",
   }), [])
 
+  const summaryMetrics = useMemo(() => {
+    if (generalStats) {
+      return {
+        totalNuevos: generalStats.nuevos || 0,
+        totalOperados: generalStats.operados || 0,
+        eficiencia: generalStats.total > 0 ? 
+          ((generalStats.operados / generalStats.total) * 100).toFixed(1) : "0.0"
+      }
+    }
+    return {
+      totalNuevos: 0,
+      totalOperados: 0,
+      eficiencia: "0.0"
+    }
+  }, [generalStats])
+
   return (
-    <Card className="overflow-hidden border bg-gradient-to-b from-background to-muted/10">
-      <CardHeader className="pb-6">
+    <Card className="border border-border/50">
+      <CardHeader className="pb-4">
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
           <div className="space-y-2">
-            <CardTitle className="flex items-center gap-3 text-2xl">
-              <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
-                <Activity className="h-6 w-6 text-primary" />
+            <CardTitle className="flex items-center gap-3 text-2xl font-semibold">
+              <div className="p-3 rounded-lg bg-muted">
+                <Activity className="h-6 w-6 text-muted-foreground" />
               </div>
               Análisis de Tendencias
             </CardTitle>
-            <CardDescription className="text-base">
+            <CardDescription className="text-muted-foreground">
               {descriptions[dateRange as keyof typeof descriptions]}
             </CardDescription>
           </div>
@@ -326,29 +369,17 @@ export const PatientTrendsChart: React.FC = () => {
             onValueChange={(value) => setDateRange(value as DateRange)}
             className="w-full xl:w-auto"
           >
-            <TabsList className="grid w-full grid-cols-2 xl:grid-cols-4 bg-muted/30 p-1 h-auto rounded-xl">
-              <TabsTrigger
-                value="7dias"
-                className="px-4 py-2.5 text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
+            <TabsList className="grid w-full grid-cols-2 xl:grid-cols-4 bg-muted/50 p-1 h-auto">
+              <TabsTrigger value="7dias" className="px-4 py-2 text-sm">
                 7 días
               </TabsTrigger>
-              <TabsTrigger
-                value="30dias"
-                className="px-4 py-2.5 text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
+              <TabsTrigger value="30dias" className="px-4 py-2 text-sm">
                 30 días
               </TabsTrigger>
-              <TabsTrigger
-                value="90dias"
-                className="px-4 py-2.5 text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
+              <TabsTrigger value="90dias" className="px-4 py-2 text-sm">
                 90 días
               </TabsTrigger>
-              <TabsTrigger
-                value="ytd"
-                className="px-4 py-2.5 text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
+              <TabsTrigger value="ytd" className="px-4 py-2 text-sm">
                 Año actual
               </TabsTrigger>
             </TabsList>
@@ -361,7 +392,7 @@ export const PatientTrendsChart: React.FC = () => {
       </CardContent>
 
       <div className="px-6 pb-6">
-        <div className="flex flex-col lg:flex-row justify-between gap-6 pt-6 border-t border-border/30">
+        <div className="flex flex-col lg:flex-row justify-between gap-6 pt-6 border-t border-border/50">
           <div className="space-y-1">
             <h4 className="font-semibold text-lg">Resumen Ejecutivo</h4>
             <p className="text-muted-foreground">
@@ -369,27 +400,31 @@ export const PatientTrendsChart: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <div className="text-center space-y-1">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-3 bg-muted/30 rounded-lg border border-border/50">
               <p className="text-sm font-medium text-muted-foreground">Total Nuevos</p>
-              <p className="text-2xl font-bold text-blue-600">1,240</p>
-              <Badge variant="secondary" className="text-xs">
+              <p className="text-xl font-semibold text-blue-600 dark:text-blue-400">
+                {summaryMetrics.totalNuevos.toLocaleString()}
+              </p>
+              <Badge variant="secondary" className="text-xs mt-1">
                 +12.5%
               </Badge>
             </div>
 
-            <div className="text-center space-y-1">
+            <div className="text-center p-3 bg-muted/30 rounded-lg border border-border/50">
               <p className="text-sm font-medium text-muted-foreground">Total Operados</p>
-              <p className="text-2xl font-bold text-emerald-600">782</p>
-              <Badge variant="secondary" className="text-xs">
+              <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400">
+                {summaryMetrics.totalOperados.toLocaleString()}
+              </p>
+              <Badge variant="secondary" className="text-xs mt-1">
                 +8.3%
               </Badge>
             </div>
 
-            <div className="text-center space-y-1">
+            <div className="text-center p-3 bg-muted/30 rounded-lg border border-border/50">
               <p className="text-sm font-medium text-muted-foreground">Eficiencia</p>
-              <p className="text-2xl font-bold text-amber-600">63.1%</p>
-              <Badge variant="outline" className="text-xs text-amber-700">
+              <p className="text-xl font-semibold text-amber-600 dark:text-amber-400">{summaryMetrics.eficiencia}%</p>
+              <Badge variant="outline" className="text-xs mt-1">
                 Óptimo
               </Badge>
             </div>
