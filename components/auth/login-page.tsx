@@ -1,424 +1,192 @@
+// components/auth/ProfessionalLoginForm.tsx
 "use client"
 
-import { useState, useRef, type FC } from "react"
-import { useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
+import { useState, useEffect, useRef, memo, type FC } from "react"
+import { useFormStatus } from "react-dom"
+import { login } from "@/components/auth/actions"
+import { 
+  LockKeyhole, 
+  AtSign, 
+  LogIn, 
+  Eye, 
+  EyeOff, 
+  AlertCircle 
+} from "lucide-react"
 
-// Iconos SVG optimizados con mejor diseño
-const LockKeyhole = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
-    <path d="m7 11V7a5 5 0 0 1 10 0v4"/>
-  </svg>
-)
+// --- Paleta de Colores (sin cambios) ---
+const brandColors = {
+  primary: {
+    solidBg: 'bg-teal-600',
+    hoverSolidBg: 'hover:bg-teal-700',
+    focusRing: 'focus:ring-teal-500/30',
+    focusBorder: 'focus:border-teal-500',
+    text: 'text-teal-400',
+    hoverText: 'hover:text-teal-300',
+    checkbox: 'text-teal-600',
+    shadow: 'hover:shadow-teal-500/25',
+  },
+  background: {
+    circle1: 'bg-blue-600/10',
+    circle2: 'bg-teal-600/10',
+  }
+};
 
-const AtSign = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <circle cx="12" cy="12" r="4"/>
-    <path d="m16 8-4 4-4-4"/>
-  </svg>
-)
-
-const LogIn = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path d="m15 3 4 4-4 4"/>
-    <path d="M19 7H8"/>
-  </svg>
-)
-
-const Eye = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>
-)
-
-const EyeOff = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path d="m15 18-.722-3.25"/>
-    <path d="m2 2 20 20"/>
-    <path d="M6.71 6.71C3.4 8.27 1 12 1 12s3.63 7.27 11 7.27a8 8 0 0 0 2.71-.45"/>
-    <path d="m20 4-2 14.5"/>
-  </svg>
-)
-
-const CheckCircle = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-    <path d="m9 11 3 3L22 4"/>
-  </svg>
-)
-
-const AlertCircle = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <circle cx="12" cy="12" r="10"/>
-    <path d="m15 9-6 6"/>
-    <path d="m9 9 6 6"/>
-  </svg>
-)
-
-// CSS personalizado solo para animaciones (mantiene el diseño premium)
-const customStyles = `
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  
-  @keyframes pulse {
-    0%, 100% { opacity: 0.15; }
-    50% { opacity: 0.25; }
-  }
-  
-  @keyframes shine {
-    from { transform: translateX(-100%); }
-    to { transform: translateX(100%); }
-  }
-  
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-  
-  @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.95); }
-    to { opacity: 1; transform: scale(1); }
-  }
-  
-  .animate-fadeIn {
-    animation: fadeIn 0.6s ease-out;
-  }
-  
-  .gradient-pulse {
-    animation: pulse 4s ease-in-out infinite;
-  }
-  
-  .btn-shine {
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .btn-shine::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
-    transition: left 0.5s;
-  }
-  
-  .btn-shine:hover::before {
-    animation: shine 0.5s ease-out;
-  }
-  
-  .success-animation {
-    animation: scaleIn 0.5s ease-out;
-  }
-  
-  .spinner {
-    animation: spin 1s linear infinite;
-  }
-  
-  /* Checkbox personalizado mejorado */
-  .custom-checkbox {
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    border: 2px solid #475569;
-    border-radius: 4px;
-    background: rgba(30, 41, 59, 0.5);
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-  }
-  
-  .custom-checkbox:checked {
-    background: #6366f1;
-    border-color: #6366f1;
-  }
-  
-  .custom-checkbox:checked::after {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 1px;
-    width: 4px;
-    height: 8px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-  }
-  
-  .custom-checkbox:focus-visible {
-    outline: 2px solid #6366f1;
-    outline-offset: 2px;
-  }
-`
-
-interface FormState {
-  email: string
-  password: string
-  rememberMe: boolean
-  isLoading: boolean
-  loginSuccess: boolean
-  showPassword: boolean
-  activeField: string | null
-  errors: {
-    email?: string
-    password?: string
-    general?: string
-  }
-}
-
-const OptimizedLoginForm: FC = () => {
-  const router = useRouter()
+// --- Componente Principal del Formulario ---
+const ProfessionalLoginForm: FC = () => {
+  const [showPassword, setShowPassword] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
-  const passwordRef = useRef<HTMLInputElement>(null)
   
-  const [state, setState] = useState<FormState>({
-    email: "",
-    password: "",
-    rememberMe: false,
-    isLoading: false,
-    loginSuccess: false,
-    showPassword: false,
-    activeField: null,
-    errors: {}
-  })
+  const searchParams = useSearchParams()
+  const errorMessage = searchParams.get('message')
 
-  const validate = () => {
-    const errors: FormState['errors'] = {}
-    
-    if (!state.email.trim()) {
-      errors.email = "El correo es requerido"
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(state.email)) {
-      errors.email = "Formato de correo inválido"
-    }
-    
-    if (!state.password) {
-      errors.password = "La contraseña es requerida"
-    } else if (state.password.length < 6) {
-      errors.password = "Mínimo 6 caracteres"
-    }
-    
-    setState(prev => ({ ...prev, errors }))
-    return Object.keys(errors).length === 0
-  }
-
-  const handleSubmit = async () => {
-    if (!validate() || state.isLoading) return
-    
-    setState(prev => ({ ...prev, isLoading: true, errors: {} }))
-    
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      setState(prev => ({ ...prev, isLoading: false, loginSuccess: true }))
-      
-      setTimeout(() => router.push('/dashboard'), 1500)
-    } catch (error) {
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        errors: { general: "Error de conexión. Intente nuevamente." }
-      }))
-    }
-  }
-
-  const updateField = (field: keyof FormState, value: any) => {
-    setState(prev => ({
-      ...prev,
-      [field]: value,
-      errors: { ...prev.errors, [field]: undefined, general: undefined }
-    }))
-  }
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !state.isLoading) {
-      handleSubmit()
-    }
-  }
+  useEffect(() => {
+    emailRef.current?.focus()
+  }, [])
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: customStyles }} />
-      
-      <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        {/* Fondos animados */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-1/2 -right-1/2 w-full h-full rounded-full bg-indigo-600/10 blur-3xl gradient-pulse" />
-          <div className="absolute -bottom-1/2 -left-1/2 w-full h-full rounded-full bg-purple-600/10 blur-3xl gradient-pulse" />
-        </div>
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 bg-gradient-to-br from-slate-900 to-slate-800 font-sans">
+      <div className="absolute inset-0 overflow-hidden">
+        <div className={`absolute -top-1/2 -right-1/2 w-full h-full rounded-full ${brandColors.background.circle1} blur-3xl`} />
+        <div className={`absolute -bottom-1/2 -left-1/2 w-full h-full rounded-full ${brandColors.background.circle2} blur-3xl`} />
+      </div>
 
-        <div className="w-full max-w-md relative z-10 animate-fadeIn">
-          <div className="relative">
-            {/* Borde con gradiente */}
-            <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-2xl opacity-75 blur-sm" />
-            
-            <div className="relative bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
-              {state.loginSuccess ? (
-                <div className="text-center py-12 success-animation">
-                  <div className="inline-flex items-center justify-center w-20 h-20 mb-6 rounded-full bg-emerald-500/20 border-2 border-emerald-500/40">
-                    <CheckCircle className="w-10 h-10 text-emerald-400" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-slate-100 mb-2">¡Bienvenido!</h2>
-                  <p className="text-slate-400">Redirigiendo al panel...</p>
-                </div>
-              ) : (
-                <div>
-                  {/* Logo */}
-                  <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 mb-4 shadow-lg">
-                      <span className="text-2xl font-bold text-white">CHV</span>
-                    </div>
-                    <h1 className="text-xl font-semibold text-slate-100">Clínica de Hernia y Vesícula</h1>
-                    <p className="text-xs text-slate-400 mt-1">Sistema de Gestión Médica</p>
-                  </div>
-
-                  <div className="space-y-5">
-                    {/* Campo Email */}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                        Correo Electrónico
-                      </label>
-                      <div className="relative">
-                        <AtSign className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors duration-200 ${
-                          state.errors.email ? 'text-red-400' : state.activeField === 'email' ? 'text-indigo-400' : 'text-slate-500'
-                        }`} />
-                        <input
-                          ref={emailRef}
-                          type="email"
-                          value={state.email}
-                          onChange={(e) => updateField('email', e.target.value)}
-                          onFocus={() => setState(prev => ({ ...prev, activeField: 'email' }))}
-                          onBlur={() => setState(prev => ({ ...prev, activeField: null }))}
-                          onKeyPress={handleKeyPress}
-                          className={`w-full pl-10 pr-4 py-3 bg-slate-800/50 border rounded-lg text-slate-100 placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 ${
-                            state.errors.email 
-                              ? 'border-red-500/50 focus:ring-red-500/30 focus:border-red-500' 
-                              : 'border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/30'
-                          }`}
-                          placeholder="nombre@clinica.com"
-                          disabled={state.isLoading}
-                        />
-                      </div>
-                      {state.errors.email && (
-                        <p className="mt-1 text-xs text-red-400 flex items-center gap-1 animate-fadeIn">
-                          <AlertCircle className="w-3 h-3" />
-                          {state.errors.email}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Campo Contraseña */}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                        Contraseña
-                      </label>
-                      <div className="relative">
-                        <LockKeyhole className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors duration-200 ${
-                          state.errors.password ? 'text-red-400' : state.activeField === 'password' ? 'text-indigo-400' : 'text-slate-500'
-                        }`} />
-                        <input
-                          ref={passwordRef}
-                          type={state.showPassword ? "text" : "password"}
-                          value={state.password}
-                          onChange={(e) => updateField('password', e.target.value)}
-                          onFocus={() => setState(prev => ({ ...prev, activeField: 'password' }))}
-                          onBlur={() => setState(prev => ({ ...prev, activeField: null }))}
-                          onKeyPress={handleKeyPress}
-                          className={`w-full pl-10 pr-12 py-3 bg-slate-800/50 border rounded-lg text-slate-100 placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 ${
-                            state.errors.password 
-                              ? 'border-red-500/50 focus:ring-red-500/30 focus:border-red-500' 
-                              : 'border-slate-700 focus:border-indigo-500 focus:ring-indigo-500/30'
-                          }`}
-                          placeholder="••••••••"
-                          disabled={state.isLoading}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => updateField('showPassword', !state.showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-400 transition-colors duration-200"
-                          tabIndex={-1}
-                        >
-                          {state.showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
-                      {state.errors.password && (
-                        <p className="mt-1 text-xs text-red-400 flex items-center gap-1 animate-fadeIn">
-                          <AlertCircle className="w-3 h-3" />
-                          {state.errors.password}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Error general */}
-                    {state.errors.general && (
-                      <div className="p-3 bg-red-900/20 border border-red-800/30 rounded-lg text-sm text-red-400 animate-fadeIn">
-                        <div className="flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4" />
-                          {state.errors.general}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Recordar y olvidé contraseña */}
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={state.rememberMe}
-                          onChange={(e) => updateField('rememberMe', e.target.checked)}
-                          disabled={state.isLoading}
-                          className="custom-checkbox"
-                        />
-                        <span className="text-sm text-slate-300 group-hover:text-slate-200 transition-colors">
-                          Recordar sesión
-                        </span>
-                      </label>
-                      <a 
-                        href="#" 
-                        className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors duration-200 hover:underline"
-                      >
-                        ¿Olvidó su contraseña?
-                      </a>
-                    </div>
-
-                    {/* Botón de envío */}
-                    <button
-                      onClick={handleSubmit}
-                      disabled={state.isLoading || !state.email || !state.password}
-                      className={`w-full py-3.5 px-6 rounded-lg font-medium text-white transition-all duration-200 btn-shine ${
-                        state.isLoading || !state.email || !state.password
-                          ? 'bg-slate-700 cursor-not-allowed opacity-60'
-                          : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl hover:shadow-indigo-500/25 hover:-translate-y-0.5'
-                      }`}
-                    >
-                      {state.isLoading ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full spinner" />
-                          Autenticando...
-                        </span>
-                      ) : (
-                        <span className="flex items-center justify-center gap-2">
-                          <LogIn className="w-5 h-5" />
-                          Iniciar Sesión
-                        </span>
-                      )}
-                    </button>
-                  </div>
-
-                  <div className="mt-8 pt-6 border-t border-slate-800 text-center">
-                    <p className="text-xs text-slate-500">
-                      © {new Date().getFullYear()} Clínica de Hernia y Vesícula. Todos los derechos reservados.
-                    </p>
-                  </div>
-                </div>
-              )}
+      <div className="w-full max-w-md relative z-10">
+        <div className="relative bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+          <div className="text-center mb-8">
+            <div className={`inline-flex items-center justify-center w-16 h-16 rounded-xl ${brandColors.primary.solidBg} mb-4 shadow-lg`}>
+              <span className="text-2xl font-bold text-white">CHV</span>
             </div>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-100">
+              Clínica de Hernia y Vesícula
+            </h1>
+            <p className="text-sm sm:text-base text-slate-400 mt-2">
+              Sistema de Gestión Médica
+            </p>
+          </div>
+
+          <form action={login} className="space-y-6">
+            {/* Campo Email */}
+            <div className="relative group">
+              <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-1.5 sr-only">
+                Correo Electrónico
+              </label>
+              <AtSign 
+                className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 transition-colors duration-200 group-focus-within:text-teal-400 ${errorMessage && 'text-red-400'}`} 
+              />
+              <input
+                id="email"
+                name="email"
+                type="email"
+                ref={emailRef}
+                className={`w-full pl-10 pr-4 py-3 bg-slate-800/50 border rounded-lg text-slate-100 placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 ${
+                  errorMessage
+                    ? 'border-red-500/50 focus:ring-red-500/30 focus:border-red-500'
+                    : `border-slate-700 ${brandColors.primary.focusBorder} ${brandColors.primary.focusRing}`
+                }`}
+                placeholder="Correo Electrónico"
+                required
+                aria-required="true"
+                aria-invalid={!!errorMessage}
+              />
+            </div>
+
+            {/* Campo Contraseña */}
+            <div className="relative group">
+              <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-1.5 sr-only">
+                Contraseña
+              </label>
+              <LockKeyhole 
+                className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 transition-colors duration-200 group-focus-within:text-teal-400 ${errorMessage && 'text-red-400'}`} 
+              />
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                className={`w-full pl-10 pr-12 py-3 bg-slate-800/50 border rounded-lg text-slate-100 placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 ${
+                  errorMessage
+                    ? 'border-red-500/50 focus:ring-red-500/30 focus:border-red-500'
+                    : `border-slate-700 ${brandColors.primary.focusBorder} ${brandColors.primary.focusRing}`
+                }`}
+                placeholder="Contraseña"
+                required
+                aria-required="true"
+                aria-invalid={!!errorMessage}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 ${brandColors.primary.hoverText} transition-colors duration-200 focus:outline-none focus:ring-2 ${brandColors.primary.focusRing} rounded-full p-1`}
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+
+            {errorMessage && (
+              <div className="p-3 bg-red-900/20 border border-red-800/30 rounded-lg text-sm text-red-400 flex items-center gap-2" role="alert" aria-live="assertive">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{errorMessage.replace('Error: ', '')}</span>
+              </div>
+            )}
+
+            {/* Opciones adicionales: Se eliminó "¿Olvidó su contraseña?" */}
+            <div className="flex items-center justify-start">
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  name="rememberMe"
+                  className={`w-4 h-4 ${brandColors.primary.checkbox} bg-slate-800 border-slate-700 rounded focus:ring-teal-500 focus:ring-2`}
+                />
+                <span className="text-sm text-slate-300 group-hover:text-slate-200 transition-colors">
+                  Recordar sesión
+                </span>
+              </label>
+            </div>
+
+            <LoginButton />
+          </form>
+
+          <div className="mt-8 pt-6 border-t border-slate-800 text-center">
+            <p className="text-xs text-slate-500">
+              © {new Date().getFullYear()} Clínica de Hernia y Vesícula. Todos los derechos reservados.
+            </p>
           </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }
 
-export default OptimizedLoginForm
+// --- Componente del Botón de Login (sin cambios) ---
+function LoginButton() {
+  const { pending } = useFormStatus()
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-disabled={pending}
+      className={`w-full py-3.5 px-6 rounded-lg font-semibold text-white transition-all duration-300 ease-in-out transform hover:scale-105 ${
+        pending
+          ? 'bg-slate-700 cursor-wait'
+          : `${brandColors.primary.solidBg} ${brandColors.primary.hoverSolidBg} shadow-lg hover:shadow-xl ${brandColors.primary.shadow} active:translate-y-0.5`
+      }`}
+    >
+      {pending ? (
+        <span className="flex items-center justify-center gap-2">
+          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          Autenticando...
+        </span>
+      ) : (
+        <span className="flex items-center justify-center gap-2">
+          <LogIn className="w-5 h-5" />
+          Iniciar Sesión
+        </span>
+      )}
+    </button>
+  )
+}
+
+export default memo(ProfessionalLoginForm)

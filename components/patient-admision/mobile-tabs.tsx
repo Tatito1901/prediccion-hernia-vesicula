@@ -20,7 +20,6 @@ export interface MobileTabsProps {
   isLoading: boolean;
 }
 
-// Configuración estática fuera del componente
 const TABS_CONFIG = [
   { value: "newPatient" as const, label: "Nuevo Paciente", icon: UserRoundPlus, shortLabel: "Nuevo" },
   { value: "today" as const, label: "Citas de Hoy", icon: CalendarCheck, shortLabel: "Hoy" },
@@ -28,7 +27,6 @@ const TABS_CONFIG = [
   { value: "past" as const, label: "Historial", icon: History, shortLabel: "Pasadas" },
 ] as const;
 
-// Componente de Tab individual memoizado
 const TabButton = memo<{
   tab: typeof TABS_CONFIG[number];
   isActive: boolean;
@@ -73,14 +71,12 @@ const TabButton = memo<{
 
 TabButton.displayName = "TabButton";
 
-// Componente principal optimizado
 export const MobileTabs = memo<MobileTabsProps>(({
   activeTab,
   onTabChange,
   appointmentCounts,
   isLoading
 }) => {
-  // Handler memoizado para evitar recreación de funciones
   const handleTabClick = useCallback((tabValue: TabValue) => {
     if (tabValue !== activeTab) {
       onTabChange(tabValue);
