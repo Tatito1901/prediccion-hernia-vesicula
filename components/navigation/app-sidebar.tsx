@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-breakpoint"
 import { NavMain } from "./nav-main"
 import { NavSecondary } from "./nav-secondary"
-import { NavUser } from "./nav-user"
+import NavUser from "./nav-user"
 
 /* ──────────────────────────────────────────────────────────────────────────── */
 /* Datos estáticos                                                             */

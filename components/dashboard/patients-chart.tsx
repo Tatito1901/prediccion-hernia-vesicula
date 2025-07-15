@@ -14,10 +14,17 @@ import { Badge } from "@/components/ui/badge"
 type DateRange = "7dias" | "30dias" | "90dias" | "ytd"
 
 interface ChartDataPoint {
+<<<<<<< HEAD
   date: string
   label: string
   pacientes: number
   operados: number
+=======
+  date: string;
+  label: string;
+  pacientes: number;
+  operados: number;
+>>>>>>> feature/nombre-de-la-feature
 }
 
 const CustomTooltip = memo(({ active, payload, label }: any) => {
@@ -390,6 +397,7 @@ export const PatientTrendsChart: React.FC = () => {
       <CardContent className="p-6">
         <PatientsChart />
       </CardContent>
+<<<<<<< HEAD
 
       <div className="px-6 pb-6">
         <div className="flex flex-col lg:flex-row justify-between gap-6 pt-6 border-t border-border/50">
@@ -436,3 +444,36 @@ export const PatientTrendsChart: React.FC = () => {
 }
 
 export default memo(PatientTrendsChart)
+=======
+      
+      <div className="px-6 pb-4">
+        <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t border-border">
+          <div>
+            <h4 className="font-medium">Resumen</h4>
+            <p className="text-sm text-muted-foreground">
+              Comparativa entre nuevos pacientes y operados
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground">Nuevos pacientes</p>
+              <p className="font-bold">1,240</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground">Pacientes operados</p>
+              <p className="font-bold">782</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground">Ratio de operación</p>
+              <p className="font-bold">63.1%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+PatientTrendsChart.displayName = 'PatientTrendsChart';
+export default PatientTrendsChart;
+>>>>>>> feature/nombre-de-la-feature

@@ -18,8 +18,8 @@ import {
   Stethoscope
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { usePatients } from "@/hooks/use-patients"
-import { useAppointments } from "@/hooks/use-appointments"
+import { usePatients } from '@/hooks/use-appointments';
+
 import { Patient, PatientStatusEnum, EnrichedPatient, Appointment } from "@/lib/types"
 import { generateSurveyId } from "@/lib/form-utils"
 import { toast } from "sonner"
@@ -238,7 +238,7 @@ export const PatientManagement: React.FC = () => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
 
-  const { data: patientData, isLoading: isLoadingPatients } = usePatients(
+  const { data: patientData, isLoading: isLoadingPatients, isError } = usePatients(
     currentPage, 
     PAGE_SIZE, 
     statusFilter === 'all' ? undefined : statusFilter
@@ -247,13 +247,13 @@ export const PatientManagement: React.FC = () => {
   const { data: appointmentsData } = useAppointments(1, 1000)
   const { data: mainStats, isLoading: isLoadingStats } = usePatientStats()
 
-  const patients = patientData?.data || []
+  const patients = patientData?.data || [];
   const appointments = appointmentsData?.appointments || []
   const pagination = patientData?.pagination
   const totalPages = pagination?.totalPages || 1
 
   // Calcular estadísticas de estado
-  const statusStats: StatusStatsType = React.useMemo(() => {
+{{ ... }}
     const stats: StatusStatsType = { all: patients.length }
     Object.keys(STATUS_CONFIG).forEach(status => {
       stats[status] = patients.filter((p: Patient) => p.estado_paciente === status).length

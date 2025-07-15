@@ -1,9 +1,25 @@
+<<<<<<< HEAD
 "use client"
 
 import type React from "react"
 import { useMemo, memo } from "react"
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+=======
+import React from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Area,
+  AreaChart,
+} from 'recharts';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+>>>>>>> feature/nombre-de-la-feature
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -401,12 +417,20 @@ export const PatientAnalytics: React.FC = () => {
                   fill="url(#consultasGradient)"
                   name="Consultas"
                 />
+<<<<<<< HEAD
 
                 <Area
                   type="monotone"
                   dataKey="operados"
                   stroke="#10b981"
                   strokeWidth={2}
+=======
+                <Area 
+                  type="monotone" 
+                  dataKey="operados" 
+                  stroke="#10B981"
+                  strokeWidth={3}
+>>>>>>> feature/nombre-de-la-feature
                   fill="url(#operadosGradient)"
                   name="Procedimientos"
                 />

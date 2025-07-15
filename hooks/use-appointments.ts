@@ -1,11 +1,9 @@
 // lib/hooks/use-appointments.ts
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { parseISO, isValid, format } from 'date-fns';
 import { toast } from 'sonner';
-import { useState } from 'react';
 
 import { 
-  ID, 
   Appointment, 
   ExtendedAppointment,
   AppointmentStatusEnum, 
@@ -27,18 +25,12 @@ interface ApiAppointment {
   doctor?: {
     full_name?: string;
   };
-  // La API de Supabase devuelve la relación bajo la clave 'patients' (plural)
-  patients?: {
-    id: string;
-    nombre?: string;
-    apellidos?: string;
-    telefono?: string;
-    email?: string;
-  };
+  // Datos del paciente que vienen directamente en la respuesta de la API
+  nombre?: string;
+  apellidos?: string;
+  telefono?: string;
+  email?: string;
 }
-
-// Las interfaces AddAppointmentInput y UpdateAppointmentInput han sido reemplazadas
-// por los tipos centralizados NewAppointment y Appointment de lib/types
 
 // Funciones de transformación
 const normalizeId = (id: string | number | null | undefined): string => {
@@ -46,44 +38,16 @@ const normalizeId = (id: string | number | null | undefined): string => {
   return String(id).trim();
 };
 
-const safeParseDate = (dateString: string | null | undefined): Date | null => {
-  if (!dateString) return null;
-  try {
-    const date = parseISO(dateString);
-    return isValid(date) ? date : null;
-  } catch {
-    return null;
-  }
-};
-
-const extractTimeFromDate = (date: Date | null): TimeString | null => {
-  if (!date) return null;
-  return format(date, 'HH:mm') as TimeString;
-};
-
 // Transformación del modelo de API al tipo centralizado ExtendedAppointment
 const transformAppointment = (apiAppointment: ApiAppointment): ExtendedAppointment => {
   const appointmentId = normalizeId(apiAppointment.id);
+  // Corrección: Usar el patient_id proporcionado por la API
   const patientId = normalizeId(apiAppointment.patient_id);
-  
-  // Datos del paciente - Supabase devuelve 'patients' (plural)
-  const patientInfo = apiAppointment.patients || {
-    id: '',
-    nombre: '',
-    apellidos: '',
-    telefono: '',
-    email: ''
-  };
-  
-  const pacienteNombre = patientInfo.nombre || '';
-  const pacienteApellidos = patientInfo.apellidos || '';
-  const pacienteTelefono = patientInfo.telefono || '';
 
-  // Datos del doctor
-  const doctorInfo = apiAppointment.doctor || {
-    full_name: ''
-  };
-  
+  const pacienteNombre = apiAppointment.nombre || '';
+  const pacienteApellidos = apiAppointment.apellidos || '';
+  const pacienteTelefono = apiAppointment.telefono || '';
+
   return {
     id: appointmentId,
     patient_id: patientId,
@@ -94,23 +58,20 @@ const transformAppointment = (apiAppointment: ApiAppointment): ExtendedAppointme
     estado_cita: apiAppointment.estado_cita as typeof AppointmentStatusEnum[keyof typeof AppointmentStatusEnum] || AppointmentStatusEnum.PROGRAMADA,
     notas_cita_seguimiento: apiAppointment.notas_cita_seguimiento || null,
     es_primera_vez: apiAppointment.es_primera_vez || false,
-    // Datos enriquecidos que no son parte del modelo básico de Appointment
     paciente: {
       id: patientId,
       nombre: pacienteNombre,
       apellidos: pacienteApellidos,
       telefono: pacienteTelefono,
-      email: patientInfo.email || ''
+      email: apiAppointment.email || ''
     },
     doctor: {
-      full_name: doctorInfo.full_name || ''
+      full_name: apiAppointment.doctor?.full_name || ''
     }
   };
 };
 
-
-
-// Query Keys
+// Query Keys para citas, ahora con un nombre más coherente
 export const appointmentKeys = {
   all: ['appointments'] as const,
   lists: () => [...appointmentKeys.all, 'list'] as const,
@@ -118,11 +79,14 @@ export const appointmentKeys = {
     [...appointmentKeys.lists(), filters] as const,
   details: () => [...appointmentKeys.all, 'detail'] as const,
   detail: (id: string) => [...appointmentKeys.details(), id] as const,
-  history: (id: string) => [...appointmentKeys.all, 'history', id] as const,
 };
 
 // Hooks de React Query
-// Devuelve las citas en el formato ExtendedAppointment
+
+/**
+ * Hook para obtener una lista paginada de citas con datos del paciente.
+ * El endpoint de API /api/patients devuelve estos datos enriquecidos.
+ */
 export const useAppointments = (page = 1, pageSize = 10) => {
   return useQuery<{ appointments: ExtendedAppointment[], pagination: any }>({  
     queryKey: appointmentKeys.list({ page, pageSize }),
@@ -132,16 +96,15 @@ export const useAppointments = (page = 1, pageSize = 10) => {
         pageSize: pageSize.toString(),
       });
 
-      const response = await fetch(`/api/appointments?${params}`);
+      const response = await fetch(`/api/patients?${params}`);
       if (!response.ok) {
-        throw new Error('Error fetching appointments');
+        throw new Error('Error al obtener las citas');
       }
       
       const data = await response.json();
-      // Primero transformamos al modelo centralizado
       const appointments = data.data.map(transformAppointment);
       return {
-        appointments, // Devolvemos directamente los objetos tipo Appointment
+        appointments,
         pagination: data.pagination
       };
     },
@@ -151,7 +114,9 @@ export const useAppointments = (page = 1, pageSize = 10) => {
   });
 };
 
-// Devuelve una cita específica en el formato ExtendedAppointment
+/**
+ * Hook para obtener una cita específica por su ID.
+ */
 export const useAppointment = (id: string | null) => {
   return useQuery<ExtendedAppointment | null>({  
     queryKey: appointmentKeys.detail(id!),
@@ -159,7 +124,7 @@ export const useAppointment = (id: string | null) => {
       const response = await fetch(`/api/appointments/${id}`);
       if (!response.ok) {
         if (response.status === 404) return null;
-        throw new Error('Error fetching appointment');
+        throw new Error('Error al obtener la cita');
       }
       const data = await response.json();
       return transformAppointment(data);
@@ -175,36 +140,25 @@ export const useCreateAppointment = () => {
   
   return useMutation({
     mutationFn: async (data: NewAppointment) => {
-      // NewAppointment ya utiliza snake_case y tiene todos los campos necesarios
-      // Solo necesitamos asegurarnos de que fecha_hora_cita tiene el formato correcto
-      const payload = {
-        ...data,
-        // Asegurar que otros campos sean consistentes con la API
-      };
-      
       const response = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(data),
       });
       
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Error creating appointment');
+        throw new Error(error.message || 'Error al crear la cita');
       }
       
-      const responseData = await response.json();
-      return transformAppointment(responseData);
+      return transformAppointment(await response.json());
     },
     onSuccess: (newAppointment) => {
       queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: ['patients'] });
-      
       queryClient.setQueryData(
         appointmentKeys.detail(newAppointment.id),
         newAppointment
       );
-      
       toast.success('Cita agendada exitosamente');
     },
     onError: (error) => {
@@ -222,39 +176,26 @@ export const useUpdateAppointment = () => {
     mutationFn: async (input: Partial<ExtendedAppointment> & { id: string }) => {
       const { id, ...updateData } = input;
       
-      // Usamos directamente los datos de actualización sin transformaciones adicionales
-      // ya que estamos trabajando con el tipo Partial<ExtendedAppointment> que ya tiene la estructura correcta
-      const payload = { ...updateData };
-      
-      // Nota: El tipo ExtendedAppointment ya define fecha_hora_cita como string, por lo que
-      // Nota: El tipo Appointment ya define fecha_hora_cita como string, por lo que
-      // no es necesario realizar conversiones de tipo aquí
-      
       const response = await fetch(`/api/appointments/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(updateData),
       });
       
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Error updating appointment');
+        throw new Error(error.message || 'Error al actualizar la cita');
       }
       
-      const responseData = await response.json();
-      return transformAppointment(responseData);
+      return transformAppointment(await response.json());
     },
     onSuccess: (updatedAppointment) => {
-      // Actualizar la caché de la cita específica
       queryClient.setQueryData(
         appointmentKeys.detail(updatedAppointment.id),
         updatedAppointment
       );
-      
-      // Invalidar las listas de citas para forzar una recarga
       queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
       
-      // Invalidar los datos del paciente asociado si existe un ID de paciente
       if (updatedAppointment.patient_id) {
         queryClient.invalidateQueries({ 
           queryKey: ['patients', 'detail', updatedAppointment.patient_id] 
@@ -288,7 +229,8 @@ export const useUpdateAppointmentStatus = () => {
     }) => {
       const payload = {
         estado_cita: newStatus,
-        actor_id: '5e4d29a2-5eec-49ee-ac0f-8d349d5660ed', // TODO: Obtener del usuario actual
+        // TODO: Reemplazar con el ID del usuario autenticado.
+        // Ejemplo: actor_id: getCurrentUserId(),
         motivo_cambio: motivo,
         fecha_hora_cita: nuevaFechaHora
       };
@@ -301,18 +243,16 @@ export const useUpdateAppointmentStatus = () => {
       
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Error updating appointment status');
+        throw new Error(error.message || 'Error al actualizar el estado de la cita');
       }
       
-      const responseData = await response.json();
-      return transformAppointment(responseData);
+      return transformAppointment(await response.json());
     },
     onSuccess: (updatedAppointment) => {
       queryClient.setQueryData(
         appointmentKeys.detail(updatedAppointment.id),
         updatedAppointment
       );
-      
       queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
       
       if (updatedAppointment.patient_id) {

@@ -15,7 +15,7 @@ import {
   Filter, Search, Calendar as CalendarIcon, TrendingUp, Users,
   BarChart3, Activity, AlertTriangle, CheckCircle2
 } from "lucide-react";
-import { usePatients } from '@/hooks/use-patients';
+import { usePatients } from '@/hooks/use-appointments';
 import type { Patient } from '@/lib/types';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';

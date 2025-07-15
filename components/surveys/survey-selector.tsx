@@ -75,7 +75,7 @@ SurveyTemplateCard.displayName = 'SurveyTemplateCard';
 const SKELETON_COUNT = 3;
 const skeletonItems = Array.from({ length: SKELETON_COUNT });
 
-export const SurveySelector = React.memo(({
+const SurveySelector = React.memo(({
   isOpen,
   onClose,
   patientId,
@@ -199,3 +199,5 @@ export const SurveySelector = React.memo(({
 });
 
 SurveySelector.displayName = 'SurveySelector';
+
+export default SurveySelector;

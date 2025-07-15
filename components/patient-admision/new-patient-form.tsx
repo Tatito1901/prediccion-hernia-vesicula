@@ -1,9 +1,10 @@
-// new-patient-form.tsx - Versión optimizada y responsiva
+// new-patient-form.tsx - Versión refactorizada con utilidades integradas
 import React, { useState, useMemo, useCallback, memo } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { UserPlus, Loader2, Clock, Calendar, Phone, FileText, Stethoscope } from "lucide-react"
+import { isSameDay } from "date-fns"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -37,10 +38,114 @@ import {
   AppointmentStatusEnum,
   type TimeString
 } from "@/lib/types"
-import { useAdmitPatient } from "@/hooks/use-patients"
+import { useAdmitPatient } from "@/hooks/use-appointments"
 import { useAppointments } from "@/hooks/use-appointments"
 
-// ==================== ESQUEMAS Y TIPOS ====================
+// ==================== UTILIDADES INTEGRADAS ====================
+
+// Configuración de horarios
+const WORK_SCHEDULE = {
+  startHour: 9,
+  endHour: 14,
+  intervalMinutes: 30,
+  workDays: [1, 2, 3, 4, 5, 6], // Lun-Sáb
+} as const;
+
+// Generar slots de tiempo
+const generateTimeSlots = (): string[] => {
+  const slots: string[] = [];
+  const { startHour, endHour, intervalMinutes } = WORK_SCHEDULE;
+  const totalSlots = ((endHour - startHour) * 60) / intervalMinutes;
+  
+  for (let i = 0; i < totalSlots; i++) {
+    const totalMinutes = startHour * 60 + i * intervalMinutes;
+    const hour = Math.floor(totalMinutes / 60);
+    const minute = totalMinutes % 60;
+    
+    slots.push(`${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`);
+  }
+  
+  return slots;
+};
+
+// Validaciones de fecha
+const isWorkDay = (date: Date): boolean => {
+  return (WORK_SCHEDULE.workDays as readonly number[]).includes(date.getDay());
+};
+
+const isDateInRange = (date: Date): boolean => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const maxDate = new Date();
+  maxDate.setMonth(maxDate.getMonth() + 3);
+  maxDate.setHours(23, 59, 59, 999);
+  
+  return date >= today && date <= maxDate;
+};
+
+const isValidAppointmentDate = (date: Date): boolean => {
+  return isWorkDay(date) && isDateInRange(date);
+};
+
+// Calcular slots disponibles
+const calculateAvailableSlots = (
+  selectedDate: Date,
+  existingAppointments: any[],
+  excludeAppointmentId?: string
+): { time: string; isAvailable: boolean }[] => {
+  if (!isValidAppointmentDate(selectedDate)) {
+    return [];
+  }
+
+  const today = new Date();
+  const isToday = isSameDay(selectedDate, today);
+  
+  // Crear Set de horarios ocupados para búsqueda O(1)
+  const occupiedSlots = new Set<string>();
+  
+  existingAppointments.forEach((appointment) => {
+    // Excluir la cita que se está reagendando
+    if (excludeAppointmentId && appointment.id === excludeAppointmentId) {
+      return;
+    }
+    
+    // Solo considerar citas no canceladas
+    if (appointment.estado_cita === AppointmentStatusEnum.CANCELADA) {
+      return;
+    }
+    
+    // Verificar si es el mismo día
+    const appointmentDate = new Date(appointment.fecha_hora_cita);
+    if (isSameDay(appointmentDate, selectedDate)) {
+      const timeSlot = appointmentDate.toTimeString().slice(0, 5); // HH:MM format
+      occupiedSlots.add(timeSlot);
+    }
+  });
+  
+  // Filtrar slots disponibles
+  return generateTimeSlots().map(timeSlot => {
+    let isAvailable = !occupiedSlots.has(timeSlot);
+    
+    // Si es hoy, excluir horarios que ya pasaron
+    if (isToday && isAvailable) {
+      const [hour, minute] = timeSlot.split(':').map(Number);
+      const slotDateTime = new Date();
+      slotDateTime.setHours(hour, minute, 0, 0);
+      
+      // Agregar 30 minutos de buffer para preparación
+      const currentTimeWithBuffer = new Date(today.getTime() + 30 * 60 * 1000);
+      isAvailable = slotDateTime > currentTimeWithBuffer;
+    }
+    
+    return {
+      time: timeSlot,
+      isAvailable
+    };
+  });
+};
+
+// ==================== ESQUEMAS Y CONFIGURACIONES ====================
 
 const FORM_SCHEMA = z.object({
   nombre: z.string()
@@ -78,8 +183,7 @@ const FORM_SCHEMA = z.object({
 
 type FormValues = z.infer<typeof FORM_SCHEMA>
 
-// ==================== CONFIGURACIONES ESTÁTICAS ====================
-
+// Agrupación de diagnósticos
 const DIAGNOSIS_GROUPS = {
   "🔸 Hernias": [
     DiagnosisEnum.EVENTRACION_ABDOMINAL,
@@ -103,14 +207,6 @@ const DIAGNOSIS_GROUPS = {
   ],
 } as const
 
-// Horarios simplificados - Solo lunes a sábado, 9:00-14:00
-const WORK_SCHEDULE = {
-  startHour: 9,
-  endHour: 14,
-  intervalMinutes: 30,
-  workDays: [1, 2, 3, 4, 5, 6], // Lun-Sáb
-} as const
-
 const DEFAULT_VALUES: FormValues = {
   nombre: "",
   apellidos: "",
@@ -122,9 +218,9 @@ const DEFAULT_VALUES: FormValues = {
   motivoConsulta: null as any,
 }
 
-// ==================== UTILIDADES OPTIMIZADAS ====================
+// ==================== UTILIDADES ESPECÍFICAS ====================
 
-// Cache simple para formateo de diagnósticos
+// Cache para formateo de diagnósticos
 const diagnosisLabels = new Map<DiagnosisEnum, string>()
 
 const getDiagnosisLabel = (diagnosis: DiagnosisEnum): string => {
@@ -138,44 +234,298 @@ const getDiagnosisLabel = (diagnosis: DiagnosisEnum): string => {
   return diagnosisLabels.get(diagnosis)!
 }
 
-// Generar slots de tiempo - función pura y optimizada
-const generateTimeSlots = (): TimeString[] => {
-  const slots: TimeString[] = []
-  const { startHour, endHour, intervalMinutes } = WORK_SCHEDULE
-  const totalSlots = ((endHour - startHour) * 60) / intervalMinutes
-  
-  for (let i = 0; i < totalSlots; i++) {
-    const totalMinutes = startHour * 60 + i * intervalMinutes
-    const hour = Math.floor(totalMinutes / 60)
-    const minute = totalMinutes % 60
+// ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
+
+const PersonalDataSection = memo<{
+  form: any;
+  isSubmitting: boolean;
+  onAgeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}>(({ form, isSubmitting, onAgeChange }) => (
+  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+      <Phone className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+        Datos Personales
+      </h3>
+    </div>
     
-    slots.push(`${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}` as TimeString)
-  }
-  
-  return slots
-}
+    <div className="space-y-4">
+      <FormField
+        control={form.control}
+        name="nombre"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Nombre(s) <span className="text-red-500">*</span>
+            </FormLabel>
+            <FormControl>
+              <Input 
+                placeholder="Ana Sofía" 
+                {...field} 
+                className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                disabled={isSubmitting}
+              />
+            </FormControl>
+            <FormMessage className="text-xs" />
+          </FormItem>
+        )}
+      />
+      
+      <FormField
+        control={form.control}
+        name="apellidos"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Apellidos <span className="text-red-500">*</span>
+            </FormLabel>
+            <FormControl>
+              <Input 
+                placeholder="García Rodríguez" 
+                {...field} 
+                className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                disabled={isSubmitting}
+              />
+            </FormControl>
+            <FormMessage className="text-xs" />
+          </FormItem>
+        )}
+      />
+      
+      <div className="grid grid-cols-2 gap-3">
+        <FormField
+          control={form.control}
+          name="telefono"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Teléfono <span className="text-red-500">*</span>
+              </FormLabel>
+              <FormControl>
+                <Input 
+                  type="tel" 
+                  placeholder="55 1234 5678" 
+                  {...field} 
+                  className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                  disabled={isSubmitting}
+                />
+              </FormControl>
+              <FormMessage className="text-xs" />
+            </FormItem>
+          )}
+        />
+        
+        <FormField
+          control={form.control}
+          name="edad"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Edad
+              </FormLabel>
+              <FormControl>
+                <Input 
+                  type="number" 
+                  placeholder="35" 
+                  value={field.value === null || field.value === undefined ? '' : String(field.value)}
+                  onChange={onAgeChange}
+                  className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                  disabled={isSubmitting}
+                />
+              </FormControl>
+              <FormMessage className="text-xs" />
+            </FormItem>
+          )}
+        />
+      </div>
+    </div>
+  </div>
+));
 
-const TIME_SLOTS = generateTimeSlots()
+const MedicalInfoSection = memo<{
+  form: any;
+  isSubmitting: boolean;
+}>(({ form, isSubmitting }) => (
+  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+      <Stethoscope className="h-4 w-4 text-red-600 dark:text-red-400" />
+      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+        Información Médica
+      </h3>
+    </div>
+    
+    <FormField
+      control={form.control}
+      name="motivoConsulta"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            Motivo de Consulta <span className="text-red-500">*</span>
+          </FormLabel>
+          <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+            <FormControl>
+              <SelectTrigger className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
+                <SelectValue placeholder="Seleccione un motivo..." />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent className="max-h-72">
+              {Object.entries(DIAGNOSIS_GROUPS).map(([groupName, diagnoses]) => (
+                <SelectGroup key={groupName}>
+                  <SelectLabel className="text-xs font-semibold text-slate-600 dark:text-slate-400 py-2">
+                    {groupName}
+                  </SelectLabel>
+                  {diagnoses.map((diag) => (
+                    <SelectItem key={diag} value={diag} className="text-sm py-2">
+                      {getDiagnosisLabel(diag)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormMessage className="text-xs" />
+        </FormItem>
+      )}
+    />
 
-// Validaciones de fecha simplificadas
-const isWorkDay = (date: Date): boolean => {
-  return WORK_SCHEDULE.workDays.includes(date.getDay())
-}
+    <div className="mt-4">
+      <FormField
+        control={form.control}
+        name="notas"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Notas Adicionales
+            </FormLabel>
+            <FormControl>
+              <Textarea
+                placeholder="Información relevante, alergias, etc."
+                className="resize-none h-24 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                disabled={isSubmitting}
+                {...field}
+              />
+            </FormControl>
+            <div className="flex justify-between items-center mt-1">
+              <FormMessage className="text-xs" />
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {field.value?.length || 0}/500
+              </span>
+            </div>
+          </FormItem>
+        )}
+      />
+    </div>
+  </div>
+));
 
-const isDateInRange = (date: Date): boolean => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  
-  const maxDate = new Date()
-  maxDate.setMonth(maxDate.getMonth() + 3)
-  maxDate.setHours(23, 59, 59, 999)
-  
-  return date >= today && date <= maxDate
-}
-
-const isValidAppointmentDate = (date: Date): boolean => {
-  return isWorkDay(date) && isDateInRange(date)
-}
+const AppointmentScheduleSection = memo<{
+  form: any;
+  isSubmitting: boolean;
+  selectedDate: Date | undefined;
+  availableTimeSlots: { time: string; isAvailable: boolean }[];
+  onDateChange: (date: Date | undefined) => void;
+}>(({ form, isSubmitting, selectedDate, availableTimeSlots, onDateChange }) => (
+  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+      <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+        Programar Cita
+      </h3>
+    </div>
+    
+    <div className="space-y-4">
+      <FormField
+        control={form.control}
+        name="fechaConsulta"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Fecha <span className="text-red-500">*</span>
+            </FormLabel>
+            <DatePicker
+              date={field.value}
+              onDateChange={onDateChange}
+              minDate={new Date()}
+              maxDate={new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)}
+              placeholder="Seleccionar fecha"
+              filterDate={isValidAppointmentDate}
+              className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+              disabled={isSubmitting}
+            />
+            <FormMessage className="text-xs" />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Disponible: Lun-Sáb, {WORK_SCHEDULE.startHour}:00-{WORK_SCHEDULE.endHour}:00
+            </p>
+          </FormItem>
+        )}
+      />
+      
+      <FormField
+        control={form.control}
+        name="horaConsulta"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Hora <span className="text-red-500">*</span>
+            </FormLabel>
+            <Select 
+              onValueChange={field.onChange} 
+              value={field.value} 
+              disabled={!selectedDate || !isValidAppointmentDate(selectedDate) || isSubmitting}
+            >
+              <FormControl>
+                <SelectTrigger className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
+                  <SelectValue 
+                    placeholder={
+                      !selectedDate 
+                        ? "Seleccione fecha primero" 
+                        : !isValidAppointmentDate(selectedDate)
+                          ? "Fecha no válida"
+                          : "Seleccione hora"
+                    } 
+                  />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent className="max-h-60">
+                {availableTimeSlots.length > 0 ? (
+                  availableTimeSlots.map((slot) => (
+                    <SelectItem 
+                      key={slot.time} 
+                      value={slot.time} 
+                      className="text-sm"
+                      disabled={!slot.isAvailable}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-3 w-3" />
+                        <span>{slot.time}</span>
+                        {!slot.isAvailable && (
+                          <span className="text-xs text-red-500">(Ocupado)</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                    {selectedDate && isValidAppointmentDate(selectedDate) 
+                      ? "No hay horarios disponibles" 
+                      : "Seleccione una fecha válida"
+                    }
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+            <FormMessage className="text-xs" />
+            {availableTimeSlots.filter(s => s.isAvailable).length > 0 && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                ✓ {availableTimeSlots.filter(s => s.isAvailable).length} horarios disponibles
+              </p>
+            )}
+          </FormItem>
+        )}
+      />
+    </div>
+  </div>
+));
 
 // ==================== INTERFACES ====================
 
@@ -206,38 +556,10 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
     if (!selectedDate || !isValidAppointmentDate(selectedDate)) return []
     
     const appointments = appointmentsData?.appointments || []
-    const today = new Date()
-    const isToday = selectedDate.toDateString() === today.toDateString()
-    
-    // Crear Set de horarios ocupados para búsqueda O(1)
-    const occupiedSlots = new Set<string>()
-    
-    appointments.forEach((app: any) => {
-      if (
-        app.estado !== AppointmentStatusEnum.CANCELADA &&
-        new Date(app.fechaConsulta).toDateString() === selectedDate.toDateString()
-      ) {
-        occupiedSlots.add(app.horaConsulta)
-      }
-    })
-    
-    // Filtrar slots disponibles
-    return TIME_SLOTS.filter(timeSlot => {
-      if (occupiedSlots.has(timeSlot)) return false
-      
-      // Si es hoy, excluir horarios pasados
-      if (isToday) {
-        const [hour, minute] = timeSlot.split(':').map(Number)
-        const slotTime = new Date()
-        slotTime.setHours(hour, minute, 0, 0)
-        if (slotTime <= today) return false
-      }
-      
-      return true
-    })
+    return calculateAvailableSlots(selectedDate, appointments)
   }, [selectedDate, appointmentsData])
 
-  // Handlers optimizados
+  // Handlers optimizados y memoizados
   const handleDateChange = useCallback((date: Date | undefined) => {
     if (!date) {
       form.setValue("fechaConsulta", undefined as any, { shouldValidate: true })
@@ -294,7 +616,8 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
     }
   }, [form])
 
-  const canSubmit = form.formState.isValid && !isSubmitting
+  // Memoizar validación de formulario
+  const canSubmit = useMemo(() => form.formState.isValid && !isSubmitting, [form.formState.isValid, isSubmitting])
 
   return (
     <Dialog open={open} onOpenChange={handleDialogChange}>
@@ -315,7 +638,7 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
         className="sm:max-w-4xl max-w-[95vw] max-h-[95vh] h-auto flex flex-col p-0 gap-0 rounded-xl shadow-2xl border-0 bg-white dark:bg-slate-900"
         onInteractOutside={(e) => e.preventDefault()}
       >
-        {/* Header mejorado */}
+        {/* Header optimizado */}
         <DialogHeader className="px-6 py-5 bg-gradient-to-r from-blue-50 via-white to-blue-50 dark:from-slate-800 dark:via-slate-800 dark:to-slate-700 border-b border-slate-200 dark:border-slate-600 rounded-t-xl">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
@@ -332,292 +655,47 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
           </div>
         </DialogHeader>
 
-        {/* Contenido del formulario */}
+        {/* Contenido del formulario optimizado */}
         <div className="flex-1 overflow-y-auto px-6 py-6 bg-gradient-to-b from-white to-slate-50/50 dark:from-slate-900 dark:to-slate-900/95">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
               
-              {/* Grid principal responsivo - Layout más ancho */}
+              {/* Grid principal responsivo */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
                 {/* Columna 1: Datos Personales */}
                 <div className="lg:col-span-1 space-y-4">
-                  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
-                      <Phone className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-                        Datos Personales
-                      </h3>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="nombre"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                              Nombre(s) <span className="text-red-500">*</span>
-                            </FormLabel>
-                            <FormControl>
-                              <Input 
-                                placeholder="Ana Sofía" 
-                                {...field} 
-                                className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-                                disabled={isSubmitting}
-                              />
-                            </FormControl>
-                            <FormMessage className="text-xs" />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name="apellidos"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                              Apellidos <span className="text-red-500">*</span>
-                            </FormLabel>
-                            <FormControl>
-                              <Input 
-                                placeholder="García Rodríguez" 
-                                {...field} 
-                                className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-                                disabled={isSubmitting}
-                              />
-                            </FormControl>
-                            <FormMessage className="text-xs" />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <FormField
-                          control={form.control}
-                          name="telefono"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                Teléfono <span className="text-red-500">*</span>
-                              </FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="tel" 
-                                  placeholder="55 1234 5678" 
-                                  {...field} 
-                                  className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-                                  disabled={isSubmitting}
-                                />
-                              </FormControl>
-                              <FormMessage className="text-xs" />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <FormField
-                          control={form.control}
-                          name="edad"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                Edad
-                              </FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="number" 
-                                  placeholder="35" 
-                                  value={field.value === null || field.value === undefined ? '' : String(field.value)}
-                                  onChange={handleAgeChange}
-                                  className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-                                  disabled={isSubmitting}
-                                />
-                              </FormControl>
-                              <FormMessage className="text-xs" />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <PersonalDataSection 
+                    form={form} 
+                    isSubmitting={isSubmitting}
+                    onAgeChange={handleAgeChange}
+                  />
                 </div>
 
                 {/* Columna 2: Información Médica */}
                 <div className="lg:col-span-1 space-y-4">
-                  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
-                      <Stethoscope className="h-4 w-4 text-red-600 dark:text-red-400" />
-                      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-                        Información Médica
-                      </h3>
-                    </div>
-                    
-                    <FormField
-                      control={form.control}
-                      name="motivoConsulta"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                            Motivo de Consulta <span className="text-red-500">*</span>
-                          </FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                            <FormControl>
-                              <SelectTrigger className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
-                                <SelectValue placeholder="Seleccione un motivo..." />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="max-h-72">
-                              {Object.entries(DIAGNOSIS_GROUPS).map(([groupName, diagnoses]) => (
-                                <SelectGroup key={groupName}>
-                                  <SelectLabel className="text-xs font-semibold text-slate-600 dark:text-slate-400 py-2">
-                                    {groupName}
-                                  </SelectLabel>
-                                  {diagnoses.map((diag) => (
-                                    <SelectItem key={diag} value={diag} className="text-sm py-2">
-                                      {getDiagnosisLabel(diag)}
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage className="text-xs" />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="mt-4">
-                      <FormField
-                        control={form.control}
-                        name="notas"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                              Notas Adicionales
-                            </FormLabel>
-                            <FormControl>
-                              <Textarea
-                                placeholder="Información relevante, alergias, etc."
-                                className="resize-none h-24 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-                                disabled={isSubmitting}
-                                {...field}
-                              />
-                            </FormControl>
-                            <div className="flex justify-between items-center mt-1">
-                              <FormMessage className="text-xs" />
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                {field.value?.length || 0}/500
-                              </span>
-                            </div>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
+                  <MedicalInfoSection 
+                    form={form} 
+                    isSubmitting={isSubmitting}
+                  />
                 </div>
 
                 {/* Columna 3: Programación de Cita */}
                 <div className="lg:col-span-1 space-y-4">
-                  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
-                      <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-                        Programar Cita
-                      </h3>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      <FormField
-                        control={form.control}
-                        name="fechaConsulta"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                              Fecha <span className="text-red-500">*</span>
-                            </FormLabel>
-                            <DatePicker
-                              date={field.value}
-                              onDateChange={handleDateChange}
-                              minDate={new Date()}
-                              maxDate={new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)}
-                              placeholder="Seleccionar fecha"
-                              filterDate={isValidAppointmentDate}
-                              className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-                              disabled={isSubmitting}
-                            />
-                            <FormMessage className="text-xs" />
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                              Disponible: Lun-Sáb, 9:00-14:00
-                            </p>
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <FormField
-                        control={form.control}
-                        name="horaConsulta"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                              Hora <span className="text-red-500">*</span>
-                            </FormLabel>
-                            <Select 
-                              onValueChange={field.onChange} 
-                              value={field.value} 
-                              disabled={!selectedDate || !isValidAppointmentDate(selectedDate) || isSubmitting}
-                            >
-                              <FormControl>
-                                <SelectTrigger className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
-                                  <SelectValue 
-                                    placeholder={
-                                      !selectedDate 
-                                        ? "Seleccione fecha primero" 
-                                        : !isValidAppointmentDate(selectedDate)
-                                          ? "Fecha no válida"
-                                          : "Seleccione hora"
-                                    } 
-                                  />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent className="max-h-60">
-                                {availableTimeSlots.length > 0 ? (
-                                  availableTimeSlots.map((slot) => (
-                                    <SelectItem key={slot} value={slot} className="text-sm">
-                                      <div className="flex items-center gap-2">
-                                        <Clock className="h-3 w-3" />
-                                        <span>{slot}</span>
-                                      </div>
-                                    </SelectItem>
-                                  ))
-                                ) : (
-                                  <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                                    {selectedDate && isValidAppointmentDate(selectedDate) 
-                                      ? "No hay horarios disponibles" 
-                                      : "Seleccione una fecha válida"
-                                    }
-                                  </div>
-                                )}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage className="text-xs" />
-                            {availableTimeSlots.length > 0 && (
-                              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                                ✓ {availableTimeSlots.length} horarios disponibles
-                              </p>
-                            )}
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
+                  <AppointmentScheduleSection
+                    form={form}
+                    isSubmitting={isSubmitting}
+                    selectedDate={selectedDate}
+                    availableTimeSlots={availableTimeSlots}
+                    onDateChange={handleDateChange}
+                  />
                 </div>
               </div>
             </form>
           </Form>
         </div>
 
-        {/* Footer con botones */}
+        {/* Footer con botones optimizado */}
         <DialogFooter className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 rounded-b-xl">
           <div className="flex justify-between items-center w-full">
             <div className="text-xs text-slate-500 dark:text-slate-400">
@@ -638,7 +716,6 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
               </DialogClose>
               <Button
                 type="submit"
-                form="patient-form"
                 onClick={form.handleSubmit(handleSubmit)}
                 disabled={!canSubmit}
                 size="default"
