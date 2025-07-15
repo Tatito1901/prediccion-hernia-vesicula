@@ -66,14 +66,20 @@ export function calculateDateRange(dateRange: string): { startDate: Date; endDat
   let startDate = new Date();
 
   switch (dateRange) {
-    case '7dias':
+    case '7d':
+    case '7dias': // Compatibilidad hacia atrás
       startDate.setDate(endDate.getDate() - 7);
       break;
-    case '30dias':
+    case '30d':
+    case '30dias': // Compatibilidad hacia atrás
       startDate.setDate(endDate.getDate() - 30);
       break;
-    case '90dias':
+    case '90d':
+    case '90dias': // Compatibilidad hacia atrás
       startDate.setDate(endDate.getDate() - 90);
+      break;
+    case 'this-month':
+      startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
       break;
     case 'ytd':
       startDate = new Date(endDate.getFullYear(), 0, 1);

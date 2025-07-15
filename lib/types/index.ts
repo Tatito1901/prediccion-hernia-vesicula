@@ -27,7 +27,7 @@ export interface ExtendedAppointment {
   estado_cita: string; // Nota: en el esquema esto es string, no enum
   notas_cita_seguimiento: string | null;
   es_primera_vez: boolean | null;
-  paciente?: {
+  patients?: {
     id: string;
     nombre?: string;
     apellidos?: string;

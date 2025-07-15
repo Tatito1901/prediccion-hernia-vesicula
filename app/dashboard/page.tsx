@@ -15,8 +15,8 @@ export default function DashboardPage() {
       <SidebarProvider>
         <AppSidebar variant="inset" />
         <SidebarInset>
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-            <div className="flex flex-col gap-8 md:gap-12 max-w-7xl mx-auto">
+          <main className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6">
+            <div className="flex flex-col gap-6 md:gap-8 max-w-7xl mx-auto">
               <section>
                 <DashboardMetrics />
               </section>

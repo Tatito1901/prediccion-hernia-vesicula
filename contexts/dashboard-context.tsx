@@ -3,7 +3,8 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useMemo } from 'react';
 import { useChartData } from '@/hooks/use-chart-data';
 
-type DateRange = '7dias' | '30dias' | '90dias' | 'ytd';
+// Rango de fechas estandarizado para todos los componentes
+type DateRange = '7d' | '30d' | '90d' | 'this-month' | 'ytd';
 
 // Define more precise types for the data structures
 interface Appointment {
@@ -97,11 +98,11 @@ const DashboardContext = createContext<DashboardContextType | undefined>(undefin
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   // Shared date range state across all dashboard components
-  const [dateRange, setDateRange] = useState<DateRange>('30dias');
+  const [dateRange, setDateRange] = useState<DateRange>('30d');
 
   // Single data fetch for all dashboard components
   const {
-    loading,
+    isLoading,
     error,
     appointments,
     patients,
@@ -118,7 +119,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({
     dateRange,
     setDateRange,
-    loading,
+    loading: isLoading,
     error,
     appointments,
     patients,
@@ -131,7 +132,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     refresh,
   }), [
     dateRange, 
-    loading, 
+    isLoading, 
     error, 
     appointments, 
     patients, 

@@ -23,13 +23,17 @@ interface ApiAppointment {
   notas_cita_seguimiento?: string | null;
   es_primera_vez?: boolean | null;
   doctor?: {
+    id: string;
     full_name?: string;
-  };
-  // Datos del paciente que vienen directamente en la respuesta de la API
-  nombre?: string;
-  apellidos?: string;
-  telefono?: string;
-  email?: string;
+  } | null;
+  // El objeto 'patients' viene anidado desde la API, tal como lo define la consulta de Supabase
+  patients?: {
+    id: string;
+    nombre?: string;
+    apellidos?: string;
+    telefono?: string;
+    email?: string;
+  } | null;
 }
 
 // Funciones de transformación
@@ -41,12 +45,14 @@ const normalizeId = (id: string | number | null | undefined): string => {
 // Transformación del modelo de API al tipo centralizado ExtendedAppointment
 const transformAppointment = (apiAppointment: ApiAppointment): ExtendedAppointment => {
   const appointmentId = normalizeId(apiAppointment.id);
-  // Corrección: Usar el patient_id proporcionado por la API
-  const patientId = normalizeId(apiAppointment.patient_id);
+  // El ID del paciente se obtiene del objeto anidado 'patients' si existe, si no, del 'patient_id' de la cita
+  const patientId = normalizeId(apiAppointment.patients?.id || apiAppointment.patient_id);
 
-  const pacienteNombre = apiAppointment.nombre || '';
-  const pacienteApellidos = apiAppointment.apellidos || '';
-  const pacienteTelefono = apiAppointment.telefono || '';
+  // Se acceden a las propiedades anidadas de forma segura
+  const pacienteNombre = apiAppointment.patients?.nombre || '';
+  const pacienteApellidos = apiAppointment.patients?.apellidos || '';
+  const pacienteTelefono = apiAppointment.patients?.telefono || '';
+  const pacienteEmail = apiAppointment.patients?.email || '';
 
   return {
     id: appointmentId,
@@ -58,12 +64,13 @@ const transformAppointment = (apiAppointment: ApiAppointment): ExtendedAppointme
     estado_cita: apiAppointment.estado_cita as typeof AppointmentStatusEnum[keyof typeof AppointmentStatusEnum] || AppointmentStatusEnum.PROGRAMADA,
     notas_cita_seguimiento: apiAppointment.notas_cita_seguimiento || null,
     es_primera_vez: apiAppointment.es_primera_vez || false,
-    paciente: {
+    // La propiedad debe llamarse 'patients' para ser consistente con use-chart-data.tsx
+    patients: {
       id: patientId,
       nombre: pacienteNombre,
       apellidos: pacienteApellidos,
       telefono: pacienteTelefono,
-      email: apiAppointment.email || ''
+      email: pacienteEmail
     },
     doctor: {
       full_name: apiAppointment.doctor?.full_name || ''
@@ -87,16 +94,23 @@ export const appointmentKeys = {
  * Hook para obtener una lista paginada de citas con datos del paciente.
  * El endpoint de API /api/patients devuelve estos datos enriquecidos.
  */
-export const useAppointments = (page = 1, pageSize = 10) => {
+export const useAppointments = (page = 1, pageSize = 10, options?: any) => {
+  // Combinamos las opciones proporcionadas con las predeterminadas
+  // Combinamos las opciones proporcionadas con las predeterminadas
   return useQuery<{ appointments: ExtendedAppointment[], pagination: any }>({  
-    queryKey: appointmentKeys.list({ page, pageSize }),
+    queryKey: options?.queryKey || appointmentKeys.list({ page, pageSize }),
+    staleTime: options?.staleTime || 2 * 60 * 1000, // 2 minutos por defecto
+    gcTime: options?.gcTime || 5 * 60 * 1000, // 5 minutos por defecto
+    // Permitimos que otras opciones se pasen directamente
+    ...options,
+    // Aseguramos que la queryFn siempre sea nuestra implementación
     queryFn: async () => {
       const params = new URLSearchParams({
         page: page.toString(),
         pageSize: pageSize.toString(),
       });
 
-      const response = await fetch(`/api/patients?${params}`);
+      const response = await fetch(`/api/appointments?${params}`);
       if (!response.ok) {
         throw new Error('Error al obtener las citas');
       }
@@ -108,9 +122,8 @@ export const useAppointments = (page = 1, pageSize = 10) => {
         pagination: data.pagination
       };
     },
-    staleTime: 2 * 60 * 1000, // 2 minutos
-    gcTime: 5 * 60 * 1000, // 5 minutos
-    refetchInterval: 30 * 1000, // Refrescar cada 30 segundos
+    // Las opciones de tiempo ya se configuraron arriba
+    refetchInterval: options?.refetchInterval || 30 * 1000, // Refrescar cada 30 segundos
   });
 };
 
