@@ -3,13 +3,11 @@
 import React, { useMemo, memo } from "react"
 import {
   ArrowUp, ArrowDown, Users, Clock, TrendingUp, 
-  Info, BarChart, PercentCircle, CheckCircle2, 
-  XCircle, Activity, UserPlus, Calendar, RefreshCw,
-  BarChart4
+  Info, PercentCircle, CheckCircle2, 
+  XCircle, Activity, UserPlus, Calendar, RefreshCw
 } from "lucide-react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -106,11 +104,11 @@ const MetricIcon = memo(({ metricKey, ...props }: { metricKey: MetricKey } & Rea
 MetricIcon.displayName = "MetricIcon"
 
 const MetricCardSkeleton = memo(() => (
-  <Card className="border border-border/50">
+  <Card className="border border-border/50 h-full">
     <CardHeader className="pb-2">
       <div className="flex justify-between items-center">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-4 w-4 rounded" />
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-4 rounded-full" />
       </div>
     </CardHeader>
     <CardContent className="pb-2">
@@ -144,7 +142,7 @@ const MetricCard = memo(({ metricKey, value, footerContent, badge, trend = "neut
 
   return (
     <Dialog>
-      <Card className="group border border-border/50 bg-card hover:border-border transition-colors duration-200">
+      <Card className="group border border-border/50 bg-card hover:border-border transition-colors duration-200 h-full flex flex-col">
         <CardHeader className="pb-2">
           <div className="flex justify-between items-center">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -155,6 +153,7 @@ const MetricCard = memo(({ metricKey, value, footerContent, badge, trend = "neut
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6 text-muted-foreground hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity duration-200"
+                aria-label={`Más información sobre ${description}`}
               >
                 <Info className="h-4 w-4" />
               </Button>
@@ -162,35 +161,35 @@ const MetricCard = memo(({ metricKey, value, footerContent, badge, trend = "neut
           </div>
         </CardHeader>
 
-        <CardContent className="pb-2">
-          <div className="flex items-baseline gap-3">
-            <div className="text-xl font-semibold text-foreground">
+        <CardContent className="pb-2 flex-grow">
+          <div className="flex items-baseline gap-2">
+            <div className="text-xl md:text-2xl font-semibold text-foreground">
               {value}
             </div>
-            {badge && <div>{badge}</div>}
+            {badge && <div className="ml-auto">{badge}</div>}
           </div>
         </CardContent>
 
         <CardFooter className="pt-2 border-t border-border/30">
           <div className={`flex items-center gap-1 text-xs ${trendConfig.color}`}>
-            {trendConfig.icon && <trendConfig.icon className="h-3 w-3" />}
-            <span>{footerContent}</span>
+            {trendConfig.icon && <trendConfig.icon className="h-3 w-3 flex-shrink-0" />}
+            <span className="truncate">{footerContent}</span>
           </div>
         </CardFooter>
 
-        <div className="absolute top-4 right-12 opacity-30 group-hover:opacity-50 transition-opacity duration-200">
-          <MetricIcon metricKey={metricKey} className="h-5 w-5" />
+        <div className="absolute bottom-4 right-4 opacity-20 group-hover:opacity-40 transition-opacity duration-200">
+          <MetricIcon metricKey={metricKey} className="h-6 w-6" />
         </div>
       </Card>
 
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex items-center gap-4 mb-4">
             <div className="p-3 rounded-lg bg-muted">
               <MetricIcon metricKey={metricKey} className="h-6 w-6" />
             </div>
             <div>
-              <DialogTitle className="text-xl font-semibold">
+              <DialogTitle className="text-lg md:text-xl font-semibold">
                 {description}
               </DialogTitle>
               <p className="text-sm text-muted-foreground">Información detallada</p>
@@ -200,17 +199,17 @@ const MetricCard = memo(({ metricKey, value, footerContent, badge, trend = "neut
           <div className="space-y-4">
             <div className="p-4 bg-muted/50 rounded-lg border">
               <div className="text-2xl font-semibold mb-2">{value}</div>
-              {badge && <div>{badge}</div>}
+              {badge && <div className="mt-2">{badge}</div>}
             </div>
 
             <div className="space-y-3">
               <div className="p-4 rounded-lg bg-muted/30">
-                <h4 className="font-medium mb-2">Fuente de Datos</h4>
+                <h4 className="font-medium mb-1">Fuente de Datos</h4>
                 <p className="text-sm text-muted-foreground">{fuente}</p>
               </div>
 
               <div className="p-4 rounded-lg bg-muted/30">
-                <h4 className="font-medium mb-2">Significado</h4>
+                <h4 className="font-medium mb-1">Significado</h4>
                 <p className="text-sm text-muted-foreground">{significado}</p>
               </div>
             </div>
@@ -251,81 +250,86 @@ export function DashboardMetrics() {
 
   const metricsData = useMemo(() => clinicMetrics ?? DEFAULT_METRICS, [clinicMetrics])
 
-  const formatPercentage = useMemo(() => 
-    (num: number, den: number) => den === 0 ? "0%" : `${Math.round((num / den) * 100)}%`,
-  [])
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[300px] bg-card border rounded-lg p-8 text-center">
-        <div className="p-4 rounded-full bg-red-50 dark:bg-red-950/20 mb-6">
-          <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
-        </div>
-        <div className="space-y-3 max-w-md">
-          <h3 className="text-lg font-semibold">Error al cargar métricas</h3>
-          <p className="text-muted-foreground">
-            No se pudieron obtener los datos del dashboard.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={refresh}
-          className="mt-6 gap-2"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Reintentar
-        </Button>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-muted">
-            <h1 className="text-xl font-semibold">Métricas de la Clínica</h1>
-            <p className="text-muted-foreground">Resumen ejecutivo de rendimiento</p>
-          </div>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Métricas de la Clínica</h1>
+          <p className="text-muted-foreground text-sm">Resumen ejecutivo de rendimiento</p>
         </div>
-        <div className="flex items-center gap-2 bg-muted/50 h-auto p-2 rounded-md">
-          <BarChart className="h-4 w-4" />
-          <span className="text-sm font-medium">Visión General</span>
+        
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <div className="flex items-center text-sm text-muted-foreground">
+            <Calendar className="h-4 w-4 mr-1.5 flex-shrink-0" />
+            <span className="truncate max-w-[180px] sm:max-w-none">{lastUpdated}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refresh}
+            className="gap-1.5"
+            aria-label="Actualizar métricas"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Actualizar</span>
+          </Button>
         </div>
       </div>
 
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <MetricCardSkeleton key={i} />
-          ))}
+      {error ? (
+        <div className="flex flex-col items-center justify-center min-h-[300px] bg-card border rounded-lg p-6 text-center">
+          <div className="p-4 rounded-full bg-red-50 dark:bg-red-950/20 mb-4">
+            <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
+          </div>
+          <div className="space-y-2 max-w-md">
+            <h3 className="text-lg font-semibold">Error al cargar métricas</h3>
+            <p className="text-muted-foreground text-sm">
+              No se pudieron obtener los datos del dashboard.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={refresh}
+            className="mt-4 gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Reintentar
+          </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
-          <MetricCard
-            metricKey="totalPacientes"
-            value={metricsData.totalPacientes}
-            footerContent="Total de pacientes registrados"
-            trend="neutral"
-          />
-          <MetricCard
-            metricKey="pacientesNuevosMes"
-            value={metricsData.pacientesNuevosMes}
-            footerContent="Total de pacientes consultados"
-            trend="neutral"
-          />
-          <MetricCard
-            metricKey="pacientesOperados"
-            value={metricsData.pacientesOperados}
-            footerContent="Cirugías realizadas"
-            trend="neutral"
-          />
-          <MetricCard
-            metricKey="fuentePrincipalPacientes"
-            value={metricsData.fuentePrincipalPacientes}
-            footerContent="Canal más efectivo"
-            badge={<Badge variant="outline">{metricsData.fuentePrincipalPacientes}</Badge>}
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {loading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <MetricCardSkeleton key={i} />
+            ))
+          ) : (
+            <>
+              <MetricCard
+                metricKey="totalPacientes"
+                value={metricsData.totalPacientes}
+                footerContent="Total de pacientes registrados"
+                trend="neutral"
+              />
+              <MetricCard
+                metricKey="pacientesNuevosMes"
+                value={metricsData.pacientesNuevosMes}
+                footerContent="Total de pacientes consultados"
+                trend="neutral"
+              />
+              <MetricCard
+                metricKey="pacientesOperados"
+                value={metricsData.pacientesOperados}
+                footerContent="Cirugías realizadas"
+                trend="neutral"
+              />
+              <MetricCard
+                metricKey="fuentePrincipalPacientes"
+                value={metricsData.fuentePrincipalPacientes}
+                footerContent="Canal más efectivo"
+                badge={<Badge variant="outline" className="text-xs">{metricsData.fuentePrincipalPacientes}</Badge>}
+              />
+            </>
+          )}
         </div>
       )}
     </div>

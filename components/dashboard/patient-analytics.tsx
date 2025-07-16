@@ -1,4 +1,3 @@
-
 import type React from "react"
 import { useMemo, memo } from "react"
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from "recharts"
@@ -13,13 +12,16 @@ import {
   AlertCircle,
   RefreshCw,
   ArrowUpRight,
+  ArrowDownRight,
   Download,
   Filter,
   Eye,
+  Calendar,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useDashboard } from "@/contexts/dashboard-context"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
 
 interface ChartDataPoint {
   name: string
@@ -27,10 +29,27 @@ interface ChartDataPoint {
   operados: number
 }
 
+interface PatientAnalyticsProps {
+  loading?: boolean
+  error?: boolean
+  chart?: {
+    series: Array<{ name: string; data: number[] }>
+    categories: string[]
+  }
+  generalStats?: {
+    total: number
+    operados: number
+    nuevos: number
+  }
+  dateRange?: '7d' | '30d' | '90d' | 'ytd'
+  setDateRange?: (range: '7d' | '30d' | '90d' | 'ytd') => void
+  lastUpdated?: string | number | Date
+}
+
 const ElegantTooltip = memo(({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-background border border-border/50 rounded-lg shadow-lg p-4 min-w-[200px]">
+      <div className="bg-background border border-border rounded-lg shadow-lg p-4 min-w-[200px]">
         <div className="text-sm font-medium text-muted-foreground mb-3">
           {label}
         </div>
@@ -74,13 +93,13 @@ const MetricCard = memo(
     subtitle: string
   }) => {
     return (
-      <Card className="border border-border/50">
+      <Card className="border border-border/50 shadow-sm hover:shadow-md transition-shadow duration-300">
         <CardContent className="p-6">
           <div className="flex items-start justify-between mb-4">
-            <div className="p-2 rounded-lg bg-muted">
+            <div className="p-2 rounded-lg bg-muted/50">
               <Icon className="h-5 w-5 text-muted-foreground" />
             </div>
-            {change && (
+            {change && trend && (
               <Badge
                 variant="secondary"
                 className={`${
@@ -89,7 +108,7 @@ const MetricCard = memo(
                     : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400"
                 } text-xs`}
               >
-                {trend === "up" ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <TrendingUp className="h-3 w-3 mr-1" />}
+                {trend === "up" ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
                 {change}
               </Badge>
             )}
@@ -99,7 +118,7 @@ const MetricCard = memo(
             <h3 className="text-sm font-medium text-muted-foreground">
               {title}
             </h3>
-            <p className="text-2xl font-semibold text-foreground">
+            <p className="text-2xl font-bold text-foreground">
               {value}
             </p>
             <p className="text-sm text-muted-foreground">
@@ -121,7 +140,10 @@ const LoadingSkeleton = memo(() => (
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-5 w-96" />
       </div>
-      <Skeleton className="h-10 w-48" />
+      <div className="flex gap-3">
+        <Skeleton className="h-10 w-24" />
+        <Skeleton className="h-10 w-24" />
+      </div>
     </div>
 
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -147,8 +169,8 @@ const LoadingSkeleton = memo(() => (
           <Skeleton className="h-4 w-64" />
         </div>
         <div className="flex gap-4">
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-24" />
         </div>
       </div>
       <Skeleton className="h-80 w-full" />
@@ -158,9 +180,15 @@ const LoadingSkeleton = memo(() => (
 
 LoadingSkeleton.displayName = "LoadingSkeleton"
 
-export const PatientAnalytics: React.FC = () => {
-  const { loading, error, chart, generalStats, dateRange, setDateRange } = useDashboard()
-
+export const PatientAnalytics: React.FC<PatientAnalyticsProps> = ({
+  loading = false,
+  error = false,
+  chart,
+  generalStats,
+  dateRange = '30d',
+  setDateRange,
+  lastUpdated
+}) => {
   const transformedChartData = useMemo((): ChartDataPoint[] => {
     if (!chart?.series || !chart.categories || chart.series.length < 2) {
       return []
@@ -206,9 +234,21 @@ export const PatientAnalytics: React.FC = () => {
     }
   }, [generalStats, transformedChartData])
 
+  const formattedLastUpdated = useMemo(() => {
+    if (!lastUpdated) return "Actualizando..."
+    try {
+      const date = new Date(lastUpdated)
+      return isNaN(date.getTime()) 
+        ? "Actualizando..." 
+        : `Actualizado: ${format(date, "dd 'de' MMMM, yyyy HH:mm", { locale: es })}`
+    } catch {
+      return "Actualizando..."
+    }
+  }, [lastUpdated])
+
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <LoadingSkeleton />
       </div>
     )
@@ -216,8 +256,8 @@ export const PatientAnalytics: React.FC = () => {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <Card>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Card className="border border-border/50 shadow-sm">
           <CardContent className="p-12">
             <div className="flex flex-col items-center justify-center text-center space-y-6">
               <div className="p-4 rounded-full bg-red-50 dark:bg-red-950/20">
@@ -226,7 +266,7 @@ export const PatientAnalytics: React.FC = () => {
               <div className="space-y-2">
                 <h3 className="text-xl font-semibold">Error al cargar datos</h3>
                 <p className="text-muted-foreground max-w-md">
-                  No se pudieron cargar los datos del análisis.
+                  No se pudieron cargar los datos del análisis. Por favor, inténtalo de nuevo.
                 </p>
               </div>
               <Button variant="outline" className="gap-2">
@@ -242,8 +282,8 @@ export const PatientAnalytics: React.FC = () => {
 
   if (!transformedChartData || transformedChartData.length === 0) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <Card>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Card className="border border-border/50 shadow-sm">
           <CardContent className="p-12">
             <div className="flex flex-col items-center justify-center text-center space-y-6">
               <div className="p-4 rounded-full bg-muted">
@@ -252,7 +292,7 @@ export const PatientAnalytics: React.FC = () => {
               <div className="space-y-2">
                 <h3 className="text-xl font-semibold">Sin datos disponibles</h3>
                 <p className="text-muted-foreground max-w-md">
-                  No hay datos suficientes para mostrar el análisis.
+                  No hay datos suficientes para mostrar el análisis en este momento.
                 </p>
               </div>
               <Button variant="outline" className="gap-2">
@@ -267,10 +307,10 @@ export const PatientAnalytics: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
         <div className="space-y-2">
-          <h1 className="text-3xl font-semibold text-foreground">
+          <h1 className="text-3xl font-bold text-foreground">
             Análisis de Pacientes
           </h1>
           <p className="text-lg text-muted-foreground">
@@ -278,28 +318,39 @@ export const PatientAnalytics: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <Tabs value={dateRange} onValueChange={(value) => setDateRange(value as '7d' | '30d' | '90d' | 'ytd')}>
-            <TabsList className="bg-muted/50 p-1 w-full sm:w-auto">
-              <TabsTrigger value="7d" className="text-sm">
-                7D
-              </TabsTrigger>
-              <TabsTrigger value="30d" className="text-sm">
-                30D
-              </TabsTrigger>
-              <TabsTrigger value="90d" className="text-sm">
-                90D
-              </TabsTrigger>
-              <TabsTrigger value="ytd" className="text-sm">
-                Año
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center text-sm text-muted-foreground">
+            <Calendar className="h-4 w-4 mr-2" />
+            {formattedLastUpdated}
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <Tabs 
+              value={dateRange} 
+              onValueChange={(value) => setDateRange?.(value as '7d' | '30d' | '90d' | 'ytd')}
+              className="w-full sm:w-auto"
+            >
+              <TabsList className="bg-muted/50 p-1 w-full sm:w-auto">
+                <TabsTrigger value="7d" className="text-xs sm:text-sm">
+                  7D
+                </TabsTrigger>
+                <TabsTrigger value="30d" className="text-xs sm:text-sm">
+                  30D
+                </TabsTrigger>
+                <TabsTrigger value="90d" className="text-xs sm:text-sm">
+                  90D
+                </TabsTrigger>
+                <TabsTrigger value="ytd" className="text-xs sm:text-sm">
+                  Año
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-          <Button variant="outline" size="sm" className="gap-2">
-            <Filter className="h-4 w-4" />
-            <span className="hidden sm:inline">Filtros</span>
-          </Button>
+            <Button variant="outline" size="sm" className="gap-2 w-full sm:w-auto">
+              <Filter className="h-4 w-4" />
+              <span className="hidden sm:inline">Filtros</span>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -310,7 +361,7 @@ export const PatientAnalytics: React.FC = () => {
           value={metrics.totalConsultas.toLocaleString()}
           change="+12.5%"
           trend="up"
-          subtitle="Consultas médicas realizadas en el período"
+          subtitle="Consultas médicas realizadas"
         />
         <MetricCard
           icon={Activity}
@@ -318,29 +369,31 @@ export const PatientAnalytics: React.FC = () => {
           value={metrics.totalOperados.toLocaleString()}
           change="+8.3%"
           trend="up"
-          subtitle="Pacientes que completaron procedimientos"
+          subtitle="Pacientes con procedimientos completados"
         />
         <MetricCard
           icon={TrendingUp}
           title="Tasa Conversión"
           value={`${metrics.conversionRate}%`}
+          change={`${metrics.conversionRate >= 0 ? '+' : ''}${metrics.conversionRate}%`}
+          trend={metrics.conversionRate >= 0 ? "up" : "down"}
           subtitle="Porcentaje de consultas convertidas"
         />
       </div>
 
-      <Card>
+      <Card className="border border-border/50 shadow-sm">
         <CardHeader className="pb-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div className="space-y-2">
-              <CardTitle className="text-xl font-semibold">
+              <CardTitle className="text-xl font-bold">
                 Tendencia Mensual
               </CardTitle>
               <CardDescription className="text-muted-foreground">
-                Evolución de consultas y procedimientos a lo largo del tiempo
+                Evolución de consultas y procedimientos
               </CardDescription>
             </div>
 
-            <div className="flex gap-6">
+            <div className="flex flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-blue-500" />
                 <span className="text-sm font-medium">Consultas</span>
@@ -353,17 +406,17 @@ export const PatientAnalytics: React.FC = () => {
           </div>
         </CardHeader>
 
-        <CardContent className="pb-8">
+        <CardContent>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={transformedChartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
                 <defs>
                   <linearGradient id="consultasGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="operadosGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                   </linearGradient>
                 </defs>
@@ -415,7 +468,7 @@ export const PatientAnalytics: React.FC = () => {
         </CardContent>
       </Card>
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-6 border-t border-border/50">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-6 border-t border-border/30">
         <div className="space-y-1">
           <h3 className="font-semibold">Exportar Datos</h3>
           <p className="text-sm text-muted-foreground">
@@ -424,11 +477,11 @@ export const PatientAnalytics: React.FC = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2 w-full sm:w-auto">
             <Eye className="h-4 w-4" />
             Vista Detallada
           </Button>
-          <Button className="gap-2">
+          <Button className="gap-2 w-full sm:w-auto">
             <Download className="h-4 w-4" />
             Exportar
           </Button>

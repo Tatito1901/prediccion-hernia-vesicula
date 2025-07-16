@@ -48,22 +48,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 CustomTooltip.displayName = 'CustomTooltip';
 
 export const PatientTrendsChart: React.FC = () => {
-  const { loading, error, chart, dateRange, setDateRange, refresh } = useDashboard()
+  const { loading, error, chart, dateRange, setDateRange } = useDashboard()
   
-  // Estado local para mostrar una animación durante la actualización
-  const [isUpdating, setIsUpdating] = useState(false)
-  
-  // Efecto para mostrar un breve efecto visual y refrescar los datos cuando cambia el rango de fechas
-  useEffect(() => {
-    setIsUpdating(true)
-    
-    // Refrescar datos cuando cambia el rango de fechas
-    refresh();
-    
-    // Establecemos un temporizador para quitar la animación de actualización
-    const timer = setTimeout(() => setIsUpdating(false), 800)
-    return () => clearTimeout(timer)
-  }, [dateRange, refresh])
+
 
   const { chartData, metrics } = useMemo(() => {
     if (!chart?.series || !chart.categories) {
@@ -169,13 +156,13 @@ export const PatientTrendsChart: React.FC = () => {
       <CardContent>
         <div className="flex flex-col space-y-4">
           <div className="flex justify-center">
-            <div className={`text-center p-4 rounded-lg border min-w-[250px] transition-all duration-300 ${isUpdating ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50' : 'bg-muted/30 border-border/50'}`}>
+            <div className={`text-center p-4 rounded-lg border min-w-[250px] transition-all duration-300 ${loading ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50' : 'bg-muted/30 border-border/50'}`}>
               <div className="flex items-center justify-center gap-2 mb-2">
                 <div className="w-3 h-3 rounded-full bg-amber-500"></div>
                 <span className="text-sm font-medium text-muted-foreground">Ratio de Efectividad</span>
               </div>
               <p className="text-2xl font-semibold">
-                {isUpdating ? (
+                {loading ? (
                   <span className="inline-block animate-pulse">...</span>
                 ) : (
                   metrics.ratio

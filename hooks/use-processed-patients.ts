@@ -80,25 +80,8 @@ export const useProcessedPatients = (
     });
   }, [patients, appointments]);
 
-  // Memoización del filtrado y cálculo de estadísticas.
-  const { filteredAndEnrichedPatients, statusStats } = useMemo(() => {
-    let currentViewPatients: EnrichedPatient[] = enrichedPatients;
-    const term = (searchTerm || '').toLowerCase();
-
-    if (term) {
-      currentViewPatients = currentViewPatients.filter(p =>
-        p.nombreCompleto.toLowerCase().includes(term) ||
-        (p.telefono?.includes(term)) || // No es necesario toLowerCase para números de teléfono
-        (p.email?.toLowerCase().includes(term)) ||
-        p.displayDiagnostico.toLowerCase().includes(term) ||
-        p.id.toLowerCase().includes(term)
-      );
-    }
-
-    if (statusFilter !== "all") {
-      currentViewPatients = currentViewPatients.filter((p) => p.estado_paciente === statusFilter);
-    }
-
+  // Memoización para el cálculo de estadísticas, depende solo de la lista completa.
+  const statusStats = useMemo(() => {
     const stats = enrichedPatients.reduce((acc, patient) => {
       if (patient.estado_paciente && patient.estado_paciente in STATUS_CONFIG) {
         acc[patient.estado_paciente as keyof typeof PatientStatusEnum]++;
@@ -113,10 +96,29 @@ export const useProcessedPatients = (
       [PatientStatusEnum.INDECISO]: 0,
     } as Record<keyof typeof PatientStatusEnum, number>);
 
-    return {
-      filteredAndEnrichedPatients: currentViewPatients,
-      statusStats: { ...stats, all: enrichedPatients.length }
-    };
+    return { ...stats, all: enrichedPatients.length };
+  }, [enrichedPatients]);
+
+  // Memoización para el filtrado, depende de la lista y los filtros.
+  const filteredAndEnrichedPatients = useMemo(() => {
+    let currentViewPatients: EnrichedPatient[] = enrichedPatients;
+    const term = (searchTerm || '').toLowerCase();
+
+    if (term) {
+      currentViewPatients = currentViewPatients.filter(p =>
+        p.nombreCompleto.toLowerCase().includes(term) ||
+        (p.telefono?.includes(term)) ||
+        (p.email?.toLowerCase().includes(term)) ||
+        p.displayDiagnostico.toLowerCase().includes(term) ||
+        p.id.toLowerCase().includes(term)
+      );
+    }
+
+    if (statusFilter !== "all") {
+      currentViewPatients = currentViewPatients.filter((p) => p.estado_paciente === statusFilter);
+    }
+
+    return currentViewPatients;
   }, [enrichedPatients, searchTerm, statusFilter]);
 
   return { enrichedPatients, filteredAndEnrichedPatients, statusStats };
