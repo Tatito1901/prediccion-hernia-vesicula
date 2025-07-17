@@ -17,6 +17,7 @@ export async function GET(request: Request) {
 
     // 1. Recolectar y sanitizar parámetros de la URL
     const estado = searchParams.get('estado');
+    // const searchTerm = searchParams.get('search'); // TODO: Implementar búsqueda cuando la función RPC lo soporte
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
     // 2. Llamar a la función de la base de datos (RPC) con los parámetros
     const { data, error } = await supabase.rpc('get_paginated_patients', {
       p_estado: estado,
+      // p_search_term: searchTerm, // TODO: Añadir cuando la función RPC lo soporte
       p_start_date: startDate,
       p_end_date: endDate,
       p_page_num: page,

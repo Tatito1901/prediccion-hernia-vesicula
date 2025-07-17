@@ -1,7 +1,9 @@
-// lib/hooks/use-appointments.ts
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+// hooks/use-appointments.ts - REFACTORED TO USE CENTRAL DATA PROVIDER
+import { useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseISO, isValid, format } from 'date-fns';
 import { toast } from 'sonner';
+import { useClinic } from '@/contexts/clinic-data-provider';
 
 import { 
   Appointment, 
@@ -91,40 +93,39 @@ export const appointmentKeys = {
 // Hooks de React Query
 
 /**
- * Hook para obtener una lista paginada de citas con datos del paciente.
- * El endpoint de API /api/patients devuelve estos datos enriquecidos.
+ * Hook refactorizado que actúa como selector - NO hace fetch, consume datos del contexto central.
+ * Realiza paginación sobre los datos ya existentes en memoria.
  */
-export const useAppointments = (page = 1, pageSize = 10, options?: any) => {
-  // Combinamos las opciones proporcionadas con las predeterminadas
-  // Combinamos las opciones proporcionadas con las predeterminadas
-  return useQuery<{ appointments: ExtendedAppointment[], pagination: any }>({  
-    queryKey: options?.queryKey || appointmentKeys.list({ page, pageSize }),
-    staleTime: options?.staleTime || 2 * 60 * 1000, // 2 minutos por defecto
-    gcTime: options?.gcTime || 5 * 60 * 1000, // 5 minutos por defecto
-    // Permitimos que otras opciones se pasen directamente
-    ...options,
-    // Aseguramos que la queryFn siempre sea nuestra implementación
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        pageSize: pageSize.toString(),
-      });
+export const useAppointments = (page = 1, pageSize = 100) => {
+  // 1. Consume los datos desde la fuente única de la verdad
+  const { appointmentsWithPatientData, isLoading, error, refetch } = useClinic();
 
-      const response = await fetch(`/api/appointments?${params}`);
-      if (!response.ok) {
-        throw new Error('Error al obtener las citas');
+  // 2. Realiza la paginación sobre los datos ya existentes en memoria
+  const paginatedData = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    return appointmentsWithPatientData.slice(start, end);
+  }, [appointmentsWithPatientData, page, pageSize]);
+  
+  const totalCount = appointmentsWithPatientData.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+
+  // 3. Devuelve los datos en la misma estructura que antes para no romper los componentes
+  return {
+    data: {
+      appointments: paginatedData as ExtendedAppointment[],
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+        hasMore: page < totalPages
       }
-      
-      const data = await response.json();
-      const appointments = data.data.map(transformAppointment);
-      return {
-        appointments,
-        pagination: data.pagination
-      };
     },
-    // Las opciones de tiempo ya se configuraron arriba
-    refetchInterval: options?.refetchInterval || 30 * 1000, // Refrescar cada 30 segundos
-  });
+    isLoading, // Propaga el estado de carga del hook central
+    error,
+    refetchAppointments: refetch // Expone la función de refetch central
+  };
 };
 
 /**
@@ -280,5 +281,127 @@ export const useUpdateAppointmentStatus = () => {
         description: error instanceof Error ? error.message : 'Error desconocido'
       });
     },
+  });
+};
+
+// Hook para admitir un paciente (crear paciente + cita en una sola operación)
+export const useAdmitPatient = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (patientData: {
+      nombre: string;
+      apellidos: string;
+      telefono: string;
+      edad?: number | null;
+      diagnostico_principal: string;
+      comentarios_registro: string;
+      fecha_hora_cita: string;
+      motivo_cita: string;
+    }) => {
+      const response = await fetch('/api/patients/admit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patientData),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Error al admitir paciente');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidamos la query central para refrescar toda la app
+      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
+      toast.success('Paciente admitido exitosamente');
+    },
+    onError: (error) => {
+      toast.error('Error al admitir paciente', {
+        description: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    },
+  });
+};
+
+// Hook para obtener un paciente específico por su ID
+export const usePatient = (id: string | null) => {
+  return useQuery({
+    queryKey: ['patient', id],
+    queryFn: async () => {
+      if (!id) return null;
+      
+      const response = await fetch(`/api/patients/${id}`);
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Error al obtener el paciente');
+      }
+      
+      return response.json();
+    },
+    enabled: !!id,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+};
+
+// Hook para actualizar un paciente
+export const useUpdatePatient = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, updatedData }: { id: string; updatedData: any }) => {
+      const response = await fetch(`/api/patients/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedData),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Error al actualizar el paciente');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (updatedPatient, { id }) => {
+      // Actualizar la query del paciente específico
+      queryClient.setQueryData(['patient', id], updatedPatient);
+      // Invalidar la query central para refrescar toda la app
+      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
+      toast.success('Paciente actualizado exitosamente');
+    },
+    onError: (error) => {
+      toast.error('Error al actualizar paciente', {
+        description: error instanceof Error ? error.message : 'Error desconocido'
+      });
+    },
+  });
+};
+
+// Hook para obtener múltiples pacientes con filtros
+export const usePatients = (page = 1, pageSize = 100, status?: string) => {
+  return useQuery({
+    queryKey: ['patients', page, pageSize, status],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      });
+      
+      if (status) {
+        params.append('estado', status);
+      }
+      
+      const response = await fetch(`/api/patients?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Error al obtener los pacientes');
+      }
+      
+      return response.json();
+    },
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 };

@@ -136,42 +136,42 @@ const StatCards = memo<{ generalStats: GeneralStats; isLoading: boolean }>(({ ge
   const statCardsData = useMemo(() => [
     { 
       title: "Total de Citas", 
-      value: generalStats.total.toLocaleString(), 
+      value: (generalStats?.total || 0).toLocaleString(), 
       icon: <FileBarChart className="h-4 w-4" />, 
       description: "Número total de citas en el período seleccionado", 
       color: "bg-primary", 
       trendPercent: 12, 
-      previousValue: Math.max(0, generalStats.total - 5).toLocaleString(), 
+      previousValue: Math.max(0, (generalStats?.total || 0) - 5).toLocaleString(), 
       trendLabel: "vs período anterior" 
     },
     { 
       title: "Tasa de Asistencia", 
-      value: `${generalStats.attendance.toFixed(1)}%`, 
+      value: `${(generalStats?.attendance || 0).toFixed(1)}%`, 
       icon: <Calendar className="h-4 w-4" />, 
       description: "Porcentaje de citas completadas exitosamente", 
       color: "bg-green-500", 
       trendPercent: 5, 
-      previousValue: `${Math.max(0, generalStats.attendance - 3).toFixed(1)}%`, 
+      previousValue: `${Math.max(0, (generalStats?.attendance || 0) - 3).toFixed(1)}%`, 
       trendLabel: "vs período anterior" 
     },
     { 
       title: "Tasa de Cancelación", 
-      value: `${generalStats.cancellation.toFixed(1)}%`, 
+      value: `${(generalStats?.cancellation || 0).toFixed(1)}%`, 
       icon: <AlertCircle className="h-4 w-4" />, 
       description: "Porcentaje de citas canceladas", 
       color: "bg-red-500", 
       trendPercent: -2, 
-      previousValue: `${(generalStats.cancellation + 2).toFixed(1)}%`, 
+      previousValue: `${((generalStats?.cancellation || 0) + 2).toFixed(1)}%`, 
       trendLabel: "vs período anterior" 
     },
     { 
       title: "Citas Pendientes", 
-      value: generalStats.pendingCount.toLocaleString(), 
+      value: (generalStats?.pendingCount || 0).toLocaleString(), 
       icon: <Clock className="h-4 w-4" />, 
       description: "Número de citas aún pendientes por realizar", 
       color: "bg-amber-500", 
       trendPercent: -8, 
-      previousValue: (generalStats.pendingCount + 2).toLocaleString(), 
+      previousValue: ((generalStats?.pendingCount || 0) + 2).toLocaleString(), 
       trendLabel: "vs período anterior" 
     },
   ], [generalStats])

@@ -2,6 +2,7 @@
 
 import React, { useState, Suspense, useMemo } from 'react';
 import { useClinic } from "@/contexts/clinic-data-provider";
+import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 import { useChartData, type AppointmentFilters } from "@/hooks/use-chart-data";
 import { AppointmentStatistics } from "@/components/charts/appointment-statistics";
 import { LoadingSpinner } from "@/components/charts/use-chart-config";
@@ -60,44 +61,46 @@ const EstadisticasPage = () => {
   }
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Estadísticas</h2>
+    <ClinicDataProvider>
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+        <div className="flex items-center justify-between space-y-2">
+          <h2 className="text-3xl font-bold tracking-tight">Estadísticas</h2>
+        </div>
+
+        <Tabs defaultValue="citas" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="citas">
+              <FileBarChart className="mr-2 h-4 w-4" />
+              Análisis de Citas
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="citas" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Estadísticas de Citas</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Suspense fallback={<LoadingSpinner />}>
+                  {isLoading ? (
+                    <LoadingSpinner />
+                  ) : (
+                    <AppointmentStatistics
+                      chartData={chartData}
+                      isLoading={isLoading}
+                      error={clinicError}
+                      onRefresh={refetch}
+                      filters={filters}
+                      setFilters={setFilters}
+                    />
+                  )}
+                </Suspense>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
-
-      <Tabs defaultValue="citas" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="citas">
-            <FileBarChart className="mr-2 h-4 w-4" />
-            Análisis de Citas
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="citas" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Estadísticas de Citas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Suspense fallback={<LoadingSpinner />}>
-                {isLoading ? (
-                  <LoadingSpinner />
-                ) : (
-                  <AppointmentStatistics
-                    chartData={chartData}
-                    isLoading={isLoading}
-                    error={clinicError}
-                    onRefresh={refetch}
-                    filters={filters}
-                    setFilters={setFilters}
-                  />
-                )}
-              </Suspense>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+    </ClinicDataProvider>
   );
 };
 
