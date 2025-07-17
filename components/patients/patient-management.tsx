@@ -15,10 +15,10 @@ import { SimplePagination } from "@/components/ui/simple-pagination"
 import PatientTable from "./patient-table"
 
 // --- Hooks y Tipos ---
-import { useAppointments } from "@/hooks/use-appointments" 
-import { usePatientStats } from "@/hooks/use-patient-stats"
+// Importamos el nuevo hook de contexto
+import { useClinic } from "@/contexts/clinic-data-provider";
 import { useProcessedPatients } from "@/hooks/use-processed-patients"
-import { EnrichedPatient, PatientStatusEnum, PatientStats } from "@/lib/types"
+import { EnrichedPatient, PatientStatusEnum, PatientStats, StatusStats } from "@/lib/types"
 import { generateSurveyId } from "@/lib/form-utils"
 import { cn } from "@/lib/utils"
 
@@ -56,21 +56,15 @@ const STATUS_CONFIG = {
   }
 } as const
 
+type StatusFilterType = keyof typeof PatientStatusEnum | "all"
+type DialogType = "details" | "shareSurvey" | "scheduleAppointment"
+
 interface StatsDataType {
   totalPatients: number
   surveyRate: number
   pendingConsults: number
   operatedPatients: number
 }
-
-interface StatusStatsType {
-  all: number
-  [key: string]: number
-}
-
-type StatusFilterType = keyof typeof PatientStatusEnum | "all"
-type DialogType = "details" | "shareSurvey" | "scheduleAppointment"
-type StatusCountMap = { [key: string]: number }
 
 interface PatientHeaderProps {
   statsData: StatsDataType
@@ -84,7 +78,7 @@ interface FilterBarProps {
   statusFilter: StatusFilterType
   onStatusChange: (value: StatusFilterType) => void
   onClearFilters: () => void
-  statusStats: StatusCountMap
+  statusStats: StatusStats
 }
 
 const LoadingSkeleton: React.FC = () => (
@@ -217,79 +211,52 @@ export const PatientManagement: React.FC = () => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
 
-  // --- Fetching de Datos ---
+  // ==================== OBTENCIÓN DE DATOS CENTRALIZADA ====================
+  // ¡Aquí está la magia! Obtenemos todos los datos y el estado desde un solo lugar.
   const { 
-    data: appointmentsData, 
-    isLoading: isLoadingPatients, 
-    isError,
-    refetch: refetchPatients 
-  } = useAppointments(currentPage, PAGE_SIZE)
+    enrichedPatients, 
+    allAppointments,
+    isLoading: isLoadingClinicData, // Usamos el estado de carga del hook central
+    error 
+  } = useClinic();
+  // ========================================================================
 
-  const { data: stats, isLoading: isLoadingStats } = usePatientStats()
-  
-  // Usamos un mock de datos compatibles con el hook mientras se ajusta el API
-  // Este enfoque temporal nos permite seguir usando el hook sin cambiar su implementación
-  const compatiblePatients = useMemo(() => {
-    // Extraemos datos de pacientes a partir de las citas
-    const patientsFromAppointments = appointmentsData?.appointments?.map(app => {
-      return {
-        id: app.patient_id,
-        nombre: app.paciente?.nombre || '',
-        apellidos: app.paciente?.apellidos || '',
-        telefono: app.paciente?.telefono || '',
-        email: app.paciente?.email || '',
-        fecha_registro: app.created_at || null,
-        created_at: app.created_at,
-        updated_at: null,
-        estado_paciente: "PENDIENTE_DE_CONSULTA" as const, // Valor por defecto
-        diagnostico_principal: null,
-        diagnostico_principal_detalle: null,
-        fecha_nacimiento: null,
-        edad: null,
-        genero: null,
-        // Campos requeridos para el tipo Patient
-        comentarios_registro: null,
-        creado_por_id: null,
-        doctor_asignado_id: app.doctor_id,
-        fecha_operacion: null,
-        historial_medico: null,
-        origen_paciente: null,
-        notas_seguimiento: null
-      }
-    }) || []
-    
-    // Eliminar duplicados basados en ID
-    const uniquePatients = Array.from(
-      new Map(patientsFromAppointments.map(item => [item.id, item]))
-      .values()
-    )
-    
-    return uniquePatients
-  }, [appointmentsData])
-  
-  // Procesamiento de pacientes con filtros
+  // El hook useProcessedPatients ahora recibe los datos como argumentos,
+  // en lugar de hacer su propia llamada a la API.
   const { 
     filteredAndEnrichedPatients: processedPatients,
     statusStats 
-  // @ts-ignore - Ignoramos temporalmente incompatibilidades de tipo mientras se ajusta la API
   } = useProcessedPatients(
-    compatiblePatients, 
-    appointmentsData?.appointments || [], 
+    enrichedPatients, // Pasamos los pacientes ya enriquecidos
+    allAppointments, // Pasamos todas las citas
     searchTerm,
     statusFilter
-  )
+  );
 
   // --- Lógica y Memos ---
-  const totalPages = useMemo(() => appointmentsData?.pagination?.totalPages || 1, [appointmentsData])
-  
-  // Usamos el stats generado por useProcessedPatients
+  const totalPages = useMemo(() => {
+    if (!processedPatients.length) return 1;
+    return Math.ceil(processedPatients.length / PAGE_SIZE);
+  }, [processedPatients]);
 
-  const statsData: StatsDataType = {
-    totalPatients: stats?.total_patients ?? 0,
-    surveyRate: stats?.survey_completion_rate ?? 0,
-    pendingConsults: stats?.pending_consults ?? 0,
-    operatedPatients: stats?.operated_patients ?? 0,
-  }
+  const paginatedPatients = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return processedPatients.slice(start, end);
+  }, [processedPatients, currentPage]);
+
+  const statsData: StatsDataType = useMemo(() => {
+    const totalPatients = enrichedPatients.length;
+    if (totalPatients === 0) {
+      return { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0 };
+    }
+    const surveyCompleted = enrichedPatients.filter(p => p.encuesta_completada).length;
+    const surveyRate = Math.round((surveyCompleted / totalPatients) * 100);
+    const pendingConsults = statusStats[PatientStatusEnum.PENDIENTE_DE_CONSULTA] || 0;
+    const operatedPatients = statusStats[PatientStatusEnum.OPERADO] || 0;
+
+    return { totalPatients, surveyRate, pendingConsults, operatedPatients };
+  }, [enrichedPatients, statusStats]);
 
   const handlePageChange = (page: number): void => {
     setCurrentPage(page)
@@ -345,15 +312,19 @@ export const PatientManagement: React.FC = () => {
     }
   }, [selectedPatient])
 
-  if (isLoadingPatients) {
+  if (isLoadingClinicData) {
     return <LoadingSkeleton />
+  }
+
+  if (error) {
+    return <div>Error: {error.message}</div>;
   }
 
   return (
     <div className="w-full space-y-4 pb-8">
       <PatientHeader 
         statsData={statsData}
-        isLoadingStats={isLoadingStats}
+        isLoadingStats={isLoadingClinicData}
       />
 
       <FilterBar 
@@ -366,9 +337,9 @@ export const PatientManagement: React.FC = () => {
         statusStats={statusStats}
       />
 
-      {processedPatients && processedPatients.length > 0 ? (
+      {paginatedPatients && paginatedPatients.length > 0 ? (
         <PatientTable 
-          patients={processedPatients}
+          patients={paginatedPatients}
           onSelectPatient={handleSelectPatient}
           onShareSurvey={handleShareSurvey}
           onEditPatient={handleEditPatient}
@@ -385,7 +356,7 @@ export const PatientManagement: React.FC = () => {
             currentPage={currentPage} 
             totalPages={totalPages} 
             onPageChange={handlePageChange}
-            loading={isLoadingPatients}
+            loading={isLoadingClinicData}
           />
         </div>
       )}

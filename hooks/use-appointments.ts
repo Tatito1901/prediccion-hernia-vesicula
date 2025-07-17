@@ -167,7 +167,8 @@ export const useCreateAppointment = () => {
       return transformAppointment(await response.json());
     },
     onSuccess: (newAppointment) => {
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+      // Invalidamos la query central para refrescar toda la app
+      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
       queryClient.setQueryData(
         appointmentKeys.detail(newAppointment.id),
         newAppointment
@@ -207,13 +208,8 @@ export const useUpdateAppointment = () => {
         appointmentKeys.detail(updatedAppointment.id),
         updatedAppointment
       );
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
-      
-      if (updatedAppointment.patient_id) {
-        queryClient.invalidateQueries({ 
-          queryKey: ['patients', 'detail', updatedAppointment.patient_id] 
-        });
-      }
+      // Invalidamos la query central para refrescar toda la app
+      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
       
       toast.success('Cita actualizada exitosamente');
     },
@@ -266,13 +262,8 @@ export const useUpdateAppointmentStatus = () => {
         appointmentKeys.detail(updatedAppointment.id),
         updatedAppointment
       );
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
-      
-      if (updatedAppointment.patient_id) {
-        queryClient.invalidateQueries({ 
-          queryKey: ['patients', 'detail', updatedAppointment.patient_id] 
-        });
-      }
+      // Invalidamos la query central para refrescar toda la app
+      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
       
       const statusMessages: Record<string, string> = {
         [AppointmentStatusEnum.PRESENTE]: 'Check-in registrado',

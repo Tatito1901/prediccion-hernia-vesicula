@@ -1,7 +1,8 @@
 
 import { useMemo, memo, useState, useEffect } from "react"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-import { useDashboard } from "@/contexts/dashboard-context"
+import { useClinic } from "@/contexts/clinic-data-provider"
+import { useChartData } from "@/hooks/use-chart-data"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -48,7 +49,28 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 CustomTooltip.displayName = 'CustomTooltip';
 
 export const PatientTrendsChart: React.FC = () => {
-  const { loading, error, chart, dateRange, setDateRange } = useDashboard()
+  const [dateRange, setDateRange] = useState('30d');
+  const { 
+    allPatients,
+    allAppointments,
+    isLoading: loading,
+    error,
+  } = useClinic();
+
+  const enrichedAppointments = useMemo(() => {
+    if (!allAppointments || !allPatients) return [];
+    const patientsMap = new Map(allPatients.map(p => [p.id, p]));
+    return allAppointments.map(appointment => ({
+      ...appointment,
+      patients: patientsMap.get(appointment.patient_id) || null,
+    }));
+  }, [allAppointments, allPatients]);
+
+  const { chart } = useChartData({
+    patients: allPatients,
+    appointments: enrichedAppointments,
+    dateRange: dateRange,
+  });
   
 
 
@@ -102,7 +124,7 @@ export const PatientTrendsChart: React.FC = () => {
         <CardContent className="flex flex-col items-center justify-center h-[350px] text-center">
           <AlertCircle className="h-12 w-12 text-destructive mb-4" />
           <p className="text-lg font-semibold">No se pudieron obtener las tendencias.</p>
-          <p className="text-muted-foreground">{error}</p>
+          <p className="text-muted-foreground">{error.message}</p>
         </CardContent>
       </Card>
     )
@@ -139,7 +161,7 @@ export const PatientTrendsChart: React.FC = () => {
           <Tabs
             value={dateRange}
             onValueChange={(value) => {
-              setDateRange(value as '7d' | '30d' | '90d' | 'ytd')
+              setDateRange(value)
               // La animación se manejará en el efecto
             }}
             className="w-full md:w-auto"

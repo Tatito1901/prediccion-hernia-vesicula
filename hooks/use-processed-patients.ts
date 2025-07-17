@@ -6,7 +6,8 @@ import {
   Patient, 
   Appointment, 
   PatientStatusEnum, 
-  EnrichedPatient // <-- Se importa el nuevo tipo desde la fuente de verdad.
+  EnrichedPatient, // <-- Se importa el nuevo tipo desde la fuente de verdad.
+  StatusStats
 } from "@/lib/types";
 // Ya no se necesita el tipo local de 'patient-management'
 
@@ -81,22 +82,20 @@ export const useProcessedPatients = (
   }, [patients, appointments]);
 
   // Memoización para el cálculo de estadísticas, depende solo de la lista completa.
-  const statusStats = useMemo(() => {
+  const statusStats = useMemo((): StatusStats => {
+    const initialStats = Object.values(PatientStatusEnum).reduce((acc, status) => {
+      acc[status] = 0;
+      return acc;
+    }, {} as Record<string, number>);
+
     const stats = enrichedPatients.reduce((acc, patient) => {
-      if (patient.estado_paciente && patient.estado_paciente in STATUS_CONFIG) {
-        acc[patient.estado_paciente as keyof typeof PatientStatusEnum]++;
+      if (patient.estado_paciente && patient.estado_paciente in acc) {
+        acc[patient.estado_paciente]++;
       }
       return acc;
-    }, {
-      [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: 0,
-      [PatientStatusEnum.CONSULTADO]: 0,
-      [PatientStatusEnum.EN_SEGUIMIENTO]: 0,
-      [PatientStatusEnum.OPERADO]: 0,
-      [PatientStatusEnum.NO_OPERADO]: 0,
-      [PatientStatusEnum.INDECISO]: 0,
-    } as Record<keyof typeof PatientStatusEnum, number>);
+    }, initialStats);
 
-    return { ...stats, all: enrichedPatients.length };
+    return { ...stats, all: enrichedPatients.length } as StatusStats;
   }, [enrichedPatients]);
 
   // Memoización para el filtrado, depende de la lista y los filtros.

@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useDashboard } from "@/contexts/dashboard-context"
+import { useClinic } from "@/contexts/clinic-data-provider"
+import { useChartData } from "@/hooks/use-chart-data"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 
@@ -234,7 +235,28 @@ const DEFAULT_METRICS: ClinicMetrics = {
 }
 
 export function DashboardMetrics() {
-  const { loading, error, clinicMetrics, refresh } = useDashboard()
+  const { 
+    allPatients,
+    allAppointments,
+    isLoading: loading,
+    error,
+    refetch: refresh
+  } = useClinic();
+
+  const enrichedAppointments = useMemo(() => {
+    if (!allAppointments || !allPatients) return [];
+    const patientsMap = new Map(allPatients.map(p => [p.id, p]));
+    return allAppointments.map(appointment => ({
+      ...appointment,
+      patients: patientsMap.get(appointment.patient_id) || null,
+    }));
+  }, [allAppointments, allPatients]);
+
+  const { clinicMetrics } = useChartData({
+    patients: allPatients,
+    appointments: enrichedAppointments,
+    dateRange: 'all',
+  });
 
   const lastUpdated = useMemo(() => {
     if (!clinicMetrics?.lastUpdated) return "Actualizando..."

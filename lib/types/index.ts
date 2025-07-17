@@ -166,6 +166,9 @@ export interface EnrichedPatient extends Patient {
 }
 
 // --- Stats Types ---
+// --- Stats Types ---
+export type StatusStats = Record<PatientStatus, number> & { all: number };
+
 export interface PatientStats {
   total_patients: number;
   pending_consults: number;

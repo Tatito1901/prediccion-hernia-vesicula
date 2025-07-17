@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import type { Database } from '@/lib/types/database.types';
 import { calculateDateRange, isValidISODate } from '@/lib/utils';
-import { useAppointments, appointmentKeys } from './use-appointments';
+
 
 // --- TIPOS DE DATOS ---
 // Extraídos de la base de datos para autocompletado y seguridad de tipos.
@@ -20,6 +20,27 @@ type AppointmentStatus = Database['public']['Enums']['appointment_status_enum'];
 // Interfaz para citas enriquecidas con datos del paciente y doctor.
 export interface ExtendedAppointment extends Appointment {
   patients: Patient | null; // Corregido de 'paciente' a 'patients' si así viene de la query
+}
+
+
+
+export type DateRangeKey = "week" | "month" | "3-months" | "year" | "all";
+
+export interface AppointmentFilters {
+  dateRange: string;
+  patientId: string | undefined;
+  doctorId: string | undefined;
+  estado: 'todos' | AppointmentStatus;
+  motiveFilter: string;
+  statusFilter: AppointmentStatus[];
+  timeRange: [number, number];
+  sortBy: string;
+  sortOrder: 'asc' | 'desc';
+}
+
+export interface DateRange {
+  from: Date | null;
+  to: Date | null;
 }
 
 // Estructura de las métricas principales de la clínica.
@@ -69,6 +90,8 @@ interface WeekdayData {
 
 // Propiedades de entrada para el hook
 interface UseChartDataProps {
+  patients: Patient[];
+  appointments: ExtendedAppointment[];
   dateRange: string;
   patientId?: string;
   doctorId?: string;
@@ -82,63 +105,17 @@ interface UseChartDataProps {
  * @returns Un objeto con datos listos para la UI, estados de carga y error.
  */
 export function useChartData({
+  patients: allPatients,
+  appointments: allAppointments,
   dateRange,
   patientId,
   doctorId,
   estado = 'todos'
 }: UseChartDataProps) {
-  const queryClient = useQueryClient();
-  
-  // Obtenemos los datos usando el hook existente
-  const { 
-    data, 
-    isLoading, 
-    error: queryError,
-  } = useAppointments(1, 100);
-  
-  // Agregamos estado para seguir cuando estamos actualizando después de cambiar el rango de fecha
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  // Este efecto forzará una actualización cuando cambie el rango de fechas
-  useEffect(() => {
-    const refreshData = async () => {
-      setIsRefreshing(true);
-      try {
-        // Invalidamos la cache para forzar una actualización
-        await queryClient.invalidateQueries({ queryKey: appointmentKeys.all });
-        // Esperamos un breve momento para dar tiempo a que se complete la actualización
-        setTimeout(() => setIsRefreshing(false), 600);
-      } catch (error) {
-        console.error('Error refreshing data:', error);
-        setIsRefreshing(false);
-      }
-    };
-    
-    refreshData();
-  }, [dateRange, queryClient]);
-  
-  // Combinamos los estados de carga
-  const isDataLoading = isLoading || isRefreshing;
-
-  // --- 1. EXTRACCIÓN Y MEMOIZACIÓN DE DATOS CRUDOS ---
-
-  const allAppointments = useMemo((): ExtendedAppointment[] => data?.appointments || [], [data]);
-
-  const allPatients = useMemo((): Patient[] => {
-    if (!allAppointments) return [];
-    const patientMap = new Map<string, Patient>();
-    allAppointments.forEach(appt => {
-      // Usar el nombre correcto de la relación, ej. 'patients'
-      if (appt.patients) {
-        patientMap.set(appt.patients.id, appt.patients);
-      }
-    });
-    return Array.from(patientMap.values());
-  }, [allAppointments]);
 
   // --- 2. FILTRADO DE DATOS ---
 
-  const { startDate, endDate } = useMemo(() => calculateDateRange(dateRange), [dateRange]);
+    const { startDate, endDate } = useMemo(() => calculateDateRange(dateRange), [dateRange]);
 
   const filteredAppointments = useMemo(() => {
     if (!allAppointments.length || !startDate || !endDate) return [];
@@ -334,20 +311,9 @@ export function useChartData({
     };
   }, [filteredAppointments, filteredPatients, startDate, endDate]);
 
-  // --- 6. FUNCIÓN DE RECARGA ---
-
-  const refresh = useCallback(() => {
-    // Invalida la query principal para forzar una recarga de datos frescos.
-    queryClient.invalidateQueries({ queryKey: ['appointments'] });
-  }, [queryClient]);
-  
-  // --- 7. OBJETO DE RETORNO ---
+  // --- 6. OBJETO DE RETORNO ---
   
   return {
-    // Estados
-    isLoading,
-    error: queryError ? (queryError as Error).message : null,
-    
     // Datos crudos filtrados
     appointments: filteredAppointments,
     patients: filteredPatients,
@@ -359,8 +325,5 @@ export function useChartData({
     weekdayDistribution,
     clinicMetrics,
     chart,
-    
-    // Acciones
-    refresh,
   };
 }

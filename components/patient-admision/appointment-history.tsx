@@ -1,6 +1,6 @@
 // appointment-history.tsx - Versión refactorizada con utilidades integradas
 import { useMemo, memo, useCallback } from "react";
-import { useAppointments } from "@/hooks/use-appointments";
+import { useClinic } from "@/contexts/clinic-data-provider";
 import { format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,7 +53,9 @@ class LRUCache<K, V> {
       this.cache.delete(key);
     } else if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
     }
     this.cache.set(key, value);
   }
@@ -422,39 +424,6 @@ const AppointmentsList = memo<{
   </div>
 ));
 
-// ==================== HOOK PERSONALIZADO OPTIMIZADO ====================
-
-const usePatientAppointments = (patientId: string, maxItems?: number) => {
-  const { data: appointmentsData, isLoading, error } = useAppointments(1, 100);
-  
-  return useMemo(() => {
-    const allAppointments = appointmentsData?.appointments || [];
-    
-    // Filtrar y ordenar citas del paciente de forma optimizada
-    const patientAppointments = allAppointments
-      .filter((app: ExtendedAppointment) => app.patient_id === patientId)
-      .sort((a: ExtendedAppointment, b: ExtendedAppointment) => {
-        const dateA = new Date(a.fecha_hora_cita);
-        const dateB = new Date(b.fecha_hora_cita);
-        return dateB.getTime() - dateA.getTime();
-      });
-
-    const limitedAppointments = maxItems 
-      ? patientAppointments.slice(0, maxItems)
-      : patientAppointments;
-
-    const statistics = calculateAppointmentStatistics(patientAppointments);
-
-    return {
-      appointments: limitedAppointments,
-      allAppointments: patientAppointments,
-      statistics,
-      isLoading,
-      error: error as Error | null
-    };
-  }, [appointmentsData, patientId, maxItems, isLoading, error]);
-};
-
 // ==================== COMPONENTE PRINCIPAL ====================
 
 interface AppointmentHistoryProps {
@@ -470,20 +439,38 @@ export const AppointmentHistory = memo<AppointmentHistoryProps>(({
   maxItems,
   className
 }) => {
-  const { appointments, statistics, isLoading, error } = usePatientAppointments(patientId, maxItems);
+  const { allAppointments, isLoading, error } = useClinic();
 
-  // Mostrar estado de carga inicial
-  if (isLoading && !appointments.length) {
+  const patientAppointments = useMemo(() => {
+    if (!allAppointments) return [];
+    return allAppointments
+      .filter((app) => app.patient_id === patientId)
+      .sort((a, b) => {
+        const dateA = a.fecha_hora_cita ? new Date(a.fecha_hora_cita).getTime() : 0;
+        const dateB = b.fecha_hora_cita ? new Date(b.fecha_hora_cita).getTime() : 0;
+        return dateB - dateA;
+      });
+  }, [allAppointments, patientId]);
+
+  const statistics = useMemo(() => 
+    calculateAppointmentStatistics(patientAppointments as ExtendedAppointment[]), 
+    [patientAppointments]
+  );
+
+  const limitedAppointments = useMemo(() => 
+    maxItems ? patientAppointments.slice(0, maxItems) : patientAppointments, 
+    [patientAppointments, maxItems]
+  );
+
+  if (isLoading && !limitedAppointments.length) {
     return <LoadingState />;
   }
 
-  // Mostrar error si hay algún problema
   if (error) {
-    return <ErrorState error={error} />;
+    return <ErrorState error={error as Error} />;
   }
 
-  // Mostrar estado vacío si no hay citas
-  if (appointments.length === 0) {
+  if (!isLoading && limitedAppointments.length === 0) {
     return <EmptyState />;
   }
 
@@ -491,7 +478,7 @@ export const AppointmentHistory = memo<AppointmentHistoryProps>(({
     <div className={cn("space-y-6", className)}>
       {showStats && <StatsSection statistics={statistics} />}
       <AppointmentsList 
-        appointments={appointments}
+        appointments={limitedAppointments as ExtendedAppointment[]}
         maxItems={maxItems}
         statistics={statistics}
       />

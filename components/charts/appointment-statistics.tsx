@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format, isAfter, isBefore, parseISO, isValid, startOfDay, endOfDay, isSameDay } from "date-fns"
 import { es } from "date-fns/locale/es"
 import { Button } from "@/components/ui/button"
-import { usePatients as useAppointments } from "@/hooks/use-appointments";
+
 import { ExtendedAppointment, AppointmentStatusEnum, type AppointmentStatus } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -31,6 +31,7 @@ import useChartConfig, {
   StatCard,
   LoadingSpinner,
 } from '@/components/charts/use-chart-config'
+import { type AppointmentFilters } from "@/hooks/use-chart-data";
 
 /* ============================================================================
  * TIPOS SIMPLIFICADOS
@@ -51,28 +52,6 @@ interface MappedAppointment {
   estado: AppointmentStatus;
   notas: string;
   telefono: string;
-}
-
-export interface AppointmentFilters {
-  dateRange: DateRange | undefined
-  motiveFilter: string
-  statusFilter: readonly AppointmentStatus[]
-  sortBy: 'fecha_hora_cita' | 'paciente' | 'motivo_consulta'
-  sortOrder: 'asc' | 'desc'
-  timeRange: readonly [number, number]
-}
-
-/* ============================================================================
- * CONSTANTES OPTIMIZADAS
- * ========================================================================== */
-
-const INITIAL_FILTERS: AppointmentFilters = {
-  dateRange: undefined,
-  motiveFilter: "all",
-  statusFilter: [...Object.values(AppointmentStatusEnum)],
-  sortBy: "fecha_hora_cita",
-  sortOrder: "desc",
-  timeRange: [0, 24] as const,
 }
 
 /* ============================================================================
@@ -218,267 +197,40 @@ const StatCards = memo<{ generalStats: GeneralStats; isLoading: boolean }>(({ ge
 
 StatCards.displayName = "StatCards"
 
-/* ============================================================================
- * HOOKS DE PROCESAMIENTO OPTIMIZADOS
- * ============================================================================ */
 
-const useProcessedAppointments = (appointmentsFromContext: ExtendedAppointment[], filters: AppointmentFilters) => {
-  return useMemo(() => {
-    // Mapeo de datos optimizado
-    const mappedAppointments = appointmentsFromContext.map(appt => {
-      // En el modelo centralizado, el nombre viene del objeto paciente
-      const pacienteNombre = appt.paciente?.nombre || '';
-      const pacienteApellidos = appt.paciente?.apellidos || '';
-      const nombreCompleto = [pacienteNombre, pacienteApellidos].filter(Boolean).join(' ');
-      
-      let dateObj: Date | undefined = undefined;
-      try {
-        if (appt.fecha_hora_cita) {
-          const parsedDate = typeof appt.fecha_hora_cita === 'string' ? parseISO(appt.fecha_hora_cita) : new Date(appt.fecha_hora_cita);
-          if (isValid(parsedDate)) {
-            dateObj = parsedDate;
-          }
-        }
-      } catch (error) {
-        console.error("Error procesando fecha para cita ID:", appt.id, error);
-      }
-
-      // Extraemos la hora de fecha_hora_cita o usamos un valor predeterminado
-      const timeStr = dateObj ? format(dateObj, 'HH:mm') : "00:00";
-      
-      const mappedAppointment: MappedAppointment = {
-        id: appt.id,
-        paciente: nombreCompleto,
-        fecha_consulta: dateObj,
-        hora_consulta: timeStr,
-        motivo_consulta: appt.motivo_cita || "No especificado",
-        estado: appt.estado_cita as AppointmentStatus || AppointmentStatusEnum.PROGRAMADA,
-        notas: appt.notas_cita_seguimiento || "",
-        telefono: appt.paciente?.telefono || ""
-      };
-      
-      return mappedAppointment;
-    })
-
-    // Filtrado optimizado
-    const filteredAppointments = mappedAppointments.filter((appt) => {
-      if (!appt.fecha_consulta || !isValid(appt.fecha_consulta)) return false
-      
-      const { from, to } = filters.dateRange || {}
-      if (from || to) {
-        const dateObj = appt.fecha_consulta
-        const fromDate = from ? startOfDay(from) : null
-        const toDate = to ? endOfDay(to) : null
-        if (fromDate && !isSameDay(dateObj, fromDate) && isBefore(dateObj, fromDate)) return false
-        if (toDate && !isSameDay(dateObj, toDate) && isAfter(dateObj, toDate)) return false
-      }
-      
-      if (filters.motiveFilter !== "all" && appt.motivo_consulta !== filters.motiveFilter) return false
-      if (!filters.statusFilter.includes(appt.estado!)) return false
-      
-      const hourDecimalValue = hourToDecimal(appt.hora_consulta)
-      if (hourDecimalValue !== null && (hourDecimalValue < filters.timeRange[0] || hourDecimalValue > filters.timeRange[1])) return false
-      
-      return true
-    })
-    
-    // Ordenamiento optimizado
-    filteredAppointments.sort((a, b) => {
-      let comp = 0
-      if (filters.sortBy === "fecha_hora_cita") {
-        comp = (a.fecha_consulta as Date).getTime() - (b.fecha_consulta as Date).getTime()
-        if (comp === 0) {
-          const hourA = hourToDecimal(a.hora_consulta)
-          const hourB = hourToDecimal(b.hora_consulta)
-          if (hourA !== null && hourB !== null) {
-            comp = hourA - hourB
-          }
-        }
-      } else if (filters.sortBy === "paciente") {
-        comp = (a.paciente || "").localeCompare(b.paciente || "")
-      } else if (filters.sortBy === "motivo_consulta") {
-        comp = (a.motivo_consulta || "").localeCompare(b.motivo_consulta || "")
-      }
-      return filters.sortOrder === "asc" ? comp : -comp
-    })
-
-    return { mappedAppointments, filteredAppointments }
-  }, [appointmentsFromContext, filters])
-}
-
-const useChartData = (filteredAppointments: MappedAppointment[], filters: AppointmentFilters) => {
-  return useMemo(() => {
-    const total = filteredAppointments.length
-    
-    // Conteo optimizado de estados
-      const allStatusCounts = filteredAppointments.reduce((acc, appt) => { 
-        if (appt.estado && (Object.values(AppointmentStatusEnum) as string[]).includes(appt.estado)) {
-          acc[appt.estado] = (acc[appt.estado] || 0) + 1
-        }
-        return acc 
-      }, {} as Record<AppointmentStatus, number>)
-
-    // Rellenar estados faltantes
-    Object.values(AppointmentStatusEnum).forEach(status => {
-      if (!allStatusCounts[status]) allStatusCounts[status] = 0
-    })
-    
-
-    const completed = allStatusCounts[AppointmentStatusEnum.COMPLETADA] || 0
-    const cancelled = allStatusCounts[AppointmentStatusEnum.CANCELADA] || 0
-    const pending = allStatusCounts[AppointmentStatusEnum.PROGRAMADA] || 0
-    const present = allStatusCounts[AppointmentStatusEnum.PRESENTE] || 0
-    const calcPercent = (val: number): number => (total > 0 ? (val / total) * 100 : 0)
-
-    const generalStats: GeneralStats = {
-      total,
-      attendance: calcPercent(completed + present),
-      cancellation: calcPercent(cancelled),
-      pending: calcPercent(pending),
-      present: calcPercent(present),
-      completed,
-      cancelled,
-      pendingCount: pending,
-      presentCount: present,
-      period: filters.dateRange ? `${formatDateUtil(filters.dateRange.from)} - ${formatDateUtil(filters.dateRange.to)}` : "Todos",
-      allStatusCounts,
-    }
-
-    // Datos para gráficos optimizados
-    const statusChartData: StatusChartData[] = Object.values(AppointmentStatusEnum).map(status => ({
-      name: titleCaseStatus(status),
-      value: allStatusCounts[status] || 0,
-      color: `hsl(var(--chart-${status === AppointmentStatusEnum.COMPLETADA ? '1' : status === AppointmentStatusEnum.CANCELADA ? '2' : status === AppointmentStatusEnum.PROGRAMADA ? '3' : '4'}))`
-    }))
-
-    const motiveChartData: MotiveChartData[] = (() => {
-      const motiveCounts: Record<string, number> = {}
-      filteredAppointments.forEach(a => { 
-        motiveCounts[a.motivo_consulta!] = (motiveCounts[a.motivo_consulta!] || 0) + 1 
-      })
-      return Object.entries(motiveCounts)
-        .map(([motive, count]) => ({ motive, count }))
-        .sort((a, b) => b.count - a.count)
-    })()
-
-    const trendChartData: TrendChartData[] = (() => {
-      const byDate: Record<string, Record<AppointmentStatus | "total", number>> = {}
-      filteredAppointments.forEach(a => { 
-        const dateStr = format(a.fecha_consulta!, "yyyy-MM-dd")
-        if (!byDate[dateStr]) {
-          byDate[dateStr] = Object.values(AppointmentStatusEnum).reduce((ac, s) => { 
-            ac[s] = 0
-            return ac 
-          }, { total: 0 } as any)
-        }
-        if (a.estado && byDate[dateStr].hasOwnProperty(a.estado)) byDate[dateStr][a.estado as AppointmentStatus]++
-        byDate[dateStr].total++
-      })
-      return Object.entries(byDate)
-        .map(([date, counts]) => ({ 
-          date, 
-          formattedDate: format(parseISO(date), "dd/MM", { locale: es }), 
-          ...counts 
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-    })()
-
-    const weekdayChartData: WeekdayChartData[] = (() => {
-      const weekdayData: Record<number, { name: string; total: number; attended: number }> = 
-        WEEKDAYS.reduce((acc, name, idx) => { 
-          acc[idx] = { name, total: 0, attended: 0 }
-          return acc 
-        }, {} as any)
-
-      filteredAppointments.forEach(a => { 
-        const fechaDate = a.fecha_consulta instanceof Date ? a.fecha_consulta : 
-                         (typeof a.fecha_consulta === 'string' ? parseISO(a.fecha_consulta) : null)
-        if (!fechaDate) return
-        
-        const dayOfWeek = fechaDate.getDay()
-        if (weekdayData[dayOfWeek]) { 
-          weekdayData[dayOfWeek].total++
-          if (a.estado === AppointmentStatusEnum.COMPLETADA || a.estado === AppointmentStatusEnum.PRESENTE) {
-            weekdayData[dayOfWeek].attended++
-          }
-        } 
-      })
-
-      return Object.values(weekdayData).map(d => ({ 
-        ...d, 
-        rate: d.total > 0 ? (d.attended / d.total) * 100 : 0 
-      }))
-    })()
-
-    const scatterData: ScatterData = (() => {
-      const scatterByStatus = Object.fromEntries(
-        Object.values(AppointmentStatusEnum).map(s => [s, {} as Record<string, any>])
-      ) as Record<AppointmentStatus, Record<string, any>>
-
-      filteredAppointments.forEach(a => { 
-        const fechaDate = a.fecha_consulta instanceof Date ? a.fecha_consulta : 
-                         (typeof a.fecha_consulta === 'string' ? parseISO(a.fecha_consulta) : null)
-        if (!fechaDate) return
-        
-        const dayOfWeek = fechaDate.getDay()
-        const hourDecimal = hourToDecimal(a.hora_consulta)
-        if (dayOfWeek === undefined || hourDecimal === null) return
-        
-        const hour = Math.floor(hourDecimal)
-        const key = `${dayOfWeek}-${hour}`
-        const currentStatus = a.estado!
-
-        if ((Object.values(AppointmentStatusEnum) as string[]).includes(currentStatus)) { 
-          const statusKey = currentStatus as AppointmentStatus;
-          if (!scatterByStatus[statusKey][key]) {
-            scatterByStatus[currentStatus][key] = { 
-              day: dayOfWeek, 
-              hour, 
-              count: 0, 
-              dayName: WEEKDAYS[dayOfWeek] || `Día ${dayOfWeek}` 
-            }
-          }
-          scatterByStatus[currentStatus as AppointmentStatus][key].count++
-        } 
-      })
-
-      const result: ScatterData = {} as ScatterData
-      for (const statusKey of Object.values(AppointmentStatusEnum)) {
-        result[statusKey as AppointmentStatus] = Object.values(scatterByStatus[statusKey as AppointmentStatus])
-      }
-      return result
-    })()
-
-    return {
-      generalStats,
-      statusChartData,
-      motiveChartData,
-      trendChartData,
-      weekdayChartData,
-      scatterData
-    }
-  }, [filteredAppointments, filters])
-}
 
 /* ============================================================================
  * COMPONENTE PRINCIPAL OPTIMIZADO
  * ============================================================================ */
 
 interface AppointmentStatisticsProps {
-  generalStats?: GeneralStats;
-  weekdayDistribution?: WeekdayChartData[];
-  isLoading?: boolean;
-  lastUpdated?: string;
-  onRefresh?: () => void;
+  chartData: any; // Replace with a more specific type from useChartData return
+  isLoading: boolean;
+  error: Error | null;
+  onRefresh: (event: React.MouseEvent) => void;
+  filters: AppointmentFilters;
+  setFilters: React.Dispatch<React.SetStateAction<AppointmentFilters>>;
 }
 
-export const AppointmentStatistics: React.FC = () => {
-  const { data: appointmentsData, isLoading, error, refetch } = useAppointments(1, 5000); // Fetch up to 5000 appointments for stats
-  const allAppointments = appointmentsData?.appointments || [];
+export const AppointmentStatistics: React.FC<AppointmentStatisticsProps> = ({ 
+  chartData, 
+  isLoading,
+  error,
+  onRefresh,
+  filters,
+  setFilters
+}) => {
+  const [activeTab, setActiveTab] = useState("general");
 
-  const [activeTab, setActiveTab] = useState("general")
-  const [filters, setFilters] = useState<AppointmentFilters>(INITIAL_FILTERS)
-  
+  const {
+    generalStats,
+    statusChartData,
+    motiveChartData,
+    trendChartData,
+    weekdayChartData,
+    scatterData
+  } = chartData;
+
   const { 
     renderPieChart, 
     renderBarChart, 
@@ -491,30 +243,17 @@ export const AppointmentStatistics: React.FC = () => {
     showGrid: true,
     animation: true,
     interactive: true,
-  })
-
-  const { filteredAppointments } = useProcessedAppointments(allAppointments, filters)
-  
-  const { 
-    generalStats: localGeneralStats, 
-    statusChartData, 
-    motiveChartData, 
-    trendChartData, 
-    weekdayChartData: localWeekdayChartData, 
-    scatterData 
-  } = useChartData(filteredAppointments, filters)
-  
-  const generalStats = localGeneralStats
-  const weekdayChartData = localWeekdayChartData
-  const loading = isLoading
+  });
 
   const updateFilter = useCallback(<K extends keyof AppointmentFilters>(key: K, value: AppointmentFilters[K]) => {
-    setFilters((prev) => ({ ...prev, [key]: value }))
-  }, [])
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }, [setFilters]);
 
-  const handleRefresh = useCallback(() => {
-    refetch()
-  }, [refetch])
+  const handleRefresh = useCallback((e: React.MouseEvent) => {
+    onRefresh(e);
+  }, [onRefresh]);
+
+  const loading = isLoading;
 
   const tabsData = useMemo(() => [
     { id: "general", label: "General", icon: <FileBarChart className="h-4 w-4" /> },
