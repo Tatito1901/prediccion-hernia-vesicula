@@ -310,7 +310,7 @@ export const PatientManagement: React.FC = () => {
       router.push(`/survey/${generateSurveyId()}?patientId=${selectedPatient.id}&mode=internal`)
       setShareDialogOpen(false)
     }
-  }, [selectedPatient])
+  }, [selectedPatient, router])
 
   if (isLoadingClinicData) {
     return <LoadingSkeleton />

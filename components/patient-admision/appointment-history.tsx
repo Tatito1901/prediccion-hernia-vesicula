@@ -237,6 +237,7 @@ const StatCard = memo(({
     </CardContent>
   </Card>
 ));
+StatCard.displayName = "StatCard";
 
 const AppointmentCard = memo(({ appointment }: { appointment: ExtendedAppointment }) => {
   const fechaFormateada = formatDisplayDate(appointment.fecha_hora_cita);
@@ -299,6 +300,7 @@ const AppointmentCard = memo(({ appointment }: { appointment: ExtendedAppointmen
     </Card>
   );
 });
+AppointmentCard.displayName = "AppointmentCard";
 
 const LoadingState = memo(() => (
   <div className="space-y-6">
@@ -314,6 +316,7 @@ const LoadingState = memo(() => (
     </div>
   </div>
 ));
+LoadingState.displayName = "LoadingState";
 
 const ErrorState = memo(({ error }: { error: Error }) => (
   <Alert variant="destructive" className="animate-in fade-in-0 shadow-lg">
@@ -324,6 +327,7 @@ const ErrorState = memo(({ error }: { error: Error }) => (
     </AlertDescription>
   </Alert>
 ));
+ErrorState.displayName = "ErrorState";
 
 const EmptyState = memo(() => (
   <Card className="text-center py-16 shadow-lg bg-white dark:bg-slate-900">
@@ -345,6 +349,7 @@ const EmptyState = memo(() => (
     </CardContent>
   </Card>
 ));
+EmptyState.displayName = "EmptyState";
 
 const StatsSection = memo<{ statistics: ReturnType<typeof calculateAppointmentStatistics> }>(({ statistics }) => (
   <Card className="shadow-lg border bg-white dark:bg-slate-900">
@@ -390,6 +395,7 @@ const StatsSection = memo<{ statistics: ReturnType<typeof calculateAppointmentSt
     </CardContent>
   </Card>
 ));
+StatsSection.displayName = "StatsSection";
 
 const AppointmentsList = memo<{
   appointments: ExtendedAppointment[];
@@ -423,6 +429,7 @@ const AppointmentsList = memo<{
     </div>
   </div>
 ));
+AppointmentsList.displayName = "AppointmentsList";
 
 // ==================== COMPONENTE PRINCIPAL ====================
 

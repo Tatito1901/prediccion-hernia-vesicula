@@ -89,7 +89,9 @@ class LRUCache<K, V> {
       this.cache.delete(key);
     } else if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
     }
     this.cache.set(key, value);
   }
@@ -275,6 +277,7 @@ const LoadingSpinner = memo(() => (
     <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
   </div>
 ));
+LoadingSpinner.displayName = "LoadingSpinner";
 
 const EmptyState = memo<{
   title: string;
@@ -293,6 +296,7 @@ const EmptyState = memo<{
     </p>
   </div>
 ));
+EmptyState.displayName = "EmptyState";
 
 // AppointmentCard simple
 const AppointmentCard = memo<{
@@ -352,6 +356,7 @@ const AppointmentCard = memo<{
     </CardContent>
   </Card>
 ));
+AppointmentCard.displayName = "AppointmentCard";
 
 const AppointmentsList = memo<{
   appointments: UnifiedAppointment[];
@@ -378,6 +383,7 @@ const AppointmentsList = memo<{
     </div>
   );
 });
+AppointmentsList.displayName = "AppointmentsList";
 
 const MobileTabs = memo<{
   activeTab: TabValue;
@@ -423,6 +429,7 @@ const MobileTabs = memo<{
     })}
   </div>
 ));
+MobileTabs.displayName = "MobileTabs";
 
 // ==================== COMPONENTE PRINCIPAL ====================
 const PatientAdmission: React.FC = () => {
@@ -792,4 +799,7 @@ const PatientAdmission: React.FC = () => {
   );
 };
 
-export default memo(PatientAdmission);
+const MemoizedPatientAdmission = memo(PatientAdmission);
+MemoizedPatientAdmission.displayName = "PatientAdmission";
+
+export default MemoizedPatientAdmission;

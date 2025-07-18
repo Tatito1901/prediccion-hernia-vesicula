@@ -342,6 +342,8 @@ const PersonalDataSection = memo<{
   </div>
 ));
 
+PersonalDataSection.displayName = "PersonalDataSection";
+
 const MedicalInfoSection = memo<{
   form: any;
   isSubmitting: boolean;
@@ -417,6 +419,8 @@ const MedicalInfoSection = memo<{
     </div>
   </div>
 ));
+
+MedicalInfoSection.displayName = "MedicalInfoSection";
 
 const AppointmentScheduleSection = memo<{
   form: any;
@@ -526,6 +530,8 @@ const AppointmentScheduleSection = memo<{
     </div>
   </div>
 ));
+
+AppointmentScheduleSection.displayName = "AppointmentScheduleSection";
 
 // ==================== INTERFACES ====================
 

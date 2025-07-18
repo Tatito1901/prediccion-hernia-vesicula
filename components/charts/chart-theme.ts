@@ -285,7 +285,7 @@ export const CHART_PRESETS = {
 export type ChartPresetKey = keyof typeof CHART_PRESETS;
 export const getChartPreset = (preset: ChartPresetKey) => CHART_PRESETS[preset];
 
-export default {
+const chartTheme = {
   CHART_PALETTES,
   STATUS_COLORS,
   CHART_STYLES,
@@ -296,3 +296,5 @@ export default {
   getAdaptiveBackground,
   isDarkTheme,
 };
+
+export default chartTheme;

@@ -7,9 +7,15 @@ import {
   Appointment, 
   PatientStatusEnum, 
   EnrichedPatient, // <-- Se importa el nuevo tipo desde la fuente de verdad.
-  StatusStats
+  StatusStats,
+  PatientSurvey
 } from "@/lib/types";
 // Ya no se necesita el tipo local de 'patient-management'
+
+// Tipo intermedio que extiende Patient con la propiedad encuesta opcional
+type PatientWithSurvey = Patient & {
+  encuesta?: PatientSurvey | null;
+};
 
 const STATUS_CONFIG = {
   [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: { label: "Pend. Consulta" },
@@ -25,7 +31,7 @@ const STATUS_CONFIG = {
  * para su uso en la interfaz de usuario. También maneja el filtrado y las estadísticas.
  */
 export const useProcessedPatients = (
-  patients: Patient[], // El hook recibe el tipo base 'Patient'
+  patients: PatientWithSurvey[], // El hook recibe el tipo extendido 'PatientWithSurvey'
   appointments: Appointment[],
   searchTerm: string,
   statusFilter: keyof typeof PatientStatusEnum | "all"
@@ -48,7 +54,7 @@ export const useProcessedPatients = (
     }
 
     // El .map ahora está tipado para devolver un objeto EnrichedPatient.
-    return patients.map((patient: Patient): EnrichedPatient => {
+    return patients.map((patient: PatientWithSurvey): EnrichedPatient => {
       const patientAppointments = appointmentsByPatientId.get(patient.id) || [];
       patientAppointments.sort((a, b) => {
         const dateA = a.fecha_hora_cita ? new Date(a.fecha_hora_cita).getTime() : 0;
@@ -64,9 +70,8 @@ export const useProcessedPatients = (
       );
 
       // --- CORRECCIÓN DE TIPO ---
-      // Se asume que el proceso que añade 'encuesta' al objeto 'patient' ocurre ANTES de llamar a este hook.
-      // Esta es la forma segura de manejar esa propiedad potencialmente inexistente.
-      const encuestaData = (patient as any).encuesta || null;
+      // Se accede a 'encuesta' de forma segura. TypeScript ya no se quejará.
+      const encuestaData = patient.encuesta || null;
 
       // Se construye un nuevo objeto que CUMPLE con la interfaz EnrichedPatient.
       // Ya no es necesario forzar el tipo con `as EnrichedPatient` al final.

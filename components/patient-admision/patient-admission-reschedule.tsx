@@ -136,6 +136,8 @@ const LoadingSpinner = memo(() => (
   </div>
 ));
 
+LoadingSpinner.displayName = 'LoadingSpinner';
+
 // ==================== COMPONENTE PRINCIPAL ====================
 
 export const RescheduleDatePicker = memo<RescheduleDatePickerProps>(({ 
@@ -145,7 +147,7 @@ export const RescheduleDatePicker = memo<RescheduleDatePickerProps>(({
 }) => {
   // Obtener citas existentes
   const { data: appointmentsData, isLoading: isLoadingAppointments } = useAppointments(1, 100);
-  const appointments = appointmentsData?.appointments || [];
+  const appointments = useMemo(() => appointmentsData?.appointments || [], [appointmentsData?.appointments]);
 
   // Calcular horarios disponibles para la fecha seleccionada
   const availableTimeSlots = useMemo(() => {

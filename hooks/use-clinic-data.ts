@@ -1,44 +1,50 @@
 // hooks/use-clinic-data.ts
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import type { Patient, Appointment, EnrichedPatient } from '@/lib/types';
+import type { Patient, Appointment, EnrichedPatient, PatientSurvey } from '@/lib/types';
 import { toast } from 'sonner';
 
+// Tipo intermedio que extiende Patient con la propiedad encuesta opcional
+type PatientWithSurvey = Patient & {
+  encuesta?: PatientSurvey | null;
+};
+
 // ==================== TIPOS ====================
-interface ClinicData {
-  patients: Patient[];
-  appointments: Appointment[];
+interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
 }
 
 // ==================== FUNCIONES DE FETCH ====================
 /**
- * Obtiene todos los datos de la clínica (pacientes y citas) en una sola operación.
+ * Obtiene datos paginados de un recurso específico.
  */
-const fetchClinicData = async (): Promise<ClinicData> => {
+const fetchPaginatedData = async ({ 
+  pageParam = 1, 
+  resource 
+}: { 
+  pageParam: number; 
+  resource: 'patients' | 'appointments'; 
+}): Promise<PaginatedResponse<Patient | Appointment>> => {
   try {
-    // Usamos Promise.all para realizar las peticiones en paralelo
-    const [patientsResponse, appointmentsResponse] = await Promise.all([
-      fetch('/api/patients?pageSize=1000'), // Ajustar pageSize si esperas más de 1000 pacientes
-      fetch('/api/appointments?pageSize=1000') // Ajustar pageSize si esperas más de 1000 citas
-    ]);
-
-    if (!patientsResponse.ok || !appointmentsResponse.ok) {
-      throw new Error('No se pudieron obtener los datos de la clínica.');
+    const response = await fetch(`/api/${resource}?page=${pageParam}&pageSize=100`);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${resource}`);
     }
-
-    const patientsData = await patientsResponse.json();
-    const appointmentsData = await appointmentsResponse.json();
-
-    return {
-      patients: patientsData.data || [],
-      appointments: appointmentsData.data || [],
-    };
+    
+    return response.json();
   } catch (error) {
-    toast.error("Error Crítico de Datos", {
-      description: "No se pudieron cargar los datos esenciales de la clínica. Por favor, recargue la página.",
+    toast.error(`Error al cargar ${resource}`, {
+      description: `No se pudieron cargar los datos de ${resource}. Por favor, intente nuevamente.`,
     });
-    // Devolvemos un estado vacío en caso de error para no romper la app
-    return { patients: [], appointments: [] };
+    throw error;
   }
 };
 
@@ -48,20 +54,57 @@ const fetchClinicData = async (): Promise<ClinicData> => {
  * de pacientes y citas en toda la aplicación.
  */
 export const useClinicData = () => {
-  const { data, isLoading, error, refetch } = useQuery<ClinicData>({
-    queryKey: ['clinicData'], // Una única query key para toda la data
-    queryFn: fetchClinicData,
+  // Configuración de paginación infinita para pacientes
+  const {
+    data: patientsData,
+    fetchNextPage: fetchNextPatientPage,
+    hasNextPage: hasNextPatientPage,
+    isLoading: isLoadingPatients,
+    error: patientsError,
+    refetch: refetchPatients,
+  } = useInfiniteQuery({
+    queryKey: ['clinicData', 'patients'],
+    queryFn: ({ pageParam }) => fetchPaginatedData({ pageParam, resource: 'patients' }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined,
     staleTime: 5 * 60 * 1000, // 5 minutos de caché
-    refetchOnWindowFocus: true, // Refresca al volver a la pestaña
-    refetchInterval: 15 * 60 * 1000, // Refresca cada 15 minutos en segundo plano
+    refetchOnWindowFocus: true,
   });
+
+  // Configuración de paginación infinita para citas
+  const {
+    data: appointmentsData,
+    fetchNextPage: fetchNextAppointmentPage,
+    hasNextPage: hasNextAppointmentPage,
+    isLoading: isLoadingAppointments,
+    error: appointmentsError,
+    refetch: refetchAppointments,
+  } = useInfiniteQuery({
+    queryKey: ['clinicData', 'appointments'],
+    queryFn: ({ pageParam }) => fetchPaginatedData({ pageParam, resource: 'appointments' }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined,
+    staleTime: 5 * 60 * 1000, // 5 minutos de caché
+    refetchOnWindowFocus: true,
+  });
+
+  // Aplanar los datos de las páginas
+  const allPatients = useMemo(() => 
+    patientsData?.pages.flatMap(page => page.data as PatientWithSurvey[]) ?? [], 
+    [patientsData]
+  );
+  
+  const allAppointments = useMemo(() => 
+    appointmentsData?.pages.flatMap(page => page.data as Appointment[]) ?? [], 
+    [appointmentsData]
+  );
 
   /**
    * Memoizamos el procesamiento de datos para que solo se ejecute cuando los datos crudos cambien.
    * Esto es crucial para el rendimiento.
    */
   const enrichedData = useMemo(() => {
-    if (!data || !data.patients.length) {
+    if (!allPatients.length) {
       return {
         enrichedPatients: [],
         appointmentsWithPatientData: [],
@@ -69,32 +112,40 @@ export const useClinicData = () => {
     }
 
     // Creamos un mapa para un acceso rápido a los pacientes por ID
-    const patientsMap = new Map(data.patients.map(p => [p.id, p]));
+    const patientsMap = new Map(allPatients.map((p: PatientWithSurvey) => [p.id, p]));
 
-    const appointmentsWithPatientData = data.appointments.map(app => ({
+    const appointmentsWithPatientData = allAppointments.map((app: Appointment) => ({
       ...app,
       paciente: patientsMap.get(app.patient_id) || null
     }));
 
-    const enrichedPatients: EnrichedPatient[] = data.patients.map(patient => ({
+    const enrichedPatients: EnrichedPatient[] = allPatients.map((patient: PatientWithSurvey) => ({
       ...patient,
       nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
       displayDiagnostico: patient.diagnostico_principal || 'Sin diagnóstico',
-      encuesta_completada: !!(patient as any).encuesta, // Asumimos que 'encuesta' es un campo que puede o no existir
-      encuesta: (patient as any).encuesta || null,
+      encuesta_completada: !!patient.encuesta, // Ahora es type-safe
+      encuesta: patient.encuesta || null,
       // Aquí podrías agregar más datos enriquecidos, como el número de citas
-      totalCitas: data.appointments.filter(a => a.patient_id === patient.id).length,
+      totalCitas: allAppointments.filter((a: Appointment) => a.patient_id === patient.id).length,
     }));
 
     return { enrichedPatients, appointmentsWithPatientData };
-  }, [data]);
+  }, [allPatients, allAppointments]);
 
   return {
-    isLoading,
-    error,
-    refetch,
-    allPatients: data?.patients || [],
-    allAppointments: data?.appointments || [],
+    isLoading: isLoadingPatients || isLoadingAppointments,
+    error: patientsError || appointmentsError,
+    refetch: () => { 
+      refetchPatients(); 
+      refetchAppointments(); 
+    },
+    allPatients,
+    allAppointments,
+    // Funciones de paginación infinita
+    fetchNextPatientPage,
+    hasNextPatientPage,
+    fetchNextAppointmentPage,
+    hasNextAppointmentPage,
     ...enrichedData,
   };
 };

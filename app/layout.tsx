@@ -21,12 +21,11 @@ export const metadata: Metadata = {
     generator: 'Dr. Fausto Mario Medina Molina'
 }
 
-// Función para enviar métricas de Web Vitals
-export function reportWebVitals(metric: any) {
-  // En un entorno de producción, podrías enviar esto a un sistema de analytics
-  // Aquí lo mostramos en la consola para monitoreo y depuración
-  console.log(metric);
-}
+// Función para enviar métricas de Web Vitals (removida del export para compatibilidad con Next.js Layout)
+// En un entorno de producción, podrías enviar esto a un sistema de analytics
+// function reportWebVitals(metric: any) {
+//   console.log(metric);
+// }
 
 export default function RootLayout({
   children,

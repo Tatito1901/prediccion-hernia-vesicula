@@ -1657,7 +1657,7 @@ export default function PatientSurveyForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm md:text-base">
-                        En una escala del 0 al 10, donde 0 significa "sin dolor" y 10 significa "el peor dolor imaginable", ¿qué número representa mejor su dolor o molestia en este momento? <span className="text-red-500">*</span>{" "}
+                        En una escala del 0 al 10, donde 0 significa &quot;sin dolor&quot; y 10 significa &quot;el peor dolor imaginable&quot;, ¿qué número representa mejor su dolor o molestia en este momento? <span className="text-red-500">*</span>{" "}
                         <span className="font-bold text-lg text-primary">({field.value})</span>
                       </FormLabel>
                       <FormControl>

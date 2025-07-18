@@ -4,11 +4,11 @@ import { createClient } from '@/lib/supabase/server';
 // GET /api/patients/[id] - Obtener un paciente específico por ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient();
-    const { id } = params;
+    const supabase = await createClient();
+    const { id } = await params;
 
     if (!id) {
       return NextResponse.json(
@@ -52,11 +52,11 @@ export async function GET(
 // PATCH /api/patients/[id] - Actualizar un paciente específico
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient();
-    const { id } = params;
+    const supabase = await createClient();
+    const { id } = await params;
     const body = await request.json();
 
     if (!id) {
@@ -120,11 +120,11 @@ export async function PATCH(
 // DELETE /api/patients/[id] - Eliminar un paciente específico (opcional)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient();
-    const { id } = params;
+    const supabase = await createClient();
+    const { id } = await params;
 
     if (!id) {
       return NextResponse.json(

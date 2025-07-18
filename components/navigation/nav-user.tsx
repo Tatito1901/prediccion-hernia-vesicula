@@ -155,4 +155,6 @@ const NavUser = memo(({ user, className, collapsed = false, ...props }: NavUserP
   );
 });
 
+NavUser.displayName = 'NavUser';
+
 export default NavUser;

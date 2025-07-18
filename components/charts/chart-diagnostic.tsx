@@ -19,6 +19,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { DiagnosticLoadingSkeleton } from '@/components/charts/loading-skeletons';
+import { StatsCard as MetricCard } from '@/components/ui/stats-card';
+import { ChartWrapper } from '@/components/charts/chart-wrapper';
+import { InsightCard } from '@/components/charts/insight-card';
+import { CommonDiagnosesChart } from '@/components/charts/common-diagnoses-chart';
+import { HerniaDistributionChart } from '@/components/charts/hernia-distribution-chart';
+import { TimelineChart } from '@/components/charts/timeline-chart';
+import { TimelineData } from '@/components/charts/types';
 
 /* ============================================================================
  * COMPONENTES DINÁMICOS OPTIMIZADOS
@@ -91,9 +99,17 @@ export interface Metrics {
 }
 
 export interface DiagnosticInsight {
-  type: 'warning' | 'info' | 'success';
+  level: 'info' | 'warning' | 'critical';
   title: string;
   description: string;
+}
+
+export interface ChartDiagnosticClientProps {
+  metrics: Metrics;
+  timeline: TimelineData[];
+  insights: DiagnosticInsight[];
+  lastUpdated: string;
+  isLoading?: boolean;
 }
 
 /* ============================================================================
@@ -244,12 +260,12 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
   // Insights simplificados
   const insights: DiagnosticInsight[] = [
     {
-      type: porcentajeHernias > 50 ? 'warning' : 'info',
+      level: porcentajeHernias > 50 ? 'warning' : 'info',
       title: 'Prevalencia de Hernias',
       description: `Las hernias representan el ${porcentajeHernias.toFixed(1)}% de todos los diagnósticos`
     },
     {
-      type: diversidad > 2 ? 'success' : 'warning',
+      level: diversidad > 2 ? 'info' : 'warning',
       title: 'Diversidad Diagnóstica',
       description: `Se identificaron ${diagnosisCounts.size} tipos diferentes de diagnósticos`
     }
@@ -293,19 +309,19 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
             <TabsContent value="distribution" className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <MetricCard
-                  title="Total Pacientes"
+                  label="Total Pacientes"
                   value={metrics.totalPacientes.toString()}
-                  icon={Users}
+                  icon={<Users className="h-4 w-4" />}
                 />
                 <MetricCard
-                  title="Casos de Hernia"
+                  label="Casos de Hernia"
                   value={`${metrics.totalHernias} (${metrics.porcentajeHernias.toFixed(0)}%)`}
-                  icon={Target}
+                  icon={<Target className="h-4 w-4" />}
                 />
                 <MetricCard
-                  title="Índice de Diversidad"
+                  label="Índice de Diversidad"
                   value={metrics.diversidadDiagnostica.toFixed(1)}
-                  icon={BarChart3}
+                  icon={<BarChart3 className="h-4 w-4" />}
                 />
               </div>
               
