@@ -51,7 +51,7 @@ import {
   User,
   Zap,
 } from "lucide-react"
-import { usePatient } from "@/hooks/use-appointments";
+// ❌ ELIMINADO: import { usePatient } - Ya no es necesario, recibimos datos vía props
 import { useCreateAppointment } from '@/hooks/use-appointments';
 // TODO: [Refactor] The helper file was not found. The logic for these functions needs to be restored.
 // import { calculateConversionScore, generateInsights, generateRecommendationCategories } from "@/lib/utils/survey-analyzer-helpers"
@@ -88,11 +88,13 @@ export interface PersuasivePoint {
 }
 
 interface SurveyResultsAnalyzerProps {
-  patient_id: string
+  // ANTES: patient_id: string
+  patientData: Patient; // <-- AHORA: Recibe el objeto completo
 }
 
-export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnalyzerProps): React.ReactElement {
-  const { data: patientData, isLoading, error: patientError } = usePatient(patient_id);
+export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnalyzerProps): React.ReactElement {
+  // ANTES: const { data: patientData, isLoading, error: patientError } = usePatient(patient_id);
+  // AHORA: Ya no hay fetching aquí. `patientData` se usa directamente.
   const createAppointment = useCreateAppointment();
 
   // TODO: [Refactor] Survey data needs to be fetched separately for this patient.
@@ -143,13 +145,7 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
     }
   }, [patientData, surveyData]);
 
-  useEffect(() => {
-    if (patientError) {
-      const errorMessage = "Error al cargar los datos del paciente. Intente de nuevo.";
-      toast.error(errorMessage);
-      setModelError(errorMessage);
-    }
-  }, [patientError]);
+  // ❌ ELIMINADO: useEffect para patientError - Ya no es necesario porque no hay fetching
 
   const handleScheduleFollowUp = () => {
     if (!patientData) return;
@@ -182,16 +178,6 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
     // if (painSeverityAnswer?.answer_text === 'severa') { ... }
 
     return points;
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 bg-gray-50/50">
-        <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
-        <p className="text-lg font-semibold text-gray-600">Analizando respuestas...</p>
-        <p className="text-gray-500">Esto tomará solo un momento.</p>
-      </div>
-    )
   }
 
   if (modelError) {
@@ -282,7 +268,8 @@ export default function SurveyResultsAnalyzer({ patient_id }: SurveyResultsAnaly
                   </CardHeader>
                   <CardContent>
                     <p className="text-gray-600"><strong>Edad:</strong> {patientData.edad} años</p>
-                    <p className="text-gray-600"><strong>Género:</strong> {patientData.genero}</p>
+                    {/* <p className="text-gray-600"><strong>Género:</strong> {patientData.genero}</p> */}
+                    {/* ❌ COMENTADO: 'genero' no existe en el tipo Patient según el esquema de BD */}
                     {/* <p className="text-gray-600"><strong>Motivo:</strong> {surveyData?.motivo_visita}</p> */}
                   </CardContent>
                 </Card>

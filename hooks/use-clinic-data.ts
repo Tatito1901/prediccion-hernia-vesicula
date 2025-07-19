@@ -99,10 +99,6 @@ export const useClinicData = () => {
     [appointmentsData]
   );
 
-  /**
-   * Memoizamos el procesamiento de datos para que solo se ejecute cuando los datos crudos cambien.
-   * Esto es crucial para el rendimiento.
-   */
   const enrichedData = useMemo(() => {
     if (!allPatients.length) {
       return {
@@ -111,23 +107,44 @@ export const useClinicData = () => {
       };
     }
 
-    // Creamos un mapa para un acceso rápido a los pacientes por ID
-    const patientsMap = new Map(allPatients.map((p: PatientWithSurvey) => [p.id, p]));
+    const appointmentsByPatientId = new Map<string, Appointment[]>();
+    if (allAppointments) {
+      for (const app of allAppointments) {
+        if (!app.patient_id) continue;
+        if (!appointmentsByPatientId.has(app.patient_id)) {
+          appointmentsByPatientId.set(app.patient_id, []);
+        }
+        appointmentsByPatientId.get(app.patient_id)!.push(app);
+      }
+    }
 
     const appointmentsWithPatientData = allAppointments.map((app: Appointment) => ({
       ...app,
-      paciente: patientsMap.get(app.patient_id) || null
+      paciente: allPatients.find(p => p.id === app.patient_id) || null
     }));
 
-    const enrichedPatients: EnrichedPatient[] = allPatients.map((patient: PatientWithSurvey) => ({
-      ...patient,
-      nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
-      displayDiagnostico: patient.diagnostico_principal || 'Sin diagnóstico',
-      encuesta_completada: !!patient.encuesta, // Ahora es type-safe
-      encuesta: patient.encuesta || null,
-      // Aquí podrías agregar más datos enriquecidos, como el número de citas
-      totalCitas: allAppointments.filter((a: Appointment) => a.patient_id === patient.id).length,
-    }));
+    const enrichedPatients: EnrichedPatient[] = allPatients.map((patient: PatientWithSurvey) => {
+        const patientAppointments = appointmentsByPatientId.get(patient.id) || [];
+        patientAppointments.sort((a, b) => {
+            const dateA = a.fecha_hora_cita ? new Date(a.fecha_hora_cita).getTime() : 0;
+            const dateB = b.fecha_hora_cita ? new Date(b.fecha_hora_cita).getTime() : 0;
+            return dateB - dateA; // Sort descending to find the latest
+        });
+
+        const nextAppointment = patientAppointments.find(
+            appointment => new Date(appointment.fecha_hora_cita!) >= new Date()
+        );
+
+        return {
+            ...patient,
+            nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
+            displayDiagnostico: patient.diagnostico_principal || 'Sin diagnóstico',
+            encuesta_completada: !!patient.encuesta,
+            encuesta: patient.encuesta || null,
+            fecha_proxima_cita_iso: nextAppointment?.fecha_hora_cita,
+            totalCitas: patientAppointments.length,
+        };
+    });
 
     return { enrichedPatients, appointmentsWithPatientData };
   }, [allPatients, allAppointments]);

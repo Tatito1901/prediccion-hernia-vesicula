@@ -15,9 +15,7 @@ import { SimplePagination } from "@/components/ui/simple-pagination"
 import PatientTable from "./patient-table"
 
 // --- Hooks y Tipos ---
-// Importamos el nuevo hook de contexto
 import { useClinic } from "@/contexts/clinic-data-provider";
-import { useProcessedPatients } from "@/hooks/use-processed-patients"
 import { EnrichedPatient, PatientStatusEnum, PatientStats, StatusStats } from "@/lib/types"
 import { generateSurveyId } from "@/lib/form-utils"
 import { cn } from "@/lib/utils"
@@ -212,38 +210,55 @@ export const PatientManagement: React.FC = () => {
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
 
   // ==================== OBTENCIÓN DE DATOS CENTRALIZADA ====================
-  // ¡Aquí está la magia! Obtenemos todos los datos y el estado desde un solo lugar.
   const { 
     enrichedPatients, 
-    allAppointments,
-    isLoading: isLoadingClinicData, // Usamos el estado de carga del hook central
+    isLoading: isLoadingClinicData, 
     error 
   } = useClinic();
   // ========================================================================
 
-  // El hook useProcessedPatients ahora recibe los datos como argumentos,
-  // en lugar de hacer su propia llamada a la API.
-  const { 
-    filteredAndEnrichedPatients: processedPatients,
-    statusStats 
-  } = useProcessedPatients(
-    enrichedPatients, // Pasamos los pacientes ya enriquecidos
-    allAppointments, // Pasamos todas las citas
-    searchTerm,
-    statusFilter
-  );
+  const { filteredPatients, statusStats } = useMemo(() => {
+    let currentViewPatients: EnrichedPatient[] = enrichedPatients;
+    const term = (searchTerm || '').toLowerCase();
 
-  // --- Lógica y Memos ---
+    if (term) {
+      currentViewPatients = currentViewPatients.filter(p =>
+        p.nombreCompleto.toLowerCase().includes(term) ||
+        (p.telefono?.includes(term)) ||
+        (p.email?.toLowerCase().includes(term)) ||
+        p.displayDiagnostico.toLowerCase().includes(term) ||
+        p.id.toLowerCase().includes(term)
+      );
+    }
+
+    if (statusFilter !== "all") {
+      currentViewPatients = currentViewPatients.filter((p) => p.estado_paciente === statusFilter);
+    }
+    
+    const stats = enrichedPatients.reduce((acc, patient) => {
+        if (patient.estado_paciente) {
+            acc[patient.estado_paciente] = (acc[patient.estado_paciente] || 0) + 1;
+        }
+        return acc;
+    }, {} as Record<string, number>);
+    
+    return {
+        filteredPatients: currentViewPatients,
+        statusStats: { ...stats, all: enrichedPatients.length } as StatusStats
+    };
+
+  }, [enrichedPatients, searchTerm, statusFilter]);
+
   const totalPages = useMemo(() => {
-    if (!processedPatients.length) return 1;
-    return Math.ceil(processedPatients.length / PAGE_SIZE);
-  }, [processedPatients]);
+    if (!filteredPatients.length) return 1;
+    return Math.ceil(filteredPatients.length / PAGE_SIZE);
+  }, [filteredPatients]);
 
   const paginatedPatients = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
     const end = start + PAGE_SIZE;
-    return processedPatients.slice(start, end);
-  }, [processedPatients, currentPage]);
+    return filteredPatients.slice(start, end);
+  }, [filteredPatients, currentPage]);
 
   const statsData: StatsDataType = useMemo(() => {
     const totalPatients = enrichedPatients.length;

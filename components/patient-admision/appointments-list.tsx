@@ -3,6 +3,7 @@ import React, { memo, useCallback, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { ExtendedAppointment } from '@/lib/types';
 import { AppointmentCard, type ConfirmAction } from "./patient-card";
 
@@ -75,37 +76,7 @@ const LoadingSkeleton = memo(() => (
 
 LoadingSkeleton.displayName = "LoadingSkeleton";
 
-// Estado vacío mejorado con mejor UX
-const EmptyState = memo<{
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-}>(({ title, description, icon: IconComponent }) => (
-  <div className="text-center py-16 px-6">
-    <Card className="max-w-md mx-auto border-0 shadow-xl bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 transition-all duration-300 hover:shadow-2xl">
-      <CardContent className="p-8">
-        {/* Icono animado */}
-        <div className="relative mb-6">
-          <div className="mx-auto h-20 w-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center shadow-lg transition-all duration-300 hover:scale-105">
-            <IconComponent className="h-10 w-10 text-slate-500 dark:text-slate-400" />
-          </div>
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 animate-pulse" />
-        </div>
-        
-        {/* Contenido */}
-        <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-3">
-          {title}
-        </h3>
-        
-        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-          {description}
-        </p>
-      </CardContent>
-    </Card>
-  </div>
-));
-
-EmptyState.displayName = "EmptyState";
+// Componente EmptyState ahora se importa desde ui/empty-state
 
 // Indicador de carga adicional
 const LoadingIndicator = memo(() => (

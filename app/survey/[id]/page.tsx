@@ -22,7 +22,7 @@ export default async function SurveyPage({ params }: { params: Promise<{ id: str
           </div>
         }
       >
-        <PatientSurveyForm surveyId={resolvedParams.id} standalone={true} />
+        <PatientSurveyForm assignedSurveyId={resolvedParams.id} surveyTemplateId="default" standalone={true} />
       </Suspense>
     </div>
   )

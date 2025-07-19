@@ -7,29 +7,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowLeft, Loader2, ClipboardCheck, AlertCircle } from "lucide-react"
 import { useRouter, useParams } from "next/navigation"
 import { toast } from "sonner"
-import { usePatient } from "@/hooks/use-appointments";
+// ❌ ELIMINADO: import { usePatient } - Ya no es necesario, usamos contexto central
+import { useClinic } from "@/contexts/clinic-data-provider";
+import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 import { generateSurveyId } from "@/lib/form-utils"
-import type { PatientData } from "@/app/dashboard/data-model"
+import type { PatientData } from "@/components/charts/types"
 
-export default function SurveyResultsPage() {
+// Componente interno que usa el contexto
+function SurveyResultsContent() {
   const router = useRouter()
   const params = useParams();
   const patientIdFromParams = params.id as string;
   // Mantener patientId como string para usar con getPatientById que espera un string
   const patientId = patientIdFromParams;
   
-  // Obtenemos los datos de los pacientes directamente desde el Zustand store
-  
-
-    const { 
-    data: patientData, 
-    isLoading, 
-    isError,
-    error 
-  } = usePatient(patientId);
-
-    // React Query maneja el fetching, el estado de carga y los errores automáticamente.
-  // El useEffect para obtener datos ya no es necesario.
+  // ANTES: const { data: patientData, isLoading, isError, error } = usePatient(patientId);
+  // AHORA: Usar contexto central para obtener datos del paciente
+  const { enrichedPatients } = useClinic();
+  const patientData = enrichedPatients.find(p => p.id === patientId);
+  const isLoading = false; // Ya no hay loading porque los datos vienen del contexto
+  const isError = false; // Ya no hay error porque los datos vienen del contexto
+  const error = null; // Ya no hay error porque los datos vienen del contexto
 
     useEffect(() => {
     // Si tenemos datos del paciente y la encuesta no está completada, redirigimos.
@@ -104,7 +102,7 @@ export default function SurveyResultsPage() {
               <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Error al cargar los resultados</p>
-                                <p className="text-sm">{error?.message || 'Ocurrió un error inesperado.'}</p>
+                                <p className="text-sm">Ocurrió un error inesperado.</p>
                 <Button variant="outline" size="sm" className="mt-3" onClick={() => router.back()}>
                   Volver a la lista de pacientes
                 </Button>
@@ -140,9 +138,32 @@ export default function SurveyResultsPage() {
         <h1 className="text-2xl font-bold">Resultados de Encuesta</h1>
       </div>
 
-      <SurveyResultsAnalyzer
-        patient_id={patientIdFromParams}
-      />
+      {patientData ? (
+        <SurveyResultsAnalyzer
+          patientData={patientData} // Pasar el objeto completo del paciente en lugar del ID
+        />
+      ) : (
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center text-muted-foreground">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4" />
+              <p>No se encontró el paciente especificado.</p>
+              <Button variant="outline" className="mt-4" onClick={() => router.back()}>
+                Volver
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
+  )
+}
+
+// Componente principal envuelto con ClinicDataProvider
+export default function SurveyResultsPage() {
+  return (
+    <ClinicDataProvider>
+      <SurveyResultsContent />
+    </ClinicDataProvider>
   )
 }

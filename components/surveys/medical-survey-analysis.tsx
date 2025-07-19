@@ -15,7 +15,7 @@ import {
   Filter, Search, Calendar as CalendarIcon, TrendingUp, Users,
   BarChart3, Activity, AlertTriangle, CheckCircle2
 } from "lucide-react";
-import { usePatients } from '@/hooks/use-appointments';
+// ❌ ELIMINADO: import { usePatients } - Ya no es necesario, recibimos datos vía props
 import type { Patient } from '@/lib/types';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -103,14 +103,15 @@ const ResponsivePieChart: FC<{ data: ChartDataItem[] }> = ({ data }) => (
 );
 
 // Props del componente principal
-type MedicalSurveyAnalysisProps = {
+interface MedicalSurveyAnalysisProps {
   title?: string;
   description?: string;
+  patients: Patient[];
 };
 
 // Main Component
-export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de Encuestas", description = "Análisis médico detallado de los datos recopilados en las encuestas de pacientes" }: MedicalSurveyAnalysisProps) {
-  const { data, isLoading, error } = usePatients(1, 1000, 'completed');
+export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de Encuestas", description = "Análisis médico detallado de los datos recopilados en las encuestas de pacientes", patients }: MedicalSurveyAnalysisProps) {
+  // AHORA: Ya no hay fetching aquí. `patients` se usa directamente.
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [filterDate, setFilterDate] = useState("todo");
@@ -120,7 +121,7 @@ export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de E
   const [searchTermPatients, setSearchTermPatients] = useState("");
 
   const filteredData = useMemo(() => {
-    let surveys = data?.patients || [];
+    let surveys = patients || []; // ANTES: data?.patients || []
 
     if (filterDate !== "todo") {
       const now = new Date();
@@ -153,7 +154,7 @@ export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de E
     }
 
     return surveys;
-  }, [data, filterDate, filterDiagnosis, filterAge]);
+  }, [patients, filterDate, filterDiagnosis, filterAge]); // ANTES: [data, filterDate, filterDiagnosis, filterAge]
 
   const calculatedMetrics = useMemo(() => {
     const totalPatients = filteredData.length;
@@ -196,14 +197,7 @@ export default function MedicalSurveyAnalysis({ title = "Análisis Clínico de E
     setSearchTermPatients(e.target.value);
   };
 
-  if (isLoading) return <div className="flex justify-center items-center h-96"><LoadingSpinner /></div>;
-  if (error) return (
-    <Alert variant="destructive" className="m-4">
-      <AlertTriangle className="h-4 w-4" />
-      <AlertTitle>Error al Cargar Datos</AlertTitle>
-      <AlertDescription>{error instanceof Error ? error.message : "Ocurrió un error desconocido"}</AlertDescription>
-    </Alert>
-  );
+  // ❌ ELIMINADO: Loading y error states - Ya no son necesarios porque recibimos datos vía props
   if (!calculatedMetrics) return (
     <Alert className="m-4">
         <AlertTriangle className="h-4 w-4" />

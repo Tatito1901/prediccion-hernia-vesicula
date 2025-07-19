@@ -19,7 +19,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { DiagnosticLoadingSkeleton } from '@/components/charts/loading-skeletons';
 import { StatsCard as MetricCard } from '@/components/ui/stats-card';
 import { ChartWrapper } from '@/components/charts/chart-wrapper';
 import { InsightCard } from '@/components/charts/insight-card';
@@ -288,7 +287,17 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
   }, []);
 
   if (isLoading) {
-    return <DiagnosticLoadingSkeleton />;
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
   }
 
   return (

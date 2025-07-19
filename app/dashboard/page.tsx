@@ -13,7 +13,7 @@ export default function DashboardPage() {
   return (
       <ClinicDataProvider>
         <SidebarProvider>
-          <AppSidebar variant="inset" />
+          <AppSidebar />
           <SidebarInset>
             <main className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6">
               <div className="flex flex-col gap-6 md:gap-8 max-w-7xl mx-auto">

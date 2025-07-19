@@ -9,7 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tablet, Smartphone, ArrowLeft } from "lucide-react"
-import { usePatient, useUpdatePatient } from "@/hooks/use-appointments";
+// ❌ ELIMINADO: import { usePatient } - Ya no es necesario, usamos contexto central
+import { useUpdatePatient } from "@/hooks/use-appointments";
+import { useClinic } from "@/contexts/clinic-data-provider";
+import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 import MedicalSurveyAnalysis from "@/components/surveys/medical-survey-analysis"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"
 import { toast } from "sonner"
@@ -34,9 +37,12 @@ function EncuestaContent() {
   // Estado para el modo de visualización (encuesta o análisis)
   const [viewMode, setViewMode] = useState<"survey" | "analysis">("survey")
 
-  // Estado local para almacenar los datos del paciente
-    // Usar React Query para obtener los datos del paciente
-  const { data: patient, isLoading, isError } = usePatient(patientId ? String(patientId) : null);
+  // ANTES: const { data: patient, isLoading, isError } = usePatient(patientId ? String(patientId) : null);
+  // AHORA: Usar contexto central para obtener datos del paciente
+  const { enrichedPatients } = useClinic();
+  const patient = enrichedPatients.find(p => p.id === String(patientId));
+  const isLoading = false; // Ya no hay loading porque los datos vienen del contexto
+  const isError = false; // Ya no hay error porque los datos vienen del contexto
   // Usar la mutación de React Query para actualizar
   const { mutate: updatePatient } = useUpdatePatient();
 
@@ -79,7 +85,7 @@ function EncuestaContent() {
   if (showModeSelector) {
     return (
       <SidebarProvider>
-        <AppSidebar variant="inset" />
+        <AppSidebar />
         <SidebarInset>
 
           <div className="flex flex-1 flex-col">
@@ -127,7 +133,7 @@ function EncuestaContent() {
 
   return (
     <SidebarProvider>
-      <AppSidebar variant="inset" />
+      <AppSidebar />
       <SidebarInset>
 
         <div className="flex flex-1 flex-col">
@@ -148,7 +154,7 @@ function EncuestaContent() {
                         Encuesta para {patient.nombre} {patient.apellidos}
                       </CardTitle>
                       <CardDescription>
-                        ID: {patient.id} | Edad: {patient.edad} | Diagnóstico: {patient.diagnostico}
+                        ID: {patient.id} | Edad: {patient.edad} | Diagnóstico: {patient.diagnostico_principal}
                       </CardDescription>
                     </CardHeader>
                   </Card>
@@ -171,7 +177,7 @@ function EncuestaContent() {
                       patientId={patientId}
                       surveyTemplateId={surveyId}
                       assignedSurveyId={surveyId}
-                      initialData={patient ? { nombre: patient.nombre, apellidos: patient.apellidos, edad: patient.edad } : undefined}
+                      initialData={patient ? { nombre: patient.nombre, apellidos: patient.apellidos, edad: patient.edad || undefined } : undefined}
                       onComplete={handleSurveyComplete}
                     />
                   ) : (
@@ -188,6 +194,7 @@ function EncuestaContent() {
                   <MedicalSurveyAnalysis
                     title="Análisis Clínico de Encuestas"
                     description="Análisis médico detallado de los datos recopilados en las encuestas de pacientes"
+                    patients={enrichedPatients} // Pasar la lista de pacientes del contexto central
                   />
                 )}
               </div>
@@ -199,11 +206,13 @@ function EncuestaContent() {
   )
 }
 
-// Componente principal envuelto en Suspense
+// Componente principal envuelto en Suspense y ClinicDataProvider
 export default function EncuestaPage() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div></div>}>
-      <EncuestaContent />
+      <ClinicDataProvider>
+        <EncuestaContent />
+      </ClinicDataProvider>
     </Suspense>
   )
 }

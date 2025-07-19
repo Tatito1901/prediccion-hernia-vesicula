@@ -167,13 +167,12 @@ export const useCreateAppointment = () => {
       
       return transformAppointment(await response.json());
     },
-    onSuccess: (newAppointment) => {
-      // Invalidamos la query central para refrescar toda la app
+    onSuccess: () => {
+      // ¡ACCIÓN CLAVE! Invalida la caché central.
+      // Esto le dice a React Query: "Los datos de la clínica están obsoletos, ve a buscarlos de nuevo".
+      // El hook `useClinicData` se re-ejecutará automáticamente.
       queryClient.invalidateQueries({ queryKey: ['clinicData'] });
-      queryClient.setQueryData(
-        appointmentKeys.detail(newAppointment.id),
-        newAppointment
-      );
+      
       toast.success('Cita agendada exitosamente');
     },
     onError: (error) => {
@@ -204,12 +203,10 @@ export const useUpdateAppointment = () => {
       
       return transformAppointment(await response.json());
     },
-    onSuccess: (updatedAppointment) => {
-      queryClient.setQueryData(
-        appointmentKeys.detail(updatedAppointment.id),
-        updatedAppointment
-      );
-      // Invalidamos la query central para refrescar toda la app
+    onSuccess: () => {
+      // ¡ACCIÓN CLAVE! Invalida la caché central.
+      // Esto le dice a React Query: "Los datos de la clínica están obsoletos, ve a buscarlos de nuevo".
+      // El hook `useClinicData` se re-ejecutará automáticamente.
       queryClient.invalidateQueries({ queryKey: ['clinicData'] });
       
       toast.success('Cita actualizada exitosamente');
@@ -259,11 +256,9 @@ export const useUpdateAppointmentStatus = () => {
       return transformAppointment(await response.json());
     },
     onSuccess: (updatedAppointment) => {
-      queryClient.setQueryData(
-        appointmentKeys.detail(updatedAppointment.id),
-        updatedAppointment
-      );
-      // Invalidamos la query central para refrescar toda la app
+      // ¡ACCIÓN CLAVE! Invalida la caché central.
+      // Esto le dice a React Query: "Los datos de la clínica están obsoletos, ve a buscarlos de nuevo".
+      // El hook `useClinicData` se re-ejecutará automáticamente.
       queryClient.invalidateQueries({ queryKey: ['clinicData'] });
       
       const statusMessages: Record<string, string> = {
@@ -284,7 +279,7 @@ export const useUpdateAppointmentStatus = () => {
   });
 };
 
-// Hook para admitir un paciente (crear paciente + cita en una sola operación)
+// Hook para admitir un paciente (crear paciente + cita en una sola operación) usando RPC
 export const useAdmitPatient = () => {
   const queryClient = useQueryClient();
   
@@ -294,23 +289,37 @@ export const useAdmitPatient = () => {
       apellidos: string;
       telefono: string;
       edad?: number | null;
+      email?: string;
       diagnostico_principal: string;
       comentarios_registro: string;
       fecha_hora_cita: string;
       motivo_cita: string;
     }) => {
-      const response = await fetch('/api/patients/admit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patientData),
+      const { createClient } = await import('@/utils/supabase/client');
+      const supabase = createClient();
+      
+      // Obtener el usuario autenticado
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { data, error } = await supabase.rpc('admit_new_patient', {
+        p_nombre: patientData.nombre,
+        p_apellidos: patientData.apellidos,
+        p_telefono: patientData.telefono,
+        p_edad: patientData.edad || null,
+        p_email: patientData.email || '',
+        p_diagnostico_principal: patientData.diagnostico_principal,
+        p_comentarios_registro: patientData.comentarios_registro,
+        p_fecha_hora_cita: patientData.fecha_hora_cita,
+        p_motivo_cita: patientData.motivo_cita,
+        p_creado_por_id: user?.id || null, 
+        p_doctor_asignado_id: null // TODO: Implementar lógica para asignar doctor
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Error al admitir paciente');
+
+      if (error) {
+        throw new Error(error.message || 'Error al admitir al paciente vía RPC.');
       }
-      
-      return response.json();
+
+      return data;
     },
     onSuccess: () => {
       // Invalidamos la query central para refrescar toda la app
@@ -325,26 +334,8 @@ export const useAdmitPatient = () => {
   });
 };
 
-// Hook para obtener un paciente específico por su ID
-export const usePatient = (id: string | null) => {
-  return useQuery({
-    queryKey: ['patient', id],
-    queryFn: async () => {
-      if (!id) return null;
-      
-      const response = await fetch(`/api/patients/${id}`);
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error('Error al obtener el paciente');
-      }
-      
-      return response.json();
-    },
-    enabled: !!id,
-    staleTime: 2 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
-  });
-};
+// ❌ ELIMINADO: usePatient - Ya no es necesario porque useClinic proporciona toda la lista de pacientes
+// Los componentes que lo usaban deben ser refactorizados para recibir datos vía props del contexto central
 
 // Hook para actualizar un paciente
 export const useUpdatePatient = () => {
@@ -365,11 +356,12 @@ export const useUpdatePatient = () => {
       
       return response.json();
     },
-    onSuccess: (updatedPatient, { id }) => {
-      // Actualizar la query del paciente específico
-      queryClient.setQueryData(['patient', id], updatedPatient);
-      // Invalidar la query central para refrescar toda la app
+    onSuccess: () => {
+      // ¡ACCIÓN CLAVE! Invalida la caché central.
+      // Esto le dice a React Query: "Los datos de la clínica están obsoletos, ve a buscarlos de nuevo".
+      // El hook `useClinicData` se re-ejecutará automáticamente.
       queryClient.invalidateQueries({ queryKey: ['clinicData'] });
+      
       toast.success('Paciente actualizado exitosamente');
     },
     onError: (error) => {
@@ -380,28 +372,5 @@ export const useUpdatePatient = () => {
   });
 };
 
-// Hook para obtener múltiples pacientes con filtros
-export const usePatients = (page = 1, pageSize = 100, status?: string) => {
-  return useQuery({
-    queryKey: ['patients', page, pageSize, status],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        pageSize: pageSize.toString(),
-      });
-      
-      if (status) {
-        params.append('estado', status);
-      }
-      
-      const response = await fetch(`/api/patients?${params.toString()}`);
-      if (!response.ok) {
-        throw new Error('Error al obtener los pacientes');
-      }
-      
-      return response.json();
-    },
-    staleTime: 2 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
-  });
-};
+// ❌ ELIMINADO: usePatients - Ya no es necesario porque useClinic proporciona toda la lista de pacientes
+// Los componentes que lo usaban deben ser refactorizados para recibir datos vía props del contexto central

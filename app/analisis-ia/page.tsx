@@ -7,7 +7,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 export default function AnalisisIaPage() {
   return (
     <SidebarProvider>
-      <AppSidebar variant="inset" />
+      <AppSidebar />
       <SidebarInset className="flex flex-col h-screen overflow-hidden">
 
         <div className="flex-1 flex flex-col px-3 py-4 sm:px-4 sm:py-6 overflow-auto min-h-0">
