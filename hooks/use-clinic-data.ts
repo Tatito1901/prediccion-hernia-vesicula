@@ -1,17 +1,29 @@
-// hooks/use-clinic-data.ts
-import { useInfiniteQuery } from '@tanstack/react-query';
+// hooks/use-clinic-data.ts - REFACTORED TO USE ENRICHED BACKEND DATA
+import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import type { Patient, Appointment, EnrichedPatient, PatientSurvey } from '@/lib/types';
+import type { Patient, Appointment, EnrichedPatient } from '@/lib/types';
 import { toast } from 'sonner';
 
-// Tipo intermedio que extiende Patient con la propiedad encuesta opcional
-type PatientWithSurvey = Patient & {
-  encuesta?: PatientSurvey | null;
-};
+// ==================== TIPOS OPTIMIZADOS ====================
+interface EnrichedAppointmentsResponse {
+  data: Appointment[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+  summary: {
+    total_appointments: number;
+    today_count: number;
+    future_count: number;
+    past_count: number;
+  };
+}
 
-// ==================== TIPOS ====================
-interface PaginatedResponse<T> {
-  data: T[];
+interface PaginatedPatientsResponse {
+  data: Patient[];
   pagination: {
     page: number;
     pageSize: number;
@@ -21,133 +33,119 @@ interface PaginatedResponse<T> {
   };
 }
 
-// ==================== FUNCIONES DE FETCH ====================
+// ==================== FUNCIONES DE FETCH OPTIMIZADAS ====================
 /**
- * Obtiene datos paginados de un recurso específico.
+ * Obtiene citas enriquecidas usando la nueva función RPC
  */
-const fetchPaginatedData = async ({ 
-  pageParam = 1, 
-  resource 
-}: { 
-  pageParam: number; 
-  resource: 'patients' | 'appointments'; 
-}): Promise<PaginatedResponse<Patient | Appointment>> => {
+const fetchEnrichedAppointments = async (): Promise<EnrichedAppointmentsResponse> => {
   try {
-    const response = await fetch(`/api/${resource}?page=${pageParam}&pageSize=100`);
+    const response = await fetch('/api/appointments?pageSize=100');
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch ${resource}`);
+      throw new Error('Failed to fetch enriched appointments');
     }
     
     return response.json();
   } catch (error) {
-    toast.error(`Error al cargar ${resource}`, {
-      description: `No se pudieron cargar los datos de ${resource}. Por favor, intente nuevamente.`,
+    toast.error('Error al cargar citas', {
+      description: 'No se pudieron cargar las citas enriquecidas. Por favor, intente nuevamente.',
     });
     throw error;
   }
 };
 
-// ==================== HOOK PRINCIPAL ====================
 /**
- * Hook centralizado que actúa como la única fuente de verdad para los datos
- * de pacientes y citas en toda la aplicación.
+ * Obtiene pacientes usando la API optimizada
+ */
+const fetchPatients = async (): Promise<PaginatedPatientsResponse> => {
+  try {
+    const response = await fetch('/api/patients?pageSize=100');
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch patients');
+    }
+    
+    return response.json();
+  } catch (error) {
+    toast.error('Error al cargar pacientes', {
+      description: 'No se pudieron cargar los pacientes. Por favor, intente nuevamente.',
+    });
+    throw error;
+  }
+};
+
+// ==================== HOOK PRINCIPAL OPTIMIZADO ====================
+/**
+ * Hook centralizado refactorizado que consume datos ya enriquecidos del backend.
+ * Elimina el enriquecimiento en el cliente para mejorar performance y escalabilidad.
  */
 export const useClinicData = () => {
-  // Configuración de paginación infinita para pacientes
+  // Query optimizada para citas enriquecidas
   const {
-    data: patientsData,
-    fetchNextPage: fetchNextPatientPage,
-    hasNextPage: hasNextPatientPage,
-    isLoading: isLoadingPatients,
-    error: patientsError,
-    refetch: refetchPatients,
-  } = useInfiniteQuery({
-    queryKey: ['clinicData', 'patients'],
-    queryFn: ({ pageParam }) => fetchPaginatedData({ pageParam, resource: 'patients' }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined,
-    staleTime: 5 * 60 * 1000, // 5 minutos de caché
-    refetchOnWindowFocus: true,
-  });
-
-  // Configuración de paginación infinita para citas
-  const {
-    data: appointmentsData,
-    fetchNextPage: fetchNextAppointmentPage,
-    hasNextPage: hasNextAppointmentPage,
+    data: appointmentsResponse,
     isLoading: isLoadingAppointments,
     error: appointmentsError,
     refetch: refetchAppointments,
-  } = useInfiniteQuery({
-    queryKey: ['clinicData', 'appointments'],
-    queryFn: ({ pageParam }) => fetchPaginatedData({ pageParam, resource: 'appointments' }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined,
+  } = useQuery({
+    queryKey: ['clinicData', 'enrichedAppointments'],
+    queryFn: fetchEnrichedAppointments,
+    staleTime: 3 * 60 * 1000, // 3 minutos de caché
+    refetchOnWindowFocus: true,
+  });
+
+  // Query optimizada para pacientes
+  const {
+    data: patientsResponse,
+    isLoading: isLoadingPatients,
+    error: patientsError,
+    refetch: refetchPatients,
+  } = useQuery({
+    queryKey: ['clinicData', 'patients'],
+    queryFn: fetchPatients,
     staleTime: 5 * 60 * 1000, // 5 minutos de caché
     refetchOnWindowFocus: true,
   });
 
-  // Aplanar los datos de las páginas
-  const allPatients = useMemo(() => 
-    patientsData?.pages.flatMap(page => page.data as PatientWithSurvey[]) ?? [], 
-    [patientsData]
+  // Extraer datos de las respuestas
+  const allAppointments = useMemo(() => 
+    appointmentsResponse?.data ?? [], 
+    [appointmentsResponse]
   );
   
-  const allAppointments = useMemo(() => 
-    appointmentsData?.pages.flatMap(page => page.data as Appointment[]) ?? [], 
-    [appointmentsData]
+  const allPatients = useMemo(() => 
+    patientsResponse?.data ?? [], 
+    [patientsResponse]
   );
 
-  const enrichedData = useMemo(() => {
-    if (!allPatients.length) {
-      return {
-        enrichedPatients: [],
-        appointmentsWithPatientData: [],
-      };
-    }
+  // Estadísticas de citas ya calculadas en el backend
+  const appointmentsSummary = useMemo(() => 
+    appointmentsResponse?.summary ?? {
+      total_appointments: 0,
+      today_count: 0,
+      future_count: 0,
+      past_count: 0
+    }, 
+    [appointmentsResponse]
+  );
 
-    const appointmentsByPatientId = new Map<string, Appointment[]>();
-    if (allAppointments) {
-      for (const app of allAppointments) {
-        if (!app.patient_id) continue;
-        if (!appointmentsByPatientId.has(app.patient_id)) {
-          appointmentsByPatientId.set(app.patient_id, []);
-        }
-        appointmentsByPatientId.get(app.patient_id)!.push(app);
-      }
-    }
+  // Crear pacientes enriquecidos simples (sin lógica compleja en el cliente)
+  const enrichedPatients = useMemo(() => 
+    allPatients.map((patient: Patient): EnrichedPatient => ({
+      ...patient,
+      nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
+      displayDiagnostico: patient.diagnostico_principal || 'Sin diagnóstico',
+      encuesta_completada: false, // Se calculará en el backend si es necesario
+      encuesta: null, // Se calculará en el backend si es necesario
+      fecha_proxima_cita_iso: undefined, // Se calculará en el backend si es necesario
+    })), 
+    [allPatients]
+  );
 
-    const appointmentsWithPatientData = allAppointments.map((app: Appointment) => ({
-      ...app,
-      paciente: allPatients.find(p => p.id === app.patient_id) || null
-    }));
-
-    const enrichedPatients: EnrichedPatient[] = allPatients.map((patient: PatientWithSurvey) => {
-        const patientAppointments = appointmentsByPatientId.get(patient.id) || [];
-        patientAppointments.sort((a, b) => {
-            const dateA = a.fecha_hora_cita ? new Date(a.fecha_hora_cita).getTime() : 0;
-            const dateB = b.fecha_hora_cita ? new Date(b.fecha_hora_cita).getTime() : 0;
-            return dateB - dateA; // Sort descending to find the latest
-        });
-
-        const nextAppointment = patientAppointments.find(
-            appointment => new Date(appointment.fecha_hora_cita!) >= new Date()
-        );
-
-        return {
-            ...patient,
-            nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
-            displayDiagnostico: patient.diagnostico_principal || 'Sin diagnóstico',
-            encuesta_completada: !!patient.encuesta,
-            encuesta: patient.encuesta || null,
-            fecha_proxima_cita_iso: nextAppointment?.fecha_hora_cita,
-            totalCitas: patientAppointments.length,
-        };
-    });
-
-    return { enrichedPatients, appointmentsWithPatientData };
-  }, [allPatients, allAppointments]);
+  // Los appointmentsWithPatientData ya vienen enriquecidos del backend
+  const appointmentsWithPatientData = useMemo(() => 
+    allAppointments, 
+    [allAppointments]
+  );
 
   return {
     isLoading: isLoadingPatients || isLoadingAppointments,
@@ -158,11 +156,8 @@ export const useClinicData = () => {
     },
     allPatients,
     allAppointments,
-    // Funciones de paginación infinita
-    fetchNextPatientPage,
-    hasNextPatientPage,
-    fetchNextAppointmentPage,
-    hasNextAppointmentPage,
-    ...enrichedData,
+    enrichedPatients,
+    appointmentsWithPatientData,
+    appointmentsSummary,
   };
 };

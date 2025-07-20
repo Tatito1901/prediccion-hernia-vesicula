@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { format, isBefore, startOfDay, isWeekend, addMonths, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 
-import { useAppointments } from "@/hooks/use-appointments";
+import { useClinic } from "@/contexts/clinic-data-provider";
 import { AppointmentStatusEnum } from "@/lib/types";
 
 // ==================== TIPOS ====================
@@ -146,7 +146,13 @@ export const RescheduleDatePicker = memo<RescheduleDatePickerProps>(({
   excludeAppointmentId
 }) => {
   // Obtener citas existentes
-  const { data: appointmentsData, isLoading: isLoadingAppointments } = useAppointments(1, 100);
+  // Selector simple usando useClinic (como propuso el usuario)
+  const { allAppointments, isLoading: isLoadingAppointments } = useClinic();
+  
+  // Datos simulados para compatibilidad
+  const appointmentsData = useMemo(() => ({
+    appointments: allAppointments || []
+  }), [allAppointments]);
   const appointments = useMemo(() => appointmentsData?.appointments || [], [appointmentsData?.appointments]);
 
   // Calcular horarios disponibles para la fecha seleccionada

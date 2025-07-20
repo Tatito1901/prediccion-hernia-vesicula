@@ -55,7 +55,8 @@ import {
 } from "@/lib/types";
 
 // Hooks
-import { useAppointments, useUpdateAppointmentStatus } from "@/hooks/use-appointments";
+import { useUpdateAppointmentStatus } from "@/hooks/use-appointments";
+import { useClinic } from "@/contexts/clinic-data-provider";
 import { useBreakpointStore } from "@/hooks/use-breakpoint";
 
 // Lazy loaded components
@@ -433,9 +434,48 @@ MobileTabs.displayName = "MobileTabs";
 
 // ==================== COMPONENTE PRINCIPAL ====================
 const PatientAdmission: React.FC = () => {
-  // React Query hooks
-  const { data: appointmentsData, isLoading: isLoadingAppointments } = useAppointments(1, 100);
+  // Consumir datos del contexto central
+  const { allAppointments, appointmentsSummary, isLoading: isLoadingAppointments } = useClinic();
   const updateAppointmentStatusMutation = useUpdateAppointmentStatus();
+
+  // Selector simple para clasificar citas usando useMemo (como propuso el usuario)
+  const appointmentsByDate = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toDateString();
+    
+    const todayAppointments = allAppointments.filter(app => {
+      const appointmentDate = new Date(app.fecha_hora_cita);
+      return appointmentDate.toDateString() === todayStr;
+    });
+    
+    const futureAppointments = allAppointments.filter(app => {
+      const appointmentDate = new Date(app.fecha_hora_cita);
+      return appointmentDate > today;
+    });
+    
+    const pastAppointments = allAppointments.filter(app => {
+      const appointmentDate = new Date(app.fecha_hora_cita);
+      return appointmentDate < today && appointmentDate.toDateString() !== todayStr;
+    });
+    
+    return {
+      today: todayAppointments,
+      future: futureAppointments,
+      past: pastAppointments
+    };
+  }, [allAppointments]);
+
+  // Datos simulados para compatibilidad (hasta que se complete la refactorización)
+  const appointmentsData = useMemo(() => ({
+    appointments: allAppointments.map(adaptAppointmentData),
+    pagination: {
+      page: 1,
+      pageSize: 100,
+      totalCount: allAppointments.length,
+      totalPages: 1,
+      hasMore: false
+    }
+  }), [allAppointments]);
 
   // Responsive hook
   const { mobile: isMobile } = useBreakpointStore();

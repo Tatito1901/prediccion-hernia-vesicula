@@ -14,6 +14,12 @@ interface ClinicDataContextType {
   allAppointments: Appointment[];
   enrichedPatients: EnrichedPatient[];
   appointmentsWithPatientData: any[]; // Puedes definir un tipo más específico si lo necesitas
+  appointmentsSummary: {
+    total_appointments: number;
+    today_count: number;
+    future_count: number;
+    past_count: number;
+  };
 }
 
 // ==================== CREACIÓN DEL CONTEXTO ====================
@@ -29,6 +35,7 @@ export function ClinicDataProvider({ children }: { children: ReactNode }) {
     allAppointments,
     enrichedPatients,
     appointmentsWithPatientData,
+    appointmentsSummary,
   } = useClinicData();
 
   // Memoizamos el valor del contexto para evitar re-renders innecesarios
@@ -40,6 +47,7 @@ export function ClinicDataProvider({ children }: { children: ReactNode }) {
     allAppointments,
     enrichedPatients,
     appointmentsWithPatientData,
+    appointmentsSummary,
   }), [
     isLoading,
     error,
@@ -48,6 +56,7 @@ export function ClinicDataProvider({ children }: { children: ReactNode }) {
     allAppointments,
     enrichedPatients,
     appointmentsWithPatientData,
+    appointmentsSummary,
   ]);
 
   return (

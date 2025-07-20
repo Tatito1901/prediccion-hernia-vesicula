@@ -39,7 +39,7 @@ import {
   type TimeString
 } from "@/lib/types"
 import { useAdmitPatient } from "@/hooks/use-appointments"
-import { useAppointments } from "@/hooks/use-appointments"
+import { useClinic } from "@/contexts/clinic-data-provider"
 
 // ==================== UTILIDADES INTEGRADAS ====================
 
@@ -546,7 +546,13 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
   const [open, setOpen] = useState(false)
   
   // React Query hooks
-  const { data: appointmentsData } = useAppointments(1, 100)
+  // Selector simple usando useClinic (como propuso el usuario)
+  const { allAppointments } = useClinic();
+  
+  // Datos simulados para compatibilidad
+  const appointmentsData = useMemo(() => ({
+    appointments: allAppointments || []
+  }), [allAppointments]);
   const { mutateAsync: admitPatient, isPending: isSubmitting } = useAdmitPatient()
   
   const form = useForm<FormValues>({

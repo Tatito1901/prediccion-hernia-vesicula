@@ -1,126 +1,58 @@
-// app/api/appointments/route.ts
+// app/api/appointments/route.ts - REFACTORED TO USE ENRICHED_APPOINTMENTS RPC
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 
-// Helper para validar fechas ISO
-function isValidISODate(dateString: string): boolean {
-  if (!dateString) return false;
-  try {
-    const date = new Date(dateString);
-    return !isNaN(date.getTime());
-  } catch {
-    return false;
-  }
-}
-
-// Configuración de cache para las rutas GET de la API
+// Configuración de cache optimizada
 const cacheConfig = {
-  // Tiempo de validez de la caché del navegador (60 segundos)
-  'Cache-Control': 'max-age=60, s-maxage=60, stale-while-revalidate=300',
+  'Cache-Control': 'max-age=60, s-maxage=300, stale-while-revalidate=600',
 };
 
-// Tamaño de página predeterminado - no demasiado grande para evitar problemas de rendimiento
-const DEFAULT_PAGE_SIZE = 10;
-// Valor máximo permitido para page_size para evitar consultas muy pesadas
-const MAX_PAGE_SIZE = 50;
+// Configuración de paginación
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
 
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { searchParams } = new URL(request.url);
   
-  // Parámetros de filtro
+  // Parámetros de filtro optimizados
+  const dateFilter = searchParams.get('dateFilter'); // 'today', 'future', 'past'
   const patientId = searchParams.get('patientId');
   const doctorId = searchParams.get('doctorId');
-  const startDate = searchParams.get('startDate'); // YYYY-MM-DD
-  const endDate = searchParams.get('endDate');     // YYYY-MM-DD
+  const startDate = searchParams.get('startDate');
+  const endDate = searchParams.get('endDate');
   const estado = searchParams.get('estado');
+  const searchTerm = searchParams.get('search');
   
   // Parámetros de paginación
   const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
   let pageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE));
-  // Limitar el tamaño de página para evitar consultas demasiado pesadas
   pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
-  
-  // Calcular el rango para la paginación
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
 
   try {
-    // Validar que el rango de fechas no sea extremadamente amplio para prevenir sobrecarga
-    if (startDate && endDate && isValidISODate(startDate) && isValidISODate(endDate)) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      const diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
-      
-      // Si el rango es más de 12 meses, limitar a últimos 12 meses para evitar consultas excesivas
-      if (diffMonths > 12) {
-        console.warn('Rango de fechas demasiado amplio (>12 meses). Limitando a últimos 12 meses.');
-        const limitedStart = new Date(end);
-        limitedStart.setMonth(end.getMonth() - 12);
-        const limitedStartStr = limitedStart.toISOString().split('T')[0];
-        searchParams.set('startDate', limitedStartStr);
-      }
-    }
-    
-    // Iniciar la consulta con count para obtener el total de registros
-    let query = supabase.from('appointments').select(`
-      id,
-      patient_id,
-      doctor_id,
-      fecha_hora_cita,
-      motivo_cita,
-      estado_cita,
-      es_primera_vez,
-      notas_cita_seguimiento,
-      patients (id, nombre, apellidos, telefono),
-      doctor:profiles!appointments_doctor_id_fkey(id, full_name)
-    `, { count: 'exact' });
+    // Usar la nueva función RPC enriched_appointments
+    const { data, error } = await supabase.rpc('get_enriched_appointments', {
+      p_date_filter: dateFilter,
+      p_status_filter: estado,
+      p_patient_id: patientId,
+      p_doctor_id: doctorId,
+      p_start_date: startDate,
+      p_end_date: endDate,
+      p_search_term: searchTerm,
+      p_page_num: page,
+      p_page_size: pageSize
+    });
 
-    // Aplicar filtros
-    if (patientId) query = query.eq('patient_id', patientId);
-    if (doctorId) query = query.eq('doctor_id', doctorId);
-    // Mejorar validación de fechas para evitar errores 500
-    if (startDate && isValidISODate(startDate)) {
-      try {
-        query = query.gte('fecha_hora_cita', `${startDate}T00:00:00Z`);
-      } catch (e) {
-        console.warn(`Error al establecer fecha inicial: ${e}. Usando valor sin filtro.`);
-      }
+    if (error) {
+      console.error('Error calling enriched_appointments RPC:', error);
+      throw error;
     }
-    
-    if (endDate && isValidISODate(endDate)) {
-      try {
-        query = query.lte('fecha_hora_cita', `${endDate}T23:59:59Z`);
-      } catch (e) {
-        console.warn(`Error al establecer fecha final: ${e}. Usando valor sin filtro.`);
-      }
-    }
-    if (estado && estado !== 'todos') query = query.eq('estado_cita', estado);
-    
-    // Ordenar por fecha de consulta
-    query = query.order('fecha_hora_cita', { ascending: true });
-    
-    // Aplicar paginación
-    query = query.range(from, to);
 
-    const { data: appointments, error, count } = await query;
+    // La función RPC ya retorna el formato correcto con data, pagination y summary
+    return NextResponse.json(data, {
+      headers: cacheConfig
+    });
 
-    if (error) throw error;
-    
-    // Construir respuesta con metadatos de paginación
-    const totalCount = count || 0;
-    const totalPages = Math.ceil(totalCount / pageSize);
-    
-    return NextResponse.json({
-      data: appointments,
-      pagination: {
-        page,
-        pageSize,
-        totalCount,
-        totalPages,
-        hasMore: page < totalPages
-      }
-    }, { headers: cacheConfig });
   } catch (error: any) {
     console.error('Error en GET /api/appointments:', error);
     return NextResponse.json({ 

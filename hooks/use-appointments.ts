@@ -1,9 +1,7 @@
-// hooks/use-appointments.ts - REFACTORED TO USE CENTRAL DATA PROVIDER
-import { useMemo } from 'react';
+// hooks/use-appointments.ts - REFACTORED FOR MUTATIONS AND SPECIFIC OPERATIONS
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseISO, isValid, format } from 'date-fns';
 import { toast } from 'sonner';
-import { useClinic } from '@/contexts/clinic-data-provider';
 
 import { 
   Appointment, 
@@ -93,41 +91,6 @@ export const appointmentKeys = {
 // Hooks de React Query
 
 /**
- * Hook refactorizado que actúa como selector - NO hace fetch, consume datos del contexto central.
- * Realiza paginación sobre los datos ya existentes en memoria.
- */
-export const useAppointments = (page = 1, pageSize = 100) => {
-  // 1. Consume los datos desde la fuente única de la verdad
-  const { appointmentsWithPatientData, isLoading, error, refetch } = useClinic();
-
-  // 2. Realiza la paginación sobre los datos ya existentes en memoria
-  const paginatedData = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    const end = start + pageSize;
-    return appointmentsWithPatientData.slice(start, end);
-  }, [appointmentsWithPatientData, page, pageSize]);
-  
-  const totalCount = appointmentsWithPatientData.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-
-  // 3. Devuelve los datos en la misma estructura que antes para no romper los componentes
-  return {
-    data: {
-      appointments: paginatedData as ExtendedAppointment[],
-      pagination: {
-        page,
-        pageSize,
-        totalCount,
-        totalPages,
-        hasMore: page < totalPages
-      }
-    },
-    isLoading, // Propaga el estado de carga del hook central
-    error,
-    refetchAppointments: refetch // Expone la función de refetch central
-  };
-};
-
 /**
  * Hook para obtener una cita específica por su ID.
  */
