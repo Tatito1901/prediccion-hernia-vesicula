@@ -71,7 +71,7 @@ export const AppointmentStatusEnum = {
   CONFIRMADA: 'CONFIRMADA' as AppointmentStatus,
   CANCELADA: 'CANCELADA' as AppointmentStatus,
   COMPLETADA: 'COMPLETADA' as AppointmentStatus,
-  NO_ASISTIO: 'NO_ASISTIO' as AppointmentStatus,
+  NO_ASISTIO: 'NO ASISTIO' as AppointmentStatus,
   PRESENTE: 'PRESENTE' as AppointmentStatus,
   REAGENDADA: 'REAGENDADA' as AppointmentStatus,
 };

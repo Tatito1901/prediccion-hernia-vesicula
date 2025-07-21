@@ -110,7 +110,13 @@ export const APPOINTMENT_STATUS_UPDATE_STRATEGY: InvalidationStrategy = {
       refetchType: 'active'
     });
     
-    // 4. Invalidación condicional por cambio de estado
+    // 4. Invalidar la lista principal de admisión para refrescar la UI
+    await queryClient.invalidateQueries({ 
+      queryKey: CACHE_KEYS.appointments.list(),
+      refetchType: 'active'
+    });
+
+    // 5. Invalidar listas por estado (si cambió)
     if (oldStatus && oldStatus !== newStatus) {
       await queryClient.invalidateQueries({ 
         queryKey: CACHE_KEYS.appointments.byStatus(oldStatus),

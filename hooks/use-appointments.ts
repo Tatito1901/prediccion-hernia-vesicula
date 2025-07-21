@@ -379,12 +379,15 @@ export const useAdmitPatient = () => {
     onSuccess: async (result) => {
       const newPatient = result.patient || result;
       
-      // 🚀 SOLUCIÓN DEFINITIVA: Invalidación Universal con Hook de Migración
-      const { usePatientsMigration } = await import('@/hooks/use-patients-migration');
-      const migrationHook = usePatientsMigration();
+      // 🚀 SOLUCIÓN DEFINITIVA: Invalidación Universal con Funciones (NO hooks)
+      // Importar funciones de invalidación directamente
+      const { getPatientMutationInvalidationKeys } = await import('@/lib/query-keys');
       
       // Ejecutar invalidación universal que cubre TODOS los sistemas
-      migrationHook.invalidateAfterPatientCreation(newPatient);
+      const unifiedKeys = getPatientMutationInvalidationKeys(newPatient?.id);
+      unifiedKeys.forEach(key => {
+        queryClient.invalidateQueries({ queryKey: key });
+      });
       
       // 🎯 INVALIDACIÓN INMEDIATA ADICIONAL para máxima compatibilidad
       queryClient.invalidateQueries({ queryKey: patientKeys.all });

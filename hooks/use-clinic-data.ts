@@ -35,12 +35,12 @@ interface PaginatedPatientsResponse {
 
 // ==================== FUNCIONES DE FETCH INTELIGENTES ====================
 /**
- * Obtiene solo las citas relevantes usando filtros inteligentes
+ * Obtiene todas las citas para organizar por fechas en admisión
  */
-const fetchTodayAppointments = async (): Promise<EnrichedAppointmentsResponse> => {
+const fetchAllAppointments = async (): Promise<EnrichedAppointmentsResponse> => {
   try {
-    // ✅ Solo trae citas de HOY (mucho más eficiente)
-    const response = await fetch('/api/appointments?dateFilter=today&pageSize=50');
+    // ✅ Trae todas las citas para organizar por fechas (hoy, futuras, historial)
+    const response = await fetch('/api/appointments?pageSize=100');
     
     if (!response.ok) {
       throw new Error('Failed to fetch today appointments');
@@ -60,8 +60,8 @@ const fetchTodayAppointments = async (): Promise<EnrichedAppointmentsResponse> =
  */
 const fetchActivePatients = async (): Promise<PaginatedPatientsResponse> => {
   try {
-    // ✅ Solo trae pacientes activos recientes (mucho más eficiente)
-    const response = await fetch('/api/patients?estado=CONSULTADO&pageSize=50');
+    // ✅ Trae pacientes relevantes para admisión (CONSULTADO + PENDIENTE DE CONSULTA)
+    const response = await fetch('/api/patients?pageSize=50'); // Sin filtro de estado para incluir todos
     
     if (!response.ok) {
       throw new Error('Failed to fetch active patients');
@@ -111,16 +111,16 @@ const fetchAppointmentsByFilter = async (filter: {
  * Usa filtros inteligentes y fetch bajo demanda para máxima escalabilidad.
  */
 export const useClinicData = () => {
-  // ✅ Solo citas de HOY por defecto (mucho más eficiente)
+  // ✅ Todas las citas para organizar por fechas
   const {
-    data: todayAppointmentsResponse,
-    isLoading: isLoadingTodayAppointments,
-    error: todayAppointmentsError,
-    refetch: refetchTodayAppointments,
+    data: allAppointmentsResponse,
+    isLoading: isLoadingAllAppointments,
+    error: allAppointmentsError,
+    refetch: refetchAllAppointments,
   } = useQuery({
-    queryKey: ['clinicData', 'todayAppointments'],
-    queryFn: fetchTodayAppointments,
-    staleTime: 2 * 60 * 1000, // 2 minutos de caché (más frecuente para citas de hoy)
+    queryKey: ['clinicData', 'allAppointments'],
+    queryFn: fetchAllAppointments,
+    staleTime: 2 * 60 * 1000, // 2 minutos de caché
     refetchOnWindowFocus: true,
   });
 
@@ -137,21 +137,44 @@ export const useClinicData = () => {
     refetchOnWindowFocus: true,
   });
 
-  // Extraer datos esenciales
-  const todayAppointments = useMemo(() => 
-    todayAppointmentsResponse?.data ?? [], 
-    [todayAppointmentsResponse]
-  );
+  // ✅ SOLUCIÓN ROBUSTA: Extraer y transformar datos con validación
+  const allAppointments = useMemo(() => {
+    // Importar utilidades de transformación
+    const { validateAndFilterApiAppointments, transformApiAppointments } = require('@/utils/appointment-transformer');
+    
+    let rawData: any[] = [];
+    
+    // Manejar tanto array directo como objeto con data
+    if (Array.isArray(allAppointmentsResponse)) {
+      rawData = allAppointmentsResponse;
+    } else if (allAppointmentsResponse?.data && Array.isArray(allAppointmentsResponse.data)) {
+      rawData = allAppointmentsResponse.data;
+    }
+    
+    // Validar y filtrar datos de la API
+    const validApiAppointments = validateAndFilterApiAppointments(rawData);
+    
+    // Transformar a formato normalizado
+    const normalizedAppointments = transformApiAppointments(validApiAppointments);
+    
+    console.log('🔍 Citas procesadas:', {
+      raw: rawData.length,
+      valid: validApiAppointments.length,
+      normalized: normalizedAppointments.length
+    });
+    
+    return normalizedAppointments;
+  }, [allAppointmentsResponse]);
   
   const activePatients = useMemo(() => 
     activePatientsResponse?.data ?? [], 
     [activePatientsResponse]
   );
 
-  // Estadísticas de citas de hoy
+  // Resumen de citas (si existe)
   const appointmentsSummary = useMemo(() => 
-    todayAppointmentsResponse?.summary ?? {}, 
-    [todayAppointmentsResponse]
+    allAppointmentsResponse?.summary ?? {}, 
+    [allAppointmentsResponse]
   );
 
   // ✅ Función para obtener datos específicos bajo demanda
@@ -179,22 +202,22 @@ export const useClinicData = () => {
 
   // Los appointmentsWithPatientData ya vienen enriquecidos del backend
   const appointmentsWithPatientData = useMemo(() => 
-    todayAppointments, 
-    [todayAppointments]
+    allAppointments, 
+    [allAppointments]
   );
 
   return {
     // Estados de carga y error actualizados
-    isLoading: isLoadingActivePatients || isLoadingTodayAppointments,
-    error: activePatientsError || todayAppointmentsError,
+    isLoading: isLoadingActivePatients || isLoadingAllAppointments,
+    error: activePatientsError || allAppointmentsError,
     refetch: () => { 
       refetchActivePatients(); 
-      refetchTodayAppointments(); 
+      refetchAllAppointments(); 
     },
     
-    // ✅ Datos esenciales (solo lo necesario)
-    allPatients: activePatients, // Solo pacientes activos
-    allAppointments: todayAppointments, // Solo citas de hoy
+    // ✅ Datos esenciales (todas las citas para organizar por fechas)
+    allPatients: activePatients, // Todos los pacientes
+    allAppointments: allAppointments, // Todas las citas
     enrichedPatients,
     appointmentsWithPatientData,
     appointmentsSummary,

@@ -5,7 +5,8 @@ import React, {
   memo, 
   Suspense,
   lazy,
-  startTransition
+  startTransition,
+  useMemo
 } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -51,26 +52,28 @@ import {
   AppointmentStatusEnum,
   AppointmentStatus 
 } from '@/lib/types';
+import type {
+  NormalizedAppointment,
+  AppointmentsByDate,
+  AppointmentCounts
+} from '@/types/appointments';
 
 // Hooks unificados - SOLUCIÓN A LA ARQUITECTURA INCONSISTENTE
 import { 
   useFilteredAppointments, 
   useAppointmentCounts,
   formatDisplayDate,
-  type UnifiedAppointment,
-  type AppointmentsByDate,
-  type AppointmentCounts 
 } from '@/hooks/use-unified-filtering';
 
 // Contexto centralizado
-// import { useClinic } from "@/contexts/clinic-data-provider";
-
-// Hooks de mutación
-import { useUpdateAppointmentStatus } from "@/hooks/use-appointments";
+import { useClinic } from '@/contexts/clinic-data-provider';
+import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
+import { useAdmissionData } from '@/hooks/use-admission-data';
+import { usePatientsMigration } from '@/hooks/use-patients-migration';
 
 // Componentes lazy (optimización)
 const NewPatientForm = lazy(() => import("./new-patient-form"));
-const PatientAdmissionReschedule = lazy(() => import("./patient-admission-reschedule"));
+const RescheduleDatePicker = lazy(() => import("./patient-admission-reschedule"));
 
 // ==================== CONFIGURACIONES ESTÁTICAS ====================
 const TABS_CONFIG = [
@@ -114,7 +117,7 @@ const STATUS_CONFIG = {
 } as const;
 
 type TabValue = typeof TABS_CONFIG[number]['value'];
-type ConfirmAction = { type: 'checkIn' | 'complete' | 'cancel' | 'noShow' | 'reschedule'; appointment: UnifiedAppointment };
+type ConfirmAction = { type: 'checkIn' | 'complete' | 'cancel' | 'noShow' | 'reschedule'; appointment: NormalizedAppointment };
 
 // ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
 const LoadingSpinner = memo(() => (
@@ -142,20 +145,23 @@ const EmptyState = memo<{
 ));
 EmptyState.displayName = "EmptyState";
 
+// ✅ SOLUCIÓN ROBUSTA: Importar tipos normalizados
+
 const AppointmentCard = memo<{
-  appointment: UnifiedAppointment;
-  onCheckIn: (appointment: UnifiedAppointment) => void;
-  onComplete: (appointment: UnifiedAppointment) => void;
-  onCancel: (appointment: UnifiedAppointment) => void;
-  onNoShow: (appointment: UnifiedAppointment) => void;
-  onReschedule: (appointment: UnifiedAppointment) => void;
+  appointment: NormalizedAppointment;
+  onCheckIn: (appointment: NormalizedAppointment) => void;
+  onComplete: (appointment: NormalizedAppointment) => void;
+  onCancel: (appointment: NormalizedAppointment) => void;
+  onNoShow: (appointment: NormalizedAppointment) => void;
+  onReschedule: (appointment: NormalizedAppointment) => void;
 }>(({ appointment, onCheckIn, onComplete, onCancel, onNoShow, onReschedule }) => {
-  const statusConfig = STATUS_CONFIG[appointment.estado as AppointmentStatus] || STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
+  // ✅ Usar datos normalizados
+  const statusConfig = STATUS_CONFIG[appointment.status] || STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
   const StatusIcon = statusConfig.icon;
 
-  const canCheckIn = appointment.estado === AppointmentStatusEnum.PROGRAMADA;
-  const canComplete = appointment.estado === AppointmentStatusEnum.PRESENTE;
-  const canModify = [AppointmentStatusEnum.PROGRAMADA, AppointmentStatusEnum.PRESENTE].includes(appointment.estado as AppointmentStatus);
+  const canCheckIn = appointment.status === AppointmentStatusEnum.PROGRAMADA;
+  const canComplete = appointment.status === AppointmentStatusEnum.PRESENTE;
+  const canModify = [AppointmentStatusEnum.PROGRAMADA, AppointmentStatusEnum.PRESENTE].includes(appointment.status);
 
   return (
     <Card className="hover:shadow-md transition-shadow duration-200">
@@ -164,17 +170,18 @@ const AppointmentCard = memo<{
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                {appointment.paciente.nombre} {appointment.paciente.apellidos}
+                {/* ✅ Usar datos normalizados */}
+                {appointment.patient.name} {appointment.patient.lastName}
               </h3>
-              {appointment.esNuevoPaciente && (
+              {appointment.isFirstTime && (
                 <Badge variant="secondary" className="text-xs">Nuevo</Badge>
               )}
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-              {appointment.horaConsulta} • {appointment.motivoConsulta}
+              {appointment.dateTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} • {appointment.motivo}
             </p>
             <p className="text-xs text-gray-500">
-              {appointment.estado === AppointmentStatusEnum.NO_ASISTIO ? "NO_ASISTIO" : ""} {appointment.paciente.telefono} • Dr: {appointment.doctor}
+              {appointment.patient.phone || 'Sin teléfono'} • Estado: {appointment.status}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -185,9 +192,9 @@ const AppointmentCard = memo<{
           </div>
         </div>
 
-        {appointment.notas && (
+        {appointment.notes && (
           <div className="mb-3 p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs">
-            <strong>Notas:</strong> {appointment.notas}
+            <strong>Notas:</strong> {appointment.notes}
           </div>
         )}
 
@@ -275,26 +282,30 @@ const PatientAdmission: React.FC = () => {
   // Estados locales
   const [activeTab, setActiveTab] = useState<TabValue>("today");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-  const [rescheduleAppointment, setRescheduleAppointment] = useState<UnifiedAppointment | null>(null);
+  const [rescheduleAppointment, setRescheduleAppointment] = useState<NormalizedAppointment | null>(null);
 
-  // ✅ ÚNICA FUENTE DE VERDAD - Contexto centralizado
-  // TODO: Migrar a nueva arquitectura backend-first
-  // const {
-  //   todayAppointments,
-  //   isLoading,
-  //   error,
-  //   refetch,
-  // } = useClinic();
+  // ✅ SOLUCIÓN ROBUSTA: Hook específico para admisión
+  const {
+    appointmentsByDate,
+    appointmentCounts,
+    isLoading,
+    error,
+    refetch
+  } = useAdmissionData();
   
-  // Datos temporales para evitar errores de compilación
-  const todayAppointments: any[] = [];
-  const isLoading = false;
-  const error: { message?: string } | null = null;
-  const refetch = () => {};
+  // Obtener pacientes disponibles del contexto existente
+  const { allPatients } = useClinic();
 
-  // ✅ HOOKS UNIFICADOS - Solución a la arquitectura inconsistente
-  const appointmentsByDate: AppointmentsByDate = useFilteredAppointments(todayAppointments);
-  const appointmentCounts: AppointmentCounts = useAppointmentCounts(appointmentsByDate);
+  // ✅ PACIENTES DISPONIBLES (cuando no hay citas programadas)
+  const availablePatients = useMemo(() => {
+    if (!allPatients) return [];
+    // Mostrar pacientes que no tienen cita hoy o pacientes recientes
+    return allPatients.slice(0, 10); // Limitar a 10 para no sobrecargar la UI
+  }, [allPatients]);
+
+  // ✅ DETERMINAR QUÉ MOSTRAR
+  const hasAppointments = appointmentsByDate.today.length > 0 || appointmentsByDate.future.length > 0 || appointmentsByDate.past.length > 0;
+  const hasPatients = availablePatients.length > 0;
 
   // Mutaciones
   const updateAppointmentStatus = useUpdateAppointmentStatus();
@@ -316,11 +327,11 @@ const PatientAdmission: React.FC = () => {
     const { type, appointment } = confirmAction;
     
     const statusMap = {
-      checkIn: AppointmentStatusEnum.PRESENTE,
-      complete: AppointmentStatusEnum.COMPLETADA,
-      cancel: AppointmentStatusEnum.CANCELADA,
-      noShow: AppointmentStatusEnum.NO_ASISTIO,
-      reschedule: AppointmentStatusEnum.REAGENDADA,
+      checkIn: 'PRESENTE' as keyof typeof AppointmentStatusEnum,
+      complete: 'COMPLETADA' as keyof typeof AppointmentStatusEnum,
+      cancel: 'CANCELADA' as keyof typeof AppointmentStatusEnum,
+      noShow: 'NO_ASISTIO' as keyof typeof AppointmentStatusEnum,
+      reschedule: 'REAGENDADA' as keyof typeof AppointmentStatusEnum,
     };
 
     try {
@@ -336,7 +347,7 @@ const PatientAdmission: React.FC = () => {
     }
   }, [confirmAction, updateAppointmentStatus]);
 
-  const handleReschedule = useCallback((appointment: UnifiedAppointment) => {
+  const handleReschedule = useCallback((appointment: NormalizedAppointment) => {
     setRescheduleAppointment(appointment);
   }, []);
 
@@ -396,12 +407,45 @@ const PatientAdmission: React.FC = () => {
         <TabsContent value="today" className="mt-0">
           {isLoading ? (
             <LoadingSpinner />
-          ) : appointmentsByDate.today.length === 0 ? (
-            <EmptyState
-              title="No hay citas para hoy"
-              description="No tienes citas programadas para el día de hoy"
-              icon={CalendarBlank}
-            />
+          ) : !hasAppointments ? (
+            <div className="space-y-6">
+              <EmptyState
+                title="No hay citas para hoy"
+                description="No tienes citas programadas para el día de hoy"
+                icon={CalendarBlank}
+              />
+              {hasPatients && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+                    Pacientes Disponibles ({availablePatients.length})
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {availablePatients.map((patient: any) => (
+                      <div key={patient.id} className="bg-white dark:bg-gray-800 rounded-lg border p-4 hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                            {patient.nombre} {patient.apellido}
+                          </h4>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            patient.estado === 'PENDIENTE DE CONSULTA' 
+                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                              : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                          }`}>
+                            {patient.estado}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          {patient.email || 'Sin email'}
+                        </p>
+                        <Button size="sm" className="w-full">
+                          Agendar Cita
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {appointmentsByDate.today.map((appointment) => (
@@ -484,7 +528,7 @@ const PatientAdmission: React.FC = () => {
                   confirmAction.type === 'complete' ? 'completar la consulta' :
                   confirmAction.type === 'cancel' ? 'cancelar la cita' :
                   confirmAction.type === 'noShow' ? 'marcar como no asistió' : 'reagendar la cita'} 
-                  para {confirmAction.appointment.paciente.nombre} {confirmAction.appointment.paciente.apellidos}?
+                  para {confirmAction.appointment.patient.name} {confirmAction.appointment.patient.lastName}?
                 </>
               )}
             </AlertDialogDescription>
@@ -501,9 +545,16 @@ const PatientAdmission: React.FC = () => {
       {/* Dialog de reagendamiento */}
       {rescheduleAppointment && (
         <Suspense fallback={<LoadingSpinner />}>
-          <PatientAdmissionReschedule
-            appointment={rescheduleAppointment}
-            onClose={() => setRescheduleAppointment(null)}
+          <RescheduleDatePicker
+            rescheduleState={{
+              selectedDate: null,
+              selectedTime: null
+            }}
+            onStateChange={(newState) => {
+              // Handle reschedule state changes
+              console.log('Reschedule state changed:', newState);
+            }}
+            excludeAppointmentId={rescheduleAppointment.id}
           />
         </Suspense>
       )}
