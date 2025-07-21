@@ -1,6 +1,6 @@
 // hooks/use-clinic-data.ts - REFACTORED TO USE ENRICHED BACKEND DATA
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { Patient, Appointment, EnrichedPatient } from '@/lib/types';
 import { toast } from 'sonner';
 
@@ -33,104 +33,140 @@ interface PaginatedPatientsResponse {
   };
 }
 
-// ==================== FUNCIONES DE FETCH OPTIMIZADAS ====================
+// ==================== FUNCIONES DE FETCH INTELIGENTES ====================
 /**
- * Obtiene citas enriquecidas usando la nueva función RPC
+ * Obtiene solo las citas relevantes usando filtros inteligentes
  */
-const fetchEnrichedAppointments = async (): Promise<EnrichedAppointmentsResponse> => {
+const fetchTodayAppointments = async (): Promise<EnrichedAppointmentsResponse> => {
   try {
-    const response = await fetch('/api/appointments?pageSize=100');
+    // ✅ Solo trae citas de HOY (mucho más eficiente)
+    const response = await fetch('/api/appointments?dateFilter=today&pageSize=50');
     
     if (!response.ok) {
-      throw new Error('Failed to fetch enriched appointments');
+      throw new Error('Failed to fetch today appointments');
     }
     
     return response.json();
   } catch (error) {
-    toast.error('Error al cargar citas', {
-      description: 'No se pudieron cargar las citas enriquecidas. Por favor, intente nuevamente.',
+    toast.error('Error al cargar citas de hoy', {
+      description: 'No se pudieron cargar las citas de hoy. Por favor, intente nuevamente.',
     });
     throw error;
   }
 };
 
 /**
- * Obtiene pacientes usando la API optimizada
+ * Obtiene pacientes activos recientes (no todos)
  */
-const fetchPatients = async (): Promise<PaginatedPatientsResponse> => {
+const fetchActivePatients = async (): Promise<PaginatedPatientsResponse> => {
   try {
-    const response = await fetch('/api/patients?pageSize=100');
+    // ✅ Solo trae pacientes activos recientes (mucho más eficiente)
+    const response = await fetch('/api/patients?estado=ACTIVO&pageSize=50');
     
     if (!response.ok) {
-      throw new Error('Failed to fetch patients');
+      throw new Error('Failed to fetch active patients');
     }
     
     return response.json();
   } catch (error) {
-    toast.error('Error al cargar pacientes', {
-      description: 'No se pudieron cargar los pacientes. Por favor, intente nuevamente.',
+    toast.error('Error al cargar pacientes activos', {
+      description: 'No se pudieron cargar los pacientes activos. Por favor, intente nuevamente.',
     });
     throw error;
   }
 };
 
-// ==================== HOOK PRINCIPAL OPTIMIZADO ====================
 /**
- * Hook centralizado refactorizado que consume datos ya enriquecidos del backend.
- * Elimina el enriquecimiento en el cliente para mejorar performance y escalabilidad.
+ * Función para obtener datos específicos bajo demanda
+ */
+const fetchAppointmentsByFilter = async (filter: {
+  dateFilter?: 'today' | 'future' | 'past';
+  patientId?: string;
+  search?: string;
+  pageSize?: number;
+}): Promise<EnrichedAppointmentsResponse> => {
+  try {
+    const params = new URLSearchParams();
+    if (filter.dateFilter) params.append('dateFilter', filter.dateFilter);
+    if (filter.patientId) params.append('patientId', filter.patientId);
+    if (filter.search) params.append('search', filter.search);
+    params.append('pageSize', String(filter.pageSize || 20));
+    
+    const response = await fetch(`/api/appointments?${params.toString()}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch filtered appointments');
+    }
+    
+    return response.json();
+  } catch (error) {
+    toast.error('Error al cargar citas filtradas');
+    throw error;
+  }
+};
+
+// ==================== HOOK PRINCIPAL INTELIGENTE ====================
+/**
+ * Hook centralizado verdaderamente eficiente que solo trae datos esenciales.
+ * Usa filtros inteligentes y fetch bajo demanda para máxima escalabilidad.
  */
 export const useClinicData = () => {
-  // Query optimizada para citas enriquecidas
+  // ✅ Solo citas de HOY por defecto (mucho más eficiente)
   const {
-    data: appointmentsResponse,
-    isLoading: isLoadingAppointments,
-    error: appointmentsError,
-    refetch: refetchAppointments,
+    data: todayAppointmentsResponse,
+    isLoading: isLoadingTodayAppointments,
+    error: todayAppointmentsError,
+    refetch: refetchTodayAppointments,
   } = useQuery({
-    queryKey: ['clinicData', 'enrichedAppointments'],
-    queryFn: fetchEnrichedAppointments,
-    staleTime: 3 * 60 * 1000, // 3 minutos de caché
+    queryKey: ['clinicData', 'todayAppointments'],
+    queryFn: fetchTodayAppointments,
+    staleTime: 2 * 60 * 1000, // 2 minutos de caché (más frecuente para citas de hoy)
     refetchOnWindowFocus: true,
   });
 
-  // Query optimizada para pacientes
+  // ✅ Solo pacientes activos recientes (mucho más eficiente)
   const {
-    data: patientsResponse,
-    isLoading: isLoadingPatients,
-    error: patientsError,
-    refetch: refetchPatients,
+    data: activePatientsResponse,
+    isLoading: isLoadingActivePatients,
+    error: activePatientsError,
+    refetch: refetchActivePatients,
   } = useQuery({
-    queryKey: ['clinicData', 'patients'],
-    queryFn: fetchPatients,
+    queryKey: ['clinicData', 'activePatients'],
+    queryFn: fetchActivePatients,
     staleTime: 5 * 60 * 1000, // 5 minutos de caché
     refetchOnWindowFocus: true,
   });
 
-  // Extraer datos de las respuestas
-  const allAppointments = useMemo(() => 
-    appointmentsResponse?.data ?? [], 
-    [appointmentsResponse]
+  // Extraer datos esenciales
+  const todayAppointments = useMemo(() => 
+    todayAppointmentsResponse?.data ?? [], 
+    [todayAppointmentsResponse]
   );
   
-  const allPatients = useMemo(() => 
-    patientsResponse?.data ?? [], 
-    [patientsResponse]
+  const activePatients = useMemo(() => 
+    activePatientsResponse?.data ?? [], 
+    [activePatientsResponse]
   );
 
-  // Estadísticas de citas ya calculadas en el backend
+  // Estadísticas de citas de hoy
   const appointmentsSummary = useMemo(() => 
-    appointmentsResponse?.summary ?? {
-      total_appointments: 0,
-      today_count: 0,
-      future_count: 0,
-      past_count: 0
-    }, 
-    [appointmentsResponse]
+    todayAppointmentsResponse?.summary ?? {}, 
+    [todayAppointmentsResponse]
   );
+
+  // ✅ Función para obtener datos específicos bajo demanda
+  const fetchSpecificAppointments = useCallback(async (filter: {
+    dateFilter?: 'today' | 'future' | 'past';
+    patientId?: string;
+    search?: string;
+    pageSize?: number;
+  }) => {
+    return await fetchAppointmentsByFilter(filter);
+  }, []);
 
   // Crear pacientes enriquecidos simples (sin lógica compleja en el cliente)
   const enrichedPatients = useMemo(() => 
-    allPatients.map((patient: Patient): EnrichedPatient => ({
+    activePatients.map((patient: Patient): EnrichedPatient => ({
       ...patient,
       nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
       displayDiagnostico: patient.diagnostico_principal || 'Sin diagnóstico',
@@ -138,26 +174,32 @@ export const useClinicData = () => {
       encuesta: null, // Se calculará en el backend si es necesario
       fecha_proxima_cita_iso: undefined, // Se calculará en el backend si es necesario
     })), 
-    [allPatients]
+    [activePatients]
   );
 
   // Los appointmentsWithPatientData ya vienen enriquecidos del backend
   const appointmentsWithPatientData = useMemo(() => 
-    allAppointments, 
-    [allAppointments]
+    todayAppointments, 
+    [todayAppointments]
   );
 
   return {
-    isLoading: isLoadingPatients || isLoadingAppointments,
-    error: patientsError || appointmentsError,
+    // Estados de carga y error actualizados
+    isLoading: isLoadingActivePatients || isLoadingTodayAppointments,
+    error: activePatientsError || todayAppointmentsError,
     refetch: () => { 
-      refetchPatients(); 
-      refetchAppointments(); 
+      refetchActivePatients(); 
+      refetchTodayAppointments(); 
     },
-    allPatients,
-    allAppointments,
+    
+    // ✅ Datos esenciales (solo lo necesario)
+    allPatients: activePatients, // Solo pacientes activos
+    allAppointments: todayAppointments, // Solo citas de hoy
     enrichedPatients,
     appointmentsWithPatientData,
     appointmentsSummary,
+    
+    // ✅ Función para fetch bajo demanda
+    fetchSpecificAppointments,
   };
 };
