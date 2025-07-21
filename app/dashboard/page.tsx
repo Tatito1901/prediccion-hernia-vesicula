@@ -6,7 +6,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 
 // Import components statically instead of using dynamic imports
-import { DashboardMetrics } from "../../components/dashboard/dashboard-metrics";
+import DashboardMetrics from "../../components/dashboard/dashboard-metrics";
 import { PatientTrendsChart } from "../../components/dashboard/patients-chart";
 
 export default function DashboardPage() {

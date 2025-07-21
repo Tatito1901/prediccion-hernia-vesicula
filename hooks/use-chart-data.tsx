@@ -17,10 +17,7 @@ type DiagnosisEnum = Database['public']['Enums']['diagnosis_enum'];
 type PatientStatus = Database['public']['Enums']['patient_status_enum'];
 type AppointmentStatus = Database['public']['Enums']['appointment_status_enum'];
 
-// Interfaz para citas enriquecidas con datos del paciente y doctor.
-export interface ExtendedAppointment extends Appointment {
-  patients: Patient | null; // Corregido de 'paciente' a 'patients' si así viene de la query
-}
+
 
 
 
@@ -91,7 +88,7 @@ interface WeekdayData {
 // Propiedades de entrada para el hook
 interface UseChartDataProps {
   patients: Patient[];
-  appointments: ExtendedAppointment[];
+  appointments: Appointment[];
   dateRange: string;
   patientId?: string;
   doctorId?: string;
@@ -105,22 +102,35 @@ interface UseChartDataProps {
  * @returns Un objeto con datos listos para la UI, estados de carga y error.
  */
 export function useChartData({
-  patients: allPatients,
-  appointments: allAppointments,
+  patients,
+  appointments,
   dateRange,
   patientId,
   doctorId,
   estado = 'todos'
 }: UseChartDataProps) {
+  // --- GUARD CLAUSE --- 
+  // Si no hay pacientes, no se puede calcular nada. Devuelve un estado vacío.
+  if (!patients || patients.length === 0) {
+    return {
+      transformedPatients: [],
+      generalStats: { total: 0, nuevosEsteMes: 0, operados: 0, enSeguimiento: 0 },
+      diagnosisData: [],
+      weekdayDistribution: [],
+      filteredAppointments: [],
+      clinicMetrics: null,
+      chart: { series: [], categories: [] },
+    };
+  }
 
   // --- 2. FILTRADO DE DATOS ---
 
     const { startDate, endDate } = useMemo(() => calculateDateRange(dateRange), [dateRange]);
 
   const filteredAppointments = useMemo(() => {
-    if (!allAppointments.length || !startDate || !endDate) return [];
+    if (!appointments || !appointments.length || !startDate || !endDate) return [];
     
-    return allAppointments.filter(appt => {
+    return appointments.filter((appt: Appointment) => {
       const apptDateStr = appt.fecha_hora_cita;
       if (!apptDateStr || !isValidISODate(apptDateStr)) return false;
 
@@ -132,12 +142,12 @@ export function useChartData({
 
       return true;
     });
-  }, [allAppointments, startDate, endDate, doctorId, patientId, estado]);
+  }, [appointments, startDate, endDate, doctorId, patientId, estado]);
 
   const filteredPatients = useMemo((): Patient[] => {
-    const patientIdsInFilteredAppointments = new Set(filteredAppointments.map(a => a.patient_id).filter(Boolean));
-    return allPatients.filter(p => patientIdsInFilteredAppointments.has(p.id));
-  }, [allPatients, filteredAppointments]);
+    const patientIdsInFilteredAppointments = new Set(filteredAppointments.map((a: Appointment) => a.patient_id).filter(Boolean));
+    return patients.filter((p: Patient) => patientIdsInFilteredAppointments.has(p.id));
+  }, [patients, filteredAppointments]);
 
   // --- 3. TRANSFORMACIÓN DE DATOS PARA LA UI ---
 

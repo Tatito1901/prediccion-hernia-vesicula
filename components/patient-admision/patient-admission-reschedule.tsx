@@ -441,3 +441,5 @@ export const RescheduleDatePicker = memo<RescheduleDatePickerProps>(({
 });
 
 RescheduleDatePicker.displayName = "RescheduleDatePicker";
+
+export default RescheduleDatePicker;

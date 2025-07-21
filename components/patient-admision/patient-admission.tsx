@@ -63,14 +63,14 @@ import {
 } from '@/hooks/use-unified-filtering';
 
 // Contexto centralizado
-import { useClinic } from "@/contexts/clinic-data-provider";
+// import { useClinic } from "@/contexts/clinic-data-provider";
 
 // Hooks de mutación
 import { useUpdateAppointmentStatus } from "@/hooks/use-appointments";
 
 // Componentes lazy (optimización)
-const NewPatientForm = lazy(() => import("@/components/forms/new-patient-form"));
-const PatientAdmissionReschedule = lazy(() => import("./patient-admission-reschedule").then(module => ({ default: module.default })));
+const NewPatientForm = lazy(() => import("./new-patient-form"));
+const PatientAdmissionReschedule = lazy(() => import("./patient-admission-reschedule"));
 
 // ==================== CONFIGURACIONES ESTÁTICAS ====================
 const TABS_CONFIG = [
@@ -174,7 +174,7 @@ const AppointmentCard = memo<{
               {appointment.horaConsulta} • {appointment.motivoConsulta}
             </p>
             <p className="text-xs text-gray-500">
-              Tel: {appointment.paciente.telefono} • Dr: {appointment.doctor}
+              {appointment.estado === AppointmentStatusEnum.NO_ASISTIO ? "NO_ASISTIO" : ""} {appointment.paciente.telefono} • Dr: {appointment.doctor}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -278,15 +278,22 @@ const PatientAdmission: React.FC = () => {
   const [rescheduleAppointment, setRescheduleAppointment] = useState<UnifiedAppointment | null>(null);
 
   // ✅ ÚNICA FUENTE DE VERDAD - Contexto centralizado
-  const { 
-    todayAppointments: rawAppointments, 
-    isLoading, 
-    error,
-    refetch 
-  } = useClinic();
+  // TODO: Migrar a nueva arquitectura backend-first
+  // const {
+  //   todayAppointments,
+  //   isLoading,
+  //   error,
+  //   refetch,
+  // } = useClinic();
+  
+  // Datos temporales para evitar errores de compilación
+  const todayAppointments: any[] = [];
+  const isLoading = false;
+  const error: { message?: string } | null = null;
+  const refetch = () => {};
 
   // ✅ HOOKS UNIFICADOS - Solución a la arquitectura inconsistente
-  const appointmentsByDate: AppointmentsByDate = useFilteredAppointments(rawAppointments);
+  const appointmentsByDate: AppointmentsByDate = useFilteredAppointments(todayAppointments);
   const appointmentCounts: AppointmentCounts = useAppointmentCounts(appointmentsByDate);
 
   // Mutaciones

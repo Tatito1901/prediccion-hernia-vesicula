@@ -1,9 +1,10 @@
-// components/dashboard/dashboard-metrics-new.tsx - REFACTORIZADO CON SISTEMA GENÉRICO
+// components/dashboard/dashboard-metrics.tsx - REFACTORIZADO CON TENDENCIAS REALES
 "use client";
 
 import React, { useMemo, memo } from "react";
 import { Users, CheckCircle2, XCircle, Activity, UserPlus, PercentCircle } from "lucide-react";
 import { useClinic } from "@/contexts/clinic-data-provider";
+import { useDashboardTrends } from "@/hooks/use-trends";
 import { 
   MetricsGrid, 
   createMetric, 
@@ -65,7 +66,14 @@ const DashboardMetrics: React.FC = () => {
     refetchPatients
   } = useClinic();
 
-  // 📊 Crear métricas usando el sistema genérico
+  // 📈 Tendencias históricas reales
+  const {
+    data: trends,
+    isLoading: trendsLoading,
+    error: trendsError
+  } = useDashboardTrends();
+
+  // 📊 Crear métricas usando el sistema genérico CON TENDENCIAS REALES
   const metrics: MetricValue[] = useMemo(() => {
     if (!patientsStats) {
       return Object.values(METRICS_CONFIG).map(config => 
@@ -82,8 +90,15 @@ const DashboardMetrics: React.FC = () => {
     // Calcular métricas derivadas
     const pacientesNoOperados = statusStats?.['no_operado'] || 0;
     const pacientesSeguimiento = statusStats?.['en_seguimiento'] || 0;
-    const pacientesNuevosMes = Math.floor(totalPatients * 0.1); // Estimación temporal
     const tasaConversion = operatedPatients > 0 ? (operatedPatients / totalPatients) * 100 : 0;
+
+    // 🎯 USAR TENDENCIAS REALES DE LA API
+    const totalPatientsTrend = trends?.totalPatients || { trend: 'neutral', trendValue: '0%' };
+    const operatedPatientsTrend = trends?.operatedPatients || { trend: 'neutral', trendValue: '0%' };
+    const nonOperatedPatientsTrend = trends?.nonOperatedPatients || { trend: 'neutral', trendValue: '0%' };
+    const followUpPatientsTrend = trends?.followUpPatients || { trend: 'neutral', trendValue: '0%' };
+    const newPatientsTrend = trends?.newPatients || { trend: 'neutral', trendValue: '0%' };
+    const conversionRateTrend = trends?.conversionRate || { trend: 'neutral', trendValue: '0%' };
 
     return [
       createMetric(
@@ -93,8 +108,8 @@ const DashboardMetrics: React.FC = () => {
           icon: METRICS_CONFIG.totalPacientes.icon,
           color: METRICS_CONFIG.totalPacientes.color,
           description: METRICS_CONFIG.totalPacientes.description,
-          trend: totalPatients > 50 ? 'up' : 'neutral',
-          trendValue: totalPatients > 50 ? '+12%' : '0%'
+          trend: totalPatientsTrend.trend,
+          trendValue: totalPatientsTrend.trendValue
         }
       ),
       createMetric(
@@ -104,8 +119,8 @@ const DashboardMetrics: React.FC = () => {
           icon: METRICS_CONFIG.pacientesOperados.icon,
           color: METRICS_CONFIG.pacientesOperados.color,
           description: METRICS_CONFIG.pacientesOperados.description,
-          trend: operatedPatients > 0 ? 'up' : 'neutral',
-          trendValue: operatedPatients > 0 ? '+8%' : '0%'
+          trend: operatedPatientsTrend.trend,
+          trendValue: operatedPatientsTrend.trendValue
         }
       ),
       createMetric(
@@ -115,7 +130,8 @@ const DashboardMetrics: React.FC = () => {
           icon: METRICS_CONFIG.pacientesNoOperados.icon,
           color: METRICS_CONFIG.pacientesNoOperados.color,
           description: METRICS_CONFIG.pacientesNoOperados.description,
-          trend: pacientesNoOperados > 10 ? 'down' : 'neutral'
+          trend: nonOperatedPatientsTrend.trend,
+          trendValue: nonOperatedPatientsTrend.trendValue
         }
       ),
       createMetric(
@@ -125,18 +141,19 @@ const DashboardMetrics: React.FC = () => {
           icon: METRICS_CONFIG.pacientesSeguimiento.icon,
           color: METRICS_CONFIG.pacientesSeguimiento.color,
           description: METRICS_CONFIG.pacientesSeguimiento.description,
-          trend: 'neutral'
+          trend: followUpPatientsTrend.trend,
+          trendValue: followUpPatientsTrend.trendValue
         }
       ),
       createMetric(
         METRICS_CONFIG.pacientesNuevosMes.label,
-        formatMetricValue(pacientesNuevosMes),
+        formatMetricValue(trends?.newPatients.current || 0),
         {
           icon: METRICS_CONFIG.pacientesNuevosMes.icon,
           color: METRICS_CONFIG.pacientesNuevosMes.color,
           description: METRICS_CONFIG.pacientesNuevosMes.description,
-          trend: pacientesNuevosMes > 5 ? 'up' : 'neutral',
-          trendValue: pacientesNuevosMes > 5 ? '+15%' : '0%'
+          trend: newPatientsTrend.trend,
+          trendValue: newPatientsTrend.trendValue
         }
       ),
       createMetric(
@@ -146,12 +163,12 @@ const DashboardMetrics: React.FC = () => {
           icon: METRICS_CONFIG.tasaConversion.icon,
           color: METRICS_CONFIG.tasaConversion.color,
           description: METRICS_CONFIG.tasaConversion.description,
-          trend: tasaConversion > 50 ? 'up' : tasaConversion > 25 ? 'neutral' : 'down',
-          trendValue: `${tasaConversion > 50 ? '+' : tasaConversion < 25 ? '-' : ''}${Math.abs(tasaConversion - 40).toFixed(1)}%`
+          trend: conversionRateTrend.trend,
+          trendValue: conversionRateTrend.trendValue
         }
       )
     ];
-  }, [patientsStats]);
+  }, [patientsStats, trends]);
 
   // 🚨 Manejo de errores
   if (patientsError) {
@@ -162,13 +179,17 @@ const DashboardMetrics: React.FC = () => {
     );
   }
 
+  if (trendsError) {
+    console.warn('Error al cargar tendencias, usando valores por defecto:', trendsError);
+  }
+
   // ✅ Renderizar usando el sistema genérico
   return (
     <MetricsGrid
       title="Métricas del Dashboard"
       description="Resumen de estadísticas principales de pacientes"
       metrics={metrics}
-      isLoading={isPatientsLoading}
+      isLoading={isPatientsLoading || trendsLoading}
       columns={3}
       size="md"
       variant="detailed"

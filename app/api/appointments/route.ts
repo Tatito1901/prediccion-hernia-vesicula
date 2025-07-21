@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
   try {
     // Usar la nueva función RPC enriched_appointments
-    const { data, error } = await supabase.rpc('get_enriched_appointments', {
+    const { data, error } = await supabase.rpc('enriched_appointments', {
       p_date_filter: dateFilter,
       p_status_filter: estado,
       p_patient_id: patientId,

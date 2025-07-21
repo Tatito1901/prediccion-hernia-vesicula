@@ -29,7 +29,7 @@ export async function GET(request: Request) {
       .from('patients')
       .select(`
         *,
-        surveys!left(id, completed_at, survey_template_id),
+        assigned_surveys!left(id, completed_at, survey_template_id),
         appointments!left(id, fecha_hora_cita, estado_cita)
       `, { count: 'exact' });
 
@@ -72,8 +72,8 @@ export async function GET(request: Request) {
       ...patient,
       nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
       displayDiagnostico: patient.diagnostico_principal || 'Sin diagnóstico',
-      encuesta_completada: patient.surveys?.some((s: any) => s.completed_at) || false,
-      encuesta: patient.surveys?.[0] || null,
+      encuesta_completada: patient.assigned_surveys?.some((s: any) => s.completed_at) || false,
+      encuesta: patient.assigned_surveys?.[0] || null,
       fecha_proxima_cita_iso: patient.appointments
         ?.filter((a: any) => new Date(a.fecha_hora_cita) > new Date())
         ?.sort((a: any, b: any) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime())
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
     if (page === 1) {
       const { data: statsData } = await supabase
         .from('patients')
-        .select('estado_paciente, surveys!left(completed_at)')
+        .select('estado_paciente, assigned_surveys!left(completed_at)')
         .not('estado_paciente', 'is', null);
 
       const statusStats = statsData?.reduce((acc, patient) => {
@@ -96,7 +96,7 @@ export async function GET(request: Request) {
       }, {} as Record<string, number>) || {};
 
       const totalPatients = statsData?.length || 0;
-      const surveyCompleted = statsData?.filter(p => p.surveys?.some(s => s.completed_at))?.length || 0;
+      const surveyCompleted = statsData?.filter(p => p.assigned_surveys?.some((s: any) => s.completed_at))?.length || 0;
       const surveyRate = totalPatients > 0 ? Math.round((surveyCompleted / totalPatients) * 100) : 0;
 
       stats = {

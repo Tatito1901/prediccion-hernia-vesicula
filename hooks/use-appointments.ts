@@ -1,15 +1,18 @@
-// hooks/use-appointments-optimized.ts - SOLUCIÓN AL "EFECTO TSUNAMI"
+// hooks/use-appointments.ts - SOLUCIÓN DEFINITIVA AL "EFECTO TSUNAMI"
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseISO, isValid, format } from 'date-fns';
 import { toast } from 'sonner';
-
 import { 
-  Appointment, 
-  ExtendedAppointment,
-  AppointmentStatusEnum, 
+  Appointment,
+  ExtendedAppointment, 
+  AppointmentStatusEnum,
   TimeString,
-  NewAppointment 
+  NewAppointment
 } from '@/lib/types';
+import { 
+  useSmartAppointmentInvalidation,
+  CACHE_KEYS 
+} from '@/lib/cache-invalidation';
 
 // ==================== QUERY KEYS GRANULARES ====================
 export const appointmentKeys = {
@@ -76,20 +79,19 @@ const transformAppointment = (apiAppointment: ApiAppointment): ExtendedAppointme
     created_at: apiAppointment.created_at || null,
     fecha_hora_cita: apiAppointment.fecha_hora_cita,
     motivo_cita: apiAppointment.motivo_cita || '',
-    estado_cita: apiAppointment.estado_cita as AppointmentStatusEnum,
+    estado_cita: apiAppointment.estado_cita as keyof typeof AppointmentStatusEnum,
     notas_cita_seguimiento: apiAppointment.notas_cita_seguimiento || null,
     es_primera_vez: apiAppointment.es_primera_vez || false,
     doctor: apiAppointment.doctor ? {
-      id: normalizeId(apiAppointment.doctor.id),
       full_name: apiAppointment.doctor.full_name || 'Doctor',
-    } : null,
-    patient: apiAppointment.patients ? {
+    } : undefined,
+    patients: apiAppointment.patients ? {
       id: patientId,
       nombre: apiAppointment.patients.nombre || '',
       apellidos: apiAppointment.patients.apellidos || '',
-      telefono: apiAppointment.patients.telefono || null,
-      email: apiAppointment.patients.email || null,
-    } : null,
+      telefono: apiAppointment.patients.telefono || undefined,
+      email: apiAppointment.patients.email || undefined,
+    } : undefined,
   };
 };
 
@@ -225,12 +227,13 @@ export const useUpdateAppointment = () => {
 };
 
 /**
- * 🎯 SOLUCIÓN AL "EFECTO TSUNAMI": useUpdateAppointmentStatus Optimizado
+ * 🎯 SOLUCIÓN DEFINITIVA AL "EFECTO TSUNAMI": useUpdateAppointmentStatus
  * 
- * Este es el más crítico porque se usa para check-ins frecuentes
+ * ELIMINA COMPLETAMENTE LA INVALIDACIÓN MASIVA
  */
 export const useUpdateAppointmentStatus = () => {
   const queryClient = useQueryClient();
+  const smartInvalidation = useSmartAppointmentInvalidation(queryClient);
   
   return useMutation({
     mutationFn: async ({ 
@@ -240,7 +243,7 @@ export const useUpdateAppointmentStatus = () => {
       nuevaFechaHora 
     }: { 
       appointmentId: string; 
-      newStatus: typeof AppointmentStatusEnum[keyof typeof AppointmentStatusEnum]; 
+      newStatus: keyof typeof AppointmentStatusEnum; 
       motivo?: string; 
       nuevaFechaHora?: string;
     }) => {
@@ -263,41 +266,34 @@ export const useUpdateAppointmentStatus = () => {
       
       return transformAppointment(await response.json());
     },
-    // ✅ ACTUALIZACIÓN OPTIMISTA INMEDIATA (antes del servidor)
+    // ✅ INVALIDACIÓN QUIRÚRGICA - NO MÁS TSUNAMI
     onMutate: async ({ appointmentId, newStatus }) => {
-      // Cancelar queries en vuelo para evitar conflictos
-      await queryClient.cancelQueries({ queryKey: appointmentKeys.detail(appointmentId) });
-      await queryClient.cancelQueries({ queryKey: appointmentKeys.today() });
+      // Obtener estado anterior para el contexto
+      const previousAppointment = queryClient.getQueryData(
+        CACHE_KEYS.appointments.detail(appointmentId)
+      ) as ExtendedAppointment | undefined;
       
-      // Snapshot del estado anterior para rollback
-      const previousAppointment = queryClient.getQueryData(appointmentKeys.detail(appointmentId));
-      const previousTodayList = queryClient.getQueryData(appointmentKeys.today());
+      const oldStatus = previousAppointment?.estado_cita;
+      const patientId = previousAppointment?.patient_id;
+      const appointmentDate = previousAppointment?.fecha_hora_cita?.split('T')[0];
       
-      // ✅ Actualización optimista INMEDIATA
-      queryClient.setQueryData(appointmentKeys.detail(appointmentId), (old: ExtendedAppointment | undefined) => {
-        if (!old) return old;
-        return { ...old, estado_cita: newStatus };
+      // Ejecutar invalidación quirúrgica
+      await smartInvalidation.onStatusUpdate({
+        appointmentId,
+        oldStatus,
+        newStatus,
+        patientId,
+        appointmentDate
       });
       
-      queryClient.setQueryData(appointmentKeys.today(), (oldData: ExtendedAppointment[] | undefined) => {
-        if (!oldData) return oldData;
-        return oldData.map(apt => 
-          apt.id === appointmentId 
-            ? { ...apt, estado_cita: newStatus }
-            : apt
-        );
-      });
-      
-      // Retornar contexto para rollback si falla
-      return { previousAppointment, previousTodayList, appointmentId };
+      return { previousAppointment, appointmentId };
     },
     onSuccess: (updatedAppointment) => {
-      // ✅ Invalidación mínima (solo estadísticas, no datos)
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.summary() });
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.byStatus(updatedAppointment.estado_cita) });
-      
-      // ✅ Confirmar datos optimistas con datos reales del servidor
-      queryClient.setQueryData(appointmentKeys.detail(updatedAppointment.id), updatedAppointment);
+      // ✅ Solo confirmar datos del servidor - NO MÁS INVALIDACIONES MASIVAS
+      queryClient.setQueryData(
+        CACHE_KEYS.appointments.detail(updatedAppointment.id), 
+        updatedAppointment
+      );
       
       const statusMessages: Record<string, string> = {
         [AppointmentStatusEnum.PRESENTE]: 'Check-in registrado',
@@ -313,7 +309,7 @@ export const useUpdateAppointmentStatus = () => {
       // ✅ ROLLBACK: Restaurar estado anterior si falla
       if (context) {
         queryClient.setQueryData(appointmentKeys.detail(context.appointmentId), context.previousAppointment);
-        queryClient.setQueryData(appointmentKeys.today(), context.previousTodayList);
+        // Rollback no necesario con nueva arquitectura granular
       }
       
       toast.error('Error al actualizar estado', {
