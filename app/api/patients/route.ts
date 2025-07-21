@@ -132,3 +132,68 @@ export async function GET(request: Request) {
     }, { status: 500 });
   }
 }
+
+// --- POST: CREAR NUEVO PACIENTE ---
+export async function POST(request: Request) {
+  try {
+    const supabase = await createClient();
+    const body = await request.json();
+
+    // 1. Validar campos requeridos
+    if (!body.nombre || !body.apellidos) {
+      return NextResponse.json({ 
+        message: 'Nombre y apellidos son requeridos' 
+      }, { status: 400 });
+    }
+
+    // 2. Preparar datos del paciente
+    const patientData = {
+      nombre: body.nombre.trim(),
+      apellidos: body.apellidos.trim(),
+      edad: body.edad || null,
+      telefono: body.telefono?.trim() || null,
+      email: body.email?.trim() || null,
+      estado_paciente: body.estado_paciente || 'PENDIENTE DE CONSULTA',
+      diagnostico_principal: body.diagnostico_principal || null,
+      diagnostico_principal_detalle: body.diagnostico_principal_detalle?.trim() || null,
+      probabilidad_cirugia: body.probabilidad_cirugia || null,
+      fecha_cirugia_programada: body.fecha_cirugia_programada || null,
+      fecha_primera_consulta: body.fecha_primera_consulta || null,
+      fecha_registro: new Date().toISOString(),
+      doctor_asignado_id: body.doctor_asignado_id || null,
+      origen_paciente: body.origen_paciente?.trim() || null,
+      etiquetas: body.etiquetas || null,
+      comentarios_registro: body.comentarios_registro?.trim() || null,
+      proximo_contacto: body.proximo_contacto || null,
+      ultimo_contacto: body.ultimo_contacto || null,
+    };
+
+    // 3. Insertar paciente en la base de datos
+    const { data: newPatient, error } = await supabase
+      .from('patients')
+      .insert(patientData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating patient:', error);
+      return NextResponse.json({ 
+        message: 'Error al crear paciente', 
+        error: error.message 
+      }, { status: 500 });
+    }
+
+    // 4. Retornar paciente creado
+    return NextResponse.json({
+      message: 'Paciente creado exitosamente',
+      patient: newPatient
+    }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('Error in patients API route (POST):', error);
+    return NextResponse.json({ 
+      message: 'Error al crear paciente', 
+      error: error.message 
+    }, { status: 500 });
+  }
+}

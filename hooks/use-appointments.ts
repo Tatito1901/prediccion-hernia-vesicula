@@ -353,3 +353,71 @@ const isToday = (dateString: string): boolean => {
 - Reducción 95%+ en transferencia de datos
 - Preparado para tiempo real
 */
+
+// 🎯 SOLUCIÓN AL "EFECTO TSUNAMI": useAdmitPatient Optimizado
+// Hook para admitir pacientes - SOLUCIÓN DEFINITIVA CON INVALIDACIÓN UNIVERSAL
+export const useAdmitPatient = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (patientData: any) => {
+      const response = await fetch('/api/patients', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(patientData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Error al admitir paciente');
+      }
+
+      return response.json();
+    },
+    onSuccess: async (result) => {
+      const newPatient = result.patient || result;
+      
+      // 🚀 SOLUCIÓN DEFINITIVA: Invalidación Universal con Hook de Migración
+      const { usePatientsMigration } = await import('@/hooks/use-patients-migration');
+      const migrationHook = usePatientsMigration();
+      
+      // Ejecutar invalidación universal que cubre TODOS los sistemas
+      migrationHook.invalidateAfterPatientCreation(newPatient);
+      
+      // 🎯 INVALIDACIÓN INMEDIATA ADICIONAL para máxima compatibilidad
+      queryClient.invalidateQueries({ queryKey: patientKeys.all });
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['clinicData', 'todayAppointments'] });
+      queryClient.invalidateQueries({ queryKey: ['clinicData', 'activePatients'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'summary'] });
+      queryClient.invalidateQueries({ queryKey: ['trends'] });
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      
+      // 🌐 INVALIDACIÓN CON PREDICADO FINAL - Garantiza que NO se escape ninguna query
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const queryKey = query.queryKey;
+          const keyString = JSON.stringify(queryKey).toLowerCase();
+          
+          return (
+            keyString.includes('patient') ||
+            keyString.includes('clinic') ||
+            keyString.includes('dashboard') ||
+            keyString.includes('appointment') ||
+            keyString.includes('trend') ||
+            keyString.includes('stats') ||
+            keyString.includes('metric')
+          );
+        }
+      });
+      
+      toast.success('Paciente admitido exitosamente - Datos sincronizados en toda la plataforma');
+    },
+    onError: (error: Error) => {
+      console.error('Error admitting patient:', error);
+      toast.error(error.message || 'Error al admitir paciente');
+    },
+  });
+};

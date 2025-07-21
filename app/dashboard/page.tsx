@@ -7,7 +7,6 @@ import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 
 // Import components statically instead of using dynamic imports
 import DashboardMetrics from "../../components/dashboard/dashboard-metrics";
-import { PatientTrendsChart } from "../../components/dashboard/patients-chart";
 
 export default function DashboardPage() {
   return (
@@ -22,7 +21,21 @@ export default function DashboardPage() {
                 </section>
 
                 <section>
-                  <PatientTrendsChart />
+                  {/* Gráficos y análisis detallados sin duplicar métricas */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white p-6 rounded-lg shadow">
+                      <h3 className="text-lg font-semibold mb-4">Distribución de Pacientes</h3>
+                      <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
+                        <p className="text-gray-500">Gráfico de distribución por estado</p>
+                      </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-lg shadow">
+                      <h3 className="text-lg font-semibold mb-4">Tendencias Temporales</h3>
+                      <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
+                        <p className="text-gray-500">Gráfico de evolución temporal</p>
+                      </div>
+                    </div>
+                  </div>
                 </section>
 
               </div>

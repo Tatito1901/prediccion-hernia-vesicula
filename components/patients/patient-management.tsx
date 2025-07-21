@@ -151,32 +151,28 @@ const PatientHeader = memo<PatientHeaderProps>(({ statsData, isLoadingStats, onR
     
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       <StatsCard
-        title="Total Pacientes"
+        label="Total Pacientes"
         value={statsData.totalPatients}
-        icon={Users}
-        description="Pacientes registrados"
-        loading={isLoadingStats}
+        icon={<Users className="w-4 h-4" />}
+        color="blue"
       />
       <StatsCard
-        title="Tasa de Encuestas"
+        label="Tasa de Encuestas"
         value={`${statsData.surveyRate}%`}
-        icon={ClipboardCheck}
-        description="Encuestas completadas"
-        loading={isLoadingStats}
+        icon={<ClipboardCheck className="w-4 h-4" />}
+        color="purple"
       />
       <StatsCard
-        title="Consultas Pendientes"
+        label="Consultas Pendientes"
         value={statsData.pendingConsults}
-        icon={CalendarClock}
-        description="Esperando consulta"
-        loading={isLoadingStats}
+        icon={<CalendarClock className="w-4 h-4" />}
+        color="amber"
       />
       <StatsCard
-        title="Pacientes Operados"
+        label="Pacientes Operados"
         value={statsData.operatedPatients}
-        icon={Stethoscope}
-        description="Cirugías realizadas"
-        loading={isLoadingStats}
+        icon={<Stethoscope className="w-4 h-4" />}
+        color="emerald"
       />
     </div>
   </div>

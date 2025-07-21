@@ -1,9 +1,11 @@
 // contexts/clinic-data-provider.tsx
 'use client';
 
-import { createContext, useContext, ReactNode, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { useClinicData } from '@/hooks/use-clinic-data';
 import { usePaginatedPatients } from '@/hooks/use-paginated-patients';
+// Importar sistema unificado para futuras migraciones
+import { queryKeys } from '@/lib/query-keys';
 
 // ==================== TIPOS Y CONTRATOS ====================
 
@@ -45,7 +47,7 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   const [patientsFilters, setPatientsFilters] = useState({
     page: 1,
     search: '',
-    status: 'CONSULTADO',
+    status: 'all', // ✅ Mostrar todos los pacientes por defecto
   });
 
   // Hook de pacientes paginados
@@ -82,7 +84,7 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const clearPatientsFilters = useCallback(() => {
-    setPatientsFilters({ page: 1, search: '', status: 'CONSULTADO' });
+    setPatientsFilters({ page: 1, search: '', status: 'all' }); // ✅ Limpiar a 'all' en lugar de 'CONSULTADO'
   }, []);
 
   // Valor combinado del contexto
