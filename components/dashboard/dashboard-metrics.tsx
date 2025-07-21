@@ -60,10 +60,11 @@ const METRICS_CONFIG = {
 const DashboardMetrics: React.FC = () => {
   // 🎯 Datos de la única fuente de verdad
   const { 
-    patientsStats,
-    isPatientsLoading,
-    patientsError,
-    refetchPatients
+    allPatients,
+    allAppointments,
+    isLoading,
+    error,
+    refetch
   } = useClinic();
 
   // 📈 Tendencias históricas reales
@@ -75,7 +76,7 @@ const DashboardMetrics: React.FC = () => {
 
   // 📊 Crear métricas usando el sistema genérico CON TENDENCIAS REALES
   const metrics: MetricValue[] = useMemo(() => {
-    if (!patientsStats) {
+    if (!allPatients || allPatients.length === 0) {
       return Object.values(METRICS_CONFIG).map(config => 
         createMetric(config.label, 0, {
           icon: config.icon,
@@ -85,12 +86,12 @@ const DashboardMetrics: React.FC = () => {
       );
     }
 
-    const { totalPatients, operatedPatients, pendingConsults, surveyRate, statusStats } = patientsStats;
-    
-    // Calcular métricas derivadas
-    const pacientesNoOperados = statusStats?.['no_operado'] || 0;
-    const pacientesSeguimiento = statusStats?.['en_seguimiento'] || 0;
-    const tasaConversion = operatedPatients > 0 ? (operatedPatients / totalPatients) * 100 : 0;
+    // Calcular métricas desde los datos reales
+    const totalPatients = allPatients.length;
+    const operatedPatients = allPatients.filter(p => p.estado_paciente === 'OPERADO').length;
+    const pacientesNoOperados = allPatients.filter(p => p.estado_paciente === 'NO OPERADO').length;
+    const pacientesSeguimiento = allPatients.filter(p => p.estado_paciente === 'EN SEGUIMIENTO').length;
+    const tasaConversion = totalPatients > 0 ? (operatedPatients / totalPatients) * 100 : 0;
 
     // 🎯 USAR TENDENCIAS REALES DE LA API
     const totalPatientsTrend = trends?.totalPatients || { trend: 'neutral', trendValue: '0%' };
@@ -168,13 +169,13 @@ const DashboardMetrics: React.FC = () => {
         }
       )
     ];
-  }, [patientsStats, trends]);
+  }, [allPatients, trends]);
 
   // 🚨 Manejo de errores
-  if (patientsError) {
+  if (error) {
     return (
       <div className="p-6 text-center">
-        <p className="text-red-600">Error al cargar métricas: {patientsError.message}</p>
+        <p className="text-red-600">Error al cargar métricas: {error.message}</p>
       </div>
     );
   }
@@ -189,11 +190,11 @@ const DashboardMetrics: React.FC = () => {
       title="Métricas del Dashboard"
       description="Resumen de estadísticas principales de pacientes"
       metrics={metrics}
-      isLoading={isPatientsLoading || trendsLoading}
+      isLoading={isLoading || trendsLoading}
       columns={3}
       size="md"
       variant="detailed"
-      onRefresh={refetchPatients}
+      onRefresh={refetch}
       className="w-full"
     />
   );

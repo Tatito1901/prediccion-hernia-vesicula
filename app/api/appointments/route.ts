@@ -30,21 +30,58 @@ export async function GET(request: Request) {
   pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
 
   try {
-    // Usar la nueva función RPC enriched_appointments
-    const { data, error } = await supabase.rpc('enriched_appointments', {
-      p_date_filter: dateFilter,
-      p_status_filter: estado,
-      p_patient_id: patientId,
-      p_doctor_id: doctorId,
-      p_start_date: startDate,
-      p_end_date: endDate,
-      p_search_term: searchTerm,
-      p_page_num: page,
-      p_page_size: pageSize
-    });
+    // Construir consulta SQL estándar con joins
+    let query = supabase
+      .from('appointments')
+      .select(`
+        *,
+        patients!inner(id, nombre, apellidos, telefono, email, estado_paciente)
+      `, { count: 'exact' });
+
+    // Aplicar filtros de fecha
+    const today = new Date().toISOString().split('T')[0];
+    if (dateFilter === 'today') {
+      query = query.gte('fecha_hora_cita', today)
+                   .lt('fecha_hora_cita', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    } else if (dateFilter === 'future') {
+      query = query.gt('fecha_hora_cita', new Date().toISOString());
+    } else if (dateFilter === 'past') {
+      query = query.lt('fecha_hora_cita', new Date().toISOString());
+    }
+
+    // Aplicar otros filtros
+    if (estado && estado !== 'all') {
+      query = query.eq('estado_cita', estado);
+    }
+    if (patientId) {
+      query = query.eq('patient_id', patientId);
+    }
+    if (doctorId) {
+      query = query.eq('doctor_id', doctorId);
+    }
+    if (startDate) {
+      query = query.gte('fecha_hora_cita', startDate);
+    }
+    if (endDate) {
+      query = query.lte('fecha_hora_cita', endDate);
+    }
+    if (searchTerm) {
+      query = query.or(`
+        motivo_consulta.ilike.%${searchTerm}%,
+        observaciones.ilike.%${searchTerm}%
+      `);
+    }
+
+    // Aplicar paginación y ordenamiento
+    const offset = (page - 1) * pageSize;
+    query = query
+      .order('fecha_hora_cita', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    const { data, error, count } = await query;
 
     if (error) {
-      console.error('Error calling enriched_appointments RPC:', error);
+      console.error('Error en GET /api/appointments:', error);
       throw error;
     }
 

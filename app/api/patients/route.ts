@@ -29,7 +29,7 @@ export async function GET(request: Request) {
       .from('patients')
       .select(`
         *,
-        assigned_surveys!left(id, completed_at, survey_template_id),
+        assigned_surveys!left(id, completed_at),
         appointments!left(id, fecha_hora_cita, estado_cita)
       `, { count: 'exact' });
 

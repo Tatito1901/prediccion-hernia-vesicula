@@ -45,7 +45,7 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   const [patientsFilters, setPatientsFilters] = useState({
     page: 1,
     search: '',
-    status: 'ACTIVO',
+    status: 'CONSULTADO',
   });
 
   // Hook de pacientes paginados
@@ -82,7 +82,7 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const clearPatientsFilters = useCallback(() => {
-    setPatientsFilters({ page: 1, search: '', status: 'ACTIVO' });
+    setPatientsFilters({ page: 1, search: '', status: 'CONSULTADO' });
   }, []);
 
   // Valor combinado del contexto

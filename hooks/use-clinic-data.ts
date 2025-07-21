@@ -61,7 +61,7 @@ const fetchTodayAppointments = async (): Promise<EnrichedAppointmentsResponse> =
 const fetchActivePatients = async (): Promise<PaginatedPatientsResponse> => {
   try {
     // ✅ Solo trae pacientes activos recientes (mucho más eficiente)
-    const response = await fetch('/api/patients?estado=ACTIVO&pageSize=50');
+    const response = await fetch('/api/patients?estado=CONSULTADO&pageSize=50');
     
     if (!response.ok) {
       throw new Error('Failed to fetch active patients');
