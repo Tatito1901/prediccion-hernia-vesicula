@@ -37,22 +37,49 @@ const EstadisticasContent = () => {
     ...filters,
   });
 
+  // Calcular estadísticas desde los datos reales de citas
+  const appointmentStats = useMemo(() => {
+    if (!allAppointments?.length) {
+      return { todayCount: 0, futureCount: 0, pastCount: 0, totalCount: 0 };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const stats = allAppointments.reduce((acc: { todayCount: number; futureCount: number; pastCount: number; totalCount: number }, apt: any) => {
+      const aptDate = new Date(apt.fecha_hora_cita);
+      aptDate.setHours(0, 0, 0, 0);
+      
+      if (aptDate.getTime() === today.getTime()) {
+        acc.todayCount++;
+      } else if (aptDate > today) {
+        acc.futureCount++;
+      } else {
+        acc.pastCount++;
+      }
+      acc.totalCount++;
+      return acc;
+    }, { todayCount: 0, futureCount: 0, pastCount: 0, totalCount: 0 });
+    
+    return stats;
+  }, [allAppointments]);
+
   const summaryMetrics: MetricValue[] = useMemo(() => [
     {
       label: "Total de Citas (Hoy)",
-      value: appointmentsSummary?.today_count ?? 0,
+      value: appointmentStats.todayCount,
       icon: Calendar,
       description: "Todas las citas programadas para hoy."
     },
     {
       label: "Citas Futuras",
-      value: appointmentsSummary?.future_count ?? 0,
+      value: appointmentStats.futureCount,
       icon: CalendarClock,
       description: "Citas programadas para los próximos días."
     },
     {
       label: "Citas Pasadas",
-      value: appointmentsSummary?.past_count ?? 0,
+      value: appointmentStats.pastCount,
       icon: CalendarCheck,
       description: "Citas que ya han ocurrido."
     },

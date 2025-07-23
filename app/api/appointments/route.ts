@@ -35,7 +35,7 @@ export async function GET(request: Request) {
         patient_id,
         doctor_id,
         patients (*),
-        doctors (*)
+        profiles (*)
       `, { count: 'exact' });
 
     if (patientId) {

@@ -56,7 +56,7 @@ function EncuestaContent() {
     if (patientId && patient) {
       updatePatient({ 
         id: String(patientId), 
-        updatedData: {
+        updates: {
           ...patient, // Asegúrate que los datos del paciente son los correctos aquí
           encuesta: true,
           estado: "Pendiente de consulta",

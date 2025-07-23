@@ -424,3 +424,40 @@ export const useAdmitPatient = () => {
     },
   });
 };
+
+// 🎯 SOLUCIÓN SIMPLE: useUpdatePatient para resolver imports rotos
+// Hook básico para actualizar datos de pacientes
+export const useUpdatePatient = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { id: string; updates: any }) => {
+      const response = await fetch(`/api/patients/${data.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data.updates),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al actualizar paciente');
+      }
+
+      return response.json();
+    },
+    onSuccess: (updatedPatient, variables) => {
+      // ✅ Invalidación simple pero efectiva
+      queryClient.invalidateQueries({ queryKey: patientKeys.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: patientKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
+      
+      toast.success('Paciente actualizado exitosamente');
+    },
+    onError: (error: Error) => {
+      console.error('Error updating patient:', error);
+      toast.error(error.message || 'Error al actualizar paciente');
+    },
+  });
+};

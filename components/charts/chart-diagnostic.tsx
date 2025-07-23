@@ -20,10 +20,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { StatsCard as MetricCard } from '@/components/ui/stats-card';
-import { ChartWrapper } from '@/components/charts/chart-wrapper';
-import { InsightCard } from '@/components/charts/insight-card';
-import { CommonDiagnosesChart } from '@/components/charts/common-diagnoses-chart';
-import { HerniaDistributionChart } from '@/components/charts/hernia-distribution-chart';
+import { ChartWrapper } from '@/components/charts/common/chart-wrapper';
+import { InsightCard } from '@/components/charts/common/insight-card';
+import { CommonDiagnosesChart } from '@/components/charts/dashboard/common-diagnoses-chart';
+import { PathologyDistributionChart } from '@/components/charts/dashboard/pathology-distribution-chart';
 import { TimelineChart } from '@/components/charts/timeline-chart';
 import { TimelineData } from '@/components/charts/types';
 
@@ -31,34 +31,12 @@ import { TimelineData } from '@/components/charts/types';
  * COMPONENTES DINÁMICOS OPTIMIZADOS
  * ============================================================================ */
 
-const DiagnosisChart = dynamic(
-  () => import('@/components/charts/diagnosis-chart').then(mod => ({ default: mod.default })),
-  { 
-    loading: () => <ChartSkeleton />,
-    ssr: false 
-  }
-);
-
+// Los componentes dinámicos han sido migrados a la nueva arquitectura dashboard/
+// Ya no necesitamos imports dinámicos separados, usaremos los componentes consolidados
 const DiagnosisTimelineChart = dynamic(
-  () => import('@/components/charts/diagnosis-timeline-chart').then(mod => ({ default: mod.DiagnosisTimelineChart })),
+  () => import('@/components/charts/dashboard/diagnosis-timeline-chart').then(mod => ({ default: mod.DiagnosisTimelineChart })),
   { 
     loading: () => <ChartSkeleton height="h-80" />,
-    ssr: false 
-  }
-);
-
-const DiagnosisBarChart = dynamic(
-  () => import('@/components/charts/diagnosis-bar-chart').then(mod => ({ default: mod.default })),
-  { 
-    loading: () => <ChartSkeleton />,
-    ssr: false 
-  }
-);
-
-const DiagnosisTypeDistribution = dynamic(
-  () => import('@/components/charts/diagnosis-type-distribution').then(mod => ({ default: mod.default })),
-  { 
-    loading: () => <ChartSkeleton />,
     ssr: false 
   }
 );
@@ -335,11 +313,11 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <ChartWrapper title="Distribución de Diagnósticos">
-                  <CommonDiagnosesChart data={metrics.diagnosticosMasComunes} />
+                <ChartWrapper title="Diagnósticos Más Comunes">
+                  <CommonDiagnosesChart data={metrics.diagnosticosMasComunes.map(d => ({name: d.tipo, total: d.cantidad}))} />
                 </ChartWrapper>
-                <ChartWrapper title="Distribución de Hernias">
-                  <HerniaDistributionChart data={metrics.distribucionHernias} />
+                <ChartWrapper title="Distribución de Patologías">
+                  <PathologyDistributionChart data={metrics.distribucionHernias.map(d => ({name: d.tipo, total: d.cantidad}))} />
                 </ChartWrapper>
               </div>
             </TabsContent>
@@ -353,7 +331,11 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
             <TabsContent value="analysis" className="space-y-4">
               <div className="grid gap-4">
                 {insights.map((insight, index) => (
-                  <InsightCard key={index} insight={insight} />
+                  <InsightCard 
+                    key={index} 
+                    title={insight.title}
+                    value={insight.description}
+                  />
                 ))}
               </div>
             </TabsContent>

@@ -17,7 +17,7 @@ RETURNS TABLE(
     patient_apellidos TEXT,
     doctor_id UUID,
     doctor_nombre TEXT,
-    date_classification TEXT, -- 'today', 'future', 'past'
+    date_classification TEXT, 
     total_count BIGINT
 )
 LANGUAGE plpgsql

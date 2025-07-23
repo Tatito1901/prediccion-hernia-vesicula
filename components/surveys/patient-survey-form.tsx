@@ -815,7 +815,7 @@ export default function PatientSurveyForm({
       updatePatient(
         {
           id: String(patientId),
-          updatedData: { encuesta: true, estado: "Pendiente de consulta" },
+          updates: { encuesta: true, estado: "Pendiente de consulta" },
         },
         {
           onSuccess: () => {
