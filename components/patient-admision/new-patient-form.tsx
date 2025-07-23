@@ -1,8 +1,7 @@
-// new-patient-form.tsx - Versión refactorizada con utilidades integradas
+// new-patient-form.tsx - Versión refactorizada con arquitectura modular
 import React, { useState, useMemo, useCallback, memo } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import { z } from "zod"
 import { UserPlus, Loader2, Clock, Calendar, Phone, FileText, Stethoscope } from "lucide-react"
 import { isSameDay } from "date-fns"
 
@@ -30,16 +29,14 @@ import {
   SelectLabel,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
-import { 
-  DiagnosisEnum,
-  AppointmentStatusEnum,
-  type TimeString
-} from "@/lib/types"
-import { useAdmitPatient } from "@/hooks/use-appointments"
+import { DiagnosisEnum } from "@/lib/types"
 import { useClinic } from "@/contexts/clinic-data-provider"
+
+// Importar desde la nueva arquitectura modular
+import { useAdmitPatient } from "./actions"
+import { AdmissionFormSchema, TAdmissionForm } from "./types"
 
 // ==================== UTILIDADES INTEGRADAS ====================
 
@@ -48,140 +45,83 @@ const WORK_SCHEDULE = {
   startHour: 9,
   endHour: 14,
   intervalMinutes: 30,
-  workDays: [1, 2, 3, 4, 5, 6], // Lun-Sáb
-} as const;
+}
 
 // Generar slots de tiempo
-const generateTimeSlots = (): string[] => {
-  const slots: string[] = [];
-  const { startHour, endHour, intervalMinutes } = WORK_SCHEDULE;
-  const totalSlots = ((endHour - startHour) * 60) / intervalMinutes;
+function generateTimeSlots(): string[] {
+  const slots: string[] = []
+  const { startHour, endHour, intervalMinutes } = WORK_SCHEDULE
   
-  for (let i = 0; i < totalSlots; i++) {
-    const totalMinutes = startHour * 60 + i * intervalMinutes;
-    const hour = Math.floor(totalMinutes / 60);
-    const minute = totalMinutes % 60;
-    
-    slots.push(`${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`);
+  for (let hour = startHour; hour < endHour; hour++) {
+    for (let minute = 0; minute < 60; minute += intervalMinutes) {
+      if (hour === endHour - 1 && minute > 0) break
+      const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
+      slots.push(timeString)
+    }
   }
   
-  return slots;
-};
+  return slots
+}
 
 // Validaciones de fecha
-const isWorkDay = (date: Date): boolean => {
-  return (WORK_SCHEDULE.workDays as readonly number[]).includes(date.getDay());
-};
+function isWorkDay(date: Date): boolean {
+  const day = date.getDay()
+  return day >= 1 && day <= 5 // Lunes a Viernes
+}
 
-const isDateInRange = (date: Date): boolean => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+function isDateInRange(date: Date): boolean {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
   
-  const maxDate = new Date();
-  maxDate.setMonth(maxDate.getMonth() + 3);
-  maxDate.setHours(23, 59, 59, 999);
+  const maxDate = new Date(today)
+  maxDate.setDate(maxDate.getDate() + 30) // 30 días hacia adelante
   
-  return date >= today && date <= maxDate;
-};
+  return date >= today && date <= maxDate
+}
 
-const isValidAppointmentDate = (date: Date): boolean => {
-  return isWorkDay(date) && isDateInRange(date);
-};
+function isValidAppointmentDate(date: Date): boolean {
+  return isWorkDay(date) && isDateInRange(date)
+}
 
 // Calcular slots disponibles
-const calculateAvailableSlots = (
+function calculateAvailableSlots(
   selectedDate: Date,
   existingAppointments: any[],
   excludeAppointmentId?: string
-): { time: string; isAvailable: boolean }[] => {
-  if (!isValidAppointmentDate(selectedDate)) {
-    return [];
+): { time: string; isAvailable: boolean }[] {
+  if (!selectedDate || !isValidAppointmentDate(selectedDate)) {
+    return []
   }
 
-  const today = new Date();
-  const isToday = isSameDay(selectedDate, today);
+  const allSlots = generateTimeSlots()
   
-  // Crear Set de horarios ocupados para búsqueda O(1)
-  const occupiedSlots = new Set<string>();
-  
-  existingAppointments.forEach((appointment) => {
-    // Excluir la cita que se está reagendando
+  // Filtrar citas del mismo día
+  const dayAppointments = existingAppointments.filter(appointment => {
     if (excludeAppointmentId && appointment.id === excludeAppointmentId) {
-      return;
+      return false
     }
     
-    // Solo considerar citas no canceladas
-    if (appointment.estado_cita === AppointmentStatusEnum.CANCELADA) {
-      return;
-    }
-    
-    // Verificar si es el mismo día
-    const appointmentDate = new Date(appointment.fecha_hora_cita);
-    if (isSameDay(appointmentDate, selectedDate)) {
-      const timeSlot = appointmentDate.toTimeString().slice(0, 5); // HH:MM format
-      occupiedSlots.add(timeSlot);
-    }
-  });
-  
-  // Filtrar slots disponibles
-  return generateTimeSlots().map(timeSlot => {
-    let isAvailable = !occupiedSlots.has(timeSlot);
-    
-    // Si es hoy, excluir horarios que ya pasaron
-    if (isToday && isAvailable) {
-      const [hour, minute] = timeSlot.split(':').map(Number);
-      const slotDateTime = new Date();
-      slotDateTime.setHours(hour, minute, 0, 0);
-      
-      // Agregar 30 minutos de buffer para preparación
-      const currentTimeWithBuffer = new Date(today.getTime() + 30 * 60 * 1000);
-      isAvailable = slotDateTime > currentTimeWithBuffer;
-    }
-    
-    return {
-      time: timeSlot,
-      isAvailable
-    };
-  });
-};
+    const appointmentDate = new Date(appointment.fecha_hora_cita)
+    return isSameDay(appointmentDate, selectedDate) && 
+           (appointment.estado_cita === 'PROGRAMADA' || 
+            appointment.estado_cita === 'PRESENTE' ||
+            appointment.estado_cita === 'COMPLETADA')
+  })
 
-// ==================== ESQUEMAS Y CONFIGURACIONES ====================
+  // Crear mapeo de horas ocupadas
+  const occupiedTimes = new Set(
+    dayAppointments.map(appointment => {
+      const date = new Date(appointment.fecha_hora_cita)
+      return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+    })
+  )
 
-const FORM_SCHEMA = z.object({
-  nombre: z.string()
-    .trim()
-    .min(2, "Mínimo 2 caracteres")
-    .max(50, "Máximo 50 caracteres"),
-  apellidos: z.string()
-    .trim()
-    .min(2, "Mínimo 2 caracteres")
-    .max(50, "Máximo 50 caracteres"),
-  edad: z.coerce.number()
-    .int()
-    .min(0, "Edad inválida")
-    .max(120, "Edad inválida")
-    .optional()
-    .nullable(),
-  telefono: z.string()
-    .trim()
-    .min(10, "Mínimo 10 dígitos")
-    .max(15, "Máximo 15 dígitos")
-    .regex(/^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s./0-9]*$/, "Formato inválido"),
-  motivoConsulta: z.enum(Object.values(DiagnosisEnum) as [DiagnosisEnum, ...DiagnosisEnum[]], {
-    required_error: "Seleccione un motivo",
-  }),
-  fechaConsulta: z.date({
-    required_error: "Seleccione una fecha",
-  }),
-  horaConsulta: z.string({
-    required_error: "Seleccione una hora",
-  }),
-  notas: z.string()
-    .max(500, "Máximo 500 caracteres")
-    .optional(),
-})
-
-type FormValues = z.infer<typeof FORM_SCHEMA>
+  // Marcar disponibilidad
+  return allSlots.map(time => ({
+    time,
+    isAvailable: !occupiedTimes.has(time)
+  }))
+}
 
 // Agrupación de diagnósticos
 const DIAGNOSIS_GROUPS = {
@@ -205,33 +145,6 @@ const DIAGNOSIS_GROUPS = {
     DiagnosisEnum.QUISTE_SEBACEO_INFECTADO,
     DiagnosisEnum.OTRO,
   ],
-} as const
-
-const DEFAULT_VALUES: FormValues = {
-  nombre: "",
-  apellidos: "",
-  telefono: "",
-  notas: "",
-  edad: null,
-  fechaConsulta: null as any,
-  horaConsulta: "",
-  motivoConsulta: null as any,
-}
-
-// ==================== UTILIDADES ESPECÍFICAS ====================
-
-// Cache para formateo de diagnósticos
-const diagnosisLabels = new Map<DiagnosisEnum, string>()
-
-const getDiagnosisLabel = (diagnosis: DiagnosisEnum): string => {
-  if (!diagnosisLabels.has(diagnosis)) {
-    const label = diagnosis
-      .split('_')
-      .map(word => word.charAt(0) + word.slice(1).toLowerCase())
-      .join(' ')
-    diagnosisLabels.set(diagnosis, label)
-  }
-  return diagnosisLabels.get(diagnosis)!
 }
 
 // ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
@@ -239,31 +152,30 @@ const getDiagnosisLabel = (diagnosis: DiagnosisEnum): string => {
 const PersonalDataSection = memo<{
   form: any;
   isSubmitting: boolean;
-  onAgeChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}>(({ form, isSubmitting, onAgeChange }) => (
+}>(({ form, isSubmitting }) => (
   <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
     <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
-      <Phone className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+      <Phone className="h-4 w-4 text-blue-600 dark:text-blue-400" />
       <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-        Datos Personales
+        Información Personal
       </h3>
     </div>
     
-    <div className="space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <FormField
         control={form.control}
         name="nombre"
         render={({ field }) => (
           <FormItem>
-            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Nombre(s) <span className="text-red-500">*</span>
+            <FormLabel className="text-slate-700 dark:text-slate-300 text-xs font-medium">
+              Nombre *
             </FormLabel>
             <FormControl>
-              <Input 
-                placeholder="Ana Sofía" 
-                {...field} 
-                className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+              <Input
+                placeholder="Ej: Juan Carlos"
                 disabled={isSubmitting}
+                className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                {...field}
               />
             </FormControl>
             <FormMessage className="text-xs" />
@@ -276,15 +188,15 @@ const PersonalDataSection = memo<{
         name="apellidos"
         render={({ field }) => (
           <FormItem>
-            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Apellidos <span className="text-red-500">*</span>
+            <FormLabel className="text-slate-700 dark:text-slate-300 text-xs font-medium">
+              Apellidos *
             </FormLabel>
             <FormControl>
-              <Input 
-                placeholder="García Rodríguez" 
-                {...field} 
-                className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+              <Input
+                placeholder="Ej: González López"
                 disabled={isSubmitting}
+                className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                {...field}
               />
             </FormControl>
             <FormMessage className="text-xs" />
@@ -292,57 +204,54 @@ const PersonalDataSection = memo<{
         )}
       />
       
-      <div className="grid grid-cols-2 gap-3">
-        <FormField
-          control={form.control}
-          name="telefono"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Teléfono <span className="text-red-500">*</span>
-              </FormLabel>
-              <FormControl>
-                <Input 
-                  type="tel" 
-                  placeholder="55 1234 5678" 
-                  {...field} 
-                  className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-                  disabled={isSubmitting}
-                />
-              </FormControl>
-              <FormMessage className="text-xs" />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="edad"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Edad
-              </FormLabel>
-              <FormControl>
-                <Input 
-                  type="number" 
-                  placeholder="35" 
-                  value={field.value === null || field.value === undefined ? '' : String(field.value)}
-                  onChange={onAgeChange}
-                  className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-                  disabled={isSubmitting}
-                />
-              </FormControl>
-              <FormMessage className="text-xs" />
-            </FormItem>
-          )}
-        />
-      </div>
+      <FormField
+        control={form.control}
+        name="edad"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-slate-700 dark:text-slate-300 text-xs font-medium">
+              Edad
+            </FormLabel>
+            <FormControl>
+              <Input
+                type="number"
+                placeholder="Ej: 45"
+                disabled={isSubmitting}
+                className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                {...field}
+                onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
+              />
+            </FormControl>
+            <FormMessage className="text-xs" />
+          </FormItem>
+        )}
+      />
+      
+      <FormField
+        control={form.control}
+        name="telefono"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-slate-700 dark:text-slate-300 text-xs font-medium">
+              Teléfono *
+            </FormLabel>
+            <FormControl>
+              <Input
+                placeholder="Ej: +52 555 123 4567"
+                disabled={isSubmitting}
+                className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                {...field}
+              />
+            </FormControl>
+            <FormMessage className="text-xs" />
+          </FormItem>
+        )}
+      />
     </div>
   </div>
-));
+))
 
-PersonalDataSection.displayName = "PersonalDataSection";
+PersonalDataSection.displayName = "PersonalDataSection"
 
 const MedicalInfoSection = memo<{
   form: any;
@@ -361,12 +270,16 @@ const MedicalInfoSection = memo<{
       name="motivoConsulta"
       render={({ field }) => (
         <FormItem>
-          <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Motivo de Consulta <span className="text-red-500">*</span>
+          <FormLabel className="text-slate-700 dark:text-slate-300 text-xs font-medium">
+            Motivo de Consulta *
           </FormLabel>
-          <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+          <Select 
+            onValueChange={field.onChange} 
+            value={field.value} 
+            disabled={isSubmitting}
+          >
             <FormControl>
-              <SelectTrigger className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
+              <SelectTrigger className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
                 <SelectValue placeholder="Seleccione un motivo..." />
               </SelectTrigger>
             </FormControl>
@@ -378,7 +291,7 @@ const MedicalInfoSection = memo<{
                   </SelectLabel>
                   {diagnoses.map((diag) => (
                     <SelectItem key={diag} value={diag} className="text-sm py-2">
-                      {getDiagnosisLabel(diag)}
+                      {diag.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -389,38 +302,36 @@ const MedicalInfoSection = memo<{
         </FormItem>
       )}
     />
-
-    <div className="mt-4">
-      <FormField
-        control={form.control}
-        name="notas"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Notas Adicionales
-            </FormLabel>
-            <FormControl>
-              <Textarea
-                placeholder="Información relevante, alergias, etc."
-                className="resize-none h-24 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-                disabled={isSubmitting}
-                {...field}
-              />
-            </FormControl>
-            <div className="flex justify-between items-center mt-1">
-              <FormMessage className="text-xs" />
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                {field.value?.length || 0}/500
-              </span>
-            </div>
-          </FormItem>
-        )}
-      />
-    </div>
+    
+    <FormField
+      control={form.control}
+      name="notas"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel className="text-slate-700 dark:text-slate-300 text-xs font-medium">
+            Notas Adicionales
+          </FormLabel>
+          <FormControl>
+            <Textarea
+              placeholder="Información relevante, alergias, etc."
+              className="resize-none h-24 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+              disabled={isSubmitting}
+              {...field}
+            />
+          </FormControl>
+          <div className="flex justify-between items-center mt-1">
+            <FormMessage className="text-xs" />
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {field.value?.length || 0}/500
+            </span>
+          </div>
+        </FormItem>
+      )}
+    />
   </div>
-));
+))
 
-MedicalInfoSection.displayName = "MedicalInfoSection";
+MedicalInfoSection.displayName = "MedicalInfoSection"
 
 const AppointmentScheduleSection = memo<{
   form: any;
@@ -437,101 +348,99 @@ const AppointmentScheduleSection = memo<{
       </h3>
     </div>
     
-    <div className="space-y-4">
-      <FormField
-        control={form.control}
-        name="fechaConsulta"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Fecha <span className="text-red-500">*</span>
-            </FormLabel>
-            <DatePicker
-              date={field.value}
-              onDateChange={onDateChange}
-              minDate={new Date()}
-              maxDate={new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)}
-              placeholder="Seleccionar fecha"
-              filterDate={isValidAppointmentDate}
-              className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
-              disabled={isSubmitting}
-            />
-            <FormMessage className="text-xs" />
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Disponible: Lun-Sáb, {WORK_SCHEDULE.startHour}:00-{WORK_SCHEDULE.endHour}:00
+    <FormField
+      control={form.control}
+      name="fechaConsulta"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel className="text-slate-700 dark:text-slate-300 text-xs font-medium">
+            Fecha *
+          </FormLabel>
+          <DatePicker
+            date={field.value}
+            onDateChange={onDateChange}
+            minDate={new Date()}
+            maxDate={new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)}
+            placeholder="Seleccionar fecha"
+            filterDate={isValidAppointmentDate}
+            className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+            disabled={isSubmitting}
+          />
+          <FormMessage className="text-xs" />
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Disponible: Lun-Vie, {WORK_SCHEDULE.startHour}:00-{WORK_SCHEDULE.endHour}:00
+          </p>
+        </FormItem>
+      )}
+    />
+    
+    <FormField
+      control={form.control}
+      name="horaConsulta"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel className="text-slate-700 dark:text-slate-300 text-xs font-medium">
+            Hora *
+          </FormLabel>
+          <Select 
+            onValueChange={field.onChange} 
+            value={field.value} 
+            disabled={!selectedDate || !isValidAppointmentDate(selectedDate) || isSubmitting}
+          >
+            <FormControl>
+              <SelectTrigger className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
+                <SelectValue 
+                  placeholder={
+                    !selectedDate 
+                      ? "Seleccione fecha primero" 
+                      : !isValidAppointmentDate(selectedDate)
+                        ? "Fecha no válida"
+                        : "Seleccione hora"
+                  } 
+                />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent className="max-h-60">
+              {availableTimeSlots.length > 0 ? (
+                availableTimeSlots.map((slot) => (
+                  <SelectItem 
+                    key={slot.time} 
+                    value={slot.time} 
+                    className="text-sm"
+                    disabled={!slot.isAvailable}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3 w-3" />
+                      <span>{slot.time}</span>
+                      {!slot.isAvailable && (
+                        <span className="text-xs text-red-500">(Ocupado)</span>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))
+              ) : (
+                <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                  {selectedDate && isValidAppointmentDate(selectedDate) 
+                    ? "No hay horarios disponibles" 
+                    : "Seleccione una fecha válida"
+                  }
+                </div>
+              )}
+            </SelectContent>
+          </Select>
+          <FormMessage className="text-xs" />
+          {availableTimeSlots.filter(s => s.isAvailable).length > 0 && (
+            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+              ✓ {availableTimeSlots.filter(s => s.isAvailable).length} horarios disponibles
             </p>
-          </FormItem>
-        )}
-      />
-      
-      <FormField
-        control={form.control}
-        name="horaConsulta"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Hora <span className="text-red-500">*</span>
-            </FormLabel>
-            <Select 
-              onValueChange={field.onChange} 
-              value={field.value} 
-              disabled={!selectedDate || !isValidAppointmentDate(selectedDate) || isSubmitting}
-            >
-              <FormControl>
-                <SelectTrigger className="h-10 border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
-                  <SelectValue 
-                    placeholder={
-                      !selectedDate 
-                        ? "Seleccione fecha primero" 
-                        : !isValidAppointmentDate(selectedDate)
-                          ? "Fecha no válida"
-                          : "Seleccione hora"
-                    } 
-                  />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent className="max-h-60">
-                {availableTimeSlots.length > 0 ? (
-                  availableTimeSlots.map((slot) => (
-                    <SelectItem 
-                      key={slot.time} 
-                      value={slot.time} 
-                      className="text-sm"
-                      disabled={!slot.isAvailable}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-3 w-3" />
-                        <span>{slot.time}</span>
-                        {!slot.isAvailable && (
-                          <span className="text-xs text-red-500">(Ocupado)</span>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))
-                ) : (
-                  <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                    {selectedDate && isValidAppointmentDate(selectedDate) 
-                      ? "No hay horarios disponibles" 
-                      : "Seleccione una fecha válida"
-                    }
-                  </div>
-                )}
-              </SelectContent>
-            </Select>
-            <FormMessage className="text-xs" />
-            {availableTimeSlots.filter(s => s.isAvailable).length > 0 && (
-              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                ✓ {availableTimeSlots.filter(s => s.isAvailable).length} horarios disponibles
-              </p>
-            )}
-          </FormItem>
-        )}
-      />
-    </div>
+          )}
+        </FormItem>
+      )}
+    />
   </div>
-));
+))
 
-AppointmentScheduleSection.displayName = "AppointmentScheduleSection";
+AppointmentScheduleSection.displayName = "AppointmentScheduleSection"
 
 // ==================== INTERFACES ====================
 
@@ -540,93 +449,76 @@ interface NewPatientFormProps {
   triggerButton?: React.ReactNode
 }
 
+// ==================== VALORES POR DEFECTO ====================
+
+const DEFAULT_VALUES: Partial<TAdmissionForm> = {
+  nombre: "",
+  apellidos: "",
+  telefono: "",
+  notas: "",
+  edad: null,
+}
+
 // ==================== COMPONENTE PRINCIPAL ====================
 
 const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerButton }) => {
   const [open, setOpen] = useState(false)
   
-  // React Query hooks
-  // Selector simple usando useClinic (como propuso el usuario)
-  const { allAppointments } = useClinic();
-  
-  // Datos simulados para compatibilidad
-  const appointmentsData = useMemo(() => ({
-    appointments: allAppointments || []
-  }), [allAppointments]);
+  // Hooks centralizados de la nueva arquitectura
+  const { allAppointments } = useClinic()
   const { mutateAsync: admitPatient, isPending: isSubmitting } = useAdmitPatient()
   
-  const form = useForm<FormValues>({
-    resolver: zodResolver(FORM_SCHEMA),
+  // Form setup con nuevo esquema
+  const form = useForm<TAdmissionForm>({
+    resolver: zodResolver(AdmissionFormSchema),
     defaultValues: DEFAULT_VALUES,
     mode: "onChange",
   })
-
+  
   const selectedDate = form.watch("fechaConsulta")
-
-  // Calcular slots disponibles de forma optimizada
+  
+  // Memoizaciones para optimizar performance
   const availableTimeSlots = useMemo(() => {
     if (!selectedDate || !isValidAppointmentDate(selectedDate)) return []
-    
-    const appointments = appointmentsData?.appointments || []
+    const appointments = allAppointments || []
     return calculateAvailableSlots(selectedDate, appointments)
-  }, [selectedDate, appointmentsData])
-
-  // Handlers optimizados y memoizados
+  }, [selectedDate, allAppointments])
+  
+  // Callbacks optimizados
   const handleDateChange = useCallback((date: Date | undefined) => {
-    if (!date) {
-      form.setValue("fechaConsulta", undefined as any, { shouldValidate: true })
-      form.setValue("horaConsulta", "", { shouldValidate: true })
-      return
-    }
-    
-    if (!isValidAppointmentDate(date)) {
-      toast.error("Seleccione un día laboral dentro del rango permitido")
-      return
-    }
-    
-    form.setValue("fechaConsulta", date, { shouldValidate: true })
-    form.setValue("horaConsulta", "", { shouldValidate: true })
+    form.setValue("fechaConsulta", date as Date)
+    form.setValue("horaConsulta", "") // Reset time when date changes
   }, [form])
-
-  const handleAgeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    form.setValue("edad", value === "" ? null : Number(value), { shouldValidate: true })
-  }, [form])
-
-  const handleSubmit = useCallback(async (values: FormValues) => {
-    try {
-      // Construir fecha y hora de la cita
-      const appointmentDateTime = new Date(values.fechaConsulta)
-      const [hours, minutes] = values.horaConsulta.split(':').map(Number)
-      appointmentDateTime.setHours(hours, minutes, 0, 0)
-      
-      await admitPatient({
-        nombre: values.nombre.trim(),
-        apellidos: values.apellidos.trim(),
-        telefono: values.telefono.trim(),
-        edad: values.edad ?? null,
-        diagnostico_principal: values.motivoConsulta,
-        comentarios_registro: values.notas?.trim() || "",
-        fecha_hora_cita: appointmentDateTime.toISOString(),
-        motivo_cita: values.motivoConsulta,
-      })
-
-      setOpen(false)
-      form.reset(DEFAULT_VALUES)
-      toast.success("Paciente registrado exitosamente")
-      onSuccess?.()
-    } catch (error) {
-      console.error("Error al registrar paciente:", error)
-      toast.error("Error al registrar el paciente")
-    }
-  }, [admitPatient, onSuccess, form])
-
-  const handleDialogChange = useCallback((isOpen: boolean) => {
-    setOpen(isOpen)
-    if (!isOpen) {
+  
+  const handleDialogChange = useCallback((newOpen: boolean) => {
+    setOpen(newOpen)
+    if (!newOpen) {
       form.reset(DEFAULT_VALUES)
     }
   }, [form])
+  
+  // Función de submit simplificada - delegando lógica al hook
+  const handleSubmit = useCallback(async (values: TAdmissionForm) => {
+    const appointmentDateTime = new Date(values.fechaConsulta)
+    const [hours, minutes] = values.horaConsulta.split(':').map(Number)
+    appointmentDateTime.setHours(hours, minutes, 0, 0)
+    
+    await admitPatient({
+      nombre: values.nombre,
+      apellidos: values.apellidos,
+      telefono: values.telefono,
+      edad: values.edad,
+      diagnostico_principal: values.motivoConsulta,
+      comentarios_registro: values.notas,
+      fecha_hora_cita: appointmentDateTime.toISOString(),
+      motivo_cita: values.motivoConsulta,
+      doctor_id: null,
+    })
+    
+    setOpen(false)
+    form.reset(DEFAULT_VALUES)
+    onSuccess?.()
+  }, [admitPatient, form, onSuccess])
 
   // Memoizar validación de formulario
   const canSubmit = useMemo(() => form.formState.isValid && !isSubmitting, [form.formState.isValid, isSubmitting])
@@ -680,7 +572,6 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
                   <PersonalDataSection 
                     form={form} 
                     isSubmitting={isSubmitting}
-                    onAgeChange={handleAgeChange}
                   />
                 </div>
 

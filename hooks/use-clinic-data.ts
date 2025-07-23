@@ -137,33 +137,22 @@ export const useClinicData = () => {
     refetchOnWindowFocus: true,
   });
 
-  // ✅ SOLUCIÓN ROBUSTA: Extraer y transformar datos con validación
+  // ✅ SOLUCIÓN SIMPLIFICADA: Usar los datos directamente sin transformación excesiva
   const allAppointments = useMemo(() => {
-    // Importar utilidades de transformación
-    const { validateAndFilterApiAppointments, transformApiAppointments } = require('@/utils/appointment-transformer');
-    
-    let rawData: any[] = [];
+    let appointments: any[] = [];
     
     // Manejar tanto array directo como objeto con data
     if (Array.isArray(allAppointmentsResponse)) {
-      rawData = allAppointmentsResponse;
+      appointments = allAppointmentsResponse;
     } else if (allAppointmentsResponse?.data && Array.isArray(allAppointmentsResponse.data)) {
-      rawData = allAppointmentsResponse.data;
+      appointments = allAppointmentsResponse.data;
     }
     
-    // Validar y filtrar datos de la API
-    const validApiAppointments = validateAndFilterApiAppointments(rawData);
-    
-    // Transformar a formato normalizado
-    const normalizedAppointments = transformApiAppointments(validApiAppointments);
-    
-    console.log('🔍 Citas procesadas:', {
-      raw: rawData.length,
-      valid: validApiAppointments.length,
-      normalized: normalizedAppointments.length
+    console.log('🔍 Citas procesadas directamente:', {
+      count: appointments.length
     });
     
-    return normalizedAppointments;
+    return appointments;
   }, [allAppointmentsResponse]);
   
   const activePatients = useMemo(() => 
@@ -202,7 +191,11 @@ export const useClinicData = () => {
 
   // Los appointmentsWithPatientData ya vienen enriquecidos del backend
   const appointmentsWithPatientData = useMemo(() => 
-    allAppointments, 
+    allAppointments.map(appointment => ({
+      ...appointment,
+      // Asegurar acceso directo a los datos del paciente
+      paciente: appointment.patients // Alias para compatibilidad con componentes UI
+    })), 
     [allAppointments]
   );
 

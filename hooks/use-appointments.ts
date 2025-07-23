@@ -360,13 +360,15 @@ export const useAdmitPatient = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (patientData: any) => {
-      const response = await fetch('/api/patients', {
+    mutationFn: async (patientAndAppointmentData: any) => {
+      // ⬇️ --- CAMBIO CLAVE AQUÍ --- ⬇️
+      // Apuntar al nuevo endpoint que llama a la función RPC
+      const response = await fetch('/api/admit-patient', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(patientData),
+        body: JSON.stringify(patientAndAppointmentData), // El payload ya contiene todos los datos necesarios
       });
 
       if (!response.ok) {

@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import React, { useState, useCallback } from 'react';
 import { toast } from 'sonner';
+import { useSurveyTemplates, useAssignSurvey } from '@/hooks/use-survey-templates';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -82,54 +82,18 @@ const SurveySelector = React.memo(({
   patientName,
   onSurveyAssigned
 }: SurveySelectorProps) => {
-  const supabase = useMemo(() => createClient(), []);
-  const [templates, setTemplates] = useState<SurveyTemplate[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // 🎯 HOOK CENTRALIZADO - Elimina fetch redundante
+  const { data: templates = [], isLoading, error } = useSurveyTemplates();
+  const assignSurvey = useAssignSurvey();
   const [isAssigning, setIsAssigning] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchTemplates = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const { data, error } = await supabase
-        .from('survey_templates')
-        .select('id, title, description')
-        .order('id', { ascending: true });
-
-      if (error) throw error;
-      setTemplates(data || []);
-    } catch (err: any) {
-      console.error('Error fetching survey templates:', err);
-      setError('No se pudieron cargar las encuestas. Intente de nuevo.');
-      toast.error('Error al cargar las plantillas de encuesta.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase]);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchTemplates();
-    }
-  }, [isOpen, fetchTemplates]);
 
   const handleAssignSurvey = useCallback(async (template: SurveyTemplate) => {
     if (isAssigning !== null) return; // Prevent multiple assignments
     setIsAssigning(template.id);
     try {
-      const response = await fetch('/api/assign-survey', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patientId, templateId: template.id }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Error desconocido al asignar la encuesta.');
-      }
-
+      // 🎯 HOOK CENTRALIZADO - Lógica de asignación centralizada
+      const result = await assignSurvey(patientId, template.id);
+      
       toast.success(`Encuesta "${template.title}" asignada correctamente.`);
       onSurveyAssigned(result.assignmentId, String(template.id));
       onClose();
@@ -139,7 +103,7 @@ const SurveySelector = React.memo(({
     } finally {
       setIsAssigning(null);
     }
-  }, [isAssigning, patientId, onSurveyAssigned, onClose]);
+  }, [isAssigning, patientId, assignSurvey, onSurveyAssigned, onClose]);
 
   const handleClose = useCallback(() => {
     if (isAssigning === null) {
@@ -170,10 +134,14 @@ const SurveySelector = React.memo(({
           ) : error ? (
             <div className="flex flex-col items-center justify-center text-center p-8 bg-red-50 dark:bg-red-900/20 rounded-lg">
               <XCircle className="h-12 w-12 text-red-500 mb-4" />
-              <p className="font-semibold text-red-700 dark:text-red-300">{error}</p>
-              <Button variant="outline" size="sm" onClick={fetchTemplates} className="mt-4">
-                Reintentar
-              </Button>
+              {error && (
+                <p className="text-red-500 text-center">{error.message}</p>
+              )}
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={handleClose}>
+                  Cerrar
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">

@@ -15,13 +15,16 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   const { searchParams } = new URL(request.url);
 
-  // Parámetros para la función RPC
-  const dateFilter = searchParams.get('dateFilter');
+  // ✅ SOLUCIÓN: Parámetros optimizados para la función RPC
+  const dateFilter = searchParams.get('dateFilter'); // 'today', 'future', 'past', o null para todos
   const patientId = searchParams.get('patientId');
-  const page = parseInt(searchParams.get('page') || '1', 10);
-  const pageSize = parseInt(searchParams.get('pageSize') || '20', 10);
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(searchParams.get('pageSize') || '50', 10)));
 
   try {
+    // ✅ SOLUCIÓN: Usar consulta enriquecida con JOIN correctamente estructurado
+    console.log('📊 API Appointments llamado con parámetros:', { dateFilter, patientId, pageSize, page });
+    
     let query = supabase
       .from('appointments')
       .select(`
@@ -34,17 +37,25 @@ export async function GET(request: Request) {
         created_at,
         patient_id,
         doctor_id,
-        patients (*),
-        profiles (*)
+        patients:patient_id (
+          id,
+          nombre,
+          apellidos,
+          telefono,
+          email,
+          estado_paciente
+        ),
+        profiles:doctor_id (
+          id,
+          full_name,
+          username,
+          role
+        )
       `, { count: 'exact' });
 
     if (patientId) {
       query = query.eq('patient_id', patientId);
     }
-
-    // Implementar la lógica de dateFilter aquí si es necesario
-    // Por ahora, traemos todos y que el frontend filtre.
-    // Esto se puede optimizar después si es necesario.
 
     query = query.range((page - 1) * pageSize, page * pageSize - 1);
     query = query.order('fecha_hora_cita', { ascending: false });
@@ -52,13 +63,36 @@ export async function GET(request: Request) {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('Error en GET /api/appointments RPC:', error);
+      console.error('❌ Error en GET /api/appointments:', error);
       throw error;
     }
 
-    // La función RPC devuelve los datos listos para consumir
+    console.log(`✅ Citas obtenidas: ${data?.length || 0} de ${count || 0} total`);
+    
+    // 🔍 DIAGNÓSTICO DETALLADO: Ver estructura real de datos
+    if (data && data.length > 0) {
+      const sampleAppointment = data[0];
+      
+      console.log('🔍 ESTRUCTURA COMPLETA DEL APPOINTMENT:', JSON.stringify(sampleAppointment, null, 2));
+      console.log('🔍 TIPO DE patients:', typeof sampleAppointment.patients);
+      console.log('🔍 patients ES ARRAY:', Array.isArray(sampleAppointment.patients));
+      console.log('🔍 CONTENIDO patients:', sampleAppointment.patients);
+      
+      console.log('📋 Estructura de cita ejemplo:', {
+        id: sampleAppointment.id,
+        fecha_hora_cita: sampleAppointment.fecha_hora_cita,
+        estado_cita: sampleAppointment.estado_cita,
+        patient: sampleAppointment.patients && (sampleAppointment.patients as any).nombre ? `${(sampleAppointment.patients as any).nombre} ${(sampleAppointment.patients as any).apellidos}` : 'Sin datos de paciente'
+      });
+    } else {
+      console.log('⚠️ No se encontraron citas en la base de datos');
+    }
+
     return NextResponse.json(data || [], {
-      headers: cacheConfig
+      headers: {
+        ...cacheConfig,
+        'X-Total-Count': count?.toString() || '0'
+      }
     });
 
   } catch (error: any) {

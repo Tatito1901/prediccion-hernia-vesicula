@@ -27,42 +27,111 @@ export function validateAndFilterApiAppointments(rawData: any[]): ApiAppointment
   }
 
   return rawData.filter((item): item is ApiAppointment => {
+    // 🔍 DEBUG: Log de estructura de cada cita
+    console.log('🔍 Validando cita:', {
+      id: item?.id,
+      patient_id: item?.patient_id,
+      patients: item?.patients,
+      estado_cita: item?.estado_cita,
+      fecha_hora_cita: item?.fecha_hora_cita
+    });
+
     // Validaciones básicas requeridas
-    if (!item || typeof item !== 'object') return false;
-    if (!item.id || typeof item.id !== 'string') return false;
-    if (!item.patient_id || typeof item.patient_id !== 'string') return false;
-    if (!item.fecha_hora_cita || typeof item.fecha_hora_cita !== 'string') return false;
-    if (!item.estado_cita || typeof item.estado_cita !== 'string') return false;
+    if (!item || typeof item !== 'object') {
+      console.log('❌ Cita rechazada: no es objeto válido');
+      return false;
+    }
+    if (!item.id || typeof item.id !== 'string') {
+      console.log('❌ Cita rechazada: ID inválido:', item.id);
+      return false;
+    }
+    if (!item.patient_id || typeof item.patient_id !== 'string') {
+      console.log('❌ Cita rechazada: patient_id inválido:', item.patient_id);
+      return false;
+    }
+    if (!item.fecha_hora_cita || typeof item.fecha_hora_cita !== 'string') {
+      console.log('❌ Cita rechazada: fecha_hora_cita inválida:', item.fecha_hora_cita);
+      return false;
+    }
+    if (!item.estado_cita || typeof item.estado_cita !== 'string') {
+      console.log('❌ Cita rechazada: estado_cita inválido:', item.estado_cita);
+      return false;
+    }
 
     // Validar que tiene información del paciente
-    if (!item.patients || typeof item.patients !== 'object') return false;
-    if (!item.patients.id || !item.patients.nombre) return false;
+    if (!item.patients || typeof item.patients !== 'object') {
+      console.log('❌ Cita rechazada: patients inválido:', item.patients);
+      return false;
+    }
+    if (!item.patients.id || !item.patients.nombre) {
+      console.log('❌ Cita rechazada: datos de paciente incompletos:', {
+        id: item.patients.id,
+        nombre: item.patients.nombre
+      });
+      return false;
+    }
 
     // Validar estados permitidos
     const validStatuses = ['PROGRAMADA', 'CONFIRMADA', 'CANCELADA', 'COMPLETADA', 'PRESENTE', 'REAGENDADA', 'NO ASISTIO'];
-    if (!validStatuses.includes(item.estado_cita)) return false;
+    if (!validStatuses.includes(item.estado_cita)) {
+      console.log('❌ Cita rechazada: estado no válido:', item.estado_cita);
+      return false;
+    }
 
+    console.log('✅ Cita válida:', item.id);
     return true;
   });
 }
 
 /**
  * Transforma las citas de la API al formato normalizado del frontend
+ * CORREGIDO: Validación robusta de fechas antes de transformar
  * @param apiAppointments - Citas válidas de la API
  * @returns Array de citas normalizadas
  */
 export function transformApiAppointments(apiAppointments: ApiAppointment[]): NormalizedAppointment[] {
   return apiAppointments.map((appointment): NormalizedAppointment => {
+    // ✅ SOLUCIÓN: Validación robusta de fecha de cita
+    const parseAppointmentDate = (dateString: string): Date => {
+      if (!dateString || typeof dateString !== 'string') {
+        console.warn(`Cita ${appointment.id}: fecha_hora_cita inválida:`, dateString);
+        return new Date(NaN); // Fecha inválida explícita
+      }
+      
+      const parsedDate = new Date(dateString);
+      if (isNaN(parsedDate.getTime())) {
+        console.warn(`Cita ${appointment.id}: No se pudo parsear fecha:`, dateString);
+        return new Date(NaN); // Fecha inválida explícita
+      }
+      
+      return parsedDate;
+    };
+
+    // ✅ SOLUCIÓN: Validación robusta de fecha de creación
+    const parseCreatedDate = (dateString?: string): Date => {
+      if (!dateString) {
+        return new Date(); // Usar fecha actual si no existe created_at
+      }
+      
+      const parsedDate = new Date(dateString);
+      if (isNaN(parsedDate.getTime())) {
+        console.warn(`Cita ${appointment.id}: No se pudo parsear created_at:`, dateString);
+        return new Date(); // Usar fecha actual como fallback
+      }
+      
+      return parsedDate;
+    };
+
     return {
       id: appointment.id,
       patientId: appointment.patient_id,
       doctorId: appointment.doctor_id,
-      dateTime: new Date(appointment.fecha_hora_cita),
+      dateTime: parseAppointmentDate(appointment.fecha_hora_cita), // ✅ Fecha validada
       motivo: appointment.motivo_cita || 'Consulta general',
       status: appointment.estado_cita,
       isFirstTime: appointment.es_primera_vez || false,
       notes: appointment.notas_cita_seguimiento,
-      createdAt: new Date(appointment.created_at),
+      createdAt: parseCreatedDate(appointment.created_at), // ✅ Fecha validada
       patient: {
         id: appointment.patients.id,
         name: appointment.patients.nombre || 'Sin nombre',
@@ -77,34 +146,56 @@ export function transformApiAppointments(apiAppointments: ApiAppointment[]): Nor
 
 /**
  * Agrupa las citas normalizadas por fecha (hoy, futuras, pasadas)
+ * CORREGIDO: Manejo robusto de fechas y zonas horarias
  * @param normalizedAppointments - Citas normalizadas
  * @returns Objeto con citas agrupadas por fecha
  */
 export function groupAppointmentsByDate(normalizedAppointments: NormalizedAppointment[]): AppointmentsByDate {
+  // ✅ SOLUCIÓN: Usar fechas locales consistentes
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  const localToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const localTomorrow = new Date(localToday.getFullYear(), localToday.getMonth(), localToday.getDate() + 1);
 
   const today: NormalizedAppointment[] = [];
   const future: NormalizedAppointment[] = [];
   const past: NormalizedAppointment[] = [];
 
   normalizedAppointments.forEach((appointment) => {
-    const appointmentDate = new Date(appointment.dateTime);
+    // ✅ SOLUCIÓN: Validar fecha antes de procesar
+    if (!appointment.dateTime || !(appointment.dateTime instanceof Date)) {
+      console.warn(`Cita ${appointment.id} tiene fecha inválida:`, appointment.dateTime);
+      past.push(appointment); // Poner citas inválidas en el pasado
+      return;
+    }
+
+    const appointmentDate = appointment.dateTime;
     
-    if (appointmentDate >= todayStart && appointmentDate < todayEnd) {
+    // ✅ SOLUCIÓN: Comparar solo las fechas (sin hora) para evitar problemas de zona horaria
+    const appointmentDateOnly = new Date(
+      appointmentDate.getFullYear(), 
+      appointmentDate.getMonth(), 
+      appointmentDate.getDate()
+    );
+    
+    if (appointmentDateOnly.getTime() === localToday.getTime()) {
       today.push(appointment);
-    } else if (appointmentDate >= todayEnd) {
+    } else if (appointmentDateOnly > localToday) {
       future.push(appointment);
     } else {
       past.push(appointment);
     }
   });
 
-  // Ordenar las citas por fecha
-  today.sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
-  future.sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
-  past.sort((a, b) => b.dateTime.getTime() - a.dateTime.getTime()); // Más recientes primero
+  // ✅ SOLUCIÓN: Ordenamiento mejorado con validación de fechas
+  const safeSort = (a: NormalizedAppointment, b: NormalizedAppointment, reverse = false) => {
+    const timeA = a.dateTime instanceof Date ? a.dateTime.getTime() : 0;
+    const timeB = b.dateTime instanceof Date ? b.dateTime.getTime() : 0;
+    return reverse ? timeB - timeA : timeA - timeB;
+  };
+
+  today.sort((a, b) => safeSort(a, b));
+  future.sort((a, b) => safeSort(a, b));
+  past.sort((a, b) => safeSort(a, b, true)); // Más recientes primero
 
   return { today, future, past };
 }

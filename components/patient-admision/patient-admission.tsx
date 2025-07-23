@@ -48,28 +48,44 @@ import {
 
 // Types
 import { 
-  ExtendedAppointment, 
-  AppointmentStatusEnum,
-  AppointmentStatus 
+  AppointmentStatus, 
+  ExtendedAppointment,
+  AppointmentStatusEnum
 } from '@/lib/types';
-import type {
-  NormalizedAppointment,
-  AppointmentsByDate,
-  AppointmentCounts
-} from '@/types/appointments';
 
-// Hooks unificados - SOLUCIÓN A LA ARQUITECTURA INCONSISTENTE
-import { 
-  useFilteredAppointments, 
-  useAppointmentCounts,
-  formatDisplayDate,
-} from '@/hooks/use-unified-filtering';
+// Define missing types for component
+type AppointmentCounts = {
+  today: number;
+  future: number;
+  past: number;
+};
+
+interface NormalizedAppointment extends Omit<ExtendedAppointment, 'patients'> {
+  patientId: string;
+  doctorId: string;
+  patientName: string;
+  patientLastname: string;
+  telefono: string;
+  dateTime: Date;
+  motivo: string;
+  status: AppointmentStatus;
+  isFirstTime: boolean;
+  // Mantener una estructura compatible para componentes que aún no han sido refactorizados
+  patient: {
+    nombre: string;
+    apellidos: string;
+    telefono: string;
+    estado_paciente: string;
+  };
+  // Compatibilidad con campos antiguos
+  estado: AppointmentStatus;
+  notas: string | null;
+  notes: string | null;
+}
 
 // Contexto centralizado
 import { useClinic } from '@/contexts/clinic-data-provider';
 import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
-import { useAdmissionData } from '@/hooks/use-admission-data';
-import { usePatientsMigration } from '@/hooks/use-patients-migration';
 
 // Componentes lazy (optimización)
 const NewPatientForm = lazy(() => import("./new-patient-form"));
@@ -120,30 +136,9 @@ type TabValue = typeof TABS_CONFIG[number]['value'];
 type ConfirmAction = { type: 'checkIn' | 'complete' | 'cancel' | 'noShow' | 'reschedule'; appointment: NormalizedAppointment };
 
 // ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
-const LoadingSpinner = memo(() => (
-  <div className="flex items-center justify-center p-8">
-    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-    <span className="ml-2 text-sm text-gray-600">Cargando citas...</span>
-  </div>
-));
-LoadingSpinner.displayName = "LoadingSpinner";
-
-const EmptyState = memo<{ 
-  title: string; 
-  description: string; 
-  icon: React.ComponentType<{ className?: string }>;
-  action?: React.ReactNode;
-}>(({ title, description, icon: Icon, action }) => (
-  <div className="flex flex-col items-center justify-center p-12 text-center">
-    <div className="rounded-full bg-gray-100 dark:bg-gray-800 p-4 mb-4">
-      <Icon className="h-8 w-8 text-gray-400" />
-    </div>
-    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
-    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 max-w-sm">{description}</p>
-    {action}
-  </div>
-));
-EmptyState.displayName = "EmptyState";
+// Importar componentes unificados del sistema de skeletons
+import { LoadingSpinner, AppointmentListSkeleton } from "@/components/ui/unified-skeletons";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // ✅ SOLUCIÓN ROBUSTA: Importar tipos normalizados
 
@@ -170,8 +165,8 @@ const AppointmentCard = memo<{
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                {/* ✅ Usar datos normalizados */}
-                {appointment.patient.name} {appointment.patient.lastName}
+                {/* ✅ DATOS NORMALIZADOS: Siempre estructura consistente */}
+                {appointment.patientName} {appointment.patientLastname}
               </h3>
               {appointment.isFirstTime && (
                 <Badge variant="secondary" className="text-xs">Nuevo</Badge>
@@ -181,7 +176,7 @@ const AppointmentCard = memo<{
               {appointment.dateTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} • {appointment.motivo}
             </p>
             <p className="text-xs text-gray-500">
-              {appointment.patient.phone || 'Sin teléfono'} • Estado: {appointment.status}
+              {appointment.telefono || 'Sin teléfono'} • Estado: {appointment.estado_cita}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -192,9 +187,9 @@ const AppointmentCard = memo<{
           </div>
         </div>
 
-        {appointment.notes && (
-          <div className="mb-3 p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs">
-            <strong>Notas:</strong> {appointment.notes}
+        {appointment.notas_cita_seguimiento && (
+          <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
+            <strong>Notas:</strong> {appointment.notas_cita_seguimiento}
           </div>
         )}
 
@@ -284,17 +279,86 @@ const PatientAdmission: React.FC = () => {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [rescheduleAppointment, setRescheduleAppointment] = useState<NormalizedAppointment | null>(null);
 
-  // ✅ SOLUCIÓN ROBUSTA: Hook específico para admisión
-  const {
-    appointmentsByDate,
-    appointmentCounts,
-    isLoading,
-    error,
-    refetch
-  } = useAdmissionData();
+  // ✅ SOLUCIÓN OPTIMIZADA: Usar contexto centralizado
+  const { allAppointments, allPatients, isLoading, error } = useClinic();
   
-  // Obtener pacientes disponibles del contexto existente
-  const { allPatients } = useClinic();
+  // 🔍 DEBUG MÍNIMO: Verificar corrección de API
+  if (allAppointments && allAppointments.length > 0) {
+    console.log('✅ Citas recibidas:', allAppointments.length);
+    console.log('✅ Primera cita - patients:', allAppointments[0]?.patients);
+    console.log('✅ Primera cita - fecha:', allAppointments[0]?.fecha_hora_cita);
+  }
+
+  // ✅ SELECTOR EFICIENTE: Organizar citas por fecha usando datos centralizados
+  const appointmentsByDate = useMemo(() => {
+    if (!allAppointments || allAppointments.length === 0) {
+      return { today: [], future: [], past: [] };
+    }
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    const today: any[] = [];
+    const future: any[] = [];
+    const past: any[] = [];
+
+        const normalizedAppointments = allAppointments.map((appointment: ExtendedAppointment) => {
+      // Normalizar estructura para compatibilidad con componentes
+      return {
+        ...appointment, // Incluir todos los campos originales primero
+        patientId: appointment.patient_id,
+        doctorId: appointment.doctor_id,
+        patientName: appointment.patients?.nombre || 'Sin nombre',
+        patientLastname: appointment.patients?.apellidos || '',
+        // ✅ CORREGIDO: AppointmentCard espera 'paciente', no 'patient'
+        paciente: {
+          nombre: appointment.patients?.nombre || 'Sin nombre',
+          apellidos: appointment.patients?.apellidos || '',
+          telefono: appointment.patients?.telefono || 'Sin teléfono',
+          estado_paciente: 'ACTIVO' // Default value since not available in patients type
+        },
+        // Mantener 'patient' para retrocompatibilidad
+        patient: {
+          nombre: appointment.patients?.nombre || 'Sin nombre',
+          apellidos: appointment.patients?.apellidos || '',
+          telefono: appointment.patients?.telefono || 'Sin teléfono',
+          estado_paciente: 'ACTIVO' // Default value since not available in patients type
+        },
+        telefono: appointment.patients?.telefono || 'Sin teléfono',
+        dateTime: new Date(appointment.fecha_hora_cita),
+        motivo: appointment.motivo_cita,
+        status: appointment.estado_cita,
+        estado: appointment.estado_cita as AppointmentStatus,
+        notas: appointment.notas_cita_seguimiento,
+        notes: appointment.notas_cita_seguimiento,
+        isFirstTime: appointment.es_primera_vez || false,
+        id: appointment.id
+      };
+    });
+
+    normalizedAppointments.forEach((appointment: NormalizedAppointment) => {
+      const appointmentDate = appointment.dateTime; // Usar la fecha ya normalizada
+
+      if (appointmentDate >= todayStart && appointmentDate < todayEnd) {
+        today.push(appointment);
+      } else if (appointmentDate >= todayEnd) {
+        future.push(appointment);
+      } else {
+        past.push(appointment);
+      }
+    });
+    
+    return { today, future, past };
+  }, [allAppointments]);
+
+  // ✅ CONTADOR EFICIENTE: Calcular contadores de citas
+  const appointmentCounts = useMemo(() => ({
+    today: appointmentsByDate.today.length,
+    future: appointmentsByDate.future.length,
+    past: appointmentsByDate.past.length,
+    total: (appointmentsByDate.today.length + appointmentsByDate.future.length + appointmentsByDate.past.length)
+  }), [appointmentsByDate]);
 
   // ✅ PACIENTES DISPONIBLES (cuando no hay citas programadas)
   const availablePatients = useMemo(() => {
@@ -317,7 +381,7 @@ const PatientAdmission: React.FC = () => {
     });
   }, []);
 
-  const handleConfirmAction = useCallback((action: ConfirmAction) => {
+  const handleAppointmentAction = useCallback((action: ConfirmAction, appointment: NormalizedAppointment) => {
     setConfirmAction(action);
   }, []);
 
@@ -359,13 +423,13 @@ const PatientAdmission: React.FC = () => {
           title="Error al cargar citas"
           description={error.message || "Ha ocurrido un error inesperado"}
           icon={AlertCircle}
-          action={
-            <Button onClick={() => refetch()} variant="outline">
-              <Clock className="w-4 h-4 mr-2" />
-              Reintentar
-            </Button>
-          }
         />
+        <div className="mt-4 flex justify-center">
+          <Button onClick={() => window.location.reload()} variant="outline">
+            <Clock className="w-4 h-4 mr-2" />
+            Reintentar
+          </Button>
+        </div>
       </div>
     );
   }
@@ -382,7 +446,7 @@ const PatientAdmission: React.FC = () => {
             Gestiona citas y admite nuevos pacientes
           </p>
         </div>
-        <Button onClick={() => refetch()} variant="outline" size="sm">
+        <Button onClick={() => window.location.reload()} variant="outline" size="sm">
           <Clock className="w-4 h-4 mr-2" />
           Actualizar
         </Button>
@@ -410,10 +474,10 @@ const PatientAdmission: React.FC = () => {
           ) : !hasAppointments ? (
             <div className="space-y-6">
               <EmptyState
-                title="No hay citas para hoy"
-                description="No tienes citas programadas para el día de hoy"
-                icon={CalendarBlank}
-              />
+                title="No hay citas programadas"
+                description="No tienes citas programadas para hoy. ¡Es un buen momento para descansar!"
+                icon={Calendar}
+              />  
               {hasPatients && (
                 <div className="mt-8">
                   <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
@@ -424,7 +488,7 @@ const PatientAdmission: React.FC = () => {
                       <div key={patient.id} className="bg-white dark:bg-gray-800 rounded-lg border p-4 hover:shadow-md transition-shadow">
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="font-medium text-gray-900 dark:text-gray-100">
-                            {patient.nombre} {patient.apellido}
+                            {patient.nombre} {patient.apellidos}
                           </h4>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             patient.estado === 'PENDIENTE DE CONSULTA' 
@@ -452,10 +516,10 @@ const PatientAdmission: React.FC = () => {
                 <AppointmentCard
                   key={appointment.id}
                   appointment={appointment}
-                  onCheckIn={(apt) => handleConfirmAction({ type: 'checkIn', appointment: apt })}
-                  onComplete={(apt) => handleConfirmAction({ type: 'complete', appointment: apt })}
-                  onCancel={(apt) => handleConfirmAction({ type: 'cancel', appointment: apt })}
-                  onNoShow={(apt) => handleConfirmAction({ type: 'noShow', appointment: apt })}
+                  onCheckIn={(apt) => handleAppointmentAction({ type: 'checkIn', appointment: apt }, apt)}
+                  onComplete={(apt) => handleAppointmentAction({ type: 'complete', appointment: apt }, apt)}
+                  onCancel={(apt) => handleAppointmentAction({ type: 'cancel', appointment: apt }, apt)}
+                  onNoShow={(apt) => handleAppointmentAction({ type: 'noShow', appointment: apt }, apt)}
                   onReschedule={handleReschedule}
                 />
               ))}
@@ -468,20 +532,20 @@ const PatientAdmission: React.FC = () => {
             <LoadingSpinner />
           ) : appointmentsByDate.future.length === 0 ? (
             <EmptyState
-              title="No hay citas futuras"
-              description="No tienes citas programadas para fechas futuras"
-              icon={CalendarClock}
-            />
+              title="No hay próximas citas"
+              description="No hay citas programadas en el futuro."
+              icon={Calendar}
+            />  
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {appointmentsByDate.future.map((appointment) => (
                 <AppointmentCard
                   key={appointment.id}
                   appointment={appointment}
-                  onCheckIn={(apt) => handleConfirmAction({ type: 'checkIn', appointment: apt })}
-                  onComplete={(apt) => handleConfirmAction({ type: 'complete', appointment: apt })}
-                  onCancel={(apt) => handleConfirmAction({ type: 'cancel', appointment: apt })}
-                  onNoShow={(apt) => handleConfirmAction({ type: 'noShow', appointment: apt })}
+                  onCheckIn={(apt) => handleAppointmentAction({ type: 'checkIn', appointment: apt }, apt)}
+                  onComplete={(apt) => handleAppointmentAction({ type: 'complete', appointment: apt }, apt)}
+                  onCancel={(apt) => handleAppointmentAction({ type: 'cancel', appointment: apt }, apt)}
+                  onNoShow={(apt) => handleAppointmentAction({ type: 'noShow', appointment: apt }, apt)}
                   onReschedule={handleReschedule}
                 />
               ))}
@@ -528,7 +592,7 @@ const PatientAdmission: React.FC = () => {
                   confirmAction.type === 'complete' ? 'completar la consulta' :
                   confirmAction.type === 'cancel' ? 'cancelar la cita' :
                   confirmAction.type === 'noShow' ? 'marcar como no asistió' : 'reagendar la cita'} 
-                  para {confirmAction.appointment.patient.name} {confirmAction.appointment.patient.lastName}?
+                  para {confirmAction.appointment.patientName || 'Paciente'} {confirmAction.appointment.patientLastname || ''}?
                 </>
               )}
             </AlertDialogDescription>

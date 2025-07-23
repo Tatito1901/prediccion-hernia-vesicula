@@ -12,12 +12,16 @@ interface GenericPieChartProps {
   animated?: boolean;
 }
 
-// 🎨 Componente de tooltip personalizado elegante
+// 🎨 Componente de tooltip personalizado elegante con validación de datos
 const CustomTooltip = ({ active, payload }: any) => {
-  const { tooltipStyle } = useChartConfig();
+  const { tooltipStyle, isDark } = useChartConfig();
   
   if (active && payload && payload.length) {
     const data = payload[0].payload;
+    const value = data?.value ?? 0;
+    const total = data?.total ?? 0;
+    const name = data?.name ?? 'Sin nombre';
+    
     return (
       <div style={tooltipStyle}>
         <div className="flex items-center gap-2 mb-2">
@@ -25,13 +29,13 @@ const CustomTooltip = ({ active, payload }: any) => {
             className="w-3 h-3 rounded-full" 
             style={{ backgroundColor: payload[0].color }}
           />
-          <span className="font-semibold text-sm">{data.name}</span>
+          <span className="font-semibold text-sm">{name}</span>
         </div>
         <div className="text-lg font-bold">
-          {data.value.toLocaleString()}
+          {typeof value === 'number' ? value.toLocaleString() : value}
         </div>
         <div className="text-xs text-gray-500 mt-1">
-          {((data.value / data.total) * 100).toFixed(1)}%
+          {total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'}%
         </div>
       </div>
     );
@@ -111,7 +115,7 @@ export const GenericPieChart: React.FC<GenericPieChartProps> = ({
   }));
   
   return (
-    <div style={animated ? animations.enter : {}}>
+    <div className={animated ? 'animate-fade-in-up' : ''}>
       <ResponsiveContainer width="100%" height={350}>
         <PieChart key={animationKey}>
           {/* 🎨 Tooltip personalizado elegante */}
