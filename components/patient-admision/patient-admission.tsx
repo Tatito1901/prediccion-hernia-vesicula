@@ -289,7 +289,7 @@ const PatientAdmission: React.FC = () => {
     console.log('✅ Primera cita - fecha:', allAppointments[0]?.fecha_hora_cita);
   }
 
-  // ✅ SELECTOR EFICIENTE: Organizar citas por fecha usando datos centralizados
+  // ✅ SELECTOR EFICIENTE MEJORADO: Organizar citas por fecha Y ESTADO usando datos centralizados
   const appointmentsByDate = useMemo(() => {
     if (!allAppointments || allAppointments.length === 0) {
       return { today: [], future: [], past: [] };
@@ -303,7 +303,21 @@ const PatientAdmission: React.FC = () => {
     const future: any[] = [];
     const past: any[] = [];
 
-        const normalizedAppointments = allAppointments.map((appointment: ExtendedAppointment) => {
+    // Estados activos que deben mostrarse en Today y Future
+    const activeStates = [
+      AppointmentStatusEnum.PROGRAMADA,
+      AppointmentStatusEnum.CONFIRMADA,
+      AppointmentStatusEnum.PRESENTE
+    ];
+    
+    // Estados finalizados que deben ir siempre a historial
+    const finalizedStates = [
+      AppointmentStatusEnum.COMPLETADA,
+      AppointmentStatusEnum.CANCELADA,
+      AppointmentStatusEnum.NO_ASISTIO
+    ];
+
+    const normalizedAppointments = allAppointments.map((appointment: ExtendedAppointment) => {
       // Normalizar estructura para compatibilidad con componentes
       return {
         ...appointment, // Incluir todos los campos originales primero
@@ -339,15 +353,50 @@ const PatientAdmission: React.FC = () => {
 
     normalizedAppointments.forEach((appointment: NormalizedAppointment) => {
       const appointmentDate = appointment.dateTime; // Usar la fecha ya normalizada
+      const appointmentStatus = appointment.status;
 
-      if (appointmentDate >= todayStart && appointmentDate < todayEnd) {
-        today.push(appointment);
-      } else if (appointmentDate >= todayEnd) {
-        future.push(appointment);
-      } else {
+      // LÓGICA MEJORADA: Categorizar por fecha Y estado
+      
+      // 1. Los estados finalizados siempre van a historial, sin importar la fecha
+      if (finalizedStates.includes(appointmentStatus)) {
         past.push(appointment);
+        return; // Salir temprano, ya categorizamos esta cita
       }
+      
+      // 2. Reagendadas con fecha futura van a citas futuras
+      if (appointmentStatus === AppointmentStatusEnum.REAGENDADA && appointmentDate >= todayEnd) {
+        future.push(appointment);
+        return;
+      }
+      
+      // 3. Reagendadas con fecha pasada o de hoy van a historial
+      if (appointmentStatus === AppointmentStatusEnum.REAGENDADA && appointmentDate < todayEnd) {
+        past.push(appointment);
+        return;
+      }
+      
+      // 4. Estados activos en fecha de hoy van a Today
+      if (activeStates.includes(appointmentStatus) && 
+          appointmentDate >= todayStart && 
+          appointmentDate < todayEnd) {
+        today.push(appointment);
+        return;
+      }
+      
+      // 5. Estados activos en fecha futura van a Future
+      if (activeStates.includes(appointmentStatus) && appointmentDate >= todayEnd) {
+        future.push(appointment);
+        return;
+      }
+      
+      // 6. Por defecto, todo lo demás va a historial (citas pasadas o con estados no reconocidos)
+      past.push(appointment);
     });
+    
+    // Ordenar por fecha (más reciente primero para historial, más próxima primero para today/future)
+    today.sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
+    future.sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
+    past.sort((a, b) => b.dateTime.getTime() - a.dateTime.getTime()); // Orden inverso para historial
     
     return { today, future, past };
   }, [allAppointments]);

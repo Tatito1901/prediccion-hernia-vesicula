@@ -154,7 +154,7 @@ type MenuItem = {
 // ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
 
 const PatientAvatar: FC<{ initials: string }> = memo(({ initials }) => (
-  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 transition-all duration-200 hover:scale-105">
+  <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 transition-all duration-200 hover:scale-105">
     {initials}
   </div>
 ));
@@ -163,10 +163,10 @@ PatientAvatar.displayName = "PatientAvatar";
 const PatientInfo: FC<{ fullName: string; formattedTime: string; formattedDate: string; statusDot: string; }> = memo(({ fullName, formattedTime, formattedDate, statusDot }) => (
   <div className="min-w-0 flex-1">
     <div className="mb-1 flex items-center gap-2">
-      <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{fullName}</h3>
+      <h3 className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">{fullName || "Paciente Sin Nombre"}</h3>
       <div className={cn("h-2 w-2 shrink-0 rounded-full transition-all duration-200", statusDot)} />
     </div>
-    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs text-slate-500 dark:text-slate-400">
+    <div className="mt-0.5 sm:mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-slate-500 dark:text-slate-400">
       <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formattedTime}</span>
       <span className="hidden sm:block text-slate-300 dark:text-slate-600">•</span>
       <span>{formattedDate}</span>
@@ -175,31 +175,56 @@ const PatientInfo: FC<{ fullName: string; formattedTime: string; formattedDate: 
 ));
 PatientInfo.displayName = "PatientInfo";
 
-const ActionMenu: FC<{ menuItems: readonly MenuItem[]; appointment: FlexibleAppointment; onAction: (action: ConfirmAction, appointment: FlexibleAppointment) => void; onStartSurvey: () => void; onViewHistory: (patientId: string) => void; patientId?: string; }> = memo(({ menuItems, appointment, onAction, onStartSurvey, onViewHistory, patientId }) => (
-  <DropdownMenu>
-    <DropdownMenuTrigger asChild>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 opacity-100 group-hover:opacity-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200">
-        <MoreHorizontal size={16} />
-      </Button>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" className="w-48">
-      {menuItems.map(({ icon: Icon, label, action, destructive }) => (
-        <DropdownMenuItem key={label} onClick={() => onAction(action, appointment)} className={cn("gap-2 transition-colors duration-200", destructive && "text-red-600 focus:text-red-600 dark:text-red-400")}>
-          <Icon size={14} /> {label}
-        </DropdownMenuItem>
-      ))}
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onStartSurvey} className="gap-2 transition-colors duration-200"><MessageSquare size={14} /> Encuesta</DropdownMenuItem>
-      {patientId && <DropdownMenuItem onClick={() => onViewHistory(patientId)} className="gap-2 transition-colors duration-200"><History size={14} /> Historial</DropdownMenuItem>}
-    </DropdownMenuContent>
-  </DropdownMenu>
-));
+const ActionMenu: FC<{ menuItems: MenuItem[]; appointment: FlexibleAppointment; onAction: (action: ConfirmAction, appointment: FlexibleAppointment) => void; onStartSurvey: () => void; onViewHistory: (patientId: string) => void; patientId?: string; }> = memo(({ menuItems, appointment, onAction, onStartSurvey, onViewHistory, patientId }) => {
+  if (!menuItems.length && !patientId) return null;
+  
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0"
+        >
+          <MoreHorizontal className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[180px]">
+        {patientId && (
+          <>
+            <DropdownMenuItem
+              onClick={() => onViewHistory(patientId)}
+              className="flex cursor-pointer items-center gap-2 text-xs font-medium transition-all"
+            >
+              <History className="h-3.5 w-3.5" />
+              Ver historial del paciente
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        {menuItems.map((item, i) => (
+          <DropdownMenuItem
+            key={`${item.action}-${i}`}
+            onClick={() => onAction(item.action, appointment)}
+            className={cn(
+              "flex cursor-pointer items-center gap-2 text-xs font-medium transition-all",
+              item.destructive ? "text-red-600 dark:text-red-400" : ""
+            )}
+          >
+            <item.icon className="h-3.5 w-3.5" />
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+});
 ActionMenu.displayName = "ActionMenu";
 
 const PatientDetails: FC<{ appointment: FlexibleAppointment; telefono?: string; statusConfig: StatusConfig; }> = memo(({ appointment, telefono, statusConfig }) => (
   <>
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-      <Badge variant={statusConfig.variant as any} className="self-start px-2.5 py-1 text-xs font-medium transition-all duration-200 hover:scale-105">{statusConfig.label}</Badge>
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2">
+      <Badge variant={statusConfig.variant as any} className="self-start px-2 sm:px-2.5 py-0.5 sm:py-1 text-xs font-medium transition-all duration-200 hover:scale-105">{statusConfig.label}</Badge>
       {telefono && telefono !== "N/A" && (
         <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
           <Phone size={14} className="flex-shrink-0" />
@@ -207,7 +232,7 @@ const PatientDetails: FC<{ appointment: FlexibleAppointment; telefono?: string; 
         </div>
       )}
     </div>
-    <div className="mt-2 space-y-2">
+    <div className="mt-1.5 sm:mt-2 space-y-1.5 sm:space-y-2">
       {appointment.paciente?.edad && <p className="text-xs text-slate-600 dark:text-slate-300"><span className="font-medium text-slate-700 dark:text-slate-200">Edad:</span> {appointment.paciente.edad} años</p>}
       <p className="text-xs text-slate-600 dark:text-slate-300"><span className="font-medium text-slate-700 dark:text-slate-200">Fecha:</span> {new Date(appointment.fecha_hora_cita || appointment.fechaConsulta).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       {appointment.motivo_cita && appointment.motivo_cita !== "N/A" && (
@@ -227,25 +252,25 @@ const PatientDetails: FC<{ appointment: FlexibleAppointment; telefono?: string; 
 PatientDetails.displayName = "PatientDetails";
 
 const SurveyAlert: FC<{ onStartSurvey: () => void; }> = memo(({ onStartSurvey }) => (
-  <div className="mt-3 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-800/50 dark:bg-amber-900/20 transition-all duration-200 hover:shadow-sm">
+  <div className="mt-2 sm:mt-3 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-1.5 sm:p-2 dark:border-amber-800/50 dark:bg-amber-900/20 transition-all duration-200 hover:shadow-sm">
     <div className="flex items-center gap-2">
       <div className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
       <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Encuesta requerida</span>
     </div>
-    <Button size="sm" variant="ghost" className="h-auto shrink-0 px-2 py-1 text-xs text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-800/60 transition-all duration-200" onClick={onStartSurvey}>Iniciar</Button>
+    <Button size="sm" variant="ghost" className="h-auto shrink-0 px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-800/60 transition-all duration-200" onClick={onStartSurvey}>Iniciar</Button>
   </div>
 ));
 SurveyAlert.displayName = "SurveyAlert";
 
 const ActionButton: FC<{ onAction: () => void; needsSurvey: boolean; statusConfig: StatusConfig; disabled: boolean; }> = memo(({ onAction, needsSurvey, statusConfig, disabled }) => (
-  <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700/80">
-    <Button onClick={onAction} className="w-full font-medium transition-all duration-200 hover:scale-[1.02]" variant={needsSurvey ? "outline" : "default"} size="sm" disabled={disabled}>
+  <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-200 dark:border-slate-700/80">
+    <Button onClick={onAction} className="w-full font-medium transition-all duration-200 hover:scale-[1.02] text-xs sm:text-sm py-1 sm:py-2" variant={needsSurvey ? "outline" : "default"} size="sm" disabled={disabled}>
       {needsSurvey ? (
-        <><MessageSquare size={16} className="mr-2" />Iniciar Encuesta</>
+        <><MessageSquare size={14} className="mr-1.5 sm:mr-2" />Iniciar Encuesta</>
       ) : (
         <>
-          {statusConfig.primary === "checkIn" && <LogIn size={16} className="mr-2" />}
-          {statusConfig.primary === "complete" && <ListChecks size={16} className="mr-2" />}
+          {statusConfig.primary === "checkIn" && <LogIn size={14} className="mr-1.5 sm:mr-2" />}
+          {statusConfig.primary === "complete" && <ListChecks size={14} className="mr-1.5 sm:mr-2" />}
           {statusConfig.primaryLabel}
         </>
       )}
@@ -299,24 +324,29 @@ export const AppointmentCard: FC<AppointmentCardProps> = memo(({
 
   const handlePrimaryAction = useCallback(() => {
     if (!computedValues.statusConfig.primary) return;
+    console.log(`[Patient Card] Primary action clicked: ${computedValues.statusConfig.primary}`);
+    console.log(`[Patient Card] Appointment: ${appointment.id}, Current Status: ${appointmentData.estadoCita}`);
+    
     if (computedValues.needsSurvey && computedValues.statusConfig.primary === "complete") {
+      console.log('[Patient Card] Starting survey before completion');
       onStartSurvey();
     } else {
+      console.log(`[Patient Card] Executing action: ${computedValues.statusConfig.primary}`);
       onAction(computedValues.statusConfig.primary as ConfirmAction, appointment);
     }
-  }, [computedValues, onStartSurvey, onAction, appointment]);
+  }, [computedValues, onStartSurvey, onAction, appointment, appointmentData.estadoCita]);
 
   return (
     <Card className="group relative overflow-hidden transition-all duration-200 hover:shadow-md border-0 shadow-sm bg-white dark:bg-slate-900 dark:border dark:border-slate-700 flex flex-col h-full hover:scale-[1.01] active:scale-[0.99]">
-      <CardContent className="p-4 flex flex-col flex-grow">
-        <div className="flex items-start justify-between mb-3">
+      <CardContent className="p-3 sm:p-4 flex flex-col flex-grow">
+        <div className="flex items-start justify-between mb-2 sm:mb-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <PatientAvatar initials={computedValues.initials} />
             <PatientInfo fullName={computedValues.fullName} formattedTime={computedValues.formattedTime} formattedDate={computedValues.formattedDate} statusDot={computedValues.statusConfig.dot} />
           </div>
           <ActionMenu menuItems={computedValues.menuItems} appointment={appointment} onAction={onAction} onStartSurvey={onStartSurvey} onViewHistory={onViewHistory} patientId={appointmentData.patientId} />
         </div>
-        <div className="space-y-3 pt-2 flex-grow">
+        <div className="space-y-2 sm:space-y-3 pt-1.5 sm:pt-2 flex-grow">
           <PatientDetails appointment={appointment} telefono={computedValues.telefono} statusConfig={computedValues.statusConfig} />
           {computedValues.needsSurvey && <SurveyAlert onStartSurvey={onStartSurvey} />}
         </div>

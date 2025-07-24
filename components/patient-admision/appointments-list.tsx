@@ -159,6 +159,8 @@ export const AppointmentsList = memo<AppointmentListProps>(({
   // Handlers memoizados para evitar recreaciones innecesarias
   const handleAction = useCallback((action: ConfirmAction, appointment: ExtendedAppointment) => {
     if (!disabled) {
+      console.log(`[AppointmentsList] Action triggered: ${action}`);
+      console.log(`[AppointmentsList] Appointment: ${appointment.id}, Status: ${appointment.estado_cita}`);
       onAction(action, appointment);
     }
   }, [onAction, disabled]);

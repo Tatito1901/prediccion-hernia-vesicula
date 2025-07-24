@@ -153,8 +153,8 @@ const PersonalDataSection = memo<{
   form: any;
   isSubmitting: boolean;
 }>(({ form, isSubmitting }) => (
-  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+  <div className="bg-white dark:bg-slate-800/50 p-3 sm:p-4 md:p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div className="flex items-center gap-2 mb-3 sm:mb-4 pb-2 sm:pb-3 border-b border-slate-200 dark:border-slate-700">
       <Phone className="h-4 w-4 text-blue-600 dark:text-blue-400" />
       <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
         Información Personal
@@ -174,7 +174,7 @@ const PersonalDataSection = memo<{
               <Input
                 placeholder="Ej: Juan Carlos"
                 disabled={isSubmitting}
-                className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                className="h-10 sm:h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 touch-auto"
                 {...field}
               />
             </FormControl>
@@ -195,7 +195,7 @@ const PersonalDataSection = memo<{
               <Input
                 placeholder="Ej: González López"
                 disabled={isSubmitting}
-                className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                className="h-10 sm:h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 touch-auto"
                 {...field}
               />
             </FormControl>
@@ -217,7 +217,7 @@ const PersonalDataSection = memo<{
                 type="number"
                 placeholder="Ej: 45"
                 disabled={isSubmitting}
-                className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                className="h-10 sm:h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 touch-auto"
                 {...field}
                 onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
               />
@@ -239,7 +239,7 @@ const PersonalDataSection = memo<{
               <Input
                 placeholder="Ej: +52 555 123 4567"
                 disabled={isSubmitting}
-                className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400"
+                className="h-10 sm:h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 touch-auto"
                 {...field}
               />
             </FormControl>
@@ -257,8 +257,8 @@ const MedicalInfoSection = memo<{
   form: any;
   isSubmitting: boolean;
 }>(({ form, isSubmitting }) => (
-  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+  <div className="bg-white dark:bg-slate-800/50 p-3 sm:p-4 md:p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div className="flex items-center gap-2 mb-3 sm:mb-4 pb-2 sm:pb-3 border-b border-slate-200 dark:border-slate-700">
       <Stethoscope className="h-4 w-4 text-red-600 dark:text-red-400" />
       <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
         Información Médica
@@ -279,7 +279,7 @@ const MedicalInfoSection = memo<{
             disabled={isSubmitting}
           >
             <FormControl>
-              <SelectTrigger className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
+              <SelectTrigger className="h-10 sm:h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
                 <SelectValue placeholder="Seleccione un motivo..." />
               </SelectTrigger>
             </FormControl>
@@ -340,8 +340,8 @@ const AppointmentScheduleSection = memo<{
   availableTimeSlots: { time: string; isAvailable: boolean }[];
   onDateChange: (date: Date | undefined) => void;
 }>(({ form, isSubmitting, selectedDate, availableTimeSlots, onDateChange }) => (
-  <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+  <div className="bg-white dark:bg-slate-800/50 p-3 sm:p-4 md:p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div className="flex items-center gap-2 mb-3 sm:mb-4 pb-2 sm:pb-3 border-b border-slate-200 dark:border-slate-700">
       <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400" />
       <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
         Programar Cita
@@ -388,7 +388,7 @@ const AppointmentScheduleSection = memo<{
             disabled={!selectedDate || !isValidAppointmentDate(selectedDate) || isSubmitting}
           >
             <FormControl>
-              <SelectTrigger className="h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
+              <SelectTrigger className="h-10 sm:h-9 text-sm border-slate-300 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400">
                 <SelectValue 
                   placeholder={
                     !selectedDate 
@@ -539,7 +539,7 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
       </DialogTrigger>
       
       <DialogContent 
-        className="sm:max-w-4xl max-w-[95vw] max-h-[95vh] h-auto flex flex-col p-0 gap-0 rounded-xl shadow-2xl border-0 bg-white dark:bg-slate-900"
+        className="sm:max-w-4xl max-w-[95vw] max-h-[95vh] h-auto flex flex-col p-0 gap-0 rounded-xl shadow-2xl border-0 bg-white dark:bg-slate-900 overflow-hidden"
         onInteractOutside={(e) => e.preventDefault()}
       >
         {/* Header optimizado */}
@@ -560,15 +560,15 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
         </DialogHeader>
 
         {/* Contenido del formulario optimizado */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 bg-gradient-to-b from-white to-slate-50/50 dark:from-slate-900 dark:to-slate-900/95">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-4 sm:py-5 md:py-6 bg-gradient-to-b from-white to-slate-50/50 dark:from-slate-900 dark:to-slate-900/95">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
               
               {/* Grid principal responsivo */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-5 lg:gap-6">
                 
                 {/* Columna 1: Datos Personales */}
-                <div className="lg:col-span-1 space-y-4">
+                <div className="md:col-span-1 space-y-3 sm:space-y-4">
                   <PersonalDataSection 
                     form={form} 
                     isSubmitting={isSubmitting}
@@ -576,7 +576,7 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
                 </div>
 
                 {/* Columna 2: Información Médica */}
-                <div className="lg:col-span-1 space-y-4">
+                <div className="md:col-span-1 space-y-3 sm:space-y-4">
                   <MedicalInfoSection 
                     form={form} 
                     isSubmitting={isSubmitting}
@@ -584,7 +584,7 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
                 </div>
 
                 {/* Columna 3: Programación de Cita */}
-                <div className="lg:col-span-1 space-y-4">
+                <div className="md:col-span-1 space-y-3 sm:space-y-4">
                   <AppointmentScheduleSection
                     form={form}
                     isSubmitting={isSubmitting}
@@ -599,13 +599,13 @@ const NewPatientFormComponent = memo<NewPatientFormProps>(({ onSuccess, triggerB
         </div>
 
         {/* Footer con botones optimizado */}
-        <DialogFooter className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 rounded-b-xl">
-          <div className="flex justify-between items-center w-full">
+        <DialogFooter className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 rounded-b-xl">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full gap-3 sm:gap-2">
             <div className="text-xs text-slate-500 dark:text-slate-400">
               <FileText className="inline h-3 w-3 mr-1" />
               Todos los campos marcados con * son obligatorios
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-2 sm:gap-3 w-full sm:w-auto justify-end">
               <DialogClose asChild>
                 <Button 
                   type="button" 
