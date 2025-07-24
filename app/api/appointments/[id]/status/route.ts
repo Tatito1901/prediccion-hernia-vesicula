@@ -17,11 +17,13 @@ const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
   'NO_ASISTIO': ['REAGENDADA', 'PROGRAMADA']
 };
 
+// Siguiendo exactamente la firma requerida por Next.js 15
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   const supabase = await createClient();
+  // Acceso directo al parámetro id
   const { id } = params;
 
   try {
@@ -69,7 +71,7 @@ export async function PATCH(
     // 🔄 PREPARAR DATOS PARA ACTUALIZACIÓN
     const updateData: any = {
       estado_cita: newStatus,
-      updated_at: new Date().toISOString(),
+      // Eliminamos updated_at ya que no existe en el esquema
     };
 
     // Añadir campos opcionales según el caso
@@ -109,10 +111,23 @@ export async function PATCH(
       );
     }
 
-    // 📊 LOG PARA AUDITORIA
-    const patientName = Array.isArray(currentAppointment.patients) 
-      ? currentAppointment.patients[0]?.nombre 
-      : currentAppointment.patients?.nombre;
+    // 📈 LOG PARA AUDITORIA
+    // Manejo seguro del objeto patient que puede tener diferentes estructuras
+    let patientName = 'Paciente desconocido';
+    
+    try {
+      const patient = currentAppointment.patients;
+      if (patient) {
+        if (Array.isArray(patient) && patient.length > 0) {
+          patientName = `${patient[0].nombre || ''} ${patient[0].apellidos || ''}`.trim() || 'Sin nombre';
+        } else if (typeof patient === 'object') {
+          patientName = `${(patient as any).nombre || ''} ${(patient as any).apellidos || ''}`.trim() || 'Sin nombre';
+        }
+      }
+    } catch (e) {
+      console.error('Error al extraer nombre del paciente:', e);
+    }
+    
     console.log(`✅ Estado actualizado: ${id} | ${currentStatus} → ${newStatus} | Paciente: ${patientName}`);
 
     // 🎯 RESPUESTA EXITOSA
