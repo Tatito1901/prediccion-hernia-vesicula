@@ -53,7 +53,7 @@ export const GenericBarChart: React.FC<GenericBarChartProps> = ({
   }, [data, animated]);
   
   return (
-    <div style={animated ? animations.enter : {}}>
+    <div style={animated ? animations.fadeInUp : {}}>
       <ResponsiveContainer width="100%" height={350}>
         <BarChart 
           data={data} 

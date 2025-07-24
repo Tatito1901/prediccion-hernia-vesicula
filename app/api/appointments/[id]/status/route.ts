@@ -17,14 +17,14 @@ const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
   'NO_ASISTIO': ['REAGENDADA', 'PROGRAMADA']
 };
 
-// Siguiendo exactamente la firma requerida por Next.js 15
+// Siguiendo exactamente la firma requerida por Next.js 15 con params como Promise
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
-  // Acceso directo al parámetro id
-  const { id } = params;
+  // Acceso al parámetro id, esperando la Promise
+  const { id } = await params;
 
   try {
     const body = await request.json();

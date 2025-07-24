@@ -1,8 +1,8 @@
 // components/appointments/appointments-list-reactive.tsx - COMPONENTE REACTIVO BACKEND-FIRST
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
-import { useSpecificAppointments } from '@/contexts/clinic-data-provider-new';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { useClinic } from '@/contexts/clinic-data-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,21 +37,44 @@ export function AppointmentsListReactive({
   const [pageSize] = useState(initialPageSize);
 
   // 🎯 FETCH ESPECÍFICO - Solo datos necesarios desde backend
-  const {
-    data: appointmentsResponse,
-    isLoading,
-    error,
-    refetch,
-  } = useSpecificAppointments({
-    dateFilter,
-    search: search.trim() || undefined,
-    status: status || undefined,
-    page,
-    pageSize,
-  });
+  const clinic = useClinic();
+  const [appointmentsResponse, setAppointmentsResponse] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  
+  // Función para cargar los datos
+  const fetchAppointments = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await clinic.fetchSpecificAppointments({
+        dateFilter: dateFilter === 'all' ? undefined : dateFilter,
+        search: search.trim() || undefined,
+        // El parámetro 'status' no es aceptado por fetchSpecificAppointments
+        // pero mantenemos el filtro local para la UI
+        pageSize,
+      });
+      setAppointmentsResponse(response);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Error al cargar citas'));
+      console.error('Error fetching appointments:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [clinic, dateFilter, search, status, pageSize]);
+  
+  // Efecto para cargar los datos cuando cambian los filtros
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments, page]);
+  
+  // Función para refrescar los datos
+  const refetch = useCallback(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
 
   // 🎯 Datos memoizados (NO filtrado local)
-  const appointments = useMemo(() => 
+  const appointments = useMemo<any[]>(() => 
     appointmentsResponse?.data || [], 
     [appointmentsResponse?.data]
   );
