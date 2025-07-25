@@ -1,4 +1,4 @@
-// patient-admission.tsx - VERSIÓN FINAL ESTABLE
+// patient-admission.tsx - VERSIÓN OPTIMIZADA
 import React, { 
   useState, 
   useCallback, 
@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 
 // UI Components
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -29,137 +28,90 @@ import { EmptyState } from "@/components/ui/empty-state";
 
 // Icons
 import {
-  Calendar,
   CheckCircle,
-  XCircle,
-  CalendarDays,
-  ClipboardCheck,
-  AlertCircle,
-  UserRoundPlus,
   CalendarCheck,
   CalendarClock,
   History,
+  UserRoundPlus,
+  AlertCircle,
 } from "lucide-react";
 
-// Types - Se importa lo que existe, se define localmente lo que no
-import { 
-  AppointmentStatus, 
-  ExtendedAppointment,
-  AppointmentStatusEnum,
-} from '@/lib/types';
+// Importaciones unificadas
+import {
+  AppointmentWithPatient,
+  AppointmentAction,
+  PatientAdmissionTab,
+  TabConfig,
+} from './types';
 
 // Contexto y Hooks
 import { useClinic } from '@/contexts/clinic-data-provider';
 import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
-import { convertUtcToLocal, isTodayLocal, isFutureLocal, formatTime } from '@/lib/date-utils';
+
+// Utilidades centralizadas
+import {
+  isAppointmentToday,
+  isAppointmentInPast,
+  sortAppointmentsByDate
+} from '@/lib/appointment-utils';
+
+// Componentes especializados
+import { AppointmentsList } from "./appointments-list";
 
 // Componentes Lazy
 const NewPatientForm = lazy(() => import("./new-patient-form"));
 const RescheduleDatePicker = lazy(() => import("./patient-admission-reschedule"));
 
-// ==================== TIPOS LOCALES Y CONFIGURACIONES ====================
-// ✅ SOLUCIÓN: Definir el tipo Normalizado aquí, ya que es para este componente.
-// Es simplemente un alias para ExtendedAppointment para mantener la claridad.
-type NormalizedAppointment = ExtendedAppointment;
+// ==================== CONFIGURACIÓN DE TABS ====================
 
-const TABS_CONFIG = [
-  { value: "newPatient" as const, label: "Nuevo Paciente", icon: UserRoundPlus, shortLabel: "Nuevo" },
-  { value: "today" as const, label: "Citas de Hoy", icon: CalendarCheck, shortLabel: "Hoy" },
-  { value: "future" as const, label: "Próximas Citas", icon: CalendarClock, shortLabel: "Próximas" },
-  { value: "past" as const, label: "Historial", icon: History, shortLabel: "Historial" },
-] as const;
+const TABS_CONFIG: TabConfig[] = [
+  { 
+    value: "newPatient", 
+    label: "Nuevo Paciente", 
+    icon: UserRoundPlus, 
+    shortLabel: "Nuevo" 
+  },
+  { 
+    value: "today", 
+    label: "Citas de Hoy", 
+    icon: CalendarCheck, 
+    shortLabel: "Hoy" 
+  },
+  { 
+    value: "future", 
+    label: "Próximas Citas", 
+    icon: CalendarClock, 
+    shortLabel: "Próximas" 
+  },
+  { 
+    value: "past", 
+    label: "Historial", 
+    icon: History, 
+    shortLabel: "Historial" 
+  },
+];
 
-const STATUS_CONFIG = {
-  [AppointmentStatusEnum.PROGRAMADA]: { label: "Programada", className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", icon: Calendar },
-  [AppointmentStatusEnum.PRESENTE]: { label: "Presente", className: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200", icon: CheckCircle },
-  [AppointmentStatusEnum.COMPLETADA]: { label: "Completada", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200", icon: ClipboardCheck },
-  [AppointmentStatusEnum.CANCELADA]: { label: "Cancelada", className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200", icon: XCircle },
-  [AppointmentStatusEnum.NO_ASISTIO]: { label: "No asistió", className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200", icon: AlertCircle },
-  [AppointmentStatusEnum.REAGENDADA]: { label: "Reagendada", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", icon: CalendarDays },
-} as const;
+// ==================== TIPOS LOCALES ====================
 
-type TabValue = typeof TABS_CONFIG[number]['value'];
-type ConfirmAction = { type: 'checkIn' | 'complete' | 'cancel' | 'noShow'; appointment: NormalizedAppointment };
-type AppointmentCounts = { today: number; future: number; past: number; };
+interface ConfirmationAction {
+  type: AppointmentAction;
+  appointment: AppointmentWithPatient;
+  label: string;
+  description: string;
+}
 
-// ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
-const AppointmentCard = memo<{
-  appointment: NormalizedAppointment;
-  onCheckIn: (appointment: NormalizedAppointment) => void;
-  onComplete: (appointment: NormalizedAppointment) => void;
-  onCancel: (appointment: NormalizedAppointment) => void;
-  onNoShow: (appointment: NormalizedAppointment) => void;
-  onReschedule: (appointment: NormalizedAppointment) => void;
-}>(({ appointment, onCheckIn, onComplete, onCancel, onNoShow, onReschedule }) => {
-  const statusConfig = STATUS_CONFIG[appointment.estado_cita] || STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
-  const StatusIcon = statusConfig.icon;
-
-  const canCheckIn = appointment.estado_cita === AppointmentStatusEnum.PROGRAMADA;
-  const canComplete = appointment.estado_cita === AppointmentStatusEnum.PRESENTE;
-  const canModify = [AppointmentStatusEnum.PROGRAMADA, AppointmentStatusEnum.PRESENTE].includes(appointment.estado_cita);
-
-  return (
-    <Card className="hover:shadow-md transition-shadow duration-200">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                {appointment.patients?.nombre} {appointment.patients?.apellidos}
-              </h3>
-              {appointment.es_primera_vez && (
-                <Badge variant="secondary" className="text-xs">Nuevo</Badge>
-              )}
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-              {/* ✅ SOLUCIÓN: Usar formatTime con la fecha UTC directamente */}
-              {formatTime(convertUtcToLocal(appointment.fecha_hora_cita))} • {appointment.motivo_cita}
-            </p>
-            <p className="text-xs text-gray-500">
-              {appointment.patients?.telefono || 'Sin teléfono'} • Estado: {appointment.estado_cita}
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <Badge className={cn("text-xs", statusConfig.className)}>
-              <StatusIcon className="w-3 h-3 mr-1" />
-              {statusConfig.label}
-            </Badge>
-          </div>
-        </div>
-
-        {appointment.notas_cita_seguimiento && (
-          <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
-            <strong>Notas:</strong> {appointment.notas_cita_seguimiento}
-          </div>
-        )}
-
-        <div className="flex gap-2 flex-wrap">
-          {canCheckIn && <Button size="sm" onClick={() => onCheckIn(appointment)} className="flex-1 min-w-0"><CheckCircle className="w-4 h-4 mr-1" />Check-in</Button>}
-          {canComplete && <Button size="sm" variant="outline" onClick={() => onComplete(appointment)} className="flex-1 min-w-0"><ClipboardCheck className="w-4 h-4 mr-1" />Completar</Button>}
-          {canModify && (
-            <>
-              <Button size="sm" variant="outline" onClick={() => onReschedule(appointment)}><CalendarDays className="w-4 h-4 mr-1" />Reagendar</Button>
-              <Button size="sm" variant="outline" onClick={() => onCancel(appointment)}><XCircle className="w-4 h-4 mr-1" />Cancelar</Button>
-              <Button size="sm" variant="outline" onClick={() => onNoShow(appointment)}><AlertCircle className="w-4 h-4 mr-1" />No asistió</Button>
-            </>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
-AppointmentCard.displayName = "AppointmentCard";
+// ==================== COMPONENTES INTERNOS ====================
 
 const TabNavigation = memo<{
-  activeTab: TabValue;
-  onTabChange: (tab: TabValue) => void;
-  appointmentCounts: AppointmentCounts;
+  activeTab: PatientAdmissionTab;
+  onTabChange: (tab: PatientAdmissionTab) => void;
+  counts: Record<PatientAdmissionTab, number>;
   isLoading: boolean;
-}>(({ activeTab, onTabChange, appointmentCounts, isLoading }) => (
+}>(({ activeTab, onTabChange, counts, isLoading }) => (
   <div className="grid grid-cols-4 gap-1 sm:gap-2 p-2 bg-slate-100 dark:bg-slate-800/50 rounded-xl border mb-4">
     {TABS_CONFIG.map((tab) => {
       const Icon = tab.icon;
-      const count = tab.value === "newPatient" ? 0 : appointmentCounts[tab.value];
+      const count = tab.value === "newPatient" ? 0 : counts[tab.value];
       const isActive = activeTab === tab.value;
 
       return (
@@ -176,7 +128,10 @@ const TabNavigation = memo<{
           <div className="relative">
             <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
             {tab.value !== "newPatient" && (
-              <Badge variant="secondary" className="absolute -top-2 -right-2 h-4 w-4 p-0 text-xs flex items-center justify-center">
+              <Badge 
+                variant="secondary" 
+                className="absolute -top-2 -right-2 h-4 w-4 p-0 text-xs flex items-center justify-center"
+              >
                 {isLoading ? "..." : count}
               </Badge>
             )}
@@ -190,159 +145,267 @@ const TabNavigation = memo<{
 ));
 TabNavigation.displayName = "TabNavigation";
 
-const AppointmentsList = memo<{
-  appointments: NormalizedAppointment[];
-  isLoading: boolean;
-  emptyState: React.ReactNode;
-  onCheckIn: (appointment: NormalizedAppointment) => void;
-  onComplete: (appointment: NormalizedAppointment) => void;
-  onCancel: (appointment: NormalizedAppointment) => void;
-  onNoShow: (appointment: NormalizedAppointment) => void;
-  onReschedule: (appointment: NormalizedAppointment) => void;
-}>(({ appointments, isLoading, emptyState, ...handlers }) => {
-  if (isLoading) {
-    return <AppointmentListSkeleton />;
-  }
-
-  if (appointments.length === 0) {
-    return <>{emptyState}</>;
-  }
-
-  return (
-    <div className="space-y-3">
-      {appointments.map((appointment) => (
-        <AppointmentCard key={appointment.id} appointment={appointment} {...handlers} />
-      ))}
-    </div>
-  );
-});
-AppointmentsList.displayName = "AppointmentsList";
-
 // ==================== COMPONENTE PRINCIPAL ====================
-const PatientAdmission: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabValue>("today");
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-  const [rescheduleAppointment, setRescheduleAppointment] = useState<NormalizedAppointment | null>(null);
 
+const PatientAdmission: React.FC = () => {
+  // Estado local
+  const [activeTab, setActiveTab] = useState<PatientAdmissionTab>("today");
+  const [confirmAction, setConfirmAction] = useState<ConfirmationAction | null>(null);
+  const [rescheduleAppointment, setRescheduleAppointment] = useState<AppointmentWithPatient | null>(null);
+
+  // Hooks
   const { allAppointments, isLoading, error } = useClinic();
   const updateStatusMutation = useUpdateAppointmentStatus();
 
-  const appointmentsByDate = useMemo(() => {
+  // Clasificación de citas usando utilidades centralizadas
+  const { appointmentsByDate, counts } = useMemo(() => {
+    const today: AppointmentWithPatient[] = [];
+    const future: AppointmentWithPatient[] = [];
+    const past: AppointmentWithPatient[] = [];
+    
     if (!allAppointments) {
-      return { today: [], future: [], past: [] };
+      return {
+        appointmentsByDate: { today, future, past },
+        counts: { today: 0, future: 0, past: 0, newPatient: 0 }
+      };
     }
-    const today: NormalizedAppointment[] = [];
-    const future: NormalizedAppointment[] = [];
-    const past: NormalizedAppointment[] = [];
 
-    allAppointments.forEach(appointment => {
-      const localDate = convertUtcToLocal(appointment.fecha_hora_cita);
-      if (isTodayLocal(localDate)) {
-        today.push(appointment);
-      } else if (isFutureLocal(localDate)) {
-        future.push(appointment);
-      } else {
-        past.push(appointment);
+    // Clasificación eficiente en un solo recorrido
+    for (const appointment of allAppointments) {
+      try {
+        if (!appointment.fecha_hora_cita) continue;
+        
+        if (isAppointmentToday(appointment.fecha_hora_cita)) {
+          today.push(appointment);
+        } else if (isAppointmentInPast(appointment.fecha_hora_cita)) {
+          past.push(appointment);
+        } else {
+          future.push(appointment);
+        }
+      } catch (error) {
+        console.error(`Error procesando cita ${appointment.id}:`, error);
       }
-    });
-    return { today, future, past };
+    }
+
+    // Ordenamiento optimizado
+    sortAppointmentsByDate(today, 'asc');
+    sortAppointmentsByDate(future, 'asc');
+    sortAppointmentsByDate(past, 'desc');
+
+    return {
+      appointmentsByDate: { today, future, past },
+      counts: {
+        today: today.length,
+        future: future.length,
+        past: past.length,
+        newPatient: 0
+      }
+    };
   }, [allAppointments]);
 
-  const handleUpdateStatus = useCallback((appointmentId: string, status: AppointmentStatus) => {
-    toast.promise(updateStatusMutation.mutateAsync({ appointmentId, newStatus: status }), {
-      loading: 'Actualizando estado...', 
-      success: 'Estado actualizado con éxito.',
-      error: 'Error al actualizar el estado.',
-    });
+  // Handlers principales
+  const handleUpdateStatus = useCallback((appointmentId: string, status: string) => {
+    updateStatusMutation.mutate(
+      { appointmentId, newStatus: status },
+      {
+        onSuccess: () => toast.success('Estado actualizado con éxito'),
+        onError: () => toast.error('Error al actualizar el estado')
+      }
+    );
     setConfirmAction(null);
   }, [updateStatusMutation]);
 
-  const handleReschedule = useCallback((appointment: NormalizedAppointment, newDate: Date) => {
-    toast.promise(
-      updateStatusMutation.mutateAsync({
-        appointmentId: appointment.id,
-        newStatus: AppointmentStatusEnum.REAGENDADA,
-        nuevaFechaHora: newDate.toISOString(),
-      }),
-      {
-        loading: 'Reagendando cita...',
-        success: 'Cita reagendada con éxito.',
-        error: 'Error al reagendar la cita.',
-      }
-    );
-    setRescheduleAppointment(null);
-  }, [updateStatusMutation]);
+  const handleAction = useCallback((action: AppointmentAction, appointment: AppointmentWithPatient) => {
+    if (action === 'reschedule') {
+      setRescheduleAppointment(appointment);
+      return;
+    }
 
-  const actionHandlers = {
-    onCheckIn: (appt: NormalizedAppointment) => setConfirmAction({ type: 'checkIn', appointment: appt }),
-    onComplete: (appt: NormalizedAppointment) => setConfirmAction({ type: 'complete', appointment: appt }),
-    onCancel: (appt: NormalizedAppointment) => setConfirmAction({ type: 'cancel', appointment: appt }),
-    onNoShow: (appt: NormalizedAppointment) => setConfirmAction({ type: 'noShow', appointment: appt }),
-    onReschedule: (appt: NormalizedAppointment) => setRescheduleAppointment(appt),
+    // Mapa de acciones para evitar lógica redundante
+    const actionMap: Record<AppointmentAction, { label: string; description: string }> = {
+      checkIn: { 
+        label: 'Presente', 
+        description: 'El paciente será marcado como presente en la consulta.' 
+      },
+      complete: { 
+        label: 'Completada', 
+        description: 'La consulta será marcada como finalizada.' 
+      },
+      cancel: { 
+        label: 'Cancelada', 
+        description: 'La cita será cancelada y liberará el horario.' 
+      },
+      noShow: { 
+        label: 'No Asistió', 
+        description: 'Se marcará que el paciente no se presentó a la cita.' 
+      },
+      reschedule: { label: '', description: '' } // Nunca se usa aquí
+    };
+
+    const config = actionMap[action];
+    if (config) {
+      setConfirmAction({
+        type: action,
+        appointment,
+        label: config.label,
+        description: config.description,
+      });
+    }
+  }, []);
+
+  const handleReschedule = useCallback((date: Date, time: string) => {
+    if (!rescheduleAppointment) return;
+    
+    const [hours, minutes] = time.split(':').map(Number);
+    const newDate = new Date(date);
+    newDate.setHours(hours, minutes, 0, 0);
+    
+    updateStatusMutation.mutate({
+      appointmentId: rescheduleAppointment.id,
+      newStatus: 'REAGENDADA',
+      nuevaFechaHora: newDate.toISOString(),
+    }, {
+      onSuccess: () => toast.success('Cita reagendada con éxito'),
+      onError: () => toast.error('Error al reagendar la cita')
+    });
+    
+    setRescheduleAppointment(null);
+  }, [rescheduleAppointment, updateStatusMutation]);
+
+  // Mapa de estados para confirmación
+  const statusMap: Record<AppointmentAction, string> = {
+    checkIn: 'PRESENTE',
+    complete: 'COMPLETADA',
+    cancel: 'CANCELADA',
+    noShow: 'NO_ASISTIO',
+    reschedule: 'REAGENDADA'
   };
 
-  const appointmentCounts = useMemo(() => ({
-    today: appointmentsByDate.today.length,
-    future: appointmentsByDate.future.length,
-    past: appointmentsByDate.past.length,
-  }), [appointmentsByDate]);
+  // Renderizado condicional del contenido
+  const renderContent = useMemo(() => {
+    const emptyStates = {
+      today: {
+        title: "No hay citas para hoy",
+        description: "Aquí aparecerán las citas programadas para el día de hoy.",
+        icon: CalendarCheck,
+      },
+      future: {
+        title: "No hay citas próximas",
+        description: "Las citas futuras se mostrarán en esta sección.",
+        icon: CalendarClock,
+      },
+      past: {
+        title: "No hay historial de citas",
+        description: "Las citas pasadas y completadas aparecerán aquí.",
+        icon: History,
+      }
+    };
 
-  const renderContent = () => {
     switch (activeTab) {
       case 'newPatient':
-        return <Suspense fallback={<AppointmentListSkeleton />}><NewPatientForm /></Suspense>;
+        return (
+          <Suspense fallback={<AppointmentListSkeleton />}>
+            <NewPatientForm onSuccess={() => setActiveTab('today')} />
+          </Suspense>
+        );
+      
       case 'today':
-        return <AppointmentsList appointments={appointmentsByDate.today} isLoading={isLoading} emptyState={<EmptyState icon={CalendarCheck} title="No hay citas para hoy" description="Aquí aparecerán las citas programadas para el día de hoy." />} {...actionHandlers} />;
+        return (
+          <AppointmentsList
+            appointments={appointmentsByDate.today}
+            isLoading={isLoading}
+            onAction={handleAction}
+            emptyStateConfig={emptyStates.today}
+          />
+        );
+      
       case 'future':
-        return <AppointmentsList appointments={appointmentsByDate.future} isLoading={isLoading} emptyState={<EmptyState icon={CalendarClock} title="No hay citas próximas" description="Las citas futuras se mostrarán en esta sección." />} {...actionHandlers} />;
+        return (
+          <AppointmentsList
+            appointments={appointmentsByDate.future}
+            isLoading={isLoading}
+            onAction={handleAction}
+            emptyStateConfig={emptyStates.future}
+          />
+        );
+      
       case 'past':
-        return <AppointmentsList appointments={appointmentsByDate.past} isLoading={isLoading} emptyState={<EmptyState icon={History} title="No hay historial de citas" description="Las citas pasadas y completadas aparecerán aquí." />} {...actionHandlers} />;
+        return (
+          <AppointmentsList
+            appointments={appointmentsByDate.past}
+            isLoading={isLoading}
+            onAction={handleAction}
+            emptyStateConfig={emptyStates.past}
+          />
+        );
+      
       default:
         return null;
     }
-  };
+  }, [activeTab, appointmentsByDate, isLoading, handleAction]);
 
+  // Renderizado en caso de error
   if (error) {
-    return <EmptyState icon={AlertCircle} title="Error al cargar los datos" description={error.message || "Ocurrió un problema al contactar al servidor. Inténtalo de nuevo."} />;
+    return (
+      <EmptyState 
+        icon={AlertCircle} 
+        title="Error al cargar los datos" 
+        description={error.message || "Ocurrió un problema al contactar al servidor. Inténtalo de nuevo."} 
+      />
+    );
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-[500px]">
+      {/* Navegación de tabs */}
       <TabNavigation 
         activeTab={activeTab} 
-        onTabChange={(tab) => setActiveTab(tab)} 
-        appointmentCounts={appointmentCounts} 
+        onTabChange={setActiveTab} 
+        counts={counts}
         isLoading={isLoading} 
       />
-      <div className="flex-grow overflow-y-auto pr-2">
-        {renderContent()}
+      
+      {/* Contenido principal */}
+      <div className="flex-grow overflow-y-auto pr-1">
+        {renderContent}
       </div>
 
+      {/* Diálogos de confirmación */}
       {confirmAction && (
         <AlertDialog open onOpenChange={() => setConfirmAction(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirmar Acción</AlertDialogTitle>
-              <AlertDialogDescription>
-                ¿Estás seguro de que deseas marcar esta cita como {'"'}
-                {confirmAction.type === 'checkIn' && 'Presente'}
-                {confirmAction.type === 'complete' && 'Completada'}
-                {confirmAction.type === 'cancel' && 'Cancelada'}
-                {confirmAction.type === 'noShow' && 'No Asistió'}
-                {'"'}?
+              <AlertDialogTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-blue-600" />
+                Confirmar Acción
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-base">
+                ¿Estás seguro de que deseas marcar esta cita como{" "}
+                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                  {confirmAction.label}
+                </span>
+                ?
+                <br />
+                <span className="text-sm text-slate-600 dark:text-slate-400 mt-2 block">
+                  {confirmAction.description}
+                </span>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => {
-                const statusMap = {
-                  checkIn: AppointmentStatusEnum.PRESENTE,
-                  complete: AppointmentStatusEnum.COMPLETADA,
-                  cancel: AppointmentStatusEnum.CANCELADA,
-                  noShow: AppointmentStatusEnum.NO_ASISTIO,
-                };
-                handleUpdateStatus(confirmAction.appointment.id, statusMap[confirmAction.type]);
-              }}>
+              <AlertDialogAction 
+                onClick={() => 
+                  handleUpdateStatus(
+                    confirmAction.appointment.id, 
+                    statusMap[confirmAction.type]
+                  )
+                }
+                className={cn(
+                  confirmAction.type === 'cancel' || confirmAction.type === 'noShow'
+                    ? "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                )}
+              >
                 Confirmar
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -350,8 +413,9 @@ const PatientAdmission: React.FC = () => {
         </AlertDialog>
       )}
 
+      {/* Diálogo de reagendamiento */}
       {rescheduleAppointment && (
-        <Suspense fallback={<div />}>
+        <Suspense fallback={<div className="fixed inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center"><AppointmentListSkeleton /></div>}>
           <RescheduleDatePicker
             appointment={rescheduleAppointment}
             onClose={() => setRescheduleAppointment(null)}

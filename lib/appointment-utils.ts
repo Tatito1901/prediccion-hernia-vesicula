@@ -272,6 +272,30 @@ export const getTimeUntilAppointment = (appointmentDate: Date | string): {
   return { days, hours, minutes, isPast: false };
 };
 
+// ==================== UTILIDADES DE ORDENAMIENTO ====================
+
+/**
+ * Ordena un array de citas por fecha
+ * @param appointments Array de citas a ordenar
+ * @param direction Dirección del ordenamiento: 'asc' (ascendente) o 'desc' (descendente)
+ * @returns Array ordenado (modifica el array original)
+ */
+export const sortAppointmentsByDate = <T extends { fecha_hora_cita: string }>(
+  appointments: T[],
+  direction: 'asc' | 'desc' = 'asc'
+): T[] => {
+  return appointments.sort((a, b) => {
+    const dateA = new Date(a.fecha_hora_cita).getTime();
+    const dateB = new Date(b.fecha_hora_cita).getTime();
+    
+    if (direction === 'asc') {
+      return dateA - dateB; // Más temprano primero
+    } else {
+      return dateB - dateA; // Más reciente primero
+    }
+  });
+};
+
 // ==================== EXPORTACIONES PARA COMPATIBILIDAD ====================
 export {
   generateTimeSlots as generateTimeSlotsLegacy,

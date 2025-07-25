@@ -1,7 +1,8 @@
-// patient-card.tsx - Versión refactorizada y robustecida
-import React, { memo, useMemo, useCallback, FC } from "react";
+// patient-card.tsx - Tarjeta de paciente optimizada
+import React, { memo, useMemo, useCallback, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { toast } from 'sonner';
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -15,344 +16,464 @@ import {
   Clock,
   MoreHorizontal,
   XCircle,
-  MessageSquare,
   History,
   LogIn,
   ListChecks,
   CalendarX,
   Repeat,
   Phone,
-  Icon as LucideIcon,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { AppointmentStatusEnum, ExtendedAppointment, Patient } from "@/lib/types"
+  Loader2,
+  Calendar,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 
-// ==================== UTILIDADES INTEGRADAS ====================
+import { cn } from "@/lib/utils";
 
-// Función para normalizar el estado de cita
-const normalizeAppointmentStatus = (status: string | undefined | null): keyof typeof AppointmentStatusEnum => {
-  if (!status) return "PROGRAMADA";
-  const upperStatus = status.toUpperCase();
-  const statusMap: Record<string, keyof typeof AppointmentStatusEnum> = {
-    "NO ASISTIO": "NO_ASISTIO",
-    "PROGRAMADA": "PROGRAMADA",
-    "CONFIRMADA": "CONFIRMADA",
-    "CANCELADA": "CANCELADA",
-    "COMPLETADA": "COMPLETADA",
-    "PRESENTE": "PRESENTE",
-    "REAGENDADA": "REAGENDADA"
-  }
-  
-  return statusMap[upperStatus] || "PROGRAMADA"
-};
+// Importaciones de tipos y utilidades unificadas
+import {
+  AppointmentWithPatient,
+  AppointmentAction,
+  AppointmentCardProps,
+  APPOINTMENT_STATUS_CONFIG,
+  getPatientData,
+  canPerformAction,
+} from "./types";
 
-// Generar iniciales optimizado
-const getInitials = (nombre = "", apellidos = "") => {
-  const n = (nombre || "").charAt(0)
-  const a = (apellidos || "").charAt(0)
-  return `${n}${a}`.toUpperCase() || "SN"
-}
+import {
+  formatAppointmentTime,
+  formatAppointmentDate,
+  isAppointmentToday,
+} from "@/lib/appointment-utils";
 
-// Cache para formateo de tiempo
-const timeFormatCache = new Map<string, string>();
-const formatTime = (dateString: string | undefined | null) => {
-  if (!dateString) return "---"
-  if (timeFormatCache.has(dateString)) return timeFormatCache.get(dateString)!;
-  
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "---";
-    const formatted = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    if (timeFormatCache.size > 100) timeFormatCache.clear();
-    timeFormatCache.set(dateString, formatted);
-    return formatted;
-  } catch {
-    return "---"
-  }
-}
+// Importar hooks optimizados
+import { useAppointmentActions } from "./actions";
+import { useAssignSurvey } from '@/hooks/use-survey-templates'
 
-// Cache para formateo de fecha relativa
-const dateFormatCache = new Map<string, string>();
-const formatDate = (dateString: string | undefined | null) => {
-  if (!dateString) return "---"
-  if (dateFormatCache.has(dateString)) return dateFormatCache.get(dateString)!;
-  
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "---";
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
-    
-    const diffDays = Math.round((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
-    let formatted: string;
-    if (diffDays === 0) formatted = "Hoy";
-    else if (diffDays === 1) formatted = "Mañana";
-    else {
-      formatted = date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-    }
-    
-    if (dateFormatCache.size > 100) dateFormatCache.clear();
-    dateFormatCache.set(dateString, formatted);
-    return formatted;
-  } catch {
-    return "---"
-  }
-}
-
-// ==================== TIPOS ====================
-export type ConfirmAction = "checkIn" | "cancel" | "complete" | "noShow" | "reschedule";
-
-// Tipo para un objeto de cita flexible que puede venir de diferentes fuentes
-type FlexibleAppointment = Partial<ExtendedAppointment> & { [key: string]: any };
-
-interface AppointmentCardProps {
-  appointment: FlexibleAppointment;
-  onAction: (action: ConfirmAction, appointment: FlexibleAppointment) => void;
-  onStartSurvey: () => void;
-  onViewHistory: (patientId: string) => void;
-  disableActions?: boolean;
-  surveyCompleted?: boolean;
-}
-
-// ==================== CONFIGURACIONES ESTÁTICAS ====================
-
-const STATUS_CONFIG = {
-  [AppointmentStatusEnum.PROGRAMADA]: { label: "Programada", dot: "bg-slate-400", primary: "checkIn", primaryLabel: "Check In", variant: "secondary" },
-  [AppointmentStatusEnum.CONFIRMADA]: { label: "Confirmada", dot: "bg-blue-500", primary: "checkIn", primaryLabel: "Check In", variant: "default" },
-  [AppointmentStatusEnum.PRESENTE]: { label: "En Consulta", dot: "bg-emerald-500", primary: "complete", primaryLabel: "Completar", variant: "success" },
-  [AppointmentStatusEnum.COMPLETADA]: { label: "Completada", dot: "bg-green-600", primary: null, primaryLabel: null, variant: "outline" },
-  [AppointmentStatusEnum.CANCELADA]: { label: "Cancelada", dot: "bg-red-500", primary: null, primaryLabel: null, variant: "destructive" },
-  [AppointmentStatusEnum.NO_ASISTIO]: { label: "No Asistió", dot: "bg-amber-500", primary: null, primaryLabel: null, variant: "warning" },
-  [AppointmentStatusEnum.REAGENDADA]: { label: "Reagendada", dot: "bg-purple-500", primary: null, primaryLabel: null, variant: "secondary" },
-} as const;
-
-type StatusConfig = typeof STATUS_CONFIG[keyof typeof STATUS_CONFIG];
-
-const ACTIONABLE_STATUSES = new Set([
-  AppointmentStatusEnum.PROGRAMADA,
-  AppointmentStatusEnum.CONFIRMADA,
-  AppointmentStatusEnum.PRESENTE,
-]);
-
-const MENU_ITEMS_CONFIG = {
-  PROGRAMADA: [ { icon: LogIn, label: "Check In", action: "checkIn", destructive: false }, { icon: XCircle, label: "Cancelar", action: "cancel", destructive: true } ],
-  CONFIRMADA: [ { icon: LogIn, label: "Check In", action: "checkIn", destructive: false }, { icon: XCircle, label: "Cancelar", action: "cancel", destructive: true }, { icon: Repeat, label: "Reagendar", action: "reschedule", destructive: false } ],
-  PRESENTE: [ { icon: ListChecks, label: "Completar", action: "complete", destructive: false }, { icon: CalendarX, label: "No Asistió", action: "noShow", destructive: true } ]
-} as const;
-
-type MenuItem = {
-    icon: LucideIcon;
-    label: string;
-    action: ConfirmAction;
-    destructive: boolean;
-};
+// Importar componentes de modal
+import { PatientHistoryModal } from "./patient-history-modal";
+import { SurveyModal } from "./survey-modal";
 
 // ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
 
-const PatientAvatar: FC<{ initials: string }> = memo(({ initials }) => (
-  <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 transition-all duration-200 hover:scale-105">
+const PatientAvatar = memo<{ initials: string; color?: string }>(({ initials, color = "blue" }) => (
+  <div 
+    className={cn(
+      "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold",
+      "bg-gradient-to-br transition-all duration-200 hover:scale-105 shadow-sm",
+      "border",
+      color === "blue" && "from-blue-100 to-blue-200 dark:from-blue-800 dark:to-blue-700 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-600",
+      color === "green" && "from-green-100 to-green-200 dark:from-green-800 dark:to-green-700 text-green-700 dark:text-green-300 border-green-200 dark:border-green-600",
+      color === "purple" && "from-purple-100 to-purple-200 dark:from-purple-800 dark:to-purple-700 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-600"
+    )}
+  >
     {initials}
   </div>
 ));
 PatientAvatar.displayName = "PatientAvatar";
 
-const PatientInfo: FC<{ fullName: string; formattedTime: string; formattedDate: string; statusDot: string; }> = memo(({ fullName, formattedTime, formattedDate, statusDot }) => (
-  <div className="min-w-0 flex-1">
-    <div className="mb-1 flex items-center gap-2">
-      <h3 className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">{fullName || "Paciente Sin Nombre"}</h3>
-      <div className={cn("h-2 w-2 shrink-0 rounded-full transition-all duration-200", statusDot)} />
-    </div>
-    <div className="mt-0.5 sm:mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-slate-500 dark:text-slate-400">
-      <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formattedTime}</span>
-      <span className="hidden sm:block text-slate-300 dark:text-slate-600">•</span>
-      <span>{formattedDate}</span>
-    </div>
-  </div>
-));
-PatientInfo.displayName = "PatientInfo";
+const PatientInfo = memo<{
+  fullName: string;
+  appointment: AppointmentWithPatient;
+}>(({ fullName, appointment }) => {
+  const formattedTime = formatAppointmentTime(appointment.fecha_hora_cita);
+  const isToday = isAppointmentToday(appointment.fecha_hora_cita);
 
-const ActionMenu: FC<{ menuItems: MenuItem[]; appointment: FlexibleAppointment; onAction: (action: ConfirmAction, appointment: FlexibleAppointment) => void; onStartSurvey: () => void; onViewHistory: (patientId: string) => void; patientId?: string; }> = memo(({ menuItems, appointment, onAction, onStartSurvey, onViewHistory, patientId }) => {
-  if (!menuItems.length && !patientId) return null;
-  
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0"
-        >
-          <MoreHorizontal className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[180px]">
-        {patientId && (
-          <>
-            <DropdownMenuItem
-              onClick={() => onViewHistory(patientId)}
-              className="flex cursor-pointer items-center gap-2 text-xs font-medium transition-all"
-            >
-              <History className="h-3.5 w-3.5" />
-              Ver historial del paciente
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
+    <div className="min-w-0 flex-1">
+      <div className="mb-1 flex items-center gap-2 flex-wrap">
+        <h3 className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">
+          {fullName}
+        </h3>
+        {appointment.es_primera_vez && (
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
+            Nuevo
+          </Badge>
         )}
-        {menuItems.map((item, i) => (
-          <DropdownMenuItem
-            key={`${item.action}-${i}`}
-            onClick={() => onAction(item.action, appointment)}
-            className={cn(
-              "flex cursor-pointer items-center gap-2 text-xs font-medium transition-all",
-              item.destructive ? "text-red-600 dark:text-red-400" : ""
-            )}
-          >
-            <item.icon className="h-3.5 w-3.5" />
-            {item.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </div>
+      
+      <div className="flex flex-col gap-0.5 text-xs text-slate-500 dark:text-slate-400">
+        <div className="flex items-center gap-1">
+          <Clock className="h-3 w-3 flex-shrink-0" />
+          <span>{formattedTime}</span>
+          {isToday && (
+            <span className="text-green-600 font-medium">• Hoy</span>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-1">
+          <Calendar className="h-3 w-3 flex-shrink-0" />
+          <span className="truncate">{appointment.motivo_cita}</span>
+        </div>
+      </div>
+    </div>
   );
 });
-ActionMenu.displayName = "ActionMenu";
+PatientInfo.displayName = "PatientInfo";
 
-const PatientDetails: FC<{ appointment: FlexibleAppointment; telefono?: string; statusConfig: StatusConfig; }> = memo(({ appointment, telefono, statusConfig }) => (
-  <>
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2">
-      <Badge variant={statusConfig.variant as any} className="self-start px-2 sm:px-2.5 py-0.5 sm:py-1 text-xs font-medium transition-all duration-200 hover:scale-105">{statusConfig.label}</Badge>
-      {telefono && telefono !== "N/A" && (
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-          <Phone size={14} className="flex-shrink-0" />
-          <span className="truncate">{telefono}</span>
-        </div>
+const StatusBadge = memo<{ 
+  status: AppointmentWithPatient['estado_cita'];
+  isLoading?: boolean;
+}>(({ status, isLoading }) => {
+  const config = APPOINTMENT_STATUS_CONFIG[status];
+  
+  return (
+    <Badge 
+      className={cn(
+        "text-xs font-medium transition-all duration-200 whitespace-nowrap py-1 px-2", 
+        config.bgClass
       )}
-    </div>
-    <div className="mt-1.5 sm:mt-2 space-y-1.5 sm:space-y-2">
-      {appointment.paciente?.edad && <p className="text-xs text-slate-600 dark:text-slate-300"><span className="font-medium text-slate-700 dark:text-slate-200">Edad:</span> {appointment.paciente.edad} años</p>}
-      <p className="text-xs text-slate-600 dark:text-slate-300"><span className="font-medium text-slate-700 dark:text-slate-200">Fecha:</span> {new Date(appointment.fecha_hora_cita || appointment.fechaConsulta).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-      {appointment.motivo_cita && appointment.motivo_cita !== "N/A" && (
-        <div className="pt-1">
-          <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2"><span className="font-medium text-slate-700 dark:text-slate-200">Motivo:</span> {appointment.motivo_cita}</p>
-        </div>
-      )}
-      {appointment.motivo_cita && (
-        <div className="pt-1 flex flex-wrap gap-1">
-          {appointment.motivo_cita.toUpperCase().includes("HERNIA") && <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700 text-[10px] px-1.5 py-0.5"><span className="mr-1">🔸</span> Hernia</Badge>}
-          {appointment.motivo_cita.toUpperCase().includes("VESICULA") && <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700 text-[10px] px-1.5 py-0.5"><span className="mr-1">🟡</span> Vesícula</Badge>}
-        </div>
-      )}
-    </div>
-  </>
-));
-PatientDetails.displayName = "PatientDetails";
-
-const SurveyAlert: FC<{ onStartSurvey: () => void; }> = memo(({ onStartSurvey }) => (
-  <div className="mt-2 sm:mt-3 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-1.5 sm:p-2 dark:border-amber-800/50 dark:bg-amber-900/20 transition-all duration-200 hover:shadow-sm">
-    <div className="flex items-center gap-2">
-      <div className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
-      <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Encuesta requerida</span>
-    </div>
-    <Button size="sm" variant="ghost" className="h-auto shrink-0 px-1.5 sm:px-2 py-0.5 sm:py-1 text-xs text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-800/60 transition-all duration-200" onClick={onStartSurvey}>Iniciar</Button>
-  </div>
-));
-SurveyAlert.displayName = "SurveyAlert";
-
-const ActionButton: FC<{ onAction: () => void; needsSurvey: boolean; statusConfig: StatusConfig; disabled: boolean; }> = memo(({ onAction, needsSurvey, statusConfig, disabled }) => (
-  <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-200 dark:border-slate-700/80">
-    <Button onClick={onAction} className="w-full font-medium transition-all duration-200 hover:scale-[1.02] text-xs sm:text-sm py-1 sm:py-2" variant={needsSurvey ? "outline" : "default"} size="sm" disabled={disabled}>
-      {needsSurvey ? (
-        <><MessageSquare size={14} className="mr-1.5 sm:mr-2" />Iniciar Encuesta</>
-      ) : (
-        <>
-          {statusConfig.primary === "checkIn" && <LogIn size={14} className="mr-1.5 sm:mr-2" />}
-          {statusConfig.primary === "complete" && <ListChecks size={14} className="mr-1.5 sm:mr-2" />}
-          {statusConfig.primaryLabel}
-        </>
-      )}
-    </Button>
-  </div>
-));
-ActionButton.displayName = "ActionButton";
+    >
+      {isLoading && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+      {config.label}
+    </Badge>
+  );
+});
+StatusBadge.displayName = "StatusBadge";
 
 // ==================== COMPONENTE PRINCIPAL ====================
 
-export const AppointmentCard: FC<AppointmentCardProps> = memo(({
+export const AppointmentCard: React.FC<AppointmentCardProps> = memo(({
   appointment,
   onAction,
-  onStartSurvey,
-  onViewHistory,
   disableActions = false,
   surveyCompleted = false,
+  showReschedule = true,
+  showCancel = true,
+  showComplete = true,
 }) => {
-  const appointmentData = useMemo(() => ({
-    id: appointment.id,
-    patientId: appointment.patient_id || appointment.patientId,
-    paciente: appointment.paciente,
-    fechaHoraCita: appointment.fecha_hora_cita || appointment.fechaConsulta,
-    motivoCita: appointment.motivo_cita || appointment.motivoConsulta,
-    estadoCita: appointment.estado_cita || appointment.estado,
-  }), [appointment]);
+  // Estados locales para modales
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showSurveyModal, setShowSurveyModal] = useState(false);
+  const assignSurvey = useAssignSurvey();
+  const [isSubmittingSurvey, setIsSubmittingSurvey] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
+  // Obtener datos del paciente
+  const patientData = getPatientData(appointment);
+  const patientId = patientData?.id || appointment.patient_id;
+
+  // Hook para acciones de cita
+  const appointmentActions = useAppointmentActions();
+
+  // Valores computados memoizados
   const computedValues = useMemo(() => {
-    const { paciente, estadoCita, fechaHoraCita } = appointmentData;
-    const fullName = `${paciente?.nombre || ''} ${paciente?.apellidos || ''}`.trim();
-    const telefono = paciente?.telefono;
-    const normalizedStatus = normalizeAppointmentStatus(estadoCita);
-    const statusConfig = STATUS_CONFIG[normalizedStatus];
-    const isActionable = ACTIONABLE_STATUSES.has(normalizedStatus);
-    const needsSurvey = normalizedStatus === AppointmentStatusEnum.PRESENTE && !surveyCompleted;
-    const menuItems = (MENU_ITEMS_CONFIG[normalizedStatus as keyof typeof MENU_ITEMS_CONFIG] || []).map(item => ({...item}));
+    if (!patientData) return null;
+    
+    const fullName = `${patientData.nombre} ${patientData.apellidos}`.trim();
+    
+    const initials = `${patientData.nombre.charAt(0)}${patientData.apellidos.charAt(0)}`.toUpperCase();
+    
+    // Determinar acción principal disponible
+    let primaryAction: AppointmentAction | null = null;
+    if (canPerformAction(appointment, 'checkIn')) {
+      primaryAction = 'checkIn';
+    } else if (canPerformAction(appointment, 'complete') && showComplete) {
+      primaryAction = 'complete';
+    }
+
+    // Color del avatar basado en el estado
+    let avatarColor = "blue";
+    if (appointment.estado_cita === "COMPLETADA") avatarColor = "green";
+    else if (appointment.estado_cita === "CANCELADA" || appointment.estado_cita === "NO_ASISTIO") avatarColor = "purple";
+
+    // Determinar si hay detalles adicionales
+    const hasAdditionalDetails = !!(
+      patientData.diagnostico_principal || 
+      appointment.notas_cita_seguimiento || 
+      patientData.estado_paciente || 
+      patientData.probabilidad_cirugia !== null
+    );
 
     return {
       fullName,
-      telefono,
-      normalizedStatus,
-      statusConfig,
-      isActionable,
-      needsSurvey,
-      formattedDate: formatDate(fechaHoraCita),
-      formattedTime: formatTime(fechaHoraCita),
-      initials: getInitials(paciente?.nombre, paciente?.apellidos),
-      menuItems: menuItems as MenuItem[],
+      initials,
+      primaryAction,
+      avatarColor,
+      hasAdditionalDetails
     };
-  }, [appointmentData, surveyCompleted]);
+  }, [appointment, patientData, showComplete]);
 
-  const handlePrimaryAction = useCallback(() => {
-    if (!computedValues.statusConfig.primary) return;
-    console.log(`[Patient Card] Primary action clicked: ${computedValues.statusConfig.primary}`);
-    console.log(`[Patient Card] Appointment: ${appointment.id}, Current Status: ${appointmentData.estadoCita}`);
+  // Handlers principales con memoización
+  const handleAction = useCallback((action: AppointmentAction) => {
+    if (disableActions) return;
     
-    if (computedValues.needsSurvey && computedValues.statusConfig.primary === "complete") {
-      console.log('[Patient Card] Starting survey before completion');
-      onStartSurvey();
-    } else {
-      console.log(`[Patient Card] Executing action: ${computedValues.statusConfig.primary}`);
-      onAction(computedValues.statusConfig.primary as ConfirmAction, appointment);
-    }
-  }, [computedValues, onStartSurvey, onAction, appointment, appointmentData.estadoCita]);
+    // Todas las acciones usan onAction prop
+    onAction(action, appointment);
+  }, [appointment, disableActions, onAction]);
+
+  const handleViewHistory = useCallback(() => {
+    if (disableActions) return;
+    setShowHistoryModal(true);
+  }, [disableActions]);
+
+  // Si no hay datos del paciente, mostrar card de error
+  if (!patientData || !computedValues) {
+    return (
+      <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <AlertTriangle className="h-4 w-4" />
+            <span className="text-sm">Error: Datos del paciente no disponibles</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <Card className="group relative overflow-hidden transition-all duration-200 hover:shadow-md border-0 shadow-sm bg-white dark:bg-slate-900 dark:border dark:border-slate-700 flex flex-col h-full hover:scale-[1.01] active:scale-[0.99]">
-      <CardContent className="p-3 sm:p-4 flex flex-col flex-grow">
-        <div className="flex items-start justify-between mb-2 sm:mb-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <PatientAvatar initials={computedValues.initials} />
-            <PatientInfo fullName={computedValues.fullName} formattedTime={computedValues.formattedTime} formattedDate={computedValues.formattedDate} statusDot={computedValues.statusConfig.dot} />
+    <>
+      <Card className={cn(
+        "group relative overflow-hidden transition-all duration-200",
+        "hover:shadow-lg border-0 shadow-sm bg-white dark:bg-slate-900"
+      )}>
+        <CardContent className="p-4">
+          {/* Header con avatar, info y menú */}
+          <div className="flex items-start justify-between mb-3 gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <PatientAvatar 
+                initials={computedValues.initials} 
+                color={computedValues.avatarColor}
+              />
+              <PatientInfo 
+                fullName={computedValues.fullName} 
+                appointment={appointment} 
+              />
+            </div>
+            
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <StatusBadge 
+                status={appointment.estado_cita} 
+                isLoading={appointmentActions.isLoading}
+              />
+              
+              {/* Menú de acciones */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 flex-shrink-0"
+                    disabled={disableActions}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                    <span className="sr-only">Menú de opciones</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {/* Ver historial */}
+                  <DropdownMenuItem
+                    onClick={handleViewHistory}
+                    className="flex items-center gap-2"
+                  >
+                    <History className="h-4 w-4" />
+                    Ver historial
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuSeparator />
+
+                  {/* Acciones de cita */}
+                  {canPerformAction(appointment, 'checkIn') && (
+                    <DropdownMenuItem
+                      onClick={() => handleAction('checkIn')}
+                      className="flex items-center gap-2"
+                      disabled={appointmentActions.isLoading}
+                    >
+                      <LogIn className="h-4 w-4" />
+                      Marcar presente
+                    </DropdownMenuItem>
+                  )}
+
+                  {canPerformAction(appointment, 'complete') && showComplete && (
+                    <DropdownMenuItem
+                      onClick={() => handleAction('complete')}
+                      className="flex items-center gap-2"
+                      disabled={appointmentActions.isLoading}
+                    >
+                      <ListChecks className="h-4 w-4" />
+                      Completar consulta
+                    </DropdownMenuItem>
+                  )}
+
+                  {canPerformAction(appointment, 'reschedule') && showReschedule && (
+                    <DropdownMenuItem
+                      onClick={() => handleAction('reschedule')}
+                      className="flex items-center gap-2"
+                      disabled={appointmentActions.isLoading}
+                    >
+                      <Repeat className="h-4 w-4" />
+                      Reagendar
+                    </DropdownMenuItem>
+                  )}
+
+                  {(canPerformAction(appointment, 'cancel') || canPerformAction(appointment, 'noShow')) && (
+                    <DropdownMenuSeparator />
+                  )}
+
+                  {canPerformAction(appointment, 'cancel') && showCancel && (
+                    <DropdownMenuItem
+                      onClick={() => handleAction('cancel')}
+                      className="flex items-center gap-2 text-red-600 dark:text-red-400"
+                      disabled={appointmentActions.isLoading}
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Cancelar cita
+                    </DropdownMenuItem>
+                  )}
+                  
+                  {canPerformAction(appointment, 'noShow') && (
+                    <DropdownMenuItem
+                      onClick={() => handleAction('noShow')}
+                      className="flex items-center gap-2 text-orange-600 dark:text-orange-400"
+                      disabled={appointmentActions.isLoading}
+                    >
+                      <CalendarX className="h-4 w-4" />
+                      Marcar no asistió
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-          <ActionMenu menuItems={computedValues.menuItems} appointment={appointment} onAction={onAction} onStartSurvey={onStartSurvey} onViewHistory={onViewHistory} patientId={appointmentData.patientId} />
-        </div>
-        <div className="space-y-2 sm:space-y-3 pt-1.5 sm:pt-2 flex-grow">
-          <PatientDetails appointment={appointment} telefono={computedValues.telefono} statusConfig={computedValues.statusConfig} />
-          {computedValues.needsSurvey && <SurveyAlert onStartSurvey={onStartSurvey} />}
-        </div>
-        {computedValues.isActionable && computedValues.statusConfig.primary && <ActionButton onAction={handlePrimaryAction} needsSurvey={computedValues.needsSurvey} statusConfig={computedValues.statusConfig} disabled={disableActions} />}
-      </CardContent>
-    </Card>
+
+          {/* Información básica */}
+          <div className="flex items-center justify-between text-xs flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+            {patientData.telefono && (
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                <Phone className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate">{patientData.telefono}</span>
+              </div>
+            )}
+            
+            {patientData.edad !== undefined && patientData.edad !== null && (
+              <span className="text-slate-500 dark:text-slate-400">
+                {patientData.edad} años
+              </span>
+            )}
+          </div>
+
+          {/* Botón para detalles adicionales */}
+          {computedValues.hasAdditionalDetails && (
+            <Button 
+              variant="ghost"
+              size="sm"
+              className="mt-2 h-7 px-2 text-xs text-blue-600 dark:text-blue-400"
+              onClick={() => setShowDetails(!showDetails)}
+            >
+              {showDetails ? 'Ver menos' : 'Ver más'} 
+              {showDetails ? (
+                <ChevronUp className="h-3 w-3 ml-1" />
+              ) : (
+                <ChevronDown className="h-3 w-3 ml-1" />
+              )}
+            </Button>
+          )}
+
+          {/* Detalles adicionales expandibles */}
+          {showDetails && (
+            <div className="mt-2 space-y-2 text-xs border-t border-slate-100 dark:border-slate-700 pt-2">
+              {/* Diagnóstico */}
+              {patientData.diagnostico_principal && (
+                <div className="text-slate-600 dark:text-slate-300">
+                  <span className="font-medium">Diagnóstico: </span>
+                  {patientData.diagnostico_principal.split('_').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                  ).join(' ')}
+                </div>
+              )}
+
+              {/* Notas de seguimiento */}
+              {appointment.notas_cita_seguimiento && (
+                <div className="text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-2 rounded-lg">
+                  <span className="font-medium">Notas: </span>
+                  <span className="line-clamp-3">{appointment.notas_cita_seguimiento}</span>
+                </div>
+              )}
+
+              {/* Estado del paciente */}
+              {patientData.estado_paciente && (
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {patientData.estado_paciente}
+                  </Badge>
+                  {patientData.probabilidad_cirugia !== null && patientData.probabilidad_cirugia !== undefined && (
+                    <Badge variant="secondary" className="text-xs">
+                      {patientData.probabilidad_cirugia}% prob. cirugía
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Botón de acción principal */}
+          {computedValues.primaryAction && (
+            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700">
+              <Button
+                onClick={() => handleAction(computedValues.primaryAction!)}
+                className="w-full font-medium"
+                disabled={disableActions || appointmentActions.isLoading}
+                size="sm"
+              >
+                {appointmentActions.isLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <>
+                    {computedValues.primaryAction === 'checkIn' && (
+                      <>
+                        <LogIn className="h-4 w-4 mr-2" />
+                        Marcar Presente
+                      </>
+                    )}
+                    {computedValues.primaryAction === 'complete' && (
+                      <>
+                        <ListChecks className="h-4 w-4 mr-2" />
+                        Completar Consulta
+                      </>
+                    )}
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modales */}
+      {showHistoryModal && (
+        <PatientHistoryModal
+          isOpen={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+          patientId={patientId}
+        />
+      )}
+
+      {showSurveyModal && (
+        <SurveyModal
+          isOpen={showSurveyModal}
+          onClose={() => setShowSurveyModal(false)}
+          appointment={appointment}
+          onSubmit={async (data) => {
+            if (!appointment.paciente) return;
+            setIsSubmittingSurvey(true);
+            try {
+              await assignSurvey(appointment.paciente.id, data.surveyTemplateId);
+              toast.success('Encuesta asignada exitosamente');
+              setShowSurveyModal(false);
+            } catch (error) {
+              toast.error('Error al asignar la encuesta');
+            } finally {
+              setIsSubmittingSurvey(false);
+            }
+          }}
+          isSubmitting={isSubmittingSurvey}
+        />
+      )}
+    </>
   );
 });
+
 AppointmentCard.displayName = "AppointmentCard";
+
+export default AppointmentCard;
