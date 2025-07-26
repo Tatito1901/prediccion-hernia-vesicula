@@ -1,7 +1,7 @@
 // lib/appointment-utils.ts - UTILIDADES CENTRALIZADAS PARA CITAS
 // Elimina duplicación de lógica en formularios y componentes
 
-import { format, isWeekend, isBefore, startOfDay, addDays, setHours, setMinutes } from 'date-fns';
+import { format, isWeekend, isBefore, startOfDay, addDays, setHours, setMinutes, isToday, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // ==================== CONFIGURACIÓN CENTRALIZADA ====================
@@ -236,7 +236,8 @@ export const getNextAvailableWorkDay = (fromDate: Date = new Date()): Date => {
  */
 export const isAppointmentInPast = (appointmentDate: Date | string): boolean => {
   const aptDate = typeof appointmentDate === 'string' ? new Date(appointmentDate) : appointmentDate;
-  return isBefore(aptDate, new Date());
+  // Usamos isPast para una comprobación más semántica y robusta
+  return isPast(aptDate);
 };
 
 /**
@@ -244,8 +245,8 @@ export const isAppointmentInPast = (appointmentDate: Date | string): boolean => 
  */
 export const isAppointmentToday = (appointmentDate: Date | string): boolean => {
   const aptDate = typeof appointmentDate === 'string' ? new Date(appointmentDate) : appointmentDate;
-  const today = startOfDay(new Date());
-  return format(aptDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
+  // isToday es la forma más robusta de date-fns para manejar esto
+  return isToday(aptDate);
 };
 
 /**

@@ -1,6 +1,8 @@
 // patient-card.tsx - Tarjeta de paciente optimizada
 import React, { memo, useMemo, useCallback, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { Button } from "@/components/ui/button";
 import { toast } from 'sonner';
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +41,7 @@ import {
   APPOINTMENT_STATUS_CONFIG,
   getPatientData,
   canPerformAction,
-} from "./types";
+} from "./admision-types";
 
 import {
   formatAppointmentTime,
@@ -77,8 +79,8 @@ const PatientInfo = memo<{
   fullName: string;
   appointment: AppointmentWithPatient;
 }>(({ fullName, appointment }) => {
-  const formattedTime = formatAppointmentTime(appointment.fecha_hora_cita);
-  const isToday = isAppointmentToday(appointment.fecha_hora_cita);
+  // Formateo robusto de la fecha y hora completa
+  const formattedDateTime = format(new Date(appointment.fecha_hora_cita), "d 'de' MMMM, h:mm a", { locale: es });
 
   return (
     <div className="min-w-0 flex-1">
@@ -88,21 +90,17 @@ const PatientInfo = memo<{
         </h3>
         {appointment.es_primera_vez && (
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
-            Nuevo
+            Primera Vez
           </Badge>
         )}
       </div>
-      
-      <div className="flex flex-col gap-0.5 text-xs text-slate-500 dark:text-slate-400">
-        <div className="flex items-center gap-1">
-          <Clock className="h-3 w-3 flex-shrink-0" />
-          <span>{formattedTime}</span>
-          {isToday && (
-            <span className="text-green-600 font-medium">• Hoy</span>
-          )}
+      <div className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+        {/* Mostrar fecha y hora con un ícono para mejor UX */}
+        <div className="flex items-center gap-1.5">
+          <Clock className="h-3 w-3" />
+          <span>{formattedDateTime}</span>
         </div>
-        
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <Calendar className="h-3 w-3 flex-shrink-0" />
           <span className="truncate">{appointment.motivo_cita}</span>
         </div>

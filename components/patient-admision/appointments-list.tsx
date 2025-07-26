@@ -1,266 +1,475 @@
-// appointments-list.tsx - Versión refactorizada con utilidades centralizadas
-import React, { memo, useCallback, useMemo } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import { EmptyState } from "@/components/ui/empty-state";
-
-// Importaciones unificadas
+// components/admission/appointments-list.tsx - LISTA DE CITAS OPTIMIZADA
+import React, { memo, useCallback, useMemo } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
-  AppointmentWithPatient,
-  AppointmentAction,
-  AppointmentListProps,
-} from "./types";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
-import { AppointmentCard } from "./patient-card";
+// Icons
+import {
+  MoreHorizontal,
+  Clock,
+  User,
+  Phone,
+  Calendar,
+  MapPin,
+  CheckCircle,
+  PlayCircle,
+  XCircle,
+  RotateCcw,
+  FileText,
+  AlertTriangle,
+  Loader2,
+} from 'lucide-react';
 
-// ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
+// Types and utilities
+import type { 
+  AppointmentWithPatient, 
+  AdmissionAction, 
+  AppointmentStatus
+} from './admision-types';
+import { STATUS_CONFIG } from './admision-types';
+import { 
+  validateAction, 
+  getAvailableActions, 
+  getNextSuggestedAction 
+} from '@/lib/admission-business-rules';
+import { format, formatDistanceToNow, isToday, isFuture, isPast } from 'date-fns';
+import { es } from 'date-fns/locale';
 
-// Skeleton de carga optimizado
-const LoadingSkeleton = memo(() => (
-  <div className="space-y-4" role="status" aria-label="Cargando citas">
-    {Array.from({ length: 3 }, (_, i) => (
-      <Card key={i} className="overflow-hidden border border-slate-200 dark:border-slate-700 transition-all duration-200">
-        <CardContent className="p-0">
-          {/* Indicador de progreso */}
-          <div className="h-1 bg-slate-200 dark:bg-slate-700 animate-pulse" />
-          
-          <div className="p-4 space-y-4">
-            {/* Header del paciente */}
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-10 w-10 rounded-xl" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-24" />
-              </div>
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-5 w-16 rounded-full" />
-                <Skeleton className="h-8 w-8 rounded-lg" />
-              </div>
-            </div>
-            
-            {/* Información adicional */}
-            <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
-              <div className="flex items-center justify-between">
-                <Skeleton className="h-3 w-20" />
-                <Skeleton className="h-3 w-16" />
-              </div>
-              <Skeleton className="h-3 w-full" />
-            </div>
-            
-            {/* Botón de acción */}
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
-              <Skeleton className="h-9 w-full rounded-lg" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    ))}
-  </div>
-));
+// ==================== TIPOS ====================
 
-LoadingSkeleton.displayName = "LoadingSkeleton";
-
-// Indicador de carga adicional
-const LoadingIndicator = memo(() => (
-  <div className="flex justify-center py-4">
-    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-      <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
-      <span>Cargando más citas...</span>
-    </div>
-  </div>
-));
-
-LoadingIndicator.displayName = "LoadingIndicator";
-
-// Lista de citas optimizada con renderizado optimizado
-const AppointmentsGrid = memo<{
-  appointments: AppointmentWithPatient[];
-  onAction: (action: AppointmentAction, appointment: AppointmentWithPatient) => void;
-  onStartSurvey?: (appointment: AppointmentWithPatient) => void;
-  onViewHistory?: (patientId: string) => void;
-  disabled: boolean;
-}>(({ appointments, onAction, onStartSurvey, onViewHistory, disabled }) => {
-  // Handlers optimizados
-  const handleStartSurvey = useCallback(
-    (appointment: AppointmentWithPatient) => {
-      if (onStartSurvey && !disabled) {
-        onStartSurvey(appointment);
-      }
-    },
-    [onStartSurvey, disabled]
-  );
-
-  const handleViewHistory = useCallback(
-    (patientId: string) => {
-      if (onViewHistory && !disabled) {
-        onViewHistory(patientId);
-      }
-    },
-    [onViewHistory, disabled]
-  );
-
-  const handleAction = useCallback(
-    (action: AppointmentAction, appointment: AppointmentWithPatient) => {
-      if (!disabled) {
-        onAction(action, appointment);
-      }
-    },
-    [onAction, disabled]
-  );
-
-  // Renderizar función memoizada para evitar recreaciones
-  const renderAppointment = useCallback(
-    (appointment: AppointmentWithPatient, index: number) => (
-      <div
-        key={appointment.id}
-        className="animate-in fade-in-0 slide-in-from-bottom-4"
-        style={{
-          animationDelay: `${Math.min(index * 50, 300)}ms`, // Limitar delay máximo
-          animationFillMode: 'both',
-        }}
-      >
-        <AppointmentCard
-          appointment={appointment}
-          onAction={handleAction}
-          onStartSurvey={() => handleStartSurvey(appointment)}
-          onViewHistory={handleViewHistory}
-          disableActions={disabled}
-        />
-      </div>
-    ),
-    [handleAction, handleStartSurvey, handleViewHistory, disabled]
-  );
-
-  return (
-    <div className="space-y-4">
-      {appointments.map(renderAppointment)}
-    </div>
-  );
-});
-
-AppointmentsGrid.displayName = "AppointmentsGrid";
-
-// Mensaje de estado vacío optimizado
-const EmptyStateMessage = memo<{
-  title: string;
-  description: string;
+// Definición del tipo para la configuración de acciones para mejorar la seguridad de tipos
+type ActionConfig = Record<AdmissionAction, {
   icon: React.ComponentType<{ className?: string }>;
-}>(({ title, description, icon: Icon }) => (
-  <EmptyState title={title} description={description} icon={Icon} />
+  label: string;
+  variant?: 'default' | 'destructive';
+}>;
+
+interface AppointmentsListProps {
+  appointments: AppointmentWithPatient[];
+  isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
+  onAction: (action: AdmissionAction, appointment: AppointmentWithPatient) => void;
+  onLoadMore: () => void;
+  emptyStateConfig?: {
+    icon: React.ComponentType<{ className?: string }>;
+    title: string;
+    description: string;
+  };
+}
+
+interface AppointmentCardProps {
+  appointment: AppointmentWithPatient;
+  onAction: (action: AdmissionAction) => void;
+  isHighlighted?: boolean;
+}
+
+// ==================== HELPERS ====================
+const getAppointmentTimeInfo = (fechaHora: string) => {
+  const date = new Date(fechaHora);
+  const now = new Date();
+  
+  return {
+    date,
+    dateStr: format(date, 'dd/MM/yyyy', { locale: es }),
+    timeStr: format(date, 'HH:mm'),
+    relativeTime: formatDistanceToNow(date, { addSuffix: true, locale: es }),
+    isToday: isToday(date),
+    isFuture: isFuture(date),
+    isPast: isPast(date),
+    urgency: getTimeUrgency(date, now),
+  };
+};
+
+const getTimeUrgency = (appointmentDate: Date, currentDate: Date): 'urgent' | 'soon' | 'normal' | 'late' => {
+  const diffMinutes = (appointmentDate.getTime() - currentDate.getTime()) / (1000 * 60);
+  
+  if (diffMinutes < -30) return 'late';
+  if (diffMinutes < 15) return 'urgent';
+  if (diffMinutes < 60) return 'soon';
+  return 'normal';
+};
+
+const getPatientInitials = (nombre: string, apellidos: string): string => {
+  const firstInitial = (nombre || '').charAt(0).toUpperCase();
+  const lastInitial = (apellidos || '').charAt(0).toUpperCase();
+  return `${firstInitial}${lastInitial}` || 'P';
+};
+
+const getAvatarColor = (status: AppointmentStatus): string => {
+  const colorMap: Record<AppointmentStatus, string> = {
+    'PROGRAMADA': 'bg-blue-100 text-blue-700',
+    'CONFIRMADA': 'bg-green-100 text-green-700',
+    'EN_SALA': 'bg-yellow-100 text-yellow-700',
+    'EN_CONSULTA': 'bg-orange-100 text-orange-700',
+    'COMPLETADA': 'bg-emerald-100 text-emerald-700',
+    'CANCELADA': 'bg-red-100 text-red-700',
+    'NO_ASISTIO': 'bg-gray-100 text-gray-700',
+    'REAGENDADA': 'bg-purple-100 text-purple-700',
+  };
+  
+  return colorMap[status] || 'bg-gray-100 text-gray-700';
+};
+
+// ==================== COMPONENTES INTERNOS ====================
+
+// Skeleton para loading states
+const AppointmentCardSkeleton = memo(() => (
+  <Card className="mb-3">
+    <CardContent className="p-4">
+      <div className="flex items-center space-x-4">
+        <Skeleton className="h-12 w-12 rounded-full" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-[200px]" />
+          <Skeleton className="h-3 w-[150px]" />
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-[80px]" />
+          <Skeleton className="h-8 w-8 rounded" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
 ));
 
-EmptyStateMessage.displayName = "EmptyStateMessage";
-
-// ==================== COMPONENTE PRINCIPAL ====================
-
-export const AppointmentsList = memo<AppointmentListProps>(({
-  appointments,
-  isLoading = false,
-  onAction,
-  onStartSurvey,
-  onViewHistory,
-  className,
-  disabled = false,
-  emptyStateConfig,
-}) => {
-  // Memoizar estados de renderizado
-  const renderState = useMemo(() => {
-    const hasAppointments = appointments.length > 0;
-    const showInitialLoading = isLoading && !hasAppointments;
-    const showEmptyState = !isLoading && !hasAppointments;
-    const showAppointments = hasAppointments;
-    const showAdditionalLoading = isLoading && hasAppointments;
-
-    return {
-      showInitialLoading,
-      showEmptyState,
-      showAppointments,
-      showAdditionalLoading,
-    };
-  }, [isLoading, appointments.length]);
-
-  // Handlers memoizados para evitar recreaciones innecesarias
-  const handleAction = useCallback(
-    (action: AppointmentAction, appointment: AppointmentWithPatient) => {
-      if (!disabled) {
-        console.log(`[AppointmentsList] Action triggered: ${action}`);
-        console.log(`[AppointmentsList] Appointment: ${appointment.id}, Status: ${appointment.estado_cita}`);
-        onAction(action, appointment);
-      }
-    },
-    [onAction, disabled]
-  );
-
-  const handleStartSurvey = useCallback(
-    (appointment: AppointmentWithPatient) => {
-      if (!disabled && onStartSurvey) {
-        console.log(`[AppointmentsList] Starting survey for appointment: ${appointment.id}`);
-        onStartSurvey(appointment);
-      }
-    },
-    [onStartSurvey, disabled]
-  );
-
-  const handleViewHistory = useCallback(
-    (patientId: string) => {
-      if (!disabled && onViewHistory) {
-        console.log(`[AppointmentsList] Viewing history for patient: ${patientId}`);
-        onViewHistory(patientId);
-      }
-    },
-    [onViewHistory, disabled]
-  );
-
-  // Estado de carga inicial
-  if (renderState.showInitialLoading) {
+// Badge de estado con colores y animaciones
+const StatusBadge = memo<{ status: AppointmentStatus; isLoading?: boolean }>(
+  ({ status, isLoading }) => {
+    const config = STATUS_CONFIG[status];
+    
     return (
-      <div className={cn("space-y-6", className)}>
-        <LoadingSkeleton />
-      </div>
+      <Badge 
+        variant={config.color} 
+        className={`
+          flex items-center space-x-1 transition-all duration-200
+          ${isLoading ? 'opacity-50' : ''}
+        `}
+      >
+        {isLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+        <span>{config.label}</span>
+      </Badge>
     );
   }
+);
 
-  // Estado vacío
-  if (renderState.showEmptyState) {
-    return (
-      <div className={className}>
-        {emptyStateConfig ? (
-          <EmptyStateMessage
-            title={emptyStateConfig.title}
-            description={emptyStateConfig.description}
-            icon={emptyStateConfig.icon}
-          />
-        ) : (
-          <EmptyState
-            title="No hay citas disponibles"
-            description="Las citas programadas aparecerán en esta sección."
-            icon={() => <div className="text-4xl">📅</div>}
-          />
+// Información del paciente y cita
+const AppointmentInfo = memo<{ 
+  appointment: AppointmentWithPatient; 
+  timeInfo: ReturnType<typeof getAppointmentTimeInfo>;
+}>(({ appointment, timeInfo }) => {
+  const patientName = `${appointment.patients.nombre} ${appointment.patients.apellidos}`.trim();
+  
+  return (
+    <div className="flex-1 min-w-0">
+      <div className="flex items-center space-x-2 mb-1">
+        <h3 className="font-medium text-sm truncate">{patientName}</h3>
+        {appointment.es_primera_vez && (
+          <Badge variant="outline" className="text-xs">Primera vez</Badge>
         )}
       </div>
-    );
-  }
-
-  // Lista principal de citas
-  return (
-    <div className={cn("space-y-4", className)}>
-      {renderState.showAppointments && (
-        <AppointmentsGrid
-          appointments={appointments}
-          onAction={handleAction}
-          onStartSurvey={handleStartSurvey}
-          onViewHistory={handleViewHistory}
-          disabled={disabled}
-        />
-      )}
-
-      {/* Indicador de carga adicional */}
-      {renderState.showAdditionalLoading && <LoadingIndicator />}
+      
+      <div className="space-y-1 text-xs text-muted-foreground">
+        <div className="flex items-center space-x-1">
+          <Clock className="h-3 w-3" />
+          <span>{timeInfo.timeStr}</span>
+          {timeInfo.isToday && (
+            <span className="text-blue-600 font-medium">
+              ({timeInfo.relativeTime})
+            </span>
+          )}
+        </div>
+        
+        <div className="flex items-center space-x-1">
+          <FileText className="h-3 w-3" />
+          <span className="truncate">{appointment.motivo_cita}</span>
+        </div>
+        
+        {appointment.patients.telefono && (
+          <div className="flex items-center space-x-1">
+            <Phone className="h-3 w-3" />
+            <span>{appointment.patients.telefono}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 });
 
-AppointmentsList.displayName = "AppointmentsList";
+// Menú de acciones con validación de business rules
+const ActionsMenu = memo<{
+  appointment: AppointmentWithPatient;
+  onAction: (action: AdmissionAction) => void;
+  isLoading?: boolean;
+}>(({ appointment, onAction, isLoading }) => {
+  const availableActions = useMemo(
+    () => getAvailableActions(appointment),
+    [appointment]
+  );
+  
+  const suggestedAction = useMemo(
+    () => getNextSuggestedAction(appointment),
+    [appointment]
+  );
+  
+  const actionConfig: ActionConfig = {
+    checkIn: { icon: CheckCircle, label: 'Marcar presente' },
+    startConsult: { icon: PlayCircle, label: 'Iniciar consulta' },
+    complete: { icon: CheckCircle, label: 'Completar' },
+    cancel: { icon: XCircle, label: 'Cancelar', variant: 'destructive' },
+    noShow: { icon: AlertTriangle, label: 'No asistió', variant: 'destructive' },
+    reschedule: { icon: RotateCcw, label: 'Reagendar' },
+    viewHistory: { icon: FileText, label: 'Ver historial' },
+  };
+  
+  const handleAction = useCallback((action: AdmissionAction) => {
+    const validation = validateAction(action, appointment);
+    
+    if (!validation.valid) {
+      // TODO: Mostrar toast con error de validación
+      console.warn('Action not valid:', validation.reason);
+      return;
+    }
+    
+    onAction(action);
+  }, [appointment, onAction]);
+  
+  if (availableActions.length === 0) {
+    return null;
+  }
+  
+  // Si hay una acción sugerida y es la única disponible, mostrarla como botón principal
+  if (availableActions.length === 1 && suggestedAction && availableActions.includes(suggestedAction)) {
+    const config = actionConfig[suggestedAction as AdmissionAction];
+    const Icon = config.icon;
+    
+    return (
+      <Button
+        size="sm"
+        variant={config.variant || 'default'}
+        onClick={() => handleAction(suggestedAction)}
+        disabled={isLoading}
+        className="flex items-center space-x-1"
+      >
+        <Icon className="h-3 w-3" />
+        <span className="hidden sm:inline">{config.label}</span>
+      </Button>
+    );
+  }
+  
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          disabled={isLoading}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+          <span className="sr-only">Abrir menú de acciones</span>
+        </Button>
+      </DropdownMenuTrigger>
+      
+      <DropdownMenuContent align="end" className="w-48">
+        {/* Acción sugerida primero */}
+        {suggestedAction && availableActions.includes(suggestedAction) && (
+          <>
+            {(() => {
+              const config = actionConfig[suggestedAction as AdmissionAction];
+              const Icon = config.icon;
+              return (
+                <DropdownMenuItem
+                  onClick={() => handleAction(suggestedAction)}
+                  className="flex items-center space-x-2 font-medium"
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{config.label}</span>
+                  <Badge variant="outline" className="ml-auto text-xs">
+                    Sugerido
+                  </Badge>
+                </DropdownMenuItem>
+              );
+            })()}
+            <DropdownMenuSeparator />
+          </>
+        )}
+        
+        {/* Otras acciones */}
+        {availableActions
+          .filter(action => action !== suggestedAction)
+          .map((action: AdmissionAction) => {
+            const config = actionConfig[action];
+            const Icon = config.icon;
+            
+            return (
+              <DropdownMenuItem
+                key={action}
+                onClick={() => handleAction(action)}
+                className={`
+                  flex items-center space-x-2
+                  ${config.variant === 'destructive' ? 'text-destructive' : ''}
+                `}
+              >
+                <Icon className="h-4 w-4" />
+                <span>{config.label}</span>
+              </DropdownMenuItem>
+            );
+          })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+});
 
+// Card individual de cita
+const AppointmentCard = memo<AppointmentCardProps>(({ appointment, onAction, isHighlighted }) => {
+  const timeInfo = useMemo(
+    () => getAppointmentTimeInfo(appointment.fecha_hora_cita),
+    [appointment.fecha_hora_cita]
+  );
+  
+  const initials = useMemo(
+    () => getPatientInitials(appointment.patients.nombre, appointment.patients.apellidos),
+    [appointment.patients.nombre, appointment.patients.apellidos]
+  );
+  
+  const avatarColor = useMemo(
+    () => getAvatarColor(appointment.estado_cita),
+    [appointment.estado_cita]
+  );
+  
+  const urgencyStyle = useMemo(() => {
+    switch (timeInfo.urgency) {
+      case 'urgent':
+        return 'border-l-4 border-l-red-500 bg-red-50/50';
+      case 'soon':
+        return 'border-l-4 border-l-yellow-500 bg-yellow-50/50';
+      case 'late':
+        return 'border-l-4 border-l-gray-500 bg-gray-50/50';
+      default:
+        return '';
+    }
+  }, [timeInfo.urgency]);
+  
+  return (
+    <Card className={`
+      mb-3 transition-all duration-200 hover:shadow-md
+      ${isHighlighted ? 'ring-2 ring-blue-500 shadow-md' : ''}
+      ${urgencyStyle}
+    `}>
+      <CardContent className="p-4">
+        <div className="flex items-center space-x-4">
+          {/* Avatar */}
+          <Avatar className={`h-12 w-12 ${avatarColor}`}>
+            <AvatarFallback className="text-sm font-medium">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          
+          {/* Información */}
+          <AppointmentInfo appointment={appointment} timeInfo={timeInfo} />
+          
+          {/* Estado y acciones */}
+          <div className="flex flex-col items-end space-y-2">
+            <StatusBadge status={appointment.estado_cita} />
+            <ActionsMenu
+              appointment={appointment}
+              onAction={onAction}
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+// ==================== COMPONENTE PRINCIPAL ====================
+export const AppointmentsList: React.FC<AppointmentsListProps> = memo(({
+  appointments,
+  isLoading,
+  isLoadingMore,
+  hasMore,
+  onAction,
+  onLoadMore,
+  emptyStateConfig,
+}) => {
+  const handleAction = useCallback((action: AdmissionAction, appointment: AppointmentWithPatient) => {
+    onAction(action, appointment);
+  }, [onAction]);
+  
+  // Loading inicial
+  if (isLoading && appointments.length === 0) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <AppointmentCardSkeleton key={i} />
+        ))}
+      </div>
+    );
+  }
+  
+  // Estado vacío
+  if (!isLoading && appointments.length === 0) {
+    return emptyStateConfig ? (
+      <EmptyState
+        icon={emptyStateConfig.icon}
+        title={emptyStateConfig.title}
+        description={emptyStateConfig.description}
+      />
+    ) : (
+      <div className="text-center py-8">
+        <p className="text-muted-foreground">No hay citas para mostrar</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-3">
+      {/* Lista de citas */}
+      {appointments.map((appointment) => (
+        <AppointmentCard
+          key={appointment.id}
+          appointment={appointment}
+          onAction={(action) => handleAction(action, appointment)}
+        />
+      ))}
+      
+      {/* Botón de cargar más */}
+      {hasMore && (
+        <div className="flex justify-center pt-4">
+          <Button
+            variant="outline"
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            className="flex items-center space-x-2"
+          >
+            {isLoadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+            <span>{isLoadingMore ? 'Cargando...' : 'Cargar más'}</span>
+          </Button>
+        </div>
+      )}
+      
+      {/* Loading more indicator */}
+      {isLoadingMore && (
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <AppointmentCardSkeleton key={`loading-${i}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
+AppointmentsList.displayName = 'AppointmentsList';
 export default AppointmentsList;

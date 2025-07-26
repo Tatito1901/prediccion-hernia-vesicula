@@ -1,0 +1,101 @@
+sequenceDiagram
+    participant U as 👤 Usuario<br/>Personal Admisión
+    participant F as 🖥️ Frontend<br/>NewPatientForm
+    participant V as ✅ Validator<br/>Business Rules
+    participant M as 🛡️ Middleware<br/>Auth & Security
+    participant A as 🚀 API<br/>patient-admission
+    participant R as ⚙️ RPC Function<br/>create_patient_and_appointment
+    participant DB as 🗄️ Database<br/>PostgreSQL
+    participant RT as 📡 Realtime<br/>Supabase
+    participant C as 💾 Cache<br/>React Query
+    
+    %% INICIO DEL FLUJO
+    U->>F: 1. Llenar formulario paciente
+    Note over F: Validación en tiempo real<br/>con Zod schema
+    
+    U->>F: 2. Seleccionar fecha/hora
+    F->>F: 3. Verificar slots disponibles
+    Note over F: Generar horarios<br/>8:00-18:00 (no almuerzo)
+    
+    U->>F: 4. Enviar formulario
+    F->>V: 5. Validar business rules
+    
+    %% VALIDACIONES
+    V->>V: 6. Validar horario laboral
+    V->>V: 7. Validar no fin de semana
+    V->>V: 8. Validar no muy futuro (90 días)
+    alt ❌ Validación falla
+        V-->>F: Error de validación
+        F-->>U: Mostrar error + sugerencias
+    end
+    
+    %% PROCESO EXITOSO
+    V->>A: 9. ✅ Datos válidos
+    F->>M: 10. POST /api/patient-admission
+    
+    %% MIDDLEWARE SECURITY
+    M->>M: 11. Verificar auth token
+    M->>M: 12. Validar permisos usuario
+    M->>M: 13. Obtener user ID
+    alt ❌ Auth falla
+        M-->>F: 401 Unauthorized
+        F-->>U: Redirigir a login
+    end
+    
+    %% API PROCESSING
+    M->>A: 14. ✅ Request autorizado
+    A->>A: 15. Validar payload con Zod
+    A->>A: 16. Verificar conflictos horario
+    A->>DB: 17. Query conflictos existentes
+    DB-->>A: 18. Resultado consulta
+    
+    alt ❌ Conflicto encontrado
+        A-->>F: 409 Conflict + horarios sugeridos
+        F-->>U: Mostrar conflicto + alternativas
+    end
+    
+    %% DATABASE TRANSACTION
+    A->>R: 19. ✅ Sin conflictos
+    Note over R: Función RPC transaccional
+    
+    R->>DB: 20. BEGIN TRANSACTION
+    R->>DB: 21. Validar no paciente duplicado
+    R->>DB: 22. INSERT INTO patients
+    R->>DB: 23. INSERT INTO appointments
+    R->>DB: 24. INSERT INTO appointment_history
+    R->>DB: 25. COMMIT TRANSACTION
+    
+    alt ❌ Error en transacción
+        R->>DB: ROLLBACK
+        R-->>A: Error detallado
+        A-->>F: 500 Internal Error
+        F-->>U: Error + reintento
+    end
+    
+    %% SUCCESS FLOW
+    DB-->>R: 26. ✅ IDs creados
+    R-->>A: 27. Success + patient_id
+    A->>A: 28. Fetch datos completos
+    A-->>F: 29. 201 Created + datos
+    
+    %% REAL-TIME UPDATES
+    DB->>RT: 30. 📡 Database change event
+    RT->>C: 31. Invalidate cache keys
+    RT->>F: 32. WebSocket update
+    
+    %% UI UPDATES
+    F->>C: 33. Update React Query cache
+    F->>F: 34. Reset formulario
+    F->>F: 35. Switch to "Hoy" tab
+    F-->>U: 36. ✅ Success notification
+    
+    %% NOTIFICACIONES
+    Note over U,C: 🎉 Paciente creado exitosamente<br/>📋 Visible en lista de citas<br/>📡 Otras sesiones actualizadas
+    
+    %% ESTILOS
+    Note right of F: • Form validation<br/>• Error handling<br/>• Loading states
+    Note right of V: • Horario laboral<br/>• Conflictos<br/>• Business rules
+    Note right of M: • JWT validation<br/>• Role checking<br/>• Rate limiting
+    Note right of A: • Input validation<br/>• Conflict detection<br/>• Error responses
+    Note right of R: • ACID transaction<br/>• Constraint validation<br/>• Rollback safety
+    Note right of RT: • Real-time sync<br/>• Cache invalidation<br/>• Multi-user updates

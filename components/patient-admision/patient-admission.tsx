@@ -1,18 +1,12 @@
-// patient-admission.tsx - VERSIÓN OPTIMIZADA
-import React, { 
-  useState, 
-  useCallback, 
-  memo, 
-  Suspense,
-  lazy,
-  useMemo
-} from "react";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+// components/admission/patient-admission.tsx - COMPONENTE PRINCIPAL OPTIMIZADO
+'use client';
 
-// UI Components
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import React, { useState, useCallback, memo, Suspense, useMemo } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,412 +16,471 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { AppointmentListSkeleton } from "@/components/ui/unified-skeletons";
-import { EmptyState } from "@/components/ui/empty-state";
+} from '@/components/ui/alert-dialog';
 
 // Icons
 import {
-  CheckCircle,
   CalendarCheck,
   CalendarClock,
   History,
-  UserRoundPlus,
+  UserPlus,
+  RefreshCw,
+  Wifi,
+  WifiOff,
   AlertCircle,
-} from "lucide-react";
+  Loader2,
+} from 'lucide-react';
 
-// Importaciones unificadas
-import {
+// Types and hooks
+import type { 
+  TabType, 
+  AdmissionAction, 
   AppointmentWithPatient,
-  AppointmentAction,
-  PatientAdmissionTab,
-  TabConfig,
-} from './types';
+  AppointmentUpdatePayload,
+} from './admision-types';
+import { useAdmissionData } from '@/hooks/use-admission-data';
+import { useAdmissionRealtime } from '@/hooks/use-admission-realtime';
+import { validateAction, ACTION_TO_STATUS_MAP } from '@/lib/admission-business-rules';
 
-// Contexto y Hooks
-import { useClinic } from '@/contexts/clinic-data-provider';
-import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
-
-// Utilidades centralizadas
-import {
-  isAppointmentToday,
-  isAppointmentInPast,
-  sortAppointmentsByDate
-} from '@/lib/appointment-utils';
-
-// Componentes especializados
-import { AppointmentsList } from "./appointments-list";
-
-// Componentes Lazy
-const NewPatientForm = lazy(() => import("./new-patient-form"));
-const RescheduleDatePicker = lazy(() => import("./patient-admission-reschedule"));
+// Components
+import { AppointmentsList } from './appointments-list';
+import { NewPatientForm } from './new-patient-form';
 
 // ==================== CONFIGURACIÓN DE TABS ====================
-
-const TABS_CONFIG: TabConfig[] = [
-  { 
-    value: "newPatient", 
-    label: "Nuevo Paciente", 
-    icon: UserRoundPlus, 
-    shortLabel: "Nuevo" 
+const TAB_CONFIG = [
+  {
+    key: 'newPatient' as TabType,
+    label: 'Nuevo Paciente',
+    shortLabel: 'Nuevo',
+    icon: UserPlus,
+    description: 'Registrar un nuevo paciente y agendar su primera cita',
   },
-  { 
-    value: "today", 
-    label: "Citas de Hoy", 
-    icon: CalendarCheck, 
-    shortLabel: "Hoy" 
+  {
+    key: 'today' as TabType,
+    label: 'Citas de Hoy',
+    shortLabel: 'Hoy',
+    icon: CalendarCheck,
+    description: 'Citas programadas para el día de hoy',
   },
-  { 
-    value: "future", 
-    label: "Próximas Citas", 
-    icon: CalendarClock, 
-    shortLabel: "Próximas" 
+  {
+    key: 'future' as TabType,
+    label: 'Próximas Citas',
+    shortLabel: 'Próximas',
+    icon: CalendarClock,
+    description: 'Citas programadas para fechas futuras',
   },
-  { 
-    value: "past", 
-    label: "Historial", 
-    icon: History, 
-    shortLabel: "Historial" 
+  {
+    key: 'past' as TabType,
+    label: 'Historial',
+    shortLabel: 'Historial',
+    icon: History,
+    description: 'Historial de citas pasadas y completadas',
   },
-];
-
-// ==================== TIPOS LOCALES ====================
-
-interface ConfirmationAction {
-  type: AppointmentAction;
-  appointment: AppointmentWithPatient;
-  label: string;
-  description: string;
-}
+] as const;
 
 // ==================== COMPONENTES INTERNOS ====================
 
+// Tab de navegación con contadores y estados
 const TabNavigation = memo<{
-  activeTab: PatientAdmissionTab;
-  onTabChange: (tab: PatientAdmissionTab) => void;
-  counts: Record<PatientAdmissionTab, number>;
+  activeTab: TabType;
+  onTabChange: (tab: TabType) => void;
+  counts: Record<TabType, number>;
   isLoading: boolean;
 }>(({ activeTab, onTabChange, counts, isLoading }) => (
-  <div className="grid grid-cols-4 gap-1 sm:gap-2 p-2 bg-slate-100 dark:bg-slate-800/50 rounded-xl border mb-4">
-    {TABS_CONFIG.map((tab) => {
+  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
+    {TAB_CONFIG.map((tab) => {
       const Icon = tab.icon;
-      const count = tab.value === "newPatient" ? 0 : counts[tab.value];
-      const isActive = activeTab === tab.value;
-
+      const isActive = activeTab === tab.key;
+      const count = counts[tab.key] || 0;
+      
       return (
-        <button
-          key={tab.value}
-          onClick={() => onTabChange(tab.value)}
-          className={cn(
-            "flex flex-col items-center gap-1 p-2 sm:p-3 rounded-lg transition-all duration-200 text-xs sm:text-sm font-medium",
-            isActive
-              ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-700/50"
-          )}
+        <Button
+          key={tab.key}
+          variant={isActive ? 'default' : 'outline'}
+          className={`
+            h-auto p-4 flex-col items-center space-y-2 relative
+            transition-all duration-200 hover:scale-[1.02]
+            ${isActive ? 'shadow-md' : 'hover:shadow-sm'}
+          `}
+          onClick={() => onTabChange(tab.key)}
+          disabled={isLoading}
         >
-          <div className="relative">
-            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-            {tab.value !== "newPatient" && (
-              <Badge 
-                variant="secondary" 
-                className="absolute -top-2 -right-2 h-4 w-4 p-0 text-xs flex items-center justify-center"
-              >
-                {isLoading ? "..." : count}
-              </Badge>
-            )}
+          <div className="flex items-center space-x-2">
+            <Icon className="h-5 w-5" />
+            <span className="font-medium hidden sm:inline">{tab.label}</span>
+            <span className="font-medium sm:hidden">{tab.shortLabel}</span>
           </div>
-          <span className="hidden sm:block">{tab.label}</span>
-          <span className="sm:hidden">{tab.shortLabel}</span>
-        </button>
+          
+          {tab.key !== 'newPatient' && (
+            <Badge 
+              variant={isActive ? 'secondary' : 'outline'} 
+              className="text-xs min-w-[20px] h-5"
+            >
+              {isLoading ? '...' : count}
+            </Badge>
+          )}
+          
+          <p className="text-xs text-muted-foreground hidden lg:block text-center">
+            {tab.description}
+          </p>
+        </Button>
       );
     })}
   </div>
 ));
-TabNavigation.displayName = "TabNavigation";
+
+// Header con información de conexión y controles
+const AdmissionHeader = memo<{
+  isConnected: boolean;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}>(({ isConnected, onRefresh, isRefreshing }) => (
+  <Card className="mb-6">
+    <CardHeader className="pb-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <CardTitle className="text-2xl font-bold">Admisión de Pacientes</CardTitle>
+          <p className="text-muted-foreground mt-1">
+            Gestione pacientes y citas desde un solo lugar
+          </p>
+        </div>
+        
+        <div className="flex items-center space-x-3">
+          {/* Indicador de conexión real-time */}
+          <div className="flex items-center space-x-2">
+            {isConnected ? (
+              <>
+                <Wifi className="h-4 w-4 text-green-600" />
+                <span className="text-sm text-green-600 hidden sm:inline">En línea</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4 text-amber-600" />
+                <span className="text-sm text-amber-600 hidden sm:inline">Sin conexión</span>
+              </>
+            )}
+          </div>
+          
+          {/* Botón de refresh manual */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="flex items-center space-x-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Actualizar</span>
+          </Button>
+        </div>
+      </div>
+    </CardHeader>
+  </Card>
+));
+
+// Modal de confirmación para acciones
+const ActionConfirmationModal = memo<{
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  action: AdmissionAction | null;
+  appointment: AppointmentWithPatient | null;
+  isLoading: boolean;
+}>(({ isOpen, onClose, onConfirm, action, appointment, isLoading }) => {
+  const actionLabels: Record<AdmissionAction, { title: string; description: string; variant: 'default' | 'destructive' }> = {
+    checkIn: {
+      title: 'Marcar Presente',
+      description: 'El paciente será marcado como presente y podrá iniciar la consulta.',
+      variant: 'default',
+    },
+    startConsult: {
+      title: 'Iniciar Consulta',
+      description: 'La consulta será iniciada y el paciente pasará a estar en consulta.',
+      variant: 'default',
+    },
+    complete: {
+      title: 'Completar Consulta',
+      description: 'La consulta será marcada como completada exitosamente.',
+      variant: 'default',
+    },
+    cancel: {
+      title: 'Cancelar Cita',
+      description: 'La cita será cancelada y el horario quedará liberado.',
+      variant: 'destructive',
+    },
+    noShow: {
+      title: 'Marcar No Asistió',
+      description: 'Se registrará que el paciente no se presentó a la cita.',
+      variant: 'destructive',
+    },
+    reschedule: {
+      title: 'Reagendar Cita',
+      description: 'La cita será reagendada a una nueva fecha y hora.',
+      variant: 'default',
+    },
+    viewHistory: {
+      title: 'Ver Historial',
+      description: 'Se abrirá el historial completo del paciente.',
+      variant: 'default',
+    },
+  };
+  
+  if (!action || !appointment) return null;
+  
+  const config = actionLabels[action];
+  const patientName = `${appointment.patients.nombre} ${appointment.patients.apellidos}`.trim();
+  
+  return (
+    <AlertDialog open={isOpen} onOpenChange={onClose}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{config.title}</AlertDialogTitle>
+          <AlertDialogDescription className="space-y-2">
+            <p><strong>Paciente:</strong> {patientName}</p>
+            <p><strong>Cita:</strong> {new Date(appointment.fecha_hora_cita).toLocaleString()}</p>
+            <p>{config.description}</p>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose} disabled={isLoading}>
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            disabled={isLoading}
+            className={config.variant === 'destructive' ? 'bg-destructive hover:bg-destructive/90' : ''}
+          >
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Confirmar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+});
 
 // ==================== COMPONENTE PRINCIPAL ====================
-
-const PatientAdmission: React.FC = () => {
-  // Estado local
-  const [activeTab, setActiveTab] = useState<PatientAdmissionTab>("today");
-  const [confirmAction, setConfirmAction] = useState<ConfirmationAction | null>(null);
-  const [rescheduleAppointment, setRescheduleAppointment] = useState<AppointmentWithPatient | null>(null);
-
-  // Hooks
-  const { allAppointments, isLoading, error } = useClinic();
-  const updateStatusMutation = useUpdateAppointmentStatus();
-
-  // Clasificación de citas usando utilidades centralizadas
-  const { appointmentsByDate, counts } = useMemo(() => {
-    const today: AppointmentWithPatient[] = [];
-    const future: AppointmentWithPatient[] = [];
-    const past: AppointmentWithPatient[] = [];
+export const PatientAdmission: React.FC = () => {
+  // ==================== STATE ====================
+  const [activeTab, setActiveTab] = useState<TabType>('today');
+  const [confirmationModal, setConfirmationModal] = useState<{
+    isOpen: boolean;
+    action: AdmissionAction | null;
+    appointment: AppointmentWithPatient | null;
+  }>({
+    isOpen: false,
+    action: null,
+    appointment: null,
+  });
+  
+  // ==================== HOOKS ====================
+  const {
+    appointments,
+    counts,
+    isLoading,
+    isError,
+    error,
+    isLoadingMore,
+    hasMore,
+    isUpdating,
+    loadMore,
+    refreshCurrentTab,
+    updateAppointment,
+  } = useAdmissionData(activeTab);
+  
+  const { isConnected, manualRefresh } = useAdmissionRealtime({
+    enableToasts: true,
+    enableSounds: false,
+    autoRefresh: true,
+  });
+  
+  // ==================== HANDLERS ====================
+  const handleTabChange = useCallback((tab: TabType) => {
+    setActiveTab(tab);
+  }, []);
+  
+  const handleAction = useCallback((action: AdmissionAction, appointment: AppointmentWithPatient) => {
+    // Validar acción según business rules
+    const validation = validateAction(action, appointment);
     
-    if (!allAppointments) {
-      return {
-        appointmentsByDate: { today, future, past },
-        counts: { today: 0, future: 0, past: 0, newPatient: 0 }
-      };
-    }
-
-    // Clasificación eficiente en un solo recorrido
-    for (const appointment of allAppointments) {
-      try {
-        if (!appointment.fecha_hora_cita) continue;
-        
-        if (isAppointmentToday(appointment.fecha_hora_cita)) {
-          today.push(appointment);
-        } else if (isAppointmentInPast(appointment.fecha_hora_cita)) {
-          past.push(appointment);
-        } else {
-          future.push(appointment);
-        }
-      } catch (error) {
-        console.error(`Error procesando cita ${appointment.id}:`, error);
-      }
-    }
-
-    // Ordenamiento optimizado
-    sortAppointmentsByDate(today, 'asc');
-    sortAppointmentsByDate(future, 'asc');
-    sortAppointmentsByDate(past, 'desc');
-
-    return {
-      appointmentsByDate: { today, future, past },
-      counts: {
-        today: today.length,
-        future: future.length,
-        past: past.length,
-        newPatient: 0
-      }
-    };
-  }, [allAppointments]);
-
-  // Handlers principales
-  const handleUpdateStatus = useCallback((appointmentId: string, status: string) => {
-    updateStatusMutation.mutate(
-      { appointmentId, newStatus: status },
-      {
-        onSuccess: () => toast.success('Estado actualizado con éxito'),
-        onError: () => toast.error('Error al actualizar el estado')
-      }
-    );
-    setConfirmAction(null);
-  }, [updateStatusMutation]);
-
-  const handleAction = useCallback((action: AppointmentAction, appointment: AppointmentWithPatient) => {
-    if (action === 'reschedule') {
-      setRescheduleAppointment(appointment);
+    if (!validation.valid) {
+      // Mostrar error de validación
       return;
     }
-
-    // Mapa de acciones para evitar lógica redundante
-    const actionMap: Record<AppointmentAction, { label: string; description: string }> = {
-      checkIn: { 
-        label: 'Presente', 
-        description: 'El paciente será marcado como presente en la consulta.' 
-      },
-      complete: { 
-        label: 'Completada', 
-        description: 'La consulta será marcada como finalizada.' 
-      },
-      cancel: { 
-        label: 'Cancelada', 
-        description: 'La cita será cancelada y liberará el horario.' 
-      },
-      noShow: { 
-        label: 'No Asistió', 
-        description: 'Se marcará que el paciente no se presentó a la cita.' 
-      },
-      reschedule: { label: '', description: '' } // Nunca se usa aquí
-    };
-
-    const config = actionMap[action];
-    if (config) {
-      setConfirmAction({
-        type: action,
-        appointment,
-        label: config.label,
-        description: config.description,
-      });
+    
+    if (action === 'viewHistory') {
+      // Abrir modal de historial directamente
+      // TODO: Implementar modal de historial
+      return;
     }
-  }, []);
-
-  const handleReschedule = useCallback((date: Date, time: string) => {
-    if (!rescheduleAppointment) return;
     
-    const [hours, minutes] = time.split(':').map(Number);
-    const newDate = new Date(date);
-    newDate.setHours(hours, minutes, 0, 0);
+    if (action === 'reschedule') {
+      // Abrir modal de reagendamiento
+      // TODO: Implementar modal de reagendamiento
+      return;
+    }
     
-    updateStatusMutation.mutate({
-      appointmentId: rescheduleAppointment.id,
-      newStatus: 'REAGENDADA',
-      nuevaFechaHora: newDate.toISOString(),
-    }, {
-      onSuccess: () => toast.success('Cita reagendada con éxito'),
-      onError: () => toast.error('Error al reagendar la cita')
+    // Para otras acciones, mostrar confirmación
+    setConfirmationModal({
+      isOpen: true,
+      action,
+      appointment,
     });
+  }, []);
+  
+  const handleConfirmAction = useCallback(() => {
+    const { action, appointment } = confirmationModal;
     
-    setRescheduleAppointment(null);
-  }, [rescheduleAppointment, updateStatusMutation]);
-
-  // Mapa de estados para confirmación
-  const statusMap: Record<AppointmentAction, string> = {
-    checkIn: 'PRESENTE',
-    complete: 'COMPLETADA',
-    cancel: 'CANCELADA',
-    noShow: 'NO_ASISTIO',
-    reschedule: 'REAGENDADA'
-  };
-
-  // Renderizado condicional del contenido
-  const renderContent = useMemo(() => {
-    const emptyStates = {
-      today: {
-        title: "No hay citas para hoy",
-        description: "Aquí aparecerán las citas programadas para el día de hoy.",
-        icon: CalendarCheck,
-      },
-      future: {
-        title: "No hay citas próximas",
-        description: "Las citas futuras se mostrarán en esta sección.",
-        icon: CalendarClock,
-      },
-      past: {
-        title: "No hay historial de citas",
-        description: "Las citas pasadas y completadas aparecerán aquí.",
-        icon: History,
-      }
+    if (!action || !appointment) return;
+    
+    const newStatus = ACTION_TO_STATUS_MAP[action];
+    
+    if (!newStatus) return;
+    
+    const payload: AppointmentUpdatePayload = {
+      appointmentId: appointment.id,
+      newStatus,
+      motivo_cambio: `Acción realizada desde admisión: ${action}`,
     };
-
+    
+    updateAppointment(payload);
+    
+    setConfirmationModal({
+      isOpen: false,
+      action: null,
+      appointment: null,
+    });
+  }, [confirmationModal, updateAppointment]);
+  
+  const handleCloseConfirmation = useCallback(() => {
+    setConfirmationModal({
+      isOpen: false,
+      action: null,
+      appointment: null,
+    });
+  }, []);
+  
+  const handleRefresh = useCallback(() => {
+    refreshCurrentTab();
+    manualRefresh();
+  }, [refreshCurrentTab, manualRefresh]);
+  
+  const handleNewPatientSuccess = useCallback(() => {
+    // Cambiar a tab de hoy después de crear paciente
+    setActiveTab('today');
+    refreshCurrentTab();
+  }, [refreshCurrentTab]);
+  
+  // ==================== RENDER CONTENT ====================
+  const renderContent = useMemo(() => {
+    if (isError) {
+      return (
+        <EmptyState
+          icon={AlertCircle}
+          title="Error al cargar datos"
+          description={error?.message || 'Ocurrió un problema al cargar la información.'}
+          action={
+            <Button onClick={handleRefresh} variant="outline">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Reintentar
+            </Button>
+          }
+        />
+      );
+    }
+    
     switch (activeTab) {
       case 'newPatient':
         return (
-          <Suspense fallback={<AppointmentListSkeleton />}>
-            <NewPatientForm onSuccess={() => setActiveTab('today')} />
+          <Suspense fallback={<div className="animate-pulse">Cargando formulario...</div>}>
+            <NewPatientForm onSuccess={handleNewPatientSuccess} />
           </Suspense>
         );
       
       case 'today':
-        return (
-          <AppointmentsList
-            appointments={appointmentsByDate.today}
-            isLoading={isLoading}
-            onAction={handleAction}
-            emptyStateConfig={emptyStates.today}
-          />
-        );
-      
       case 'future':
-        return (
-          <AppointmentsList
-            appointments={appointmentsByDate.future}
-            isLoading={isLoading}
-            onAction={handleAction}
-            emptyStateConfig={emptyStates.future}
-          />
-        );
-      
       case 'past':
         return (
           <AppointmentsList
-            appointments={appointmentsByDate.past}
+            appointments={appointments}
             isLoading={isLoading}
+            isLoadingMore={isLoadingMore}
+            hasMore={hasMore}
             onAction={handleAction}
-            emptyStateConfig={emptyStates.past}
+            onLoadMore={loadMore}
+            emptyStateConfig={{
+              today: {
+                icon: CalendarCheck,
+                title: 'No hay citas para hoy',
+                description: 'Las citas programadas para hoy aparecerán aquí.',
+              },
+              future: {
+                icon: CalendarClock,
+                title: 'No hay citas próximas',
+                description: 'Las citas futuras se mostrarán en esta sección.',
+              },
+              past: {
+                icon: History,
+                title: 'No hay historial',
+                description: 'El historial de citas aparecerá aquí.',
+              },
+            }[activeTab]}
           />
         );
       
       default:
         return null;
     }
-  }, [activeTab, appointmentsByDate, isLoading, handleAction]);
-
-  // Renderizado en caso de error
-  if (error) {
-    return (
-      <EmptyState 
-        icon={AlertCircle} 
-        title="Error al cargar los datos" 
-        description={error.message || "Ocurrió un problema al contactar al servidor. Inténtalo de nuevo."} 
-      />
-    );
-  }
-
+  }, [
+    activeTab,
+    appointments,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    isError,
+    error,
+    handleAction,
+    loadMore,
+    handleRefresh,
+    handleNewPatientSuccess,
+  ]);
+  
+  // ==================== RENDER ====================
   return (
-    <div className="flex flex-col h-full min-h-[500px]">
-      {/* Navegación de tabs */}
-      <TabNavigation 
-        activeTab={activeTab} 
-        onTabChange={setActiveTab} 
-        counts={counts}
-        isLoading={isLoading} 
+    <div className="container mx-auto py-6 space-y-6">
+      {/* Header */}
+      <AdmissionHeader
+        isConnected={isConnected}
+        onRefresh={handleRefresh}
+        isRefreshing={isLoading}
       />
       
-      {/* Contenido principal */}
-      <div className="flex-grow overflow-y-auto pr-1">
-        {renderContent}
-      </div>
-
-      {/* Diálogos de confirmación */}
-      {confirmAction && (
-        <AlertDialog open onOpenChange={() => setConfirmAction(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-blue-600" />
-                Confirmar Acción
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-base">
-                ¿Estás seguro de que deseas marcar esta cita como{" "}
-                <span className="font-semibold text-slate-900 dark:text-slate-100">
-                  {confirmAction.label}
-                </span>
-                ?
-                <br />
-                <span className="text-sm text-slate-600 dark:text-slate-400 mt-2 block">
-                  {confirmAction.description}
-                </span>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={() => 
-                  handleUpdateStatus(
-                    confirmAction.appointment.id, 
-                    statusMap[confirmAction.type]
-                  )
-                }
-                className={cn(
-                  confirmAction.type === 'cancel' || confirmAction.type === 'noShow'
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-blue-600 hover:bg-blue-700 text-white"
-                )}
-              >
-                Confirmar
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
-
-      {/* Diálogo de reagendamiento */}
-      {rescheduleAppointment && (
-        <Suspense fallback={<div className="fixed inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center"><AppointmentListSkeleton /></div>}>
-          <RescheduleDatePicker
-            appointment={rescheduleAppointment}
-            onClose={() => setRescheduleAppointment(null)}
-            onReschedule={handleReschedule}
-          />
-        </Suspense>
-      )}
+      {/* Navigation Tabs */}
+      <TabNavigation
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        counts={counts}
+        isLoading={isLoading}
+      />
+      
+      {/* Main Content */}
+      <Card>
+        <CardContent className="p-6">
+          {renderContent}
+        </CardContent>
+      </Card>
+      
+      {/* Confirmation Modal */}
+      <ActionConfirmationModal
+        isOpen={confirmationModal.isOpen}
+        onClose={handleCloseConfirmation}
+        onConfirm={handleConfirmAction}
+        action={confirmationModal.action}
+        appointment={confirmationModal.appointment}
+        isLoading={isUpdating}
+      />
     </div>
   );
 };
 
-const MemoizedPatientAdmission = memo(PatientAdmission);
-MemoizedPatientAdmission.displayName = "PatientAdmission";
-
-export default MemoizedPatientAdmission;
+export default memo(PatientAdmission);

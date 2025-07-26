@@ -21,7 +21,7 @@ import { es } from "date-fns/locale";
 import { useClinic } from "@/contexts/clinic-data-provider";
 
 // Importaciones unificadas
-import { AppointmentWithPatient, RescheduleProps } from "./types";
+import { AppointmentWithPatient, RescheduleProps } from "./admision-types";
 
 // Utilidades centralizadas
 import {

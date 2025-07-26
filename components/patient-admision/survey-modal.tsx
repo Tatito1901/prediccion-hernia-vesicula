@@ -38,8 +38,8 @@ import {
 } from "lucide-react";
 
 // Importaciones de tipos
-import { AppointmentWithPatient, SurveyData } from "./types";
-import { getPatientData } from "./types";
+import { AppointmentWithPatient, SurveyData } from "./admision-types";
+import { getPatientData } from "./admision-types";
 
 // ==================== ESQUEMA DE VALIDACIÓN ====================
 

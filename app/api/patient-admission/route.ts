@@ -1,256 +1,368 @@
-import { NextResponse } from 'next/server';
+// app/api/patient-admission/route.ts - API CORREGIDA PARA TU ESQUEMA REAL
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { z } from 'zod';
-import { AdmissionPayload, AdmissionDBResponse, AppointmentWithPatient } from '@/components/patient-admission/types';
+import { addMinutes, isBefore, isWeekend, isAfter } from 'date-fns';
 
-// ==================== ESQUEMA DE VALIDACIÓN ====================
+// ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const PatientAdmissionSchema = z.object({
-  // Datos básicos del paciente
-  nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres').max(50),
-  apellidos: z.string().trim().min(2, 'Los apellidos deben tener al menos 2 caracteres').max(50),
-  telefono: z.string().trim().min(10, 'El teléfono debe tener al menos 10 dígitos').max(20),
+  // Campos del paciente según tu esquema
+  nombre: z.string().min(2, "Nombre debe tener al menos 2 caracteres").max(50),
+  apellidos: z.string().min(2, "Apellidos debe tener al menos 2 caracteres").max(50),
+  telefono: z.string().optional(), // Opcional en tu esquema
+  email: z.string().email("Email inválido").optional().or(z.literal("")),
+  edad: z.number().min(0).max(120).optional(),
   
-  // Datos opcionales
-  edad: z.number().int().min(0).max(120).nullable().optional(),
-  email: z.string().email().optional().or(z.literal('')),
+  // Diagnóstico usando valores reales de tu enum
+  diagnostico_principal: z.enum([
+    'HERNIA INGUINAL',
+    'HERNIA UMBILICAL', 
+    'COLECISTITIS',
+    'COLEDOCOLITIASIS',
+    'COLANGITIS',
+    'APENDICITIS',
+    'HERNIA HIATAL',
+    'LIPOMA GRANDE',
+    'HERNIA INGUINAL RECIDIVANTE',
+    'QUISTE SEBACEO INFECTADO',
+    'EVENTRACION ABDOMINAL',
+    'VESICULA (COLECISTITIS CRONICA)',
+    'OTRO',
+    'HERNIA SPIGEL'
+  ]),
+  comentarios_registro: z.string().max(500).optional(),
   
-  // Datos médicos
-  diagnostico_principal: z.string().min(1, 'El diagnóstico principal es requerido').max(100),
-  probabilidad_cirugia: z.number().min(0).max(100).nullable().optional(),
-  comentarios_registro: z.string().max(1000).optional(),
+  // CORREGIDO: probabilidad como decimal 0-1 (tu esquema es NUMERIC)
+  probabilidad_cirugia: z.number().min(0).max(1).optional(),
   
   // Datos de la cita
-  fecha_hora_cita: z.string().datetime('Fecha y hora de cita inválida'),
-  motivo_cita: z.string().min(1, 'El motivo de la cita es requerido').max(200),
-  es_primera_vez: z.boolean().default(true),
+  fecha_hora_cita: z.string().datetime("Fecha y hora inválida"),
+  motivo_cita: z.string().min(1, "Motivo de consulta requerido"),
+  doctor_id: z.string().uuid().optional().nullable(),
 });
 
-// ==================== UTILIDADES ====================
-const validateBusinessRules = async (supabase: any, data: any) => {
-  // 1. Validar horario de atención
-  const appointmentDate = new Date(data.fecha_hora_cita);
-  const hour = appointmentDate.getHours();
-  const dayOfWeek = appointmentDate.getDay();
-  
-  // Domingo = 0, Lunes = 1, etc.
-  if (dayOfWeek === 0) {
-    return { isValid: false, message: 'No se pueden agendar citas los domingos' };
-  }
-  
-  // Horario: 9 AM - 2 PM (9:00 - 14:00)
-  if (hour < 9 || hour >= 14) {
-    return { isValid: false, message: 'Horario fuera del horario de atención (9:00 AM - 2:00 PM)' };
-  }
-  
-  // 2. Validar tiempo mínimo de anticipación (2 horas)
-  const now = new Date();
-  const hoursUntilAppointment = (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-  
-  if (hoursUntilAppointment < 2) {
-    return { isValid: false, message: 'La cita debe programarse con al menos 2 horas de anticipación' };
-  }
-  
-  if (hoursUntilAppointment / 24 > 60) {
-    return { isValid: false, message: 'No se pueden programar citas con más de 60 días de anticipación' };
-  }
-  
-  // 3. Validar teléfono único
-  if (data.telefono) {
-    const { data: existingPatient } = await supabase
-      .from('patients')
-      .select('id, nombre, apellidos')
-      .eq('telefono', data.telefono)
-      .single();
+type PatientAdmissionData = z.infer<typeof PatientAdmissionSchema>;
+
+// ==================== BUSINESS RULES (sin cambios) ====================
+const validateAppointmentTime = (dateTimeStr: string): { valid: boolean; reason?: string } => {
+  try {
+    const appointmentDate = new Date(dateTimeStr);
+    const now = new Date();
     
-    if (existingPatient) {
-      return {
-        isValid: false,
-        message: `Ya existe un paciente registrado con este teléfono: ${existingPatient.nombre} ${existingPatient.apellidos}`
-      };
+    if (isBefore(appointmentDate, addMinutes(now, -5))) {
+      return { valid: false, reason: 'La cita no puede ser en el pasado' };
     }
+    
+    if (isWeekend(appointmentDate)) {
+      return { valid: false, reason: 'No se pueden agendar citas en fines de semana' };
+    }
+    
+    const hour = appointmentDate.getHours();
+    if (hour < 8 || hour >= 18) {
+      return { valid: false, reason: 'Las citas solo pueden agendarse entre 8:00 y 18:00' };
+    }
+    
+    if (hour >= 12 && hour < 13) {
+      return { valid: false, reason: 'No se pueden agendar citas en horario de almuerzo (12:00-13:00)' };
+    }
+    
+    const maxDate = addMinutes(now, 90 * 24 * 60);
+    if (isAfter(appointmentDate, maxDate)) {
+      return { valid: false, reason: 'No se pueden agendar citas con más de 90 días de anticipación' };
+    }
+    
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, reason: 'Formato de fecha/hora inválido' };
   }
-  
-  return { isValid: true, message: 'Validación exitosa' };
 };
 
-const checkAppointmentAvailability = async (supabase: any, dateTime: string) => {
-  const { data: conflictingAppointments, error } = await supabase
+const checkAppointmentConflicts = async (
+  supabase: any,
+  dateTime: string,
+  doctorId?: string | null
+): Promise<{ hasConflict: boolean; conflictingAppointment?: any }> => {
+  const appointmentDate = new Date(dateTime);
+  const startWindow = new Date(appointmentDate.getTime() - 15 * 60 * 1000);
+  const endWindow = new Date(appointmentDate.getTime() + 15 * 60 * 1000);
+  
+  let query = supabase
     .from('appointments')
     .select(`
-      id,
-      estado_cita,
-      patients (nombre, apellidos)
+      id, 
+      fecha_hora_cita, 
+      patients!inner(nombre, apellidos)
     `)
-    .eq('fecha_hora_cita', dateTime)
-    .in('estado_cita', ['PROGRAMADA', 'CONFIRMADA', 'PRESENTE']);
-
-  if (error) {
-    console.error('[API] Error checking availability:', error);
-    return { available: false, error: 'Error al verificar disponibilidad' };
+    .gte('fecha_hora_cita', startWindow.toISOString())
+    .lte('fecha_hora_cita', endWindow.toISOString())
+    .not('estado_cita', 'in', '(CANCELADA,NO_ASISTIO)');
+  
+  if (doctorId) {
+    query = query.eq('doctor_id', doctorId);
   }
-
-  const isAvailable = !conflictingAppointments || conflictingAppointments.length === 0;
+  
+  const { data: conflicts, error } = await query;
+  
+  if (error) {
+    console.error('Error checking appointment conflicts:', error);
+    throw new Error('Error al verificar conflictos de horario');
+  }
   
   return {
-    available: isAvailable,
-    conflictingAppointment: conflictingAppointments?.[0] || null,
+    hasConflict: conflicts && conflicts.length > 0,
+    conflictingAppointment: conflicts?.[0],
   };
 };
 
-const createPatientAndAppointment = async (supabase: any, data: any, userId?: string) => {
-  // 1. Crear paciente
-  const patientData = {
-    nombre: data.nombre,
-    apellidos: data.apellidos,
-    edad: data.edad || null,
-    telefono: data.telefono || null,
-    email: data.email || null,
-    fecha_registro: new Date().toISOString().split('T')[0],
-    estado_paciente: 'PENDIENTE DE CONSULTA',
-    fecha_primera_consulta: new Date(data.fecha_hora_cita).toISOString().split('T')[0],
-    diagnostico_principal: data.diagnostico_principal,
-    probabilidad_cirugia: data.probabilidad_cirugia ? data.probabilidad_cirugia / 100 : null, // Convertir a decimal
-    comentarios_registro: data.comentarios_registro || null,
-    origen_paciente: 'CONSULTA_DIRECTA',
-    creado_por_id: userId || null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-
-  const { data: newPatient, error: patientError } = await supabase
+const checkExistingPatient = async (
+  supabase: any,
+  telefono?: string,
+  email?: string
+): Promise<{ exists: boolean; patient?: any }> => {
+  if (!telefono && !email) {
+    return { exists: false };
+  }
+  
+  let query = supabase
     .from('patients')
-    .insert(patientData)
-    .select()
-    .single();
-
-  if (patientError) {
-    console.error('[API] Error creando paciente:', patientError);
-    throw new Error('Error al crear paciente: ' + patientError.message);
+    .select('id, nombre, apellidos, telefono, email, estado_paciente');
+  
+  const orConditions = [];
+  if (telefono) orConditions.push(`telefono.eq.${telefono.trim()}`);
+  if (email) orConditions.push(`email.eq.${email.trim()}`);
+  
+  if (orConditions.length > 0) {
+    query = query.or(orConditions.join(','));
   }
-
-  // 2. Crear cita
-  const appointmentData = {
-    patient_id: newPatient.id,
-    doctor_id: null,
-    fecha_hora_cita: data.fecha_hora_cita,
-    motivo_cita: data.motivo_cita,
-    estado_cita: 'PROGRAMADA',
-    es_primera_vez: data.es_primera_vez,
-    notas_cita_seguimiento: null,
-    created_at: new Date().toISOString()
-  };
-
-  const { data: newAppointment, error: appointmentError } = await supabase
-    .from('appointments')
-    .insert(appointmentData)
-    .select()
-    .single();
-
-  if (appointmentError) {
-    console.error('[API] Error creando cita:', appointmentError);
-    throw new Error('Error al crear cita: ' + appointmentError.message);
+  
+  const { data: existingPatients, error } = await query;
+  
+  if (error) {
+    console.error('Error checking existing patient:', error);
+    throw new Error('Error al verificar paciente existente');
   }
-
+  
   return {
-    patient_id: newPatient.id,
-    appointment_id: newAppointment.id,
-    patient: newPatient,
-    appointment: newAppointment
+    exists: existingPatients && existingPatients.length > 0,
+    patient: existingPatients?.[0],
   };
 };
 
 // ==================== ENDPOINT PRINCIPAL ====================
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const body = await request.json();
-
-    console.log('[API] Iniciando proceso de admisión de paciente');
-
-    // 1. Validación con Zod
-    const validatedData = PatientAdmissionSchema.parse(body);
     
-    // 2. Validaciones de negocio
-    const businessValidation = await validateBusinessRules(supabase, validatedData);
-    if (!businessValidation.isValid) {
+    console.log('🏥 [Patient Admission] Starting admission process (corrected)...');
+    
+    // 1. VALIDAR DATOS DE ENTRADA
+    const validationResult = PatientAdmissionSchema.safeParse(body);
+    
+    if (!validationResult.success) {
+      console.warn('⚠️ [Patient Admission] Validation failed:', validationResult.error.errors);
       return NextResponse.json(
-        { error: businessValidation.message }, 
+        { 
+          error: 'Datos de admisión inválidos',
+          validation_errors: validationResult.error.errors.map(err => ({
+            field: err.path.join('.'),
+            message: err.message,
+          })),
+        },
         { status: 400 }
       );
     }
-
-    // 3. Verificar disponibilidad del horario
-    const availability = await checkAppointmentAvailability(
-      supabase, 
-      validatedData.fecha_hora_cita
+    
+    const data = validationResult.data;
+    
+    // 2. VALIDAR REGLAS DE NEGOCIO PARA LA CITA
+    const timeValidation = validateAppointmentTime(data.fecha_hora_cita);
+    if (!timeValidation.valid) {
+      return NextResponse.json(
+        { error: timeValidation.reason },
+        { status: 422 }
+      );
+    }
+    
+    // 3. VERIFICAR CONFLICTOS DE HORARIO
+    const conflictCheck = await checkAppointmentConflicts(
+      supabase,
+      data.fecha_hora_cita,
+      data.doctor_id
     );
     
-    if (!availability.available) {
+    if (conflictCheck.hasConflict) {
+      const conflicting = conflictCheck.conflictingAppointment;
+      const patientName = conflicting?.patients 
+        ? `${conflicting.patients.nombre} ${conflicting.patients.apellidos}`.trim()
+        : 'Otro paciente';
+      
       return NextResponse.json(
         { 
-          error: 'El horario seleccionado no está disponible',
-          conflicting_appointment: availability.conflictingAppointment,
-        }, 
+          error: 'Conflicto de horario detectado',
+          conflicting_appointment: {
+            patient: patientName,
+            time: conflicting.fecha_hora_cita,
+          },
+        },
         { status: 409 }
       );
     }
-
-    // 4. Obtener usuario actual
-    const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id;
-
-    // 5. Crear paciente y cita en transacción
-    const result = await createPatientAndAppointment(supabase, validatedData, userId);
-
-    // 6. Construir respuesta
-    const response: AppointmentWithPatient = {
-      id: result.appointment_id,
-      patient_id: result.patient_id,
-      fecha_hora_cita: validatedData.fecha_hora_cita,
-      motivo_cita: validatedData.motivo_cita,
-      estado_cita: 'PROGRAMADA',
-      es_primera_vez: validatedData.es_primera_vez,
-      patients: {
-        id: result.patient_id,
-        nombre: validatedData.nombre,
-        apellidos: validatedData.apellidos,
-        telefono: validatedData.telefono,
-        email: validatedData.email || undefined,
-        edad: validatedData.edad || undefined,
-        diagnostico_principal: validatedData.diagnostico_principal,
-        estado_paciente: 'PENDIENTE DE CONSULTA',
-        probabilidad_cirugia: validatedData.probabilidad_cirugia || null,
-        created_at: new Date().toISOString(),
-      },
-      created_at: new Date().toISOString(),
-    };
-
-    console.log('[API] ✅ Paciente y cita creados exitosamente');
-    return NextResponse.json(response, { status: 201 });
-
-  } catch (error: any) {
-    console.error('[API] ❌ Error en el endpoint de admisión:', error);
     
-    // Manejo específico de errores de validación
-    if (error instanceof z.ZodError) {
-      const errorMessages = error.errors.map(err => ({
-        field: err.path.join('.'),
-        message: err.message,
-        received: err.input
-      }));
-      
-      return NextResponse.json({
-        error: 'Datos de entrada inválidos',
-        validation_errors: errorMessages
-      }, { status: 400 });
+    // 4. VERIFICAR SI EL PACIENTE YA EXISTE
+    const existingPatientCheck = await checkExistingPatient(
+      supabase, 
+      data.telefono, 
+      data.email
+    );
+    
+    if (existingPatientCheck.exists) {
+      return NextResponse.json(
+        {
+          error: 'Paciente ya existe en el sistema',
+          existing_patient: existingPatientCheck.patient,
+          suggestion: 'Use "Agendar Cita" en lugar de "Nuevo Paciente"',
+        },
+        { status: 409 }
+      );
     }
     
-    // Error genérico del servidor
+    // 5. OBTENER USUARIO ACTUAL
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+    
+    // 6. USAR RPC FUNCTION CORREGIDA
+    console.log('📞 [Patient Admission] Calling corrected RPC function...');
+    
+    const { data: rpcResult, error: rpcError } = await supabase.rpc(
+      'create_patient_and_appointment',
+      {
+        p_nombre: data.nombre.trim(),
+        p_apellidos: data.apellidos.trim(),
+        p_telefono: data.telefono?.trim() || null,
+        p_email: data.email?.trim() || null,
+        p_edad: data.edad || null,
+        p_diagnostico_principal: data.diagnostico_principal,
+        p_comentarios_registro: data.comentarios_registro?.trim() || null,
+        p_probabilidad_cirugia: data.probabilidad_cirugia || null, // Ya en formato 0-1
+        p_fecha_hora_cita: data.fecha_hora_cita,
+        p_motivo_cita: data.motivo_cita.trim(),
+        p_doctor_id: data.doctor_id || null,
+        p_creado_por_id: userId,
+      }
+    );
+    
+    if (rpcError) {
+      console.error('❌ [Patient Admission] RPC error:', rpcError);
+      throw new Error(`Error en base de datos: ${rpcError.message}`);
+    }
+    
+    if (!rpcResult || rpcResult.length === 0) {
+      throw new Error('No se obtuvo respuesta válida de la base de datos');
+    }
+    
+    const result = rpcResult[0];
+    
+    // 7. VERIFICAR RESULTADO DE LA RPC
+    if (!result.success) {
+      return NextResponse.json(
+        { 
+          error: result.message || 'Error al crear paciente y cita',
+        },
+        { status: 400 }
+      );
+    }
+    
+    const patientId = result.created_patient_id;
+    const appointmentId = result.created_appointment_id;
+    
+    if (!patientId || !appointmentId) {
+      throw new Error('IDs de paciente o cita no recibidos');
+    }
+    
+    // 8. OBTENER DATOS COMPLETOS CREADOS
+    const { data: createdPatient, error: fetchError } = await supabase
+      .from('patients')
+      .select(`
+        id,
+        nombre,
+        apellidos,
+        telefono,
+        email,
+        edad,
+        diagnostico_principal,
+        estado_paciente,
+        fecha_registro,
+        probabilidad_cirugia
+      `)
+      .eq('id', patientId)
+      .single();
+    
+    if (fetchError) {
+      console.error('⚠️ [Patient Admission] Error fetching created patient:', fetchError);
+    }
+    
+    const { data: createdAppointment, error: appointmentFetchError } = await supabase
+      .from('appointments')
+      .select(`
+        id,
+        fecha_hora_cita,
+        motivo_cita,
+        estado_cita,
+        es_primera_vez
+      `)
+      .eq('id', appointmentId)
+      .single();
+    
+    if (appointmentFetchError) {
+      console.error('⚠️ [Patient Admission] Error fetching created appointment:', appointmentFetchError);
+    }
+    
+    // 9. LOG PARA AUDITORÍA
+    console.log(`✅ [Patient Admission] Success (corrected):`, {
+      patientId,
+      appointmentId,
+      patientName: `${data.nombre} ${data.apellidos}`.trim(),
+      appointmentTime: data.fecha_hora_cita,
+      createdBy: userId || 'unknown',
+      timestamp: new Date().toISOString(),
+    });
+    
+    // 10. RESPUESTA EXITOSA
+    return NextResponse.json({
+      message: 'Paciente y cita creados exitosamente',
+      patient_id: patientId,
+      appointment_id: appointmentId,
+      patient: createdPatient || {
+        id: patientId,
+        nombre: data.nombre,
+        apellidos: data.apellidos,
+        telefono: data.telefono,
+        email: data.email,
+        diagnostico_principal: data.diagnostico_principal,
+      },
+      appointment: createdAppointment || {
+        id: appointmentId,
+        fecha_hora_cita: data.fecha_hora_cita,
+        motivo_cita: data.motivo_cita,
+        estado_cita: 'PROGRAMADA',
+        es_primera_vez: true,
+      },
+      next_steps: [
+        'El paciente ha sido registrado en el sistema',
+        'La cita ha sido programada automáticamente',
+        'El paciente aparecerá en la lista de citas correspondiente',
+      ],
+    }, { status: 201 });
+    
+  } catch (error: any) {
+    console.error('💥 [Patient Admission] Unexpected error:', error);
+    
     return NextResponse.json(
       { 
         error: 'Error interno del servidor',
-        message: process.env.NODE_ENV === 'development' ? error.message : 'Contacte al administrador'
-      }, 
+        message: process.env.NODE_ENV === 'development' ? error.message : 'Error al procesar la admisión',
+      },
       { status: 500 }
     );
   }

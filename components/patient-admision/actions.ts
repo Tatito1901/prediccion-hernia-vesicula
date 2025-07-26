@@ -15,7 +15,7 @@ import {
   PatientHistoryData,
   AppointmentStatusUpdatePayload,
   ApiResponse,
-} from './types';
+} from './admision-types';
 
 // ==================== INTERFACES PARA HOOKS ====================
 

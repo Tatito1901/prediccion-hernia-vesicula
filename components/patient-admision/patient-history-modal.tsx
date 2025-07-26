@@ -40,7 +40,7 @@ import {
   PatientHistoryData,
   APPOINTMENT_STATUS_CONFIG,
   // getPatientData, // Se eliminó ya que no se usaba.
-} from "./types";
+} from "./admision-types";
 import { usePatientHistory } from "./actions";
 import {
   formatAppointmentDate,

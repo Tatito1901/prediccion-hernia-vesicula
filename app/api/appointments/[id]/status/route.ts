@@ -1,48 +1,127 @@
-// app/api/appointments/[id]/status/route.ts
-// 🎯 VERSIÓN MEJORADA - Usa tu tabla appointment_history para auditoría automática
-
-import { NextResponse } from 'next/server';
+// app/api/appointments/[id]/status/route.ts - API CORREGIDA PARA TU ESQUEMA REAL
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { z } from 'zod';
 
-// Estados válidos permitidos para transiciones
-const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
-  'PROGRAMADA': ['CONFIRMADA', 'CANCELADA', 'REAGENDADA', 'PRESENTE', 'NO_ASISTIO'],
-  'CONFIRMADA': ['CANCELADA', 'REAGENDADA', 'PRESENTE', 'NO_ASISTIO', 'COMPLETADA'],
-  'PRESENTE': ['COMPLETADA', 'CANCELADA'],
-  'CANCELADA': ['REAGENDADA', 'PROGRAMADA'],
-  'REAGENDADA': ['CONFIRMADA', 'PROGRAMADA', 'CANCELADA'],
-  'COMPLETADA': [], // Estado final
-  'NO_ASISTIO': ['REAGENDADA', 'PROGRAMADA']
+// ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
+const UpdateStatusSchema = z.object({
+  // estado_cita es TEXT en tu esquema, no ENUM
+  newStatus: z.enum([
+    'PROGRAMADA',
+    'CONFIRMADA', 
+    'EN_SALA',
+    'EN_CONSULTA',
+    'COMPLETADA',
+    'CANCELADA',
+    'NO_ASISTIO',
+    'REAGENDADA'
+  ] as const),
+  motivo_cambio: z.string().optional(),
+  nuevaFechaHora: z.string().datetime().optional(),
+  notas_adicionales: z.string().max(500).optional(),
+});
+
+// ==================== HELPERS CORREGIDOS ====================
+const createAuditRecord = async (
+  supabase: any,
+  appointmentId: string,
+  userId: string | null,
+  oldStatus: string,
+  newStatus: string,
+  oldDateTime?: string,
+  newDateTime?: string,
+  motivo?: string,
+  userAgent?: string,
+  ipAddress?: string
+) => {
+  // Datos de auditoría según tu esquema real
+  const auditData = {
+    appointment_id: appointmentId,
+    estado_cita_anterior: oldStatus, // USER-DEFINED en tu esquema
+    estado_cita_nuevo: newStatus,    // USER-DEFINED en tu esquema
+    fecha_cambio: new Date().toISOString(),
+    modificado_por_id: userId,
+    motivo_cambio: motivo || `Cambio de estado: ${oldStatus} → ${newStatus}`,
+    notas: `Actualización realizada desde sistema de admisión`,
+    ip_address: ipAddress || null,
+    user_agent: userAgent || null,
+    created_at: new Date().toISOString(),
+  };
+  
+  // Agregar fechas si es reagendamiento
+  if (newStatus === 'REAGENDADA' && oldDateTime && newDateTime) {
+    auditData['fecha_cita_anterior'] = oldDateTime;
+    auditData['fecha_cita_nueva'] = newDateTime;
+  }
+  
+  const { error } = await supabase
+    .from('appointment_history')
+    .insert(auditData);
+  
+  if (error) {
+    console.error('⚠️ [Status Update] Audit trail error:', error);
+    return { success: false, error: error.message };
+  }
+  
+  return { success: true };
 };
 
+const validateStatusTransition = (
+  currentStatus: string,
+  newStatus: string
+): { valid: boolean; reason?: string } => {
+  // Transiciones permitidas según tu workflow
+  const allowedTransitions: Record<string, string[]> = {
+    'PROGRAMADA': ['CONFIRMADA', 'EN_SALA', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'],
+    'CONFIRMADA': ['EN_SALA', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'],
+    'EN_SALA': ['EN_CONSULTA', 'CANCELADA'],
+    'EN_CONSULTA': ['COMPLETADA', 'REAGENDADA'],
+    'COMPLETADA': [], // Estado final
+    'CANCELADA': ['REAGENDADA'],
+    'NO_ASISTIO': ['REAGENDADA'],
+    'REAGENDADA': ['PROGRAMADA'], // Reinicia el ciclo
+  };
+  
+  const allowed = allowedTransitions[currentStatus] || [];
+  
+  if (!allowed.includes(newStatus)) {
+    return {
+      valid: false,
+      reason: `No se puede cambiar de ${currentStatus} a ${newStatus}. Transiciones permitidas: ${allowed.join(', ')}`
+    };
+  }
+  
+  return { valid: true };
+};
+
+// ==================== ENDPOINT PRINCIPAL ====================
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  const { id } = await params;
-
   try {
+    const supabase = await createClient();
+    const { id: appointmentId } = await params;
     const body = await request.json();
-    const { 
-      estado_cita: newStatus, 
-      motivo_cambio, 
-      fecha_hora_cita: newDateTime,
-      notas_adicionales 
-    } = body;
-
-    console.log(`[API] 🔄 Actualizando estado de cita ${id}: ${newStatus}`);
-
-    // 1. VALIDACIÓN: Verificar que el estado nuevo es válido
-    const validStates = ['PROGRAMADA', 'CONFIRMADA', 'PRESENTE', 'COMPLETADA', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'];
-    if (!validStates.includes(newStatus)) {
+    
+    console.log(`🔄 [Status Update] Processing update for appointment: ${appointmentId}`);
+    
+    // 1. VALIDAR PAYLOAD
+    const validationResult = UpdateStatusSchema.safeParse(body);
+    
+    if (!validationResult.success) {
       return NextResponse.json(
-        { message: `Estado inválido: ${newStatus}` },
+        { 
+          error: 'Datos inválidos',
+          details: validationResult.error.errors,
+        },
         { status: 400 }
       );
     }
-
-    // 2. OBTENER CITA ACTUAL (usando tu esquema exacto)
+    
+    const { newStatus, motivo_cambio, nuevaFechaHora, notas_adicionales } = validationResult.data;
+    
+    // 2. OBTENER CITA ACTUAL (según tu esquema real)
     const { data: currentAppointment, error: fetchError } = await supabase
       .from('appointments')
       .select(`
@@ -55,243 +134,181 @@ export async function PATCH(
         es_primera_vez,
         notas_cita_seguimiento,
         created_at,
-        patients (
-          id, 
-          nombre, 
-          apellidos,
-          telefono
-        ),
-        profiles:doctor_id (
+        patients!inner (
           id,
-          full_name,
-          username
+          nombre,
+          apellidos,
+          telefono,
+          email,
+          estado_paciente
         )
       `)
-      .eq('id', id)
+      .eq('id', appointmentId)
       .single();
-
-    if (fetchError || !currentAppointment) {
-      console.error('[API] ❌ Cita no encontrada:', fetchError);
-      return NextResponse.json(
-        { message: 'Cita no encontrada' },
-        { status: 404 }
-      );
-    }
-
-    // 3. VALIDAR TRANSICIÓN DE ESTADO
-    const currentStatus = currentAppointment.estado_cita;
-    const allowedTransitions = VALID_STATUS_TRANSITIONS[currentStatus] || [];
     
-    if (!allowedTransitions.includes(newStatus)) {
-      return NextResponse.json(
-        { message: `Transición no permitida de ${currentStatus} a ${newStatus}` },
-        { status: 422 }
-      );
-    }
-
-    // 4. PREPARAR DATOS PARA ACTUALIZACIÓN
-    const updateData: any = {
-      estado_cita: newStatus
-    };
-
-    // Campos opcionales según el caso
-    if (notas_adicionales) {
-      updateData.notas_cita_seguimiento = notas_adicionales;
-    }
-
-    // Para reagendamiento, actualizar fecha/hora
-    if (newDateTime && newStatus === 'REAGENDADA') {
-      updateData.fecha_hora_cita = newDateTime;
-    }
-
-    // 5. OBTENER USUARIO ACTUAL (para auditoría)
-    // Nota: Aquí deberías obtener el ID del usuario logueado
-    // Por ahora uso un ID por defecto, pero deberías obtenerlo de la sesión
-    const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id; // Usuario logueado
-
-    if (!userId) {
-      console.warn('[API] ⚠️ No se pudo obtener usuario para auditoría');
-    }
-
-    // 6. INICIAR TRANSACCIÓN: Actualizar cita + crear historial
-    try {
-      // 6a. Actualizar la cita
-      const { data: updatedAppointment, error: updateError } = await supabase
-        .from('appointments')
-        .update(updateData)
-        .eq('id', id)
-        .select(`
-          id,
-          patient_id,
-          doctor_id,
-          fecha_hora_cita,
-          motivo_cita,
-          estado_cita,
-          es_primera_vez,
-          notas_cita_seguimiento,
-          created_at,
-          patients (*),
-          profiles:doctor_id (*)
-        `)
-        .single();
-
-      if (updateError) {
-        console.error('[API] ❌ Error actualizando cita:', updateError);
-        return NextResponse.json(
-          { message: 'Error al actualizar el estado de la cita', error: updateError.message },
-          { status: 500 }
-        );
-      }
-
-      // 6b. CREAR REGISTRO EN APPOINTMENT_HISTORY (usando tu tabla de auditoría)
-      if (userId) {
-        const historyData = {
-          appointment_id: id,
-          estado_cita_anterior: currentStatus,
-          estado_cita_nuevo: newStatus,
-          fecha_cambio: new Date().toISOString(),
-          modificado_por_id: userId,
-          notas: motivo_cambio || `Cambio de estado: ${currentStatus} → ${newStatus}`,
-          motivo_cambio: motivo_cambio || 'Actualización manual'
-        };
-
-        // Si es reagendamiento, incluir fechas
-        if (newStatus === 'REAGENDADA' && newDateTime) {
-          historyData['fecha_cita_anterior'] = currentAppointment.fecha_hora_cita;
-          historyData['fecha_cita_nueva'] = newDateTime;
-        }
-
-        const { error: historyError } = await supabase
-          .from('appointment_history')
-          .insert(historyData);
-
-        if (historyError) {
-          console.error('[API] ⚠️ Error creando historial (no crítico):', historyError);
-          // No fallamos la operación principal por error de auditoría
-        } else {
-          console.log(`[API] ✅ Historial creado: ${currentStatus} → ${newStatus}`);
-        }
-      }
-
-      // 7. LOG PARA MONITOREO
-      const patient = currentAppointment.patients;
-      const patientName = patient ? `${patient.nombre} ${patient.apellidos}`.trim() : 'Paciente desconocido';
-      
-      console.log(`[API] ✅ Estado actualizado exitosamente:`, {
-        appointmentId: id,
-        patient: patientName,
-        statusChange: `${currentStatus} → ${newStatus}`,
-        datetime: newDateTime || 'sin cambio',
-        userId: userId || 'usuario no disponible'
-      });
-
-      // 8. RESPUESTA EXITOSA CON DATOS COMPLETOS
-      return NextResponse.json({
-        ...updatedAppointment,
-        // Metadatos adicionales
-        _meta: {
-          previous_status: currentStatus,
-          status_changed_at: new Date().toISOString(),
-          changed_by_user: userId || null,
-          has_history_record: !!userId
-        }
-      }, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-        },
-      });
-
-    } catch (transactionError: any) {
-      console.error('[API] ❌ Error en transacción:', transactionError);
-      return NextResponse.json(
-        { message: 'Error en la actualización transaccional', error: transactionError.message },
-        { status: 500 }
-      );
-    }
-
-  } catch (error: any) {
-    console.error('[API] ❌ Error general en PATCH /api/appointments/[id]/status:', error);
-    return NextResponse.json(
-      { message: 'Error interno del servidor', error: error.message },
-      { status: 500 }
-    );
-  }
-}
-
-// GET - Obtener historial de cambios de una cita específica
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const supabase = await createClient();
-    const { id } = await params;
-
-    console.log(`[API] 📊 Obteniendo historial de cambios para cita: ${id}`);
-
-    // Obtener cita actual
-    const { data: appointment, error: appointmentError } = await supabase
-      .from('appointments')
-      .select(`
-        id,
-        estado_cita,
-        fecha_hora_cita,
-        patients (nombre, apellidos)
-      `)
-      .eq('id', id)
-      .single();
-
-    if (appointmentError) {
+    if (fetchError || !currentAppointment) {
+      console.error('❌ [Status Update] Appointment not found:', fetchError);
       return NextResponse.json(
         { error: 'Cita no encontrada' },
         { status: 404 }
       );
     }
-
-    // Obtener historial completo usando tu tabla appointment_history
-    const { data: history, error: historyError } = await supabase
-      .from('appointment_history')
+    
+    const currentStatus = currentAppointment.estado_cita;
+    
+    // 3. VALIDAR QUE EL ESTADO REALMENTE CAMBIÓ
+    if (currentStatus === newStatus) {
+      return NextResponse.json(
+        { error: 'El estado ya es el mismo' },
+        { status: 400 }
+      );
+    }
+    
+    // 4. VALIDAR TRANSICIÓN DE ESTADO
+    const transitionValidation = validateStatusTransition(currentStatus, newStatus);
+    
+    if (!transitionValidation.valid) {
+      console.warn('⚠️ [Status Update] Invalid transition:', transitionValidation.reason);
+      return NextResponse.json(
+        { 
+          error: 'Transición de estado no permitida',
+          reason: transitionValidation.reason,
+          currentStatus,
+          attemptedStatus: newStatus,
+        },
+        { status: 422 }
+      );
+    }
+    
+    // 5. OBTENER INFORMACIÓN DEL USUARIO PARA AUDITORÍA
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+    
+    // Obtener información adicional de la request
+    const userAgent = request.headers.get('user-agent');
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    const realIp = request.headers.get('x-real-ip');
+    const ipAddress = forwardedFor?.split(',')[0] || realIp || 'unknown';
+    
+    // 6. PREPARAR DATOS DE ACTUALIZACIÓN
+    const updateData: any = {
+      estado_cita: newStatus, // TEXT en tu esquema
+      updated_at: new Date().toISOString(),
+    };
+    
+    // Agregar nueva fecha/hora si es reagendamiento
+    if (newStatus === 'REAGENDADA' && nuevaFechaHora) {
+      updateData.fecha_hora_cita = nuevaFechaHora;
+    }
+    
+    // Agregar notas adicionales
+    if (notas_adicionales) {
+      const existingNotes = currentAppointment.notas_cita_seguimiento || '';
+      const timestamp = new Date().toLocaleString('es-MX');
+      updateData.notas_cita_seguimiento = existingNotes 
+        ? `${existingNotes} | [${timestamp}] ${notas_adicionales}`
+        : `[${timestamp}] ${notas_adicionales}`;
+    }
+    
+    // 7. REALIZAR ACTUALIZACIÓN EN LA BASE DE DATOS
+    const { data: updatedAppointment, error: updateError } = await supabase
+      .from('appointments')
+      .update(updateData)
+      .eq('id', appointmentId)
       .select(`
         id,
-        estado_cita_anterior,
-        estado_cita_nuevo,
-        fecha_cambio,
-        fecha_cita_anterior,
-        fecha_cita_nueva,
-        notas,
-        motivo_cambio,
-        profiles:modificado_por_id (
-          full_name,
-          username
+        patient_id,
+        doctor_id,
+        fecha_hora_cita,
+        motivo_cita,
+        estado_cita,
+        es_primera_vez,
+        notas_cita_seguimiento,
+        created_at,
+        patients!inner (
+          id,
+          nombre,
+          apellidos,
+          telefono,
+          email,
+          estado_paciente
         )
       `)
-      .eq('appointment_id', id)
-      .order('fecha_cambio', { ascending: false });
-
-    if (historyError) {
-      console.error('[API] ❌ Error obteniendo historial:', historyError);
+      .single();
+    
+    if (updateError) {
+      console.error('❌ [Status Update] Database update error:', updateError);
       return NextResponse.json(
-        { error: 'Error al obtener historial' },
+        { error: 'Error al actualizar el estado de la cita' },
         { status: 500 }
       );
     }
-
-    return NextResponse.json({
-      appointment: {
-        id: appointment.id,
-        current_status: appointment.estado_cita,
-        current_datetime: appointment.fecha_hora_cita,
-        patient_name: `${appointment.patients.nombre} ${appointment.patients.apellidos}`
-      },
-      history: history || [],
-      total_changes: history?.length || 0
+    
+    // 8. CREAR REGISTRO DE AUDITORÍA
+    const auditResult = await createAuditRecord(
+      supabase,
+      appointmentId,
+      userId,
+      currentStatus,
+      newStatus,
+      currentAppointment.fecha_hora_cita,
+      nuevaFechaHora,
+      motivo_cambio,
+      userAgent,
+      ipAddress
+    );
+    
+    // 9. ACTUALIZAR ESTADO DEL PACIENTE SI ES NECESARIO
+    if (newStatus === 'COMPLETADA') {
+      // Actualizar estado del paciente según tu enum real
+      await supabase
+        .from('patients')
+        .update({ 
+          estado_paciente: 'CONSULTADO', // Valor según tu enum patient_status_enum
+          fecha_primera_consulta: currentAppointment.fecha_hora_cita.split('T')[0],
+          ultimo_contacto: new Date().toISOString().split('T')[0], // DATE field
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentAppointment.patient_id);
+    }
+    
+    // 10. LOG PARA MONITOREO
+    const patientName = currentAppointment.patients 
+      ? `${currentAppointment.patients.nombre} ${currentAppointment.patients.apellidos}`.trim()
+      : 'Paciente desconocido';
+    
+    console.log(`✅ [Status Update] Success:`, {
+      appointmentId,
+      patient: patientName,
+      statusChange: `${currentStatus} → ${newStatus}`,
+      datetime: nuevaFechaHora || 'sin cambio',
+      userId: userId || 'usuario no disponible',
+      auditCreated: auditResult.success,
+      ipAddress,
     });
-
+    
+    // 11. RESPUESTA EXITOSA CON METADATOS
+    return NextResponse.json({
+      ...updatedAppointment,
+      _meta: {
+        previous_status: currentStatus,
+        status_changed_at: new Date().toISOString(),
+        changed_by_user: userId || null,
+        audit_trail_created: auditResult.success,
+        transition_validated: true,
+        ip_address: ipAddress,
+        user_agent: userAgent,
+      },
+    });
+    
   } catch (error: any) {
-    console.error('[API] ❌ Error en GET historial:', error);
+    console.error('💥 [Status Update] Unexpected error:', error);
+    
     return NextResponse.json(
-      { error: 'Error interno del servidor' },
+      { 
+        error: 'Error interno del servidor',
+        message: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      },
       { status: 500 }
     );
   }
