@@ -91,10 +91,11 @@ const diagnosisOptions = [
   { value: 'HERNIA_SPIGEL', label: 'Hernia Spigel' },
 ];
 
-const TIME_SLOTS = [
-  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
-];
+const TIME_SLOTS = Array.from({ length: (15 - 9) * 2 }, (_, i) => {
+  const hour = 9 + Math.floor(i / 2);
+  const minute = (i % 2) * 30;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+});
 
 // ==================== VALIDACIÓN SCHEMA ====================
 const NewPatientSchema = z.object({
@@ -471,7 +472,10 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
                             mode="single"
                             selected={field.value}
                             onSelect={handleDateSelect}
-                            disabled={date => !isValidDate(date)}
+                            disabled={(date: Date) => {
+                              if (date.getDay() === 0) return true; // Deshabilita domingos
+                              return !isValidDate(date); // Mantiene la lógica original
+                            }}
                             initialFocus
                             locale={es}
                           />

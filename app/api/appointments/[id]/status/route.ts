@@ -14,7 +14,8 @@ const UpdateStatusSchema = z.object({
     'COMPLETADA',
     'CANCELADA',
     'NO_ASISTIO',
-    'REAGENDADA'
+    'REAGENDADA',
+    'PRESENTE'
   ] as const),
   motivo_cambio: z.string().optional(),
   nuevaFechaHora: z.string().datetime().optional(),

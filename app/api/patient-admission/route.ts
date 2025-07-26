@@ -50,18 +50,25 @@ const validateAppointmentTime = (dateTimeStr: string): { valid: boolean; reason?
   try {
     const appointmentTime = new Date(dateTimeStr);
     const now = new Date();
-    
+
     // No puede ser en el pasado
     if (appointmentTime < now) {
       return { valid: false, reason: 'La cita no puede ser programada en el pasado' };
     }
-    
-    // Debe estar en horario laboral (8 AM - 6 PM)
+
+    const day = appointmentTime.getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
     const hour = appointmentTime.getHours();
-    if (hour < 8 || hour >= 18) {
-      return { valid: false, reason: 'Las citas solo pueden programarse entre 8:00 AM y 6:00 PM' };
+
+    // Debe ser de Lunes a Sábado (Domingo es 0)
+    if (day === 0) {
+      return { valid: false, reason: 'Las citas no pueden programarse en domingo' };
     }
-    
+
+    // Debe estar en el nuevo horario laboral (9 AM - 3 PM)
+    if (hour < 9 || hour >= 15) {
+      return { valid: false, reason: 'El horario de citas es de Lunes a Sábado, de 9:00 AM a 3:00 PM' };
+    }
+
     return { valid: true };
   } catch (error) {
     return { valid: false, reason: 'Formato de fecha y hora inválido' };
