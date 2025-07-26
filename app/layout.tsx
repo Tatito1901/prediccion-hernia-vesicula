@@ -6,6 +6,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { Providers } from "@/components/providers"
 import Script from 'next/script'
+import { ThemeScriptInit } from '@/components/theme/theme-script'
 
 // Optimización de Google Fonts usando next/font para auto-hosting
 const inter = Inter({
@@ -36,6 +37,9 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        {/* Script para prevenir flash de tema (FOUT) */}
+        <ThemeScriptInit />
+        
         {/* Ya no se requieren preconexiones para Google Fonts al usar next/font */}
         
         {/* Next.js maneja automáticamente la precarga de chunks JS críticos,
@@ -46,7 +50,8 @@ export default function RootLayout({
         <link rel="prefetch" href="/estadisticas" />
         
         {/* Metadatos */}
-        <meta name="theme-color" content="#ffffff" />
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#171717" media="(prefers-color-scheme: dark)" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />

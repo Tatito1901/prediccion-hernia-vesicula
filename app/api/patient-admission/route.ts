@@ -1,151 +1,71 @@
-// app/api/patient-admission/route.ts - API CORREGIDA PARA TU ESQUEMA REAL
+// app/api/patient-admission/route.ts
+// API CORREGIDA PARA TU ESQUEMA REAL DE BASE DE DATOS
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { z } from 'zod';
-import { addMinutes, isBefore, isWeekend, isAfter } from 'date-fns';
+
+// Definición del enum de diagnóstico (debe coincidir con el enum en la base de datos)
+const DIAGNOSIS_ENUM = [
+  'HERNIA_INGUINAL',
+  'HERNIA_UMBILICAL', 
+  'COLECISTITIS',
+  'COLEDOCOLITIASIS',
+  'COLANGITIS',
+  'APENDICITIS',
+  'HERNIA_HIATAL',
+  'LIPOMA_GRANDE',
+  'HERNIA_INGUINAL_RECIDIVANTE',
+  'QUISTE_SEBACEO_INFECTADO',
+  'EVENTRACION_ABDOMINAL',
+  'VESICULA',
+  'OTRO',
+  'HERNIA_SPIGEL'
+] as const;
 
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const PatientAdmissionSchema = z.object({
-  // Campos del paciente según tu esquema
-  nombre: z.string().min(2, "Nombre debe tener al menos 2 caracteres").max(50),
-  apellidos: z.string().min(2, "Apellidos debe tener al menos 2 caracteres").max(50),
-  telefono: z.string().optional(), // Opcional en tu esquema
-  email: z.string().email("Email inválido").optional().or(z.literal("")),
-  edad: z.number().min(0).max(120).optional(),
-  
-  // Diagnóstico usando valores reales de tu enum
-  diagnostico_principal: z.enum([
-    'HERNIA INGUINAL',
-    'HERNIA UMBILICAL', 
-    'COLECISTITIS',
-    'COLEDOCOLITIASIS',
-    'COLANGITIS',
-    'APENDICITIS',
-    'HERNIA HIATAL',
-    'LIPOMA GRANDE',
-    'HERNIA INGUINAL RECIDIVANTE',
-    'QUISTE SEBACEO INFECTADO',
-    'EVENTRACION ABDOMINAL',
-    'VESICULA (COLECISTITIS CRONICA)',
-    'OTRO',
-    'HERNIA SPIGEL'
-  ]),
-  comentarios_registro: z.string().max(500).optional(),
-  
-  // CORREGIDO: probabilidad como decimal 0-1 (tu esquema es NUMERIC)
-  probabilidad_cirugia: z.number().min(0).max(1).optional(),
-  
-  // Datos de la cita
-  fecha_hora_cita: z.string().datetime("Fecha y hora inválida"),
-  motivo_cita: z.string().min(1, "Motivo de consulta requerido"),
-  doctor_id: z.string().uuid().optional().nullable(),
+  // ✅ Parámetros exactos de tu función RPC
+  p_nombre: z.string().min(2, "Nombre debe tener al menos 2 caracteres"),
+  p_apellidos: z.string().min(2, "Apellidos debe tener al menos 2 caracteres"),
+  p_telefono: z.string().nullable().optional(),
+  p_email: z.string().email("Email inválido").nullable().optional(),
+  p_edad: z.number().min(0).max(120).nullable().optional(),
+  p_diagnostico_principal: z.enum(DIAGNOSIS_ENUM, {
+    required_error: "Diagnóstico es requerido",
+    invalid_type_error: "El diagnóstico debe ser uno de los valores permitidos"
+  }),
+  p_comentarios_registro: z.string().nullable().optional(),
+  p_probabilidad_cirugia: z.number().min(0).max(1).nullable().optional(),
+  p_fecha_hora_cita: z.string().datetime("Fecha y hora inválida"),
+  p_motivo_cita: z.string().min(1, "Motivo de consulta requerido"),
+  p_doctor_id: z.string().uuid().nullable().optional(),
+  p_creado_por_id: z.string().uuid().nullable().optional(),
 });
 
 type PatientAdmissionData = z.infer<typeof PatientAdmissionSchema>;
 
-// ==================== BUSINESS RULES (sin cambios) ====================
+// ==================== BUSINESS RULES ====================
 const validateAppointmentTime = (dateTimeStr: string): { valid: boolean; reason?: string } => {
   try {
-    const appointmentDate = new Date(dateTimeStr);
+    const appointmentTime = new Date(dateTimeStr);
     const now = new Date();
     
-    if (isBefore(appointmentDate, addMinutes(now, -5))) {
-      return { valid: false, reason: 'La cita no puede ser en el pasado' };
+    // No puede ser en el pasado
+    if (appointmentTime < now) {
+      return { valid: false, reason: 'La cita no puede ser programada en el pasado' };
     }
     
-    if (isWeekend(appointmentDate)) {
-      return { valid: false, reason: 'No se pueden agendar citas en fines de semana' };
-    }
-    
-    const hour = appointmentDate.getHours();
+    // Debe estar en horario laboral (8 AM - 6 PM)
+    const hour = appointmentTime.getHours();
     if (hour < 8 || hour >= 18) {
-      return { valid: false, reason: 'Las citas solo pueden agendarse entre 8:00 y 18:00' };
-    }
-    
-    if (hour >= 12 && hour < 13) {
-      return { valid: false, reason: 'No se pueden agendar citas en horario de almuerzo (12:00-13:00)' };
-    }
-    
-    const maxDate = addMinutes(now, 90 * 24 * 60);
-    if (isAfter(appointmentDate, maxDate)) {
-      return { valid: false, reason: 'No se pueden agendar citas con más de 90 días de anticipación' };
+      return { valid: false, reason: 'Las citas solo pueden programarse entre 8:00 AM y 6:00 PM' };
     }
     
     return { valid: true };
   } catch (error) {
-    return { valid: false, reason: 'Formato de fecha/hora inválido' };
+    return { valid: false, reason: 'Formato de fecha y hora inválido' };
   }
-};
-
-const checkAppointmentConflicts = async (
-  supabase: any,
-  dateTime: string,
-  doctorId?: string | null
-): Promise<{ hasConflict: boolean; conflictingAppointment?: any }> => {
-  const appointmentDate = new Date(dateTime);
-  const startWindow = new Date(appointmentDate.getTime() - 15 * 60 * 1000);
-  const endWindow = new Date(appointmentDate.getTime() + 15 * 60 * 1000);
-  
-  let query = supabase
-    .from('appointments')
-    .select(`
-      id, 
-      fecha_hora_cita, 
-      patients!inner(nombre, apellidos)
-    `)
-    .gte('fecha_hora_cita', startWindow.toISOString())
-    .lte('fecha_hora_cita', endWindow.toISOString())
-    .not('estado_cita', 'in', '(CANCELADA,NO_ASISTIO)');
-  
-  if (doctorId) {
-    query = query.eq('doctor_id', doctorId);
-  }
-  
-  const { data: conflicts, error } = await query;
-  
-  if (error) {
-    console.error('Error checking appointment conflicts:', error);
-    throw new Error('Error al verificar conflictos de horario');
-  }
-  
-  return {
-    hasConflict: conflicts && conflicts.length > 0,
-    conflictingAppointment: conflicts?.[0],
-  };
-};
-
-const checkExistingPatient = async (
-  supabase: any,
-  telefono?: string,
-  email?: string
-): Promise<{ exists: boolean; patient?: any }> => {
-  if (!telefono && !email) {
-    return { exists: false };
-  }
-  
-  let query = supabase
-    .from('patients')
-    .select('id, nombre, apellidos, telefono, email, estado_paciente');
-  
-  const orConditions = [];
-  if (telefono) orConditions.push(`telefono.eq.${telefono.trim()}`);
-  if (email) orConditions.push(`email.eq.${email.trim()}`);
-  
-  if (orConditions.length > 0) {
-    query = query.or(orConditions.join(','));
-  }
-  
-  const { data: existingPatients, error } = await query;
-  
-  if (error) {
-    console.error('Error checking existing patient:', error);
-    throw new Error('Error al verificar paciente existente');
-  }
-  
-  return {
-    exists: existingPatients && existingPatients.length > 0,
-    patient: existingPatients?.[0],
-  };
 };
 
 // ==================== ENDPOINT PRINCIPAL ====================
@@ -154,9 +74,10 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const body = await request.json();
     
-    console.log('🏥 [Patient Admission] Starting admission process (corrected)...');
+    console.log('🏥 [Patient Admission] Starting admission process...');
+    console.log('📥 [Patient Admission] Request body:', body);
     
-    // 1. VALIDAR DATOS DE ENTRADA
+    // ✅ 1. VALIDAR DATOS DE ENTRADA
     const validationResult = PatientAdmissionSchema.safeParse(body);
     
     if (!validationResult.success) {
@@ -175,8 +96,8 @@ export async function POST(request: NextRequest) {
     
     const data = validationResult.data;
     
-    // 2. VALIDAR REGLAS DE NEGOCIO PARA LA CITA
-    const timeValidation = validateAppointmentTime(data.fecha_hora_cita);
+    // ✅ 2. VALIDAR REGLAS DE NEGOCIO
+    const timeValidation = validateAppointmentTime(data.p_fecha_hora_cita);
     if (!timeValidation.valid) {
       return NextResponse.json(
         { error: timeValidation.reason },
@@ -184,176 +105,76 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 3. VERIFICAR CONFLICTOS DE HORARIO
-    const conflictCheck = await checkAppointmentConflicts(
-      supabase,
-      data.fecha_hora_cita,
-      data.doctor_id
-    );
-    
-    if (conflictCheck.hasConflict) {
-      const conflicting = conflictCheck.conflictingAppointment;
-      const patientName = conflicting?.patients 
-        ? `${conflicting.patients.nombre} ${conflicting.patients.apellidos}`.trim()
-        : 'Otro paciente';
-      
-      return NextResponse.json(
-        { 
-          error: 'Conflicto de horario detectado',
-          conflicting_appointment: {
-            patient: patientName,
-            time: conflicting.fecha_hora_cita,
-          },
-        },
-        { status: 409 }
-      );
-    }
-    
-    // 4. VERIFICAR SI EL PACIENTE YA EXISTE
-    const existingPatientCheck = await checkExistingPatient(
-      supabase, 
-      data.telefono, 
-      data.email
-    );
-    
-    if (existingPatientCheck.exists) {
-      return NextResponse.json(
-        {
-          error: 'Paciente ya existe en el sistema',
-          existing_patient: existingPatientCheck.patient,
-          suggestion: 'Use "Agendar Cita" en lugar de "Nuevo Paciente"',
-        },
-        { status: 409 }
-      );
-    }
-    
-    // 5. OBTENER USUARIO ACTUAL
+    // ✅ 3. OBTENER USUARIO ACTUAL PARA creado_por_id
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id;
     
-    // 6. USAR RPC FUNCTION CORREGIDA
-    console.log('📞 [Patient Admission] Calling corrected RPC function...');
+    // ✅ 4. PREPARAR PARÁMETROS EXACTOS PARA LA RPC
+    const rpcParams = {
+      p_nombre: data.p_nombre,
+      p_apellidos: data.p_apellidos,
+      p_telefono: data.p_telefono,
+      p_email: data.p_email,
+      p_edad: data.p_edad,
+      // Ya no necesitamos cast, la RPC ahora acepta un string directamente
+      p_diagnostico_principal: data.p_diagnostico_principal,
+      p_comentarios_registro: data.p_comentarios_registro,
+      p_probabilidad_cirugia: data.p_probabilidad_cirugia,
+      p_fecha_hora_cita: data.p_fecha_hora_cita,
+      p_motivo_cita: data.p_motivo_cita,
+      p_doctor_id: data.p_doctor_id,
+      p_creado_por_id: userId || null,
+    };
     
+    console.log('📞 [Patient Admission] Calling RPC with params:', rpcParams);
+    
+    // ✅ 5. LLAMAR A LA FUNCIÓN RPC CORREGIDA
     const { data: rpcResult, error: rpcError } = await supabase.rpc(
       'create_patient_and_appointment',
-      {
-        p_nombre: data.nombre.trim(),
-        p_apellidos: data.apellidos.trim(),
-        p_telefono: data.telefono?.trim() || null,
-        p_email: data.email?.trim() || null,
-        p_edad: data.edad || null,
-        p_diagnostico_principal: data.diagnostico_principal,
-        p_comentarios_registro: data.comentarios_registro?.trim() || null,
-        p_probabilidad_cirugia: data.probabilidad_cirugia || null, // Ya en formato 0-1
-        p_fecha_hora_cita: data.fecha_hora_cita,
-        p_motivo_cita: data.motivo_cita.trim(),
-        p_doctor_id: data.doctor_id || null,
-        p_creado_por_id: userId,
-      }
+      rpcParams
     );
     
+    // ✅ 6. PROCESAR RESULTADO
     if (rpcError) {
       console.error('❌ [Patient Admission] RPC error:', rpcError);
-      throw new Error(`Error en base de datos: ${rpcError.message}`);
-    }
-    
-    if (!rpcResult || rpcResult.length === 0) {
-      throw new Error('No se obtuvo respuesta válida de la base de datos');
-    }
-    
-    const result = rpcResult[0];
-    
-    // 7. VERIFICAR RESULTADO DE LA RPC
-    if (!result.success) {
       return NextResponse.json(
-        { 
-          error: result.message || 'Error al crear paciente y cita',
-        },
+        { error: `Error interno al registrar el paciente: ${rpcError.message}` },
         { status: 400 }
       );
     }
-    
-    const patientId = result.created_patient_id;
-    const appointmentId = result.created_appointment_id;
-    
-    if (!patientId || !appointmentId) {
-      throw new Error('IDs de paciente o cita no recibidos');
+    // Procesar el nuevo formato de respuesta (success, message, ids)
+    if (rpcResult) {
+      // La RPC devuelve un objeto, no un array
+      if (!rpcResult.success) {
+        console.warn('⚠️ [Patient Admission] RPC returned failure:', rpcResult.message);
+        return NextResponse.json(
+          { error: rpcResult.message },
+          { status: 400 }
+        );
+      }
+      
+      // ✅ 7. RETORNAR RESPUESTA EXITOSA
+      console.log('✅ [Patient Admission] RPC success!');
+      return NextResponse.json(
+        { 
+          message: 'Paciente registrado y cita creada con éxito',
+          patient_id: rpcResult.created_patient_id,
+          appointment_id: rpcResult.created_appointment_id,
+          next_steps: [
+            'El paciente ha sido registrado en el sistema',
+            'La cita ha sido programada automáticamente',
+            'El paciente aparecerá en la lista de citas correspondiente',
+          ],
+        },
+        { status: 201 }
+      );
+    } else {
+      console.error('❌ [Patient Admission] RPC returned empty or unexpected result:', rpcResult);
+      return NextResponse.json(
+        { error: 'No se obtuvo respuesta válida de la base de datos' },
+        { status: 500 }
+      );
     }
-    
-    // 8. OBTENER DATOS COMPLETOS CREADOS
-    const { data: createdPatient, error: fetchError } = await supabase
-      .from('patients')
-      .select(`
-        id,
-        nombre,
-        apellidos,
-        telefono,
-        email,
-        edad,
-        diagnostico_principal,
-        estado_paciente,
-        fecha_registro,
-        probabilidad_cirugia
-      `)
-      .eq('id', patientId)
-      .single();
-    
-    if (fetchError) {
-      console.error('⚠️ [Patient Admission] Error fetching created patient:', fetchError);
-    }
-    
-    const { data: createdAppointment, error: appointmentFetchError } = await supabase
-      .from('appointments')
-      .select(`
-        id,
-        fecha_hora_cita,
-        motivo_cita,
-        estado_cita,
-        es_primera_vez
-      `)
-      .eq('id', appointmentId)
-      .single();
-    
-    if (appointmentFetchError) {
-      console.error('⚠️ [Patient Admission] Error fetching created appointment:', appointmentFetchError);
-    }
-    
-    // 9. LOG PARA AUDITORÍA
-    console.log(`✅ [Patient Admission] Success (corrected):`, {
-      patientId,
-      appointmentId,
-      patientName: `${data.nombre} ${data.apellidos}`.trim(),
-      appointmentTime: data.fecha_hora_cita,
-      createdBy: userId || 'unknown',
-      timestamp: new Date().toISOString(),
-    });
-    
-    // 10. RESPUESTA EXITOSA
-    return NextResponse.json({
-      message: 'Paciente y cita creados exitosamente',
-      patient_id: patientId,
-      appointment_id: appointmentId,
-      patient: createdPatient || {
-        id: patientId,
-        nombre: data.nombre,
-        apellidos: data.apellidos,
-        telefono: data.telefono,
-        email: data.email,
-        diagnostico_principal: data.diagnostico_principal,
-      },
-      appointment: createdAppointment || {
-        id: appointmentId,
-        fecha_hora_cita: data.fecha_hora_cita,
-        motivo_cita: data.motivo_cita,
-        estado_cita: 'PROGRAMADA',
-        es_primera_vez: true,
-      },
-      next_steps: [
-        'El paciente ha sido registrado en el sistema',
-        'La cita ha sido programada automáticamente',
-        'El paciente aparecerá en la lista de citas correspondiente',
-      ],
-    }, { status: 201 });
     
   } catch (error: any) {
     console.error('💥 [Patient Admission] Unexpected error:', error);
@@ -362,6 +183,7 @@ export async function POST(request: NextRequest) {
       { 
         error: 'Error interno del servidor',
         message: process.env.NODE_ENV === 'development' ? error.message : 'Error al procesar la admisión',
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       },
       { status: 500 }
     );

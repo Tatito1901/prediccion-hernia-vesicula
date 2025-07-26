@@ -1,12 +1,10 @@
-// components/admission/patient-admission.tsx - COMPONENTE PRINCIPAL OPTIMIZADO
+// components/patient-admision/patient-admission-optimized.tsx
 'use client';
 
-import React, { useState, useCallback, memo, Suspense, useMemo } from 'react';
+import React, { useState, useCallback, memo, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { EmptyState } from '@/components/ui/empty-state';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Icons
 import {
@@ -29,22 +28,39 @@ import {
   WifiOff,
   AlertCircle,
   Loader2,
+  TrendingUp,
+  Clock,
 } from 'lucide-react';
 
-// Types and hooks
-import type { 
-  TabType, 
-  AdmissionAction, 
-  AppointmentWithPatient,
-  AppointmentUpdatePayload,
-} from './admision-types';
-import { useAdmissionData } from '@/hooks/use-admission-data';
-import { useAdmissionRealtime } from '@/hooks/use-admission-realtime';
-import { validateAction, ACTION_TO_STATUS_MAP } from '@/lib/admission-business-rules';
+// Hooks optimizados
+import { 
+  useAdmissionData, 
+  useAppointmentActions,
+  useRefreshAdmissionData 
+} from '@/hooks/use-admission-data';
 
-// Components
-import { AppointmentsList } from './appointments-list';
-import { NewPatientForm } from './new-patient-form';
+// Components optimizados
+import AppointmentsList from './appointments-list';
+import NewPatientForm from './new-patient-form';
+
+// ==================== TIPOS ====================
+type TabType = 'newPatient' | 'today' | 'future' | 'past';
+
+type AppointmentAction = 
+  | 'checkIn'
+  | 'startConsult' 
+  | 'complete'
+  | 'cancel'
+  | 'noShow'
+  | 'reschedule'
+  | 'viewHistory';
+
+interface ConfirmationModal {
+  isOpen: boolean;
+  action: AppointmentAction | null;
+  appointmentId: string | null;
+  patientName: string;
+}
 
 // ==================== CONFIGURACIÓN DE TABS ====================
 const TAB_CONFIG = [
@@ -54,6 +70,7 @@ const TAB_CONFIG = [
     shortLabel: 'Nuevo',
     icon: UserPlus,
     description: 'Registrar un nuevo paciente y agendar su primera cita',
+    color: 'blue',
   },
   {
     key: 'today' as TabType,
@@ -61,6 +78,7 @@ const TAB_CONFIG = [
     shortLabel: 'Hoy',
     icon: CalendarCheck,
     description: 'Citas programadas para el día de hoy',
+    color: 'green',
   },
   {
     key: 'future' as TabType,
@@ -68,6 +86,7 @@ const TAB_CONFIG = [
     shortLabel: 'Próximas',
     icon: CalendarClock,
     description: 'Citas programadas para fechas futuras',
+    color: 'purple',
   },
   {
     key: 'past' as TabType,
@@ -75,19 +94,20 @@ const TAB_CONFIG = [
     shortLabel: 'Historial',
     icon: History,
     description: 'Historial de citas pasadas y completadas',
+    color: 'gray',
   },
 ] as const;
 
 // ==================== COMPONENTES INTERNOS ====================
 
-// Tab de navegación con contadores y estados
+// ✅ Tab de navegación optimizado
 const TabNavigation = memo<{
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   counts: Record<TabType, number>;
   isLoading: boolean;
 }>(({ activeTab, onTabChange, counts, isLoading }) => (
-  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
+  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
     {TAB_CONFIG.map((tab) => {
       const Icon = tab.icon;
       const isActive = activeTab === tab.key;
@@ -100,7 +120,8 @@ const TabNavigation = memo<{
           className={`
             h-auto p-4 flex-col items-center space-y-2 relative
             transition-all duration-200 hover:scale-[1.02]
-            ${isActive ? 'shadow-md' : 'hover:shadow-sm'}
+            ${isActive ? 'shadow-md ring-2 ring-offset-2' : 'hover:shadow-sm'}
+            ${isActive ? `ring-${tab.color}-200` : ''}
           `}
           onClick={() => onTabChange(tab.key)}
           disabled={isLoading}
@@ -114,13 +135,17 @@ const TabNavigation = memo<{
           {tab.key !== 'newPatient' && (
             <Badge 
               variant={isActive ? 'secondary' : 'outline'} 
-              className="text-xs min-w-[20px] h-5"
+              className={`text-xs min-w-[24px] h-6 ${isActive ? 'bg-white/20' : ''}`}
             >
-              {isLoading ? '...' : count}
+              {isLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                count
+              )}
             </Badge>
           )}
           
-          <p className="text-xs text-muted-foreground hidden lg:block text-center">
+          <p className="text-xs text-muted-foreground hidden lg:block text-center leading-tight">
             {tab.description}
           </p>
         </Button>
@@ -128,117 +153,127 @@ const TabNavigation = memo<{
     })}
   </div>
 ));
+TabNavigation.displayName = "TabNavigation";
 
-// Header con información de conexión y controles
+// ✅ Header con información de conexión optimizado
 const AdmissionHeader = memo<{
-  isConnected: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
-}>(({ isConnected, onRefresh, isRefreshing }) => (
-  <Card className="mb-6">
-    <CardHeader className="pb-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <CardTitle className="text-2xl font-bold">Admisión de Pacientes</CardTitle>
-          <p className="text-muted-foreground mt-1">
-            Gestione pacientes y citas desde un solo lugar
-          </p>
-        </div>
-        
-        <div className="flex items-center space-x-3">
-          {/* Indicador de conexión real-time */}
-          <div className="flex items-center space-x-2">
-            {isConnected ? (
-              <>
-                <Wifi className="h-4 w-4 text-green-600" />
-                <span className="text-sm text-green-600 hidden sm:inline">En línea</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="h-4 w-4 text-amber-600" />
-                <span className="text-sm text-amber-600 hidden sm:inline">Sin conexión</span>
-              </>
-            )}
+  totalCounts: Record<TabType, number>;
+}>(({ onRefresh, isRefreshing, totalCounts }) => {
+  const totalAppointments = totalCounts.today + totalCounts.future + totalCounts.past;
+  
+  return (
+    <Card className="mb-6 border-l-4 border-l-blue-500">
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-2xl font-bold flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <CalendarCheck className="h-6 w-6 text-blue-600" />
+              </div>
+              Admisión de Pacientes
+            </CardTitle>
+            <p className="text-muted-foreground mt-2">
+              Gestione pacientes y citas desde un solo lugar
+            </p>
           </div>
           
-          {/* Botón de refresh manual */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className="flex items-center space-x-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Actualizar</span>
-          </Button>
+          <div className="flex items-center space-x-4">
+            {/* ✅ Estadísticas rápidas */}
+            <div className="hidden md:flex items-center space-x-4 text-sm">
+              <div className="text-center">
+                <div className="font-bold text-lg text-green-600">{totalCounts.today}</div>
+                <div className="text-muted-foreground">Hoy</div>
+              </div>
+              <div className="text-center">
+                <div className="font-bold text-lg text-purple-600">{totalCounts.future}</div>
+                <div className="text-muted-foreground">Próximas</div>
+              </div>
+              <div className="text-center">
+                <div className="font-bold text-lg text-blue-600">{totalAppointments}</div>
+                <div className="text-muted-foreground">Total</div>
+              </div>
+            </div>
+            
+            {/* ✅ Botón de refresh */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="flex items-center space-x-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">
+                {isRefreshing ? 'Actualizando...' : 'Actualizar'}
+              </span>
+            </Button>
+          </div>
         </div>
-      </div>
-    </CardHeader>
-  </Card>
-));
+      </CardHeader>
+    </Card>
+  );
+});
+AdmissionHeader.displayName = "AdmissionHeader";
 
-// Modal de confirmación para acciones
+// ✅ Modal de confirmación optimizado
 const ActionConfirmationModal = memo<{
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  action: AdmissionAction | null;
-  appointment: AppointmentWithPatient | null;
+  action: AppointmentAction | null;
+  patientName: string;
   isLoading: boolean;
-}>(({ isOpen, onClose, onConfirm, action, appointment, isLoading }) => {
-  const actionLabels: Record<AdmissionAction, { title: string; description: string; variant: 'default' | 'destructive' }> = {
-    checkIn: {
-      title: 'Marcar Presente',
-      description: 'El paciente será marcado como presente y podrá iniciar la consulta.',
-      variant: 'default',
-    },
-    startConsult: {
-      title: 'Iniciar Consulta',
-      description: 'La consulta será iniciada y el paciente pasará a estar en consulta.',
-      variant: 'default',
-    },
-    complete: {
-      title: 'Completar Consulta',
-      description: 'La consulta será marcada como completada exitosamente.',
-      variant: 'default',
-    },
-    cancel: {
-      title: 'Cancelar Cita',
-      description: 'La cita será cancelada y el horario quedará liberado.',
-      variant: 'destructive',
-    },
-    noShow: {
-      title: 'Marcar No Asistió',
-      description: 'Se registrará que el paciente no se presentó a la cita.',
-      variant: 'destructive',
-    },
-    reschedule: {
-      title: 'Reagendar Cita',
-      description: 'La cita será reagendada a una nueva fecha y hora.',
-      variant: 'default',
-    },
-    viewHistory: {
-      title: 'Ver Historial',
-      description: 'Se abrirá el historial completo del paciente.',
-      variant: 'default',
-    },
-  };
-  
-  if (!action || !appointment) return null;
-  
-  const config = actionLabels[action];
-  const patientName = `${appointment.patients.nombre} ${appointment.patients.apellidos}`.trim();
-  
+}>(({ isOpen, onClose, onConfirm, action, patientName, isLoading }) => {
+  const actionConfig = useMemo(() => {
+    const configs = {
+      checkIn: {
+        title: 'Marcar como Presente',
+        description: 'El paciente será marcado como presente y podrá ser llamado para consulta.',
+        confirmText: 'Marcar Presente',
+        variant: 'default' as const,
+      },
+      startConsult: {
+        title: 'Iniciar Consulta',
+        description: 'Se iniciará la consulta médica para este paciente.',
+        confirmText: 'Iniciar Consulta',
+        variant: 'default' as const,
+      },
+      complete: {
+        title: 'Completar Consulta',
+        description: 'La consulta será marcada como completada.',
+        confirmText: 'Completar',
+        variant: 'default' as const,
+      },
+      cancel: {
+        title: 'Cancelar Cita',
+        description: 'Esta acción cancelará la cita médica. Esta acción no se puede deshacer.',
+        confirmText: 'Cancelar Cita',
+        variant: 'destructive' as const,
+      },
+      reschedule: {
+        title: 'Reagendar Cita',
+        description: 'Se abrirá el diálogo para reagendar esta cita.',
+        confirmText: 'Reagendar',
+        variant: 'default' as const,
+      },
+    };
+    
+    return action ? configs[action as keyof typeof configs] : null;
+  }, [action]);
+
+  if (!actionConfig) return null;
+
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{config.title}</AlertDialogTitle>
-          <AlertDialogDescription className="space-y-2">
-            <p><strong>Paciente:</strong> {patientName}</p>
-            <p><strong>Cita:</strong> {new Date(appointment.fecha_hora_cita).toLocaleString()}</p>
-            <p>{config.description}</p>
+          <AlertDialogTitle>{actionConfig.title}</AlertDialogTitle>
+          <AlertDialogDescription>
+            <strong>{patientName}</strong>
+            <br />
+            {actionConfig.description}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -248,153 +283,163 @@ const ActionConfirmationModal = memo<{
           <AlertDialogAction
             onClick={onConfirm}
             disabled={isLoading}
-            className={config.variant === 'destructive' ? 'bg-destructive hover:bg-destructive/90' : ''}
+            className={actionConfig.variant === 'destructive' ? 'bg-red-600 hover:bg-red-700' : ''}
           >
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Confirmar
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Procesando...
+              </>
+            ) : (
+              actionConfig.confirmText
+            )}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
 });
+ActionConfirmationModal.displayName = "ActionConfirmationModal";
 
 // ==================== COMPONENTE PRINCIPAL ====================
-export const PatientAdmission: React.FC = () => {
-  // ==================== STATE ====================
+const PatientAdmission: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('today');
-  const [confirmationModal, setConfirmationModal] = useState<{
-    isOpen: boolean;
-    action: AdmissionAction | null;
-    appointment: AppointmentWithPatient | null;
-  }>({
+  const [confirmationModal, setConfirmationModal] = useState<ConfirmationModal>({
     isOpen: false,
     action: null,
-    appointment: null,
+    appointmentId: null,
+    patientName: '',
   });
-  
-  // ==================== HOOKS ====================
+
+  // ✅ Hooks optimizados
   const {
     appointments,
     counts,
     isLoading,
-    isError,
-    error,
     isLoadingMore,
     hasMore,
-    isUpdating,
+    isError,
+    error,
     loadMore,
-    refreshCurrentTab,
-    updateAppointment,
+    refresh,
   } = useAdmissionData(activeTab);
-  
-  const { isConnected, manualRefresh } = useAdmissionRealtime({
-    enableToasts: true,
-    enableSounds: false,
-    autoRefresh: true,
-  });
-  
+
+  const appointmentActions = useAppointmentActions();
+  const { refreshAll } = useRefreshAdmissionData();
+
   // ==================== HANDLERS ====================
   const handleTabChange = useCallback((tab: TabType) => {
     setActiveTab(tab);
   }, []);
-  
-  const handleAction = useCallback((action: AdmissionAction, appointment: AppointmentWithPatient) => {
-    // Validar acción según business rules
-    const validation = validateAction(action, appointment);
-    
-    if (!validation.valid) {
-      // Mostrar error de validación
-      return;
+
+  const handleRefresh = useCallback(async () => {
+    if (activeTab === 'newPatient') {
+      await refreshAll();
+    } else {
+      await refresh();
     }
+  }, [activeTab, refresh, refreshAll]);
+
+  const handleAction = useCallback((action: AppointmentAction, appointmentId: string) => {
+    const appointment = appointments.find(app => app.id === appointmentId);
+    const patientName = appointment?.patients 
+      ? `${appointment.patients.nombre || ''} ${appointment.patients.apellidos || ''}`.trim()
+      : 'Paciente';
+
+    // ✅ Acciones que requieren confirmación
+    const needsConfirmation = ['cancel', 'complete', 'checkIn'];
     
-    if (action === 'viewHistory') {
-      // Abrir modal de historial directamente
-      // TODO: Implementar modal de historial
-      return;
+    if (needsConfirmation.includes(action)) {
+      setConfirmationModal({
+        isOpen: true,
+        action,
+        appointmentId,
+        patientName,
+      });
+    } else {
+      // ✅ Acciones directas
+      executeAction(action, appointmentId);
     }
-    
-    if (action === 'reschedule') {
-      // Abrir modal de reagendamiento
-      // TODO: Implementar modal de reagendamiento
-      return;
+  }, [appointments]);
+
+  const executeAction = useCallback(async (action: AppointmentAction, appointmentId: string) => {
+    try {
+      const statusMap = {
+        checkIn: 'PRESENTE',
+        startConsult: 'EN_CONSULTA', 
+        complete: 'COMPLETADA',
+        cancel: 'CANCELADA',
+        noShow: 'NO_ASISTIO',
+      };
+
+      const newStatus = statusMap[action as keyof typeof statusMap];
+      
+      if (newStatus) {
+        await appointmentActions.mutateAsync({
+          appointmentId,
+          newStatus,
+          motivo_cambio: `Acción: ${action}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error executing action:', error);
     }
-    
-    // Para otras acciones, mostrar confirmación
-    setConfirmationModal({
-      isOpen: true,
-      action,
-      appointment,
-    });
-  }, []);
-  
-  const handleConfirmAction = useCallback(() => {
-    const { action, appointment } = confirmationModal;
-    
-    if (!action || !appointment) return;
-    
-    const newStatus = ACTION_TO_STATUS_MAP[action];
-    
-    if (!newStatus) return;
-    
-    const payload: AppointmentUpdatePayload = {
-      appointmentId: appointment.id,
-      newStatus,
-      motivo_cambio: `Acción realizada desde admisión: ${action}`,
-    };
-    
-    updateAppointment(payload);
-    
-    setConfirmationModal({
-      isOpen: false,
-      action: null,
-      appointment: null,
-    });
-  }, [confirmationModal, updateAppointment]);
-  
+  }, [appointmentActions]);
+
+  const handleConfirmAction = useCallback(async () => {
+    if (confirmationModal.action && confirmationModal.appointmentId) {
+      await executeAction(confirmationModal.action, confirmationModal.appointmentId);
+      setConfirmationModal({
+        isOpen: false,
+        action: null,
+        appointmentId: null,
+        patientName: '',
+      });
+    }
+  }, [confirmationModal, executeAction]);
+
   const handleCloseConfirmation = useCallback(() => {
     setConfirmationModal({
       isOpen: false,
       action: null,
-      appointment: null,
+      appointmentId: null,
+      patientName: '',
     });
   }, []);
-  
-  const handleRefresh = useCallback(() => {
-    refreshCurrentTab();
-    manualRefresh();
-  }, [refreshCurrentTab, manualRefresh]);
-  
+
   const handleNewPatientSuccess = useCallback(() => {
-    // Cambiar a tab de hoy después de crear paciente
+    // ✅ Cambiar a tab "today" después del éxito
     setActiveTab('today');
-    refreshCurrentTab();
-  }, [refreshCurrentTab]);
-  
+  }, []);
+
+  // ==================== CONFIGURACIÓN DE EMPTY STATES ====================
+  const emptyStateConfigs = useMemo(() => ({
+    today: {
+      icon: CalendarCheck,
+      title: 'No hay citas para hoy',
+      description: 'Las citas programadas para hoy aparecerán aquí.',
+    },
+    future: {
+      icon: CalendarClock,
+      title: 'No hay citas próximas',
+      description: 'Las citas futuras se mostrarán en esta sección.',
+    },
+    past: {
+      icon: History,
+      title: 'No hay historial',
+      description: 'El historial de citas aparecerá aquí.',
+    },
+  }), []);
+
   // ==================== RENDER CONTENT ====================
   const renderContent = useMemo(() => {
-    if (isError) {
-      return (
-        <EmptyState
-          icon={AlertCircle}
-          title="Error al cargar datos"
-          description={error?.message || 'Ocurrió un problema al cargar la información.'}
-          action={
-            <Button onClick={handleRefresh} variant="outline">
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Reintentar
-            </Button>
-          }
-        />
-      );
-    }
-    
     switch (activeTab) {
       case 'newPatient':
         return (
-          <Suspense fallback={<div className="animate-pulse">Cargando formulario...</div>}>
-            <NewPatientForm onSuccess={handleNewPatientSuccess} />
-          </Suspense>
+          <NewPatientForm 
+            onSuccess={handleNewPatientSuccess}
+            onCancel={() => setActiveTab('today')}
+          />
         );
       
       case 'today':
@@ -408,23 +453,9 @@ export const PatientAdmission: React.FC = () => {
             hasMore={hasMore}
             onAction={handleAction}
             onLoadMore={loadMore}
-            emptyStateConfig={{
-              today: {
-                icon: CalendarCheck,
-                title: 'No hay citas para hoy',
-                description: 'Las citas programadas para hoy aparecerán aquí.',
-              },
-              future: {
-                icon: CalendarClock,
-                title: 'No hay citas próximas',
-                description: 'Las citas futuras se mostrarán en esta sección.',
-              },
-              past: {
-                icon: History,
-                title: 'No hay historial',
-                description: 'El historial de citas aparecerá aquí.',
-              },
-            }[activeTab]}
+            onRefresh={refresh}
+            emptyStateConfig={emptyStateConfigs[activeTab]}
+            error={error}
           />
         );
       
@@ -437,25 +468,25 @@ export const PatientAdmission: React.FC = () => {
     isLoading,
     isLoadingMore,
     hasMore,
-    isError,
-    error,
     handleAction,
     loadMore,
-    handleRefresh,
+    refresh,
+    error,
     handleNewPatientSuccess,
+    emptyStateConfigs,
   ]);
   
   // ==================== RENDER ====================
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
+    <div className="container mx-auto py-6 space-y-6 max-w-7xl">
+      {/* ✅ Header optimizado */}
       <AdmissionHeader
-        isConnected={isConnected}
         onRefresh={handleRefresh}
         isRefreshing={isLoading}
+        totalCounts={counts}
       />
       
-      {/* Navigation Tabs */}
+      {/* ✅ Navigation Tabs optimizado */}
       <TabNavigation
         activeTab={activeTab}
         onTabChange={handleTabChange}
@@ -463,21 +494,39 @@ export const PatientAdmission: React.FC = () => {
         isLoading={isLoading}
       />
       
-      {/* Main Content */}
-      <Card>
+      {/* ✅ Error global */}
+      {isError && activeTab !== 'newPatient' && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Error al cargar los datos. 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              className="ml-2"
+            >
+              Reintentar
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {/* ✅ Main Content */}
+      <Card className="min-h-[600px]">
         <CardContent className="p-6">
           {renderContent}
         </CardContent>
       </Card>
       
-      {/* Confirmation Modal */}
+      {/* ✅ Confirmation Modal optimizado */}
       <ActionConfirmationModal
         isOpen={confirmationModal.isOpen}
         onClose={handleCloseConfirmation}
         onConfirm={handleConfirmAction}
         action={confirmationModal.action}
-        appointment={confirmationModal.appointment}
-        isLoading={isUpdating}
+        patientName={confirmationModal.patientName}
+        isLoading={appointmentActions.isPending}
       />
     </div>
   );

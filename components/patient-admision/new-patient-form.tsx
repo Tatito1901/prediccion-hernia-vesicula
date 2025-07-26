@@ -1,18 +1,17 @@
-// components/admission/new-patient-form-corrected.tsx - CORREGIDO PARA TU ESQUEMA REAL
+// components/patient-admision/new-patient-form-real.tsx
 'use client';
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import { z } from 'zod';
+import { format, addDays, isWeekend, isBefore, startOfDay } from 'date-fns';
+import { es } from 'date-fns/locale';
 
-// UI Components (sin cambios)
+// UI Components
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -24,7 +23,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -36,7 +34,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Icons
 import {
@@ -45,304 +44,210 @@ import {
   User,
   Phone,
   Mail,
-  FileText,
   CheckCircle,
   Loader2,
+  AlertCircle,
+  FileText,
 } from 'lucide-react';
 
-// Utilities
-import { format, addDays, isWeekend, isBefore, startOfDay } from 'date-fns';
-import { es } from 'date-fns/locale';
+// Hook corregido
+import { usePatientAdmission } from '@/hooks/use-admission-realtime';
 import { cn } from '@/lib/utils';
 
-// ==================== CONFIGURACIÓN CORREGIDA ====================
-const CLINIC_CONFIG = {
-  WORK_HOURS: {
-    START: 8,
-    END: 18,
-    LUNCH_START: 12,
-    LUNCH_END: 13,
-  },
-  APPOINTMENT_DURATION: 30,
-  WORK_DAYS: [1, 2, 3, 4, 5],
-} as const;
-
-// ==================== DIAGNÓSTICOS SEGÚN TU ENUM REAL ====================
+// ==================== CONFIGURACIÓN ====================
+// Definición del enum de diagnóstico (debe coincidir exactamente con el enum de la base de datos)
 const DIAGNOSIS_OPTIONS = [
-  'HERNIA INGUINAL',
-  'HERNIA UMBILICAL', 
+  'HERNIA_INGUINAL',
+  'HERNIA_UMBILICAL', 
   'COLECISTITIS',
   'COLEDOCOLITIASIS',
   'COLANGITIS',
   'APENDICITIS',
-  'HERNIA HIATAL',
-  'LIPOMA GRANDE',
-  'HERNIA INGUINAL RECIDIVANTE',
-  'QUISTE SEBACEO INFECTADO',
-  'EVENTRACION ABDOMINAL',
-  'VESICULA (COLECISTITIS CRONICA)',
+  'HERNIA_HIATAL',
+  'LIPOMA_GRANDE',
+  'HERNIA_INGUINAL_RECIDIVANTE',
+  'QUISTE_SEBACEO_INFECTADO',
+  'EVENTRACION_ABDOMINAL',
+  'VESICULA',
   'OTRO',
-  'HERNIA SPIGEL'
+  'HERNIA_SPIGEL'
 ] as const;
 
-// ==================== VALIDACIÓN CORREGIDA ====================
+// Opciones para mostrar en el select (versiones legibles)
+const diagnosisOptions = [
+  { value: 'HERNIA_INGUINAL', label: 'Hernia Inguinal' },
+  { value: 'HERNIA_UMBILICAL', label: 'Hernia Umbilical' },
+  { value: 'COLECISTITIS', label: 'Colecistitis' },
+  { value: 'COLEDOCOLITIASIS', label: 'Coledocolitiasis' },
+  { value: 'COLANGITIS', label: 'Colangitis' },
+  { value: 'APENDICITIS', label: 'Apendicitis' },
+  { value: 'HERNIA_HIATAL', label: 'Hernia Hiatal' },
+  { value: 'LIPOMA_GRANDE', label: 'Lipoma Grande' },
+  { value: 'HERNIA_INGUINAL_RECIDIVANTE', label: 'Hernia Inguinal Recidivante' },
+  { value: 'QUISTE_SEBACEO_INFECTADO', label: 'Quiste Sebáceo Infectado' },
+  { value: 'EVENTRACION_ABDOMINAL', label: 'Eventración Abdominal' },
+  { value: 'VESICULA', label: 'Vesícula (Colecistitis Crónica)' },
+  { value: 'OTRO', label: 'Otro' },
+  { value: 'HERNIA_SPIGEL', label: 'Hernia Spigel' },
+];
+
+const TIME_SLOTS = [
+  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
+];
+
+// ==================== VALIDACIÓN SCHEMA ====================
 const NewPatientSchema = z.object({
-  // Campos requeridos según tu esquema
   nombre: z.string().min(2, "Nombre debe tener al menos 2 caracteres").max(50),
   apellidos: z.string().min(2, "Apellidos debe tener al menos 2 caracteres").max(50),
-  
-  // Campos opcionales según tu esquema
-  telefono: z.string().regex(/^[0-9+\-\s()]{10,15}$/, "Teléfono inválido").optional().or(z.literal("")),
+  telefono: z.string().min(10, "Teléfono debe tener al menos 10 caracteres").optional().or(z.literal("")),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
-  edad: z.number().min(0).max(120).optional(),
-  
-  // Diagnóstico usando tus valores reales
-  motivoConsulta: z.enum(DIAGNOSIS_OPTIONS, { required_error: "Motivo de consulta requerido" }),
-  
-  // Fecha y hora
-  fechaConsulta: z.date({ required_error: "Fecha requerida" }),
-  horaConsulta: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Formato de hora inválido"),
-  
-  // Campos opcionales
-  notas: z.string().max(500, "Notas muy largas").optional(),
-  
-  // CORREGIDO: Probabilidad como porcentaje en UI (0-100) pero se convertirá a decimal (0-1) para BD
-  probabilidad_cirugia_percentage: z.number().min(0).max(100).optional(),
+  edad: z.number().min(0, "Edad no puede ser negativa").max(120, "Edad no puede ser mayor a 120").optional(),
+  diagnostico_principal: z.enum(DIAGNOSIS_OPTIONS, { 
+    required_error: "Diagnóstico principal es requerido" 
+  }),
+  fechaConsulta: z.date({ 
+    required_error: "Fecha de consulta es requerida" 
+  }),
+  horaConsulta: z.string().min(1, "Hora de consulta es requerida"),
+  motivoConsulta: z.string().min(5, "Motivo debe tener al menos 5 caracteres").max(200, "Motivo muy largo"),
+  comentarios_registro: z.string().max(500, "Comentarios muy largos").optional(),
+  probabilidad_cirugia: z.number().min(0, "Probabilidad no puede ser negativa").max(1, "Probabilidad no puede ser mayor a 1").optional(),
 });
 
-type NewPatientForm = z.infer<typeof NewPatientSchema>;
+type FormData = z.infer<typeof NewPatientSchema>;
 
-// ==================== PAYLOAD PARA API ====================
-interface AdmissionPayload {
-  nombre: string;
-  apellidos: string;
-  telefono?: string;
-  email?: string;
-  edad?: number;
-  diagnostico_principal: string;
-  comentarios_registro?: string;
-  probabilidad_cirugia?: number; // Decimal 0-1 para la BD
-  fecha_hora_cita: string;
-  motivo_cita: string;
-  doctor_id?: string | null;
+// ==================== PROPS ====================
+interface NewPatientFormProps {
+  onSuccess?: () => void;
+  onCancel?: () => void;
 }
 
-// ==================== HELPERS ====================
-const generateTimeSlots = (): string[] => {
-  const slots: string[] = [];
-  const { START, END, LUNCH_START, LUNCH_END } = CLINIC_CONFIG.WORK_HOURS;
-  
-  for (let hour = START; hour < END; hour++) {
-    if (hour >= LUNCH_START && hour < LUNCH_END) continue;
-    
-    slots.push(`${hour.toString().padStart(2, '0')}:00`);
-    slots.push(`${hour.toString().padStart(2, '0')}:30`);
-  }
-  
-  return slots;
-};
-
-const isValidAppointmentDate = (date: Date): boolean => {
+// ==================== HELPER FUNCTIONS ====================
+const isValidDate = (date: Date): boolean => {
   const today = startOfDay(new Date());
-  const appointmentDate = startOfDay(date);
-  
-  if (isBefore(appointmentDate, today)) return false;
-  if (isWeekend(date)) return false;
-  
-  return true;
-};
-
-const getEarliestAvailableDate = (): Date => {
-  let date = new Date();
-  
-  if (date.getHours() >= 17) {
-    date = addDays(date, 1);
-  }
-  
-  while (isWeekend(date)) {
-    date = addDays(date, 1);
-  }
-  
-  return date;
+  return !isBefore(date, today) && !isWeekend(date);
 };
 
 const formatPhoneNumber = (value: string): string => {
-  const cleaned = value.replace(/[^\d+]/g, '');
-  
-  if (cleaned.length === 10) {
-    return cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+  const cleaned = value.replace(/\D/g, '');
+  if (cleaned.length <= 10) {
+    const match = cleaned.match(/^(\d{2})(\d{4})(\d{4})$/);
+    if (match) {
+      return `${match[1]} ${match[2]} ${match[3]}`;
+    }
   }
-  
-  return cleaned;
-};
-
-// Convertir porcentaje (0-100) a decimal (0-1) para la BD
-const convertPercentageToDecimal = (percentage?: number): number | undefined => {
-  if (percentage === undefined || percentage === null) return undefined;
-  return percentage / 100;
-};
-
-// ==================== API FUNCTION ====================
-const submitPatientAdmission = async (data: AdmissionPayload): Promise<any> => {
-  const response = await fetch('/api/patient-admission', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Error al registrar paciente');
-  }
-  
-  return response.json();
+  return value;
 };
 
 // ==================== COMPONENTE PRINCIPAL ====================
-interface NewPatientFormProps {
-  onSuccess?: () => void;
-}
+export const NewPatientForm: React.FC<NewPatientFormProps> = ({ 
+  onSuccess, 
+  onCancel 
+}) => {
+  const [selectedDate, setSelectedDate] = useState<Date>();
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  
+  // ✅ Hook de admisión corregido
+  const admissionMutation = usePatientAdmission();
 
-export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess }) => {
-  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
-  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
-  
-  const queryClient = useQueryClient();
-  
-  // ==================== FORM ====================
-  const form = useForm<NewPatientForm>({
+  // ✅ Configuración del formulario con validación en tiempo real
+  const form = useForm<FormData>({
     resolver: zodResolver(NewPatientSchema),
+    mode: 'onChange',
     defaultValues: {
       nombre: '',
       apellidos: '',
       telefono: '',
       email: '',
       edad: undefined,
-      motivoConsulta: undefined,
-      fechaConsulta: getEarliestAvailableDate(),
+      diagnostico_principal: undefined,
+      fechaConsulta: undefined,
       horaConsulta: '',
-      notas: '',
-      probabilidad_cirugia_percentage: undefined,
-    },
-    mode: 'onChange',
-  });
-  
-  const watchedDate = form.watch('fechaConsulta');
-  const watchedTime = form.watch('horaConsulta');
-  
-  // ==================== MUTATIONS ====================
-  const admissionMutation = useMutation({
-    mutationFn: submitPatientAdmission,
-    onSuccess: (data) => {
-      toast.success('Paciente registrado exitosamente', {
-        description: `${form.getValues('nombre')} ${form.getValues('apellidos')} ha sido registrado.`,
-        duration: 4000,
-      });
-      
-      // Invalidar queries relacionadas
-      queryClient.invalidateQueries({ queryKey: ['admission-appointments'] });
-      queryClient.invalidateQueries({ queryKey: ['admission-counts'] });
-      
-      // Reset form
-      form.reset();
-      
-      // Callback de éxito
-      onSuccess?.();
-    },
-    onError: (error: Error) => {
-      toast.error('Error al registrar paciente', {
-        description: error.message || 'Intente nuevamente',
-        duration: 6000,
-      });
+      motivoConsulta: '',
+      comentarios_registro: '',
+      probabilidad_cirugia: undefined,
     },
   });
-  
-  // ==================== EFFECTS ====================
-  useEffect(() => {
-    if (!watchedDate || !isValidAppointmentDate(watchedDate)) {
-      setAvailableSlots([]);
-      return;
-    }
-    
-    const loadAvailableSlots = async () => {
-      setIsCheckingAvailability(true);
-      
-      try {
-        // TODO: Implementar verificación real de slots ocupados
-        const allSlots = generateTimeSlots();
-        setAvailableSlots(allSlots);
-      } catch (error) {
-        console.error('Error loading available slots:', error);
-        setAvailableSlots([]);
-      } finally {
-        setIsCheckingAvailability(false);
-      }
-    };
-    
-    loadAvailableSlots();
-  }, [watchedDate]);
-  
+
+  const watchedValues = form.watch();
+  const isFormValid = form.formState.isValid && selectedDate && watchedValues.horaConsulta;
+
   // ==================== HANDLERS ====================
-  const handleSubmit = useCallback(async (values: NewPatientForm) => {
-    if (!values.fechaConsulta || !values.horaConsulta) {
-      toast.error('Fecha y hora de consulta son requeridas');
-      return;
+  const onSubmit = useCallback(async (data: FormData) => {
+    try {
+      console.log('📝 [NewPatientForm] Form data:', data);
+      
+      // ✅ Construir fecha y hora completa
+      const fechaHoraCompleta = new Date(data.fechaConsulta);
+      const [horas, minutos] = data.horaConsulta.split(':').map(Number);
+      fechaHoraCompleta.setHours(horas, minutos, 0, 0);
+
+      // ✅ PREPARAR PAYLOAD CON NOMBRES EXACTOS DE LA RPC
+      const payload = {
+        p_nombre: data.nombre.trim(),
+        p_apellidos: data.apellidos.trim(),
+        p_telefono: data.telefono?.trim() || null,
+        p_email: data.email?.trim() || null,
+        p_edad: data.edad || null,
+        p_diagnostico_principal: data.diagnostico_principal,
+        p_comentarios_registro: data.comentarios_registro?.trim() || null,
+        p_probabilidad_cirugia: data.probabilidad_cirugia || null,
+        p_fecha_hora_cita: fechaHoraCompleta.toISOString(),
+        p_motivo_cita: data.motivoConsulta.trim(),
+        p_doctor_id: null, // Se puede agregar después si es necesario
+        p_creado_por_id: null, // Se obtiene en el backend
+      };
+
+      console.log('📞 [NewPatientForm] RPC payload:', payload);
+
+      await admissionMutation.mutateAsync(payload);
+      
+      // ✅ Reset form on success
+      form.reset();
+      setSelectedDate(undefined);
+      
+      // ✅ Callback de éxito
+      onSuccess?.();
+      
+    } catch (error) {
+      console.error('❌ [NewPatientForm] Submit error:', error);
+      // El error ya se maneja en el hook
     }
-    
-    // Crear fecha/hora de la cita
-    const [hours, minutes] = values.horaConsulta.split(':').map(Number);
-    const appointmentDateTime = new Date(values.fechaConsulta);
-    appointmentDateTime.setHours(hours, minutes, 0, 0);
-    
-    const payload: AdmissionPayload = {
-      nombre: values.nombre.trim(),
-      apellidos: values.apellidos.trim(),
-      telefono: values.telefono?.trim() || undefined,
-      email: values.email?.trim() || undefined,
-      edad: values.edad || undefined,
-      diagnostico_principal: values.motivoConsulta,
-      comentarios_registro: values.notas?.trim() || undefined,
-      // CONVERSIÓN CRÍTICA: porcentaje (0-100) a decimal (0-1)
-      probabilidad_cirugia: convertPercentageToDecimal(values.probabilidad_cirugia_percentage),
-      fecha_hora_cita: appointmentDateTime.toISOString(),
-      motivo_cita: values.motivoConsulta,
-      doctor_id: null,
-    };
-    
-    console.log('📋 [Form] Payload para API:', {
-      ...payload,
-      probabilidad_original: values.probabilidad_cirugia_percentage,
-      probabilidad_convertida: payload.probabilidad_cirugia,
-    });
-    
-    admissionMutation.mutate(payload);
-  }, [admissionMutation]);
-  
+  }, [admissionMutation, form, onSuccess]);
+
+  const handleDateSelect = useCallback((date: Date | undefined) => {
+    if (date && isValidDate(date)) {
+      setSelectedDate(date);
+      form.setValue('fechaConsulta', date, { shouldValidate: true });
+      setShowDatePicker(false);
+    }
+  }, [form]);
+
+  const handleCancel = useCallback(() => {
+    form.reset();
+    setSelectedDate(undefined);
+    onCancel?.();
+  }, [form, onCancel]);
+
   const handlePhoneChange = useCallback((value: string) => {
     const formatted = formatPhoneNumber(value);
-    form.setValue('telefono', formatted);
+    form.setValue('telefono', formatted, { shouldValidate: true });
   }, [form]);
-  
-  // ==================== COMPUTED VALUES ====================
+
+  // ✅ Opciones memoizadas
   const diagnosisOptions = useMemo(() => 
-    DIAGNOSIS_OPTIONS.map(value => ({
-      value,
-      label: value,
-    })), []
+    DIAGNOSIS_OPTIONS.map(value => ({ value, label: value })), 
+    []
   );
-  
-  const isFormValid = form.formState.isValid && watchedDate && watchedTime;
-  const isSubmitting = admissionMutation.isPending;
-  
-  // ==================== RENDER (UI igual, solo cambios en FormField de probabilidad) ====================
+
+  // ==================== RENDER ====================
   return (
-    <Card className="max-w-4xl mx-auto">
+    <Card className="w-full max-w-4xl mx-auto">
       <CardHeader>
-        <CardTitle className="flex items-center space-x-2">
+        <CardTitle className="flex items-center gap-2">
           <User className="h-5 w-5" />
-          <span>Registro de Nuevo Paciente</span>
+          Registro de Nuevo Paciente
         </CardTitle>
         <p className="text-muted-foreground">
           Complete la información del paciente y programe su primera consulta
@@ -351,11 +256,12 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess }) => 
       
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-            {/* Información Personal - SIN CAMBIOS */}
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            
+            {/* ✅ INFORMACIÓN PERSONAL */}
             <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <User className="h-4 w-4" />
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-blue-600" />
                 <h3 className="text-lg font-medium">Información Personal</h3>
               </div>
               
@@ -363,204 +269,200 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess }) => 
                 <FormField
                   control={form.control}
                   name="nombre"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Nombre *</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="Nombre del paciente" />
+                        <Input 
+                          placeholder="Juan" 
+                          {...field}
+                          className={cn(
+                            fieldState.error && "border-red-500 focus:border-red-500",
+                            !fieldState.error && field.value && field.value.length >= 2 && "border-green-500"
+                          )}
+                        />
                       </FormControl>
-                      <FormMessage />
+                      {fieldState.error && <FormMessage />}
+                      {!fieldState.error && field.value && field.value.length >= 2 && (
+                        <div className="flex items-center gap-1 text-xs text-green-600">
+                          <CheckCircle className="h-3 w-3" />
+                          Válido
+                        </div>
+                      )}
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="apellidos"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Apellidos *</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="Apellidos del paciente" />
+                        <Input 
+                          placeholder="Pérez García" 
+                          {...field}
+                          className={cn(
+                            fieldState.error && "border-red-500 focus:border-red-500",
+                            !fieldState.error && field.value && field.value.length >= 2 && "border-green-500"
+                          )}
+                        />
                       </FormControl>
-                      <FormMessage />
+                      {fieldState.error && <FormMessage />}
+                      {!fieldState.error && field.value && field.value.length >= 2 && (
+                        <div className="flex items-center gap-1 text-xs text-green-600">
+                          <CheckCircle className="h-3 w-3" />
+                          Válido
+                        </div>
+                      )}
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="telefono"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Teléfono</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="(555) 123-4567"
-                          onChange={(e) => handlePhoneChange(e.target.value)}
-                        />
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="55 1234 5678" 
+                            className={cn(
+                              "pl-10",
+                              fieldState.error && "border-red-500 focus:border-red-500",
+                              !fieldState.error && field.value && field.value.length >= 10 && "border-green-500"
+                            )}
+                            {...field}
+                            onChange={(e) => handlePhoneChange(e.target.value)}
+                          />
+                        </div>
                       </FormControl>
-                      <FormDescription>Opcional</FormDescription>
-                      <FormMessage />
+                      {fieldState.error && <FormMessage />}
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="email"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input {...field} type="email" placeholder="correo@ejemplo.com" />
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            type="email" 
+                            placeholder="juan@email.com" 
+                            className={cn(
+                              "pl-10",
+                              fieldState.error && "border-red-500 focus:border-red-500",
+                              !fieldState.error && field.value && field.value.includes('@') && "border-green-500"
+                            )}
+                            {...field}
+                          />
+                        </div>
                       </FormControl>
-                      <FormDescription>Opcional</FormDescription>
-                      <FormMessage />
+                      {fieldState.error && <FormMessage />}
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="edad"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Edad</FormLabel>
                       <FormControl>
-                        <Input
+                        <Input 
+                          type="number" 
+                          placeholder="35" 
+                          className={cn(
+                            fieldState.error && "border-red-500 focus:border-red-500",
+                            !fieldState.error && field.value && "border-green-500"
+                          )}
                           {...field}
-                          type="number"
-                          min="0"
-                          max="120"
-                          placeholder="Edad en años"
                           onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
                         />
                       </FormControl>
-                      <FormMessage />
+                      {fieldState.error && <FormMessage />}
                     </FormItem>
                   )}
                 />
-              </div>
-            </div>
-            
-            <Separator />
-            
-            {/* Información Médica */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <FileText className="h-4 w-4" />
-                <h3 className="text-lg font-medium">Información Médica</h3>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                 <FormField
                   control={form.control}
-                  name="motivoConsulta"
-                  render={({ field }) => (
+                  name="diagnostico_principal"
+                  render={({ field, fieldState }) => (
                     <FormItem>
-                      <FormLabel>Motivo de Consulta *</FormLabel>
+                      <FormLabel>Diagnóstico Principal *</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccione el diagnóstico" />
+                          <SelectTrigger className={cn(
+                            fieldState.error && "border-red-500 focus:border-red-500",
+                            !fieldState.error && field.value && "border-green-500"
+                          )}>
+                            <SelectValue placeholder="Seleccionar diagnóstico" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {diagnosisOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
+                          {diagnosisOptions.map((diagnosis) => (
+                            <SelectItem key={diagnosis.value} value={diagnosis.value}>
+                              {diagnosis.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                {/* CAMPO CORREGIDO: Probabilidad en porcentaje para UI */}
-                <FormField
-                  control={form.control}
-                  name="probabilidad_cirugia_percentage"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Probabilidad de Cirugía (%)</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type="number"
-                          min="0"
-                          max="100"
-                          placeholder="0-100"
-                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Estimación inicial en porcentaje (se convertirá automáticamente)
-                      </FormDescription>
-                      <FormMessage />
+                      {fieldState.error && <FormMessage />}
+                      {!fieldState.error && field.value && (
+                        <div className="flex items-center gap-1 text-xs text-green-600">
+                          <CheckCircle className="h-3 w-3" />
+                          Seleccionado
+                        </div>
+                      )}
                     </FormItem>
                   )}
                 />
               </div>
-              
-              <FormField
-                control={form.control}
-                name="notas"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Notas Adicionales</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        placeholder="Información adicional, síntomas, comentarios..."
-                        className="resize-none"
-                        rows={3}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Información adicional sobre el paciente o la consulta
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
-            
-            <Separator />
-            
-            {/* Programación de Cita - SIN CAMBIOS */}
+
+            {/* ✅ PROGRAMACIÓN DE CITA */}
             <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <CalendarIcon className="h-4 w-4" />
-                <h3 className="text-lg font-medium">Programar Primera Consulta</h3>
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4 text-blue-600" />
+                <h3 className="text-lg font-medium">Programación de Cita</h3>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="fechaConsulta"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Fecha de Consulta *</FormLabel>
-                      <Popover>
+                      <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
                               variant="outline"
                               className={cn(
-                                "w-full justify-start text-left font-normal",
-                                !field.value && "text-muted-foreground"
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground",
+                                fieldState.error && "border-red-500",
+                                !fieldState.error && field.value && "border-green-500"
                               )}
                             >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
                               {field.value ? (
                                 format(field.value, "PPP", { locale: es })
                               ) : (
-                                "Seleccione una fecha"
+                                <span>Seleccionar fecha</span>
                               )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
@@ -568,84 +470,158 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({ onSuccess }) => 
                           <Calendar
                             mode="single"
                             selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) => !isValidAppointmentDate(date)}
+                            onSelect={handleDateSelect}
+                            disabled={date => !isValidDate(date)}
                             initialFocus
                             locale={es}
                           />
                         </PopoverContent>
                       </Popover>
-                      <FormDescription>Solo días hábiles disponibles</FormDescription>
-                      <FormMessage />
+                      {fieldState.error && <FormMessage />}
+                      {!fieldState.error && field.value && (
+                        <div className="flex items-center gap-1 text-xs text-green-600">
+                          <CheckCircle className="h-3 w-3" />
+                          Fecha válida
+                        </div>
+                      )}
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="horaConsulta"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Hora de Consulta *</FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
-                        value={field.value}
-                        disabled={!watchedDate || isCheckingAvailability}
-                      >
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={
-                              isCheckingAvailability 
-                                ? "Verificando disponibilidad..." 
-                                : "Seleccione una hora"
-                            } />
+                          <SelectTrigger className={cn(
+                            fieldState.error && "border-red-500",
+                            !fieldState.error && field.value && "border-green-500"
+                          )}>
+                            <Clock className="h-4 w-4 mr-2" />
+                            <SelectValue placeholder="Seleccionar hora" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {availableSlots.map((slot) => (
-                            <SelectItem key={slot} value={slot}>
-                              <div className="flex items-center space-x-2">
-                                <Clock className="h-3 w-3" />
-                                <span>{slot}</span>
-                              </div>
+                          {TIME_SLOTS.map((time) => (
+                            <SelectItem key={time} value={time}>
+                              {time}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <FormDescription>
-                        Horario: 8:00 - 18:00 (excepto 12:00-13:00)
-                      </FormDescription>
-                      <FormMessage />
+                      {fieldState.error && <FormMessage />}
+                      {!fieldState.error && field.value && (
+                        <div className="flex items-center gap-1 text-xs text-green-600">
+                          <CheckCircle className="h-3 w-3" />
+                          Hora seleccionada
+                        </div>
+                      )}
                     </FormItem>
                   )}
                 />
               </div>
             </div>
-            
-            {/* Botones de Acción - SIN CAMBIOS */}
-            <div className="flex justify-end space-x-3 pt-6">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => form.reset()}
-                disabled={isSubmitting}
+
+            {/* ✅ MOTIVO Y COMENTARIOS */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-blue-600" />
+                <h3 className="text-lg font-medium">Detalles de la Consulta</h3>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="motivoConsulta"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>Motivo de la Consulta *</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Describa el motivo de la consulta..."
+                        className={cn(
+                          "min-h-[80px]",
+                          fieldState.error && "border-red-500",
+                          !fieldState.error && field.value && field.value.length >= 5 && "border-green-500"
+                        )}
+                        {...field}
+                      />
+                    </FormControl>
+                    {fieldState.error && <FormMessage />}
+                    <div className="text-xs text-muted-foreground">
+                      {field.value?.length || 0}/200 caracteres
+                    </div>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="comentarios_registro"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Comentarios Adicionales</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Información adicional relevante..."
+                        className="min-h-[60px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <div className="text-xs text-muted-foreground">
+                      {field.value?.length || 0}/500 caracteres
+                    </div>
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* ✅ ESTADO DE ERROR */}
+            {admissionMutation.isError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Error al registrar paciente. Por favor, revise los datos e intente nuevamente.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* ✅ INDICADOR DE VALIDACIÓN */}
+            {isFormValid && (
+              <Alert>
+                <CheckCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Formulario completo. Listo para registrar paciente.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* ✅ BOTONES */}
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handleCancel}
+                disabled={admissionMutation.isPending}
               >
-                Limpiar Formulario
+                Cancelar
               </Button>
               
-              <Button
-                type="submit"
-                disabled={!isFormValid || isSubmitting}
-                className="min-w-[150px]"
+              <Button 
+                type="submit" 
+                disabled={admissionMutation.isPending || !isFormValid}
+                className="min-w-[140px]"
               >
-                {isSubmitting ? (
+                {admissionMutation.isPending ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Registrando...
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Guardando...
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="mr-2 h-4 w-4" />
+                    <CheckCircle className="h-4 w-4 mr-2" />
                     Registrar Paciente
                   </>
                 )}

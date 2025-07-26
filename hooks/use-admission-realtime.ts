@@ -1,238 +1,166 @@
-// hooks/use-admission-realtime.ts - REAL-TIME UPDATES PARA ADMISIÓN
-import { useEffect, useCallback, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { createClient } from '@/utils/supabase/client';
+// hooks/use-patient-admission-real.ts
+// HOOK CORREGIDO PARA TU ESQUEMA REAL DE BASE DE DATOS
+
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { AppointmentUpdateEvent, AppointmentStatus } from '@/components/patient-admision/admision-types';
 
-// ==================== TIPOS PARA REAL-TIME ====================
-interface DatabaseUpdate {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new: any;
-  old: any;
-  schema: string;
-  table: string;
+// ==================== TIPOS CORREGIDOS ====================
+interface AdmissionPayload {
+  p_nombre: string;
+  p_apellidos: string;
+  p_telefono?: string | null;
+  p_email?: string | null;
+  p_edad?: number | null;
+  p_diagnostico_principal: string;
+  p_comentarios_registro?: string | null;
+  p_probabilidad_cirugia?: number | null;
+  p_fecha_hora_cita: string;
+  p_motivo_cita: string;
+  p_doctor_id?: string | null;
+  p_creado_por_id?: string | null;
 }
 
-interface RealtimeConfig {
-  enableToasts: boolean;
-  enableSounds: boolean;
-  autoRefresh: boolean;
+interface AdmissionResponse {
+  success: boolean;
+  message: string;
+  created_patient_id: string;
+  created_appointment_id: string;
 }
 
-const DEFAULT_CONFIG: RealtimeConfig = {
-  enableToasts: true,
-  enableSounds: false,
-  autoRefresh: true,
+// ==================== CACHE KEYS ====================
+export const CACHE_KEYS = {
+  APPOINTMENTS: 'admission-appointments',
+  COUNTS: 'admission-counts',
+  PATIENTS: 'patients',
+} as const;
+
+// ==================== API FUNCTION CORREGIDA ====================
+const submitAdmission = async (data: AdmissionPayload): Promise<AdmissionResponse> => {
+  console.log('🚀 [Admission Hook] Submitting admission:', {
+    patient: `${data.p_nombre} ${data.p_apellidos}`,
+    date: data.p_fecha_hora_cita,
+  });
+
+  // Enviar el payload directamente ya que viene con los prefijos correctos
+  console.log('📞 [Admission Hook] API payload:', data);
+
+  const response = await fetch('/api/patient-admission', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    let errorMessage = `Error ${response.status}: No se pudo crear el paciente`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || JSON.stringify(errorData);
+    } catch (e) {
+      // Si la respuesta no es JSON, intenta leerla como texto
+      errorMessage = await response.text();
+    }
+
+    console.error('❌ [Admission Hook] API Error:', {
+      status: response.status,
+      statusText: response.statusText,
+      errorMessage,
+    });
+
+    throw new Error(errorMessage);
+  }
+
+  const result = await response.json();
+  
+  console.log('✅ [Admission Hook] API Response:', result);
+  
+  if (!result.created_patient_id || !result.created_appointment_id) {
+    throw new Error('Respuesta inválida del servidor');
+  }
+
+  return result;
 };
 
 // ==================== HOOK PRINCIPAL ====================
-export const useAdmissionRealtime = (config: Partial<RealtimeConfig> = {}) => {
+export const usePatientAdmission = () => {
   const queryClient = useQueryClient();
-  const supabase = createClient();
-  const channelRef = useRef<any>(null);
-  const configRef = useRef({ ...DEFAULT_CONFIG, ...config });
-  
-  // ==================== NOTIFICACIÓN HELPERS ====================
-  const playNotificationSound = useCallback(() => {
-    if (configRef.current.enableSounds && 'Audio' in window) {
-      try {
-        // Simple notification sound (you can replace with custom sound file)
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvGYdBSJ+zO/ZfCsFKrTp4qVTEgdYnuP0vWEeAyCCzO7agC8BKrPn7K1WEgpVm+D1wGIcByl+yO/cjTMFKrPp6KdUEwYygdDv2IRNECtTqOPqvGUIJrLm5LZYFQhOqeXws3BdExOLxu/cjTQHSaXh8bllHwhSqOXrumEaDQfz2dWKPQQmE5WV1f7v5sU3FgIaYbfm2YAkBgQP9Lf9bN7YPSQGKS+O1/7HbzJJPQJSsODpq3ARB1GkTCTLLrO24PcCAAf9T8PCOAu5yPLciTUFJaLa5ql3HQllrbHl5J5NEAOY0e/WdCQEMLrf6bJZGQk2jc7s1X4tBSO31+y9aCgGK63p6qVZFgoJP7DF56VAFBz2');
-        audio.volume = 0.3;
-        audio.play().catch(() => {}); // Ignore errors if user hasn't interacted with page
-      } catch (error) {
-        // Ignore audio errors
-      }
-    }
-  }, []);
-  
-  const showUpdateNotification = useCallback((update: DatabaseUpdate) => {
-    if (!configRef.current.enableToasts) return;
+
+  return useMutation({
+    mutationFn: submitAdmission,
     
-    const { eventType, new: newRecord, old: oldRecord, table } = update;
-    
-    if (table === 'appointments' && eventType === 'UPDATE') {
-      const oldStatus = oldRecord?.estado_cita;
-      const newStatus = newRecord?.estado_cita;
-      
-      if (oldStatus !== newStatus) {
-        const patientName = newRecord?.patients?.nombre 
-          ? `${newRecord.patients.nombre} ${newRecord.patients.apellidos || ''}`.trim()
-          : 'Paciente';
-        
-        toast.info('Cita actualizada', {
-          description: `${patientName}: ${oldStatus} → ${newStatus}`,
-          duration: 3000,
-        });
-        
-        playNotificationSound();
-      }
-    } else if (table === 'patients' && eventType === 'INSERT') {
-      const patientName = `${newRecord?.nombre || ''} ${newRecord?.apellidos || ''}`.trim();
-      toast.success('Nuevo paciente registrado', {
-        description: patientName || 'Paciente registrado',
-        duration: 3000,
+    onMutate: async () => {
+      console.log('🔄 [Admission Hook] Starting admission mutation...');
+    },
+
+    onSuccess: async (data, variables) => {
+      console.log('✅ [Admission Hook] Admission successful:', {
+        patientId: data.created_patient_id,
+        appointmentId: data.created_appointment_id,
       });
-    }
-  }, [playNotificationSound]);
-  
-  // ==================== INVALIDATION LOGIC ====================
-  const handleAppointmentUpdate = useCallback((update: DatabaseUpdate) => {
-    const { eventType, new: newRecord, old: oldRecord } = update;
-    
-    if (configRef.current.autoRefresh) {
-      // Invalidate specific queries based on the type of update
-      queryClient.invalidateQueries({ queryKey: ['admission-counts'] });
-      
-      if (eventType === 'UPDATE') {
-        const oldStatus: AppointmentStatus = oldRecord?.estado_cita;
-        const newStatus: AppointmentStatus = newRecord?.estado_cita;
-        
-        // Determine which tabs are affected
-        const affectedTabs: string[] = [];
-        
-        // If status changed, multiple tabs might be affected
-        if (oldStatus !== newStatus) {
-          // Always invalidate all tabs for status changes to be safe
-          affectedTabs.push('today', 'future', 'past');
-        } else {
-          // For other updates (notes, etc.), just invalidate the current view
-          affectedTabs.push('today'); // Default to today for most updates
-        }
-        
-        affectedTabs.forEach(tab => {
-          queryClient.invalidateQueries({ queryKey: ['admission-appointments', tab] });
-        });
-      } else if (eventType === 'INSERT') {
-        // New appointment - invalidate future and today
-        queryClient.invalidateQueries({ queryKey: ['admission-appointments', 'today'] });
-        queryClient.invalidateQueries({ queryKey: ['admission-appointments', 'future'] });
-      } else if (eventType === 'DELETE') {
-        // Deleted appointment - invalidate all tabs
-        queryClient.invalidateQueries({ queryKey: ['admission-appointments'] });
-      }
-    }
-    
-    showUpdateNotification(update);
-  }, [queryClient, showUpdateNotification]);
-  
-  const handlePatientUpdate = useCallback((update: DatabaseUpdate) => {
-    if (configRef.current.autoRefresh) {
-      // Patient updates might affect appointment displays
-      queryClient.invalidateQueries({ queryKey: ['admission-appointments'] });
-    }
-    
-    showUpdateNotification(update);
-  }, [queryClient, showUpdateNotification]);
-  
-  // ==================== SETUP SUBSCRIPTIONS ====================
-  const setupRealtimeSubscriptions = useCallback(() => {
-    if (channelRef.current) {
-      // Clean up existing subscription
-      channelRef.current.unsubscribe();
-    }
-    
-    // Create new channel
-    channelRef.current = supabase
-      .channel('admission_updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'appointments'
-        },
-        (payload) => {
-          console.log('📡 Real-time appointment update:', payload);
-          handleAppointmentUpdate(payload as DatabaseUpdate);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'patients'
-        },
-        (payload) => {
-          console.log('📡 Real-time patient insert:', payload);
-          handlePatientUpdate(payload as DatabaseUpdate);
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Real-time subscription status:', status);
-        
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Real-time subscriptions active');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Real-time subscription error');
-          toast.error('Error de conexión', {
-            description: 'Actualizaciones en tiempo real deshabilitadas',
-            duration: 5000,
-          });
-        }
+
+      // ✅ INVALIDAR CACHÉS DE FORMA INTELIGENTE
+      const invalidationPromises = [
+        // Invalidar citas por categoría
+        queryClient.invalidateQueries({ 
+          queryKey: [CACHE_KEYS.APPOINTMENTS, 'today'] 
+        }),
+        queryClient.invalidateQueries({ 
+          queryKey: [CACHE_KEYS.APPOINTMENTS, 'future'] 
+        }),
+        queryClient.invalidateQueries({ 
+          queryKey: [CACHE_KEYS.APPOINTMENTS, 'all'] 
+        }),
+
+        // Invalidar contadores
+        queryClient.invalidateQueries({ 
+          queryKey: [CACHE_KEYS.COUNTS] 
+        }),
+
+        // Invalidar lista de pacientes
+        queryClient.invalidateQueries({ 
+          queryKey: [CACHE_KEYS.PATIENTS] 
+        }),
+      ];
+
+      await Promise.all(invalidationPromises);
+
+      // ✅ REFRESCAR INMEDIATAMENTE
+      await queryClient.refetchQueries({ 
+        queryKey: [CACHE_KEYS.APPOINTMENTS, 'today'] 
       });
-  }, [supabase, handleAppointmentUpdate, handlePatientUpdate]);
-  
-  // ==================== LIFECYCLE ====================
-  useEffect(() => {
-    setupRealtimeSubscriptions();
-    
-    // Cleanup on unmount
-    return () => {
-      if (channelRef.current) {
-        console.log('🔌 Unsubscribing from real-time updates');
-        channelRef.current.unsubscribe();
-        channelRef.current = null;
+
+      // ✅ MOSTRAR TOAST DE ÉXITO
+      toast.success('¡Paciente registrado exitosamente!', {
+        description: `${variables.p_nombre} ${variables.p_apellidos} ha sido admitido y su cita ha sido programada.`,
+        duration: 5000,
+      });
+    },
+
+    onError: (error: Error, variables) => {
+      console.error('❌ [Admission Hook] Admission failed:', {
+        error: error.message,
+        patient: `${variables.p_nombre} ${variables.p_apellidos}`,
+        stack: error.stack,
+      });
+      
+      toast.error('Error al registrar paciente', {
+        description: error.message,
+        duration: 6000,
+      });
+    },
+
+    retry: (failureCount, error) => {
+      // No reintentar en casos específicos
+      if (error.message.includes('Conflicto') || 
+          error.message.includes('inválidos') ||
+          error.message.includes('enum') ||
+          error.message.includes('ya existe')) {
+        return false;
       }
-    };
-  }, []); // Empty dependency array - setup once on mount
-  
-  // ==================== PUBLIC API ====================
-  const updateConfig = useCallback((newConfig: Partial<RealtimeConfig>) => {
-    configRef.current = { ...configRef.current, ...newConfig };
-  }, []);
-  
-  const manualRefresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['admission-appointments'] });
-    queryClient.invalidateQueries({ queryKey: ['admission-counts'] });
-    
-    toast.success('Datos actualizados', {
-      description: 'La información ha sido refrescada',
-      duration: 2000,
-    });
-  }, [queryClient]);
-  
-  const reconnect = useCallback(() => {
-    console.log('🔄 Reconnecting real-time subscriptions...');
-    setupRealtimeSubscriptions();
-  }, [setupRealtimeSubscriptions]);
-  
-  return {
-    updateConfig,
-    manualRefresh,
-    reconnect,
-    isConnected: channelRef.current?.state === 'joined',
-  };
-};
-
-// ==================== SPECIALIZED HOOKS ====================
-
-// Hook más simple para componentes que solo necesitan notificaciones
-export const useAdmissionNotifications = (enableSounds = false) => {
-  return useAdmissionRealtime({
-    enableToasts: true,
-    enableSounds,
-    autoRefresh: false, // Don't auto-refresh, just show notifications
-  });
-};
-
-// Hook para componentes que necesitan datos siempre actualizados
-export const useAdmissionAutoRefresh = () => {
-  return useAdmissionRealtime({
-    enableToasts: false, // No notifications, just data updates
-    enableSounds: false,
-    autoRefresh: true,
+      return failureCount < 2;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
   });
 };
