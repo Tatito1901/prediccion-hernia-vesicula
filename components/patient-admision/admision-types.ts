@@ -1,11 +1,11 @@
 // components/patient-admision/admision-types.ts
-// TIPOS CORREGIDOS Y UNIFICADOS PARA EL FLUJO DE ADMISIÓN
+// TIPOS UNIFICADOS Y CORREGIDOS PARA EL FLUJO DE ADMISIÓN
 
 import { z } from 'zod';
 
-// ==================== TIPOS BASE SEGÚN TU ESQUEMA REAL ====================
+// ==================== TIPOS BASE SEGÚN DATABASE.TYPES.TS ====================
 
-// ✅ Estados de cita según tu database.types.ts
+// ✅ Estados de cita exactamente como en la base de datos
 export type AppointmentStatus = 
   | 'PROGRAMADA'
   | 'CONFIRMADA' 
@@ -16,7 +16,7 @@ export type AppointmentStatus =
   | 'NO_ASISTIO'
   | 'REAGENDADA';
 
-// ✅ Estados de paciente según tu database.types.ts
+// ✅ Estados de paciente según la base de datos
 export type PatientStatus = 
   | 'PENDIENTE_DE_CONSULTA'
   | 'CONSULTADO'
@@ -25,7 +25,7 @@ export type PatientStatus =
   | 'NO_OPERADO'
   | 'INDECISO';
 
-// ✅ Diagnósticos según tu database.types.ts
+// ✅ Diagnósticos exactamente como en el enum de la base de datos
 export type DiagnosisType = 
   | 'HERNIA INGUINAL'
   | 'HERNIA UMBILICAL'
@@ -42,7 +42,7 @@ export type DiagnosisType =
   | 'OTRO'
   | 'HERNIA SPIGEL';
 
-// ✅ Roles de usuario según tu database.types.ts
+// ✅ Roles de usuario
 export type UserRole = 'doctor' | 'admin' | 'recepcion';
 
 // ✅ Acciones disponibles en el flujo de admisión
@@ -60,7 +60,7 @@ export type TabType = 'newPatient' | 'today' | 'future' | 'past';
 
 // ==================== INTERFACES PRINCIPALES ====================
 
-// ✅ Datos del paciente según tu esquema
+// ✅ Datos del paciente según el esquema de BD
 export interface Patient {
   id: string;
   created_at: string;
@@ -71,36 +71,36 @@ export interface Patient {
   edad?: number;
   telefono?: string;
   email?: string;
-  fecha_registro: string; // DATE
+  fecha_registro: string;
   estado_paciente: PatientStatus;
   diagnostico_principal?: DiagnosisType;
   diagnostico_principal_detalle?: string;
   doctor_asignado_id?: string;
-  fecha_primera_consulta?: string; // DATE
+  fecha_primera_consulta?: string;
   comentarios_registro?: string;
   origen_paciente?: string;
-  probabilidad_cirugia?: number; // NUMERIC 0-1
-  ultimo_contacto?: string; // DATE
-  proximo_contacto?: string; // DATE
+  probabilidad_cirugia?: number;
+  ultimo_contacto?: string;
+  proximo_contacto?: string;
   etiquetas?: string[];
-  fecha_cirugia_programada?: string; // DATE
+  fecha_cirugia_programada?: string;
   id_legacy?: number;
 }
 
-// ✅ Datos de la cita según tu esquema
+// ✅ Datos de la cita según el esquema de BD
 export interface Appointment {
   id: string;
   patient_id: string;
   doctor_id?: string;
   fecha_hora_cita: string; // TIMESTAMPTZ como ISO string
   motivo_cita: string;
-  estado_cita: AppointmentStatus; // Corregido para usar el enum
+  estado_cita: AppointmentStatus;
   es_primera_vez?: boolean;
   notas_cita_seguimiento?: string;
   created_at?: string;
 }
 
-// ✅ Cita con datos del paciente (para la interfaz)
+// ✅ Cita con datos del paciente (TIPO UNIFICADO para toda la app)
 export interface AppointmentWithPatient extends Appointment {
   patients: {
     id: string;
@@ -111,35 +111,55 @@ export interface AppointmentWithPatient extends Appointment {
     edad?: number;
     estado_paciente?: PatientStatus;
     diagnostico_principal?: DiagnosisType;
-  };
+  } | null;
   profiles?: {
     id: string;
     full_name?: string;
     username?: string;
     role?: UserRole;
-  };
+  } | null;
 }
 
-// ✅ Historial de cambios de cita
-export interface AppointmentHistory {
+// ✅ Datos de encuesta
+export interface SurveyData {
+  overall_rating: number;
+  waiting_time_rating: number;
+  staff_rating: number;
+  facility_rating: number;
+  recommendation_rating: number;
+  comments?: string;
+}
+
+// ✅ Estado de encuesta
+export interface SurveyStatus {
   id: string;
   appointment_id: string;
-  estado_cita_anterior?: AppointmentStatus;
-  estado_cita_nuevo: AppointmentStatus;
-  fecha_cambio: string;
-  fecha_cita_anterior?: string;
-  fecha_cita_nueva?: string;
-  modificado_por_id: string;
-  notas?: string;
-  motivo_cambio?: string;
-  ip_address?: string;
-  user_agent?: string;
-  created_at: string;
+  survey_status: 'pendiente' | 'iniciada' | 'completada';
+  start_time?: string;
+  completion_time?: string;
+  survey_data?: SurveyData;
+}
+
+// ✅ Historial del paciente
+export interface PatientHistoryData {
+  patient: {
+    id: string;
+    nombre: string;
+    apellidos: string;
+    telefono?: string;
+    email?: string;
+    created_at: string;
+  };
+  appointments: AppointmentWithPatient[];
+  totalAppointments: number;
+  lastVisit?: string;
+  nextAppointment?: AppointmentWithPatient;
+  survey_completion_rate?: number;
 }
 
 // ==================== SCHEMAS DE VALIDACIÓN ====================
 
-// ✅ Schema para nuevo paciente (corregido)
+// ✅ Schema para nuevo paciente (CORREGIDO con valores exactos de la BD)
 export const NewPatientSchema = z.object({
   // Campos requeridos
   nombre: z.string().min(2, "Nombre debe tener al menos 2 caracteres").max(50),
@@ -159,7 +179,7 @@ export const NewPatientSchema = z.object({
     .max(120, "Edad no puede ser mayor a 120")
     .optional(),
   
-  // Diagnóstico usando valores reales
+  // Diagnóstico usando valores exactos de la BD
   diagnostico_principal: z.enum([
     'HERNIA INGUINAL',
     'HERNIA UMBILICAL', 
@@ -180,47 +200,29 @@ export const NewPatientSchema = z.object({
   // Cita
   fechaConsulta: z.date({ required_error: "Fecha de consulta es requerida" }),
   horaConsulta: z.string()
-    .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Formato de hora inválido")
-    .min(1, "Hora de consulta es requerida"),
+    .regex(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/, "Hora inválida (HH:MM)"),
   
-  // Campos adicionales
-  motivoConsulta: z.string()
-    .min(5, "Motivo debe tener al menos 5 caracteres")
-    .max(200, "Motivo muy largo"),
-  comentarios_registro: z.string()
-    .max(500, "Comentarios muy largos")
-    .optional(),
-  
-  // Probabilidad como decimal 0-1
-  probabilidad_cirugia: z.number()
-    .min(0, "Probabilidad no puede ser negativa")
-    .max(1, "Probabilidad no puede ser mayor a 1")
-    .optional(),
+  // Opcionales
+  comentarios_registro: z.string().max(500).optional(),
+  probabilidad_cirugia: z.number().min(0).max(1).optional(),
+  doctor_id: z.string().uuid().optional(),
 });
-
-export type NewPatientForm = z.infer<typeof NewPatientSchema>;
 
 // ✅ Schema para actualización de estado de cita
 export const AppointmentStatusUpdateSchema = z.object({
-  appointmentId: z.string().uuid("ID de cita inválido"),
+  appointmentId: z.string().uuid(),
   newStatus: z.enum([
-    'PROGRAMADA',
-    'CONFIRMADA',
-    'PRESENTE',
-    'EN_CONSULTA',
-    'COMPLETADA',
-    'CANCELADA',
-    'NO_ASISTIO',
-    'REAGENDADA'
+    'PROGRAMADA', 'CONFIRMADA', 'PRESENTE', 'EN_CONSULTA', 
+    'COMPLETADA', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'
   ]),
-  motivo_cambio: z.string().max(200).optional(),
-  fecha_hora_cita: z.string().datetime().optional(),
-  notas_adicionales: z.string().max(500).optional(),
+  motivo_cambio: z.string().optional(),
+  fecha_hora_cita: z.string().optional(),
+  notas_adicionales: z.string().optional(),
 });
 
-// ==================== PAYLOADS PARA APIs ====================
+// ==================== TIPOS PARA API ====================
 
-// ✅ Payload para admisión (corregido para tu RPC)
+// ✅ Payload para admisión (prefijos p_ según la función de BD)
 export interface AdmissionPayload {
   nombre: string;
   apellidos: string;
@@ -229,20 +231,26 @@ export interface AdmissionPayload {
   edad?: number;
   diagnostico_principal: DiagnosisType;
   comentarios_registro?: string;
-  probabilidad_cirugia?: number; // 0-1 decimal
+  probabilidad_cirugia?: number;
   fecha_hora_cita: string; // ISO string
   motivo_cita: string;
   doctor_id?: string;
 }
 
-// ✅ Respuesta de admisión
-export interface AdmissionResponse {
+// ✅ Respuesta de la API de admisión
+export interface AdmissionDBResponse {
   success: boolean;
   message: string;
-  patient_id: string;
-  appointment_id: string;
-  patient: Partial<Patient>;
-  appointment: Partial<Appointment>;
+  created_patient_id: string;
+  created_appointment_id: string;
+  validation_errors?: Array<{
+    field: string;
+    message: string;
+  }>;
+  suggested_times?: Array<{
+    time_formatted: string;
+    datetime: string;
+  }>;
 }
 
 // ✅ Payload para actualización de estado
@@ -254,6 +262,14 @@ export interface AppointmentStatusUpdatePayload {
   notas_adicionales?: string;
 }
 
+// ✅ Respuesta genérica de API
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
 // ==================== CONFIGURACIÓN DE ESTADOS ====================
 
 // ✅ Configuración visual para estados de cita
@@ -261,49 +277,57 @@ export const APPOINTMENT_STATUS_CONFIG = {
   PROGRAMADA: {
     label: 'Programada',
     color: 'blue',
-    bgClass: 'bg-blue-100 text-blue-800 border-blue-200',
+    colorName: 'blue',
+    bgClass: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900 dark:text-blue-100',
     description: 'Cita programada, esperando confirmación',
   },
   CONFIRMADA: {
     label: 'Confirmada',
     color: 'green',
-    bgClass: 'bg-green-100 text-green-800 border-green-200',
+    colorName: 'green',
+    bgClass: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900 dark:text-green-100',
     description: 'Cita confirmada por el paciente',
   },
   PRESENTE: {
     label: 'Presente',
     color: 'emerald',
-    bgClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    colorName: 'emerald',
+    bgClass: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900 dark:text-emerald-100',
     description: 'Paciente presente, esperando consulta',
   },
   EN_CONSULTA: {
     label: 'En Consulta',
     color: 'purple',
-    bgClass: 'bg-purple-100 text-purple-800 border-purple-200',
+    colorName: 'purple',
+    bgClass: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900 dark:text-purple-100',
     description: 'Consulta médica en progreso',
   },
   COMPLETADA: {
     label: 'Completada',
     color: 'green',
-    bgClass: 'bg-green-100 text-green-800 border-green-200',
+    colorName: 'green',
+    bgClass: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900 dark:text-green-100',
     description: 'Consulta completada exitosamente',
   },
   CANCELADA: {
     label: 'Cancelada',
     color: 'red',
-    bgClass: 'bg-red-100 text-red-800 border-red-200',
+    colorName: 'red',
+    bgClass: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900 dark:text-red-100',
     description: 'Cita cancelada',
   },
   NO_ASISTIO: {
     label: 'No Asistió',
     color: 'orange',
-    bgClass: 'bg-orange-100 text-orange-800 border-orange-200',
+    colorName: 'orange',
+    bgClass: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900 dark:text-orange-100',
     description: 'Paciente no se presentó a la cita',
   },
   REAGENDADA: {
     label: 'Reagendada',
     color: 'yellow',
-    bgClass: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    colorName: 'yellow',
+    bgClass: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900 dark:text-yellow-100',
     description: 'Cita reagendada para nueva fecha',
   },
 } as const;
@@ -321,44 +345,34 @@ export const ACTION_TO_STATUS_MAP: Record<AdmissionAction, AppointmentStatus | n
 
 // ==================== TIPOS PARA INTERFAZ ====================
 
-// ✅ Props para AppointmentCard
-export interface AppointmentCardProps {
+// ✅ Props para PatientCard
+export interface PatientCardProps {
   appointment: AppointmentWithPatient;
   onAction?: (action: AdmissionAction, appointmentId: string) => void;
   disableActions?: boolean;
-  showReschedule?: boolean;
-  showCancel?: boolean;
-  showComplete?: boolean;
   className?: string;
 }
 
-// ✅ Response de API de citas
-export interface AppointmentsApiResponse {
-  data: AppointmentWithPatient[];
-  hasMore: boolean;
-  page: number;
-  total: number;
-  counts?: {
-    today: number;
-    future: number;
-    past: number;
-    newPatient: number;
-  };
+// ✅ Props para NewPatientForm
+export interface NewPatientFormProps {
+  onSuccess?: (data: AdmissionDBResponse) => void;
+  onCancel?: () => void;
+  className?: string;
 }
 
-// ✅ Filtros para consultas
-export interface AppointmentFilters {
-  tab?: TabType;
-  search?: string;
-  status?: AppointmentStatus | 'all';
-  dateFrom?: string;
-  dateTo?: string;
-  doctorId?: string;
-  page?: number;
-  pageSize?: number;
+// ✅ Props para PatientHistoryModal
+export interface PatientHistoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  patientId: string;
 }
 
-// ==================== TIPOS DE VALIDACIÓN DE NEGOCIO ====================
+// ✅ Props para RescheduleDatePicker
+export interface RescheduleProps {
+  appointment: AppointmentWithPatient;
+  onClose: () => void;
+  onReschedule: (date: Date, time: string) => void;
+}
 
 // ✅ Resultado de validación
 export interface ValidationResult {
@@ -366,48 +380,11 @@ export interface ValidationResult {
   reason?: string;
 }
 
-// ✅ Contexto para reglas de negocio
+// ✅ Contexto de reglas de negocio
 export interface BusinessRuleContext {
   currentTime?: Date;
+  allowOverride?: boolean;
   userRole?: UserRole;
-  doctorId?: string;
-}
-
-// ==================== TIPOS PARA ENCUESTAS (si es necesario) ====================
-
-export interface SurveyData {
-  overall_rating: number;
-  service_quality?: number;
-  wait_time_satisfaction?: number;
-  doctor_communication?: number;
-  would_recommend?: boolean;
-  suggestions?: string;
-  surveyTemplateId: number;
-}
-
-export interface SurveyStatus {
-  completed: boolean;
-  completedAt?: string;
-  rating?: number;
-}
-
-// ==================== TIPOS DE HISTORIAL DE PACIENTE ====================
-
-export interface PatientHistoryData {
-  appointments: AppointmentWithPatient[];
-  totalAppointments: number;
-  lastVisit?: string;
-  nextAppointment?: AppointmentWithPatient;
-  treatmentStatus: PatientStatus;
-}
-
-// ==================== TIPOS DE RESPUESTA GENÉRICA ====================
-
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
 }
 
 // ==================== UTILITIES ====================
@@ -417,8 +394,19 @@ export const getPatientData = (appointment: AppointmentWithPatient) => {
   return appointment.patients;
 };
 
-// ✅ Helper para verificar si se puede realizar una acción
-export const canPerformAction = (
+// ✅ Helper para formatear nombre completo
+export const getPatientFullName = (patient: { nombre?: string; apellidos?: string } | null): string => {
+  if (!patient) return 'Sin nombre';
+  return `${patient.nombre || ''} ${patient.apellidos || ''}`.trim() || 'Sin nombre';
+};
+
+// ✅ Helper para obtener configuración de estado
+export const getStatusConfig = (status: AppointmentStatus) => {
+  return APPOINTMENT_STATUS_CONFIG[status] || APPOINTMENT_STATUS_CONFIG.PROGRAMADA;
+};
+
+// ✅ Helper para verificar si se puede realizar una acción (básico)
+export const canPerformActionBasic = (
   appointment: AppointmentWithPatient, 
   action: AdmissionAction
 ): boolean => {
@@ -444,35 +432,23 @@ export const canPerformAction = (
   }
 };
 
-// ✅ Helper para formatear nombre completo
-export const getPatientFullName = (patient: { nombre?: string; apellidos?: string }): string => {
-  return `${patient.nombre || ''} ${patient.apellidos || ''}`.trim() || 'Sin nombre';
-};
-
-// ✅ Helper para obtener configuración de estado
-export const getStatusConfig = (status: AppointmentStatus) => {
-  return APPOINTMENT_STATUS_CONFIG[status] || APPOINTMENT_STATUS_CONFIG.PROGRAMADA;
-};
-
 // ==================== EXPORTS ====================
+export type { 
+  AppointmentWithPatient as AppointmentData, // Alias para compatibilidad
+};
+
+// Note: APPOINTMENT_STATUS_CONFIG, getPatientFullName, and getStatusConfig are already exported inline
+
 export default {
   // Tipos principales
-  type AppointmentWithPatient,
-  type AdmissionAction,
-  type TabType,
-  type AppointmentStatus,
-  
-  // Schemas de validación
   NewPatientSchema,
   AppointmentStatusUpdateSchema,
-  
-  // Configuraciones
   APPOINTMENT_STATUS_CONFIG,
   ACTION_TO_STATUS_MAP,
   
   // Helpers
   getPatientData,
-  canPerformAction,
+  canPerformActionBasic,
   getPatientFullName,
   getStatusConfig,
 };

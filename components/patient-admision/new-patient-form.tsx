@@ -1,10 +1,8 @@
-// components/patient-admision/new-patient-form-real.tsx
-'use client';
+// components/patient-admision/new-patient-form.tsx
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { format, addDays, isWeekend, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -50,166 +48,139 @@ import {
   FileText,
 } from 'lucide-react';
 
-// Hook corregido
-import { usePatientAdmission } from '@/hooks/use-admission-realtime';
+// ✅ IMPORTS CORREGIDOS - usando tipos unificados
+import type { 
+  NewPatientFormProps, 
+  DiagnosisType,
+  AdmissionPayload,
+  NewPatientSchema 
+} from './admision-types';
+
+// ✅ Hook corregido para admisión
+import { useAdmitPatient } from './actions';
 import { cn } from '@/lib/utils';
 
 // ==================== CONFIGURACIÓN ====================
-// Definición del enum de diagnóstico (debe coincidir exactamente con el enum de la base de datos)
-const DIAGNOSIS_OPTIONS = [
-  'HERNIA_INGUINAL',
-  'HERNIA_UMBILICAL', 
-  'COLECISTITIS',
-  'COLEDOCOLITIASIS',
-  'COLANGITIS',
-  'APENDICITIS',
-  'HERNIA_HIATAL',
-  'LIPOMA_GRANDE',
-  'HERNIA_INGUINAL_RECIDIVANTE',
-  'QUISTE_SEBACEO_INFECTADO',
-  'EVENTRACION_ABDOMINAL',
-  'VESICULA',
-  'OTRO',
-  'HERNIA_SPIGEL'
-] as const;
 
-// Opciones para mostrar en el select (versiones legibles)
+// ✅ Opciones de diagnóstico exactamente como en la BD
 const diagnosisOptions = [
-  { value: 'HERNIA_INGUINAL', label: 'Hernia Inguinal' },
-  { value: 'HERNIA_UMBILICAL', label: 'Hernia Umbilical' },
-  { value: 'COLECISTITIS', label: 'Colecistitis' },
-  { value: 'COLEDOCOLITIASIS', label: 'Coledocolitiasis' },
-  { value: 'COLANGITIS', label: 'Colangitis' },
-  { value: 'APENDICITIS', label: 'Apendicitis' },
-  { value: 'HERNIA_HIATAL', label: 'Hernia Hiatal' },
-  { value: 'LIPOMA_GRANDE', label: 'Lipoma Grande' },
-  { value: 'HERNIA_INGUINAL_RECIDIVANTE', label: 'Hernia Inguinal Recidivante' },
-  { value: 'QUISTE_SEBACEO_INFECTADO', label: 'Quiste Sebáceo Infectado' },
-  { value: 'EVENTRACION_ABDOMINAL', label: 'Eventración Abdominal' },
-  { value: 'VESICULA', label: 'Vesícula (Colecistitis Crónica)' },
-  { value: 'OTRO', label: 'Otro' },
-  { value: 'HERNIA_SPIGEL', label: 'Hernia Spigel' },
+  { value: 'HERNIA INGUINAL' as DiagnosisType, label: 'Hernia Inguinal' },
+  { value: 'HERNIA UMBILICAL' as DiagnosisType, label: 'Hernia Umbilical' },
+  { value: 'COLECISTITIS' as DiagnosisType, label: 'Colecistitis' },
+  { value: 'COLEDOCOLITIASIS' as DiagnosisType, label: 'Coledocolitiasis' },
+  { value: 'COLANGITIS' as DiagnosisType, label: 'Colangitis' },
+  { value: 'APENDICITIS' as DiagnosisType, label: 'Apendicitis' },
+  { value: 'HERNIA HIATAL' as DiagnosisType, label: 'Hernia Hiatal' },
+  { value: 'LIPOMA GRANDE' as DiagnosisType, label: 'Lipoma Grande' },
+  { value: 'HERNIA INGUINAL RECIDIVANTE' as DiagnosisType, label: 'Hernia Inguinal Recidivante' },
+  { value: 'QUISTE SEBACEO INFECTADO' as DiagnosisType, label: 'Quiste Sebáceo Infectado' },
+  { value: 'EVENTRACION ABDOMINAL' as DiagnosisType, label: 'Eventración Abdominal' },
+  { value: 'VESICULA (COLECISTITIS CRONICA)' as DiagnosisType, label: 'Vesícula (Colecistitis Crónica)' },
+  { value: 'OTRO' as DiagnosisType, label: 'Otro' },
+  { value: 'HERNIA SPIGEL' as DiagnosisType, label: 'Hernia Spigel' },
 ];
 
-const TIME_SLOTS = Array.from({ length: (15 - 9) * 2 }, (_, i) => {
-  const hour = 9 + Math.floor(i / 2);
-  const minute = (i % 2) * 30;
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+// ✅ Horarios disponibles (8:00 AM - 3:30 PM cada 30 min)
+const TIME_SLOTS = Array.from({ length: 16 }, (_, i) => {
+  const hour = 8 + Math.floor(i / 2);
+  const minute = i % 2 === 0 ? '00' : '30';
+  const time = `${hour.toString().padStart(2, '0')}:${minute}`;
+  return { value: time, label: time };
 });
 
-// ==================== VALIDACIÓN SCHEMA ====================
-const NewPatientSchema = z.object({
-  nombre: z.string().min(2, "Nombre debe tener al menos 2 caracteres").max(50),
-  apellidos: z.string().min(2, "Apellidos debe tener al menos 2 caracteres").max(50),
-  telefono: z.string().min(10, "Teléfono debe tener al menos 10 caracteres").optional().or(z.literal("")),
-  email: z.string().email("Email inválido").optional().or(z.literal("")),
-  edad: z.number().min(0, "Edad no puede ser negativa").max(120, "Edad no puede ser mayor a 120").optional(),
-  diagnostico_principal: z.enum(DIAGNOSIS_OPTIONS, { 
-    required_error: "Diagnóstico principal es requerido" 
-  }),
-  fechaConsulta: z.date({ 
-    required_error: "Fecha de consulta es requerida" 
-  }),
-  horaConsulta: z.string().min(1, "Hora de consulta es requerida"),
-  motivoConsulta: z.string().min(5, "Motivo debe tener al menos 5 caracteres").max(200, "Motivo muy largo"),
-  comentarios_registro: z.string().max(500, "Comentarios muy largos").optional(),
-  probabilidad_cirugia: z.number().min(0, "Probabilidad no puede ser negativa").max(1, "Probabilidad no puede ser mayor a 1").optional(),
-});
-
-type FormData = z.infer<typeof NewPatientSchema>;
-
-// ==================== PROPS ====================
-interface NewPatientFormProps {
-  onSuccess?: () => void;
-  onCancel?: () => void;
-}
-
-// ==================== HELPER FUNCTIONS ====================
-const isValidDate = (date: Date): boolean => {
-  const today = startOfDay(new Date());
-  return !isBefore(date, today) && !isWeekend(date);
+// ==================== TIPOS PARA EL FORMULARIO ====================
+type FormData = {
+  nombre: string;
+  apellidos: string;
+  telefono?: string;
+  email?: string;
+  edad?: number;
+  diagnostico_principal: DiagnosisType;
+  fechaConsulta: Date;
+  horaConsulta: string;
+  comentarios_registro?: string;
+  probabilidad_cirugia?: number;
+  doctor_id?: string;
 };
 
+// ==================== UTILIDADES ====================
 const formatPhoneNumber = (value: string): string => {
   const cleaned = value.replace(/\D/g, '');
-  if (cleaned.length <= 10) {
-    const match = cleaned.match(/^(\d{2})(\d{4})(\d{4})$/);
-    if (match) {
-      return `${match[1]} ${match[2]} ${match[3]}`;
-    }
+  const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
+  if (match) {
+    return `(${match[1]}) ${match[2]}-${match[3]}`;
   }
-  return value;
+  return cleaned;
+};
+
+const isValidDate = (date: Date): boolean => {
+  const today = startOfDay(new Date());
+  const maxDate = addDays(today, 90); // Máximo 90 días en el futuro
+  return !isBefore(date, today) && !isBefore(maxDate, date) && !isWeekend(date);
 };
 
 // ==================== COMPONENTE PRINCIPAL ====================
-export const NewPatientForm: React.FC<NewPatientFormProps> = ({ 
+const NewPatientForm: React.FC<NewPatientFormProps> = ({ 
   onSuccess, 
-  onCancel 
+  onCancel, 
+  className 
 }) => {
-  const [selectedDate, setSelectedDate] = useState<Date>();
+  // ✅ ESTADOS LOCALES
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
-  
-  // ✅ Hook de admisión corregido
-  const admissionMutation = usePatientAdmission();
 
-  // ✅ Configuración del formulario con validación en tiempo real
+  // ✅ HOOK DE ADMISIÓN CORREGIDO
+  const admissionMutation = useAdmitPatient();
+
+  // ✅ FORMULARIO CON VALIDACIÓN CORREGIDA
   const form = useForm<FormData>({
     resolver: zodResolver(NewPatientSchema),
-    mode: 'onChange',
     defaultValues: {
       nombre: '',
       apellidos: '',
       telefono: '',
       email: '',
       edad: undefined,
-      diagnostico_principal: undefined,
+      diagnostico_principal: 'HERNIA INGUINAL',
       fechaConsulta: undefined,
-      horaConsulta: '',
-      motivoConsulta: '',
+      horaConsulta: '09:00',
       comentarios_registro: '',
-      probabilidad_cirugia: undefined,
+      probabilidad_cirugia: 0.5,
+      doctor_id: undefined,
     },
   });
 
-  const watchedValues = form.watch();
-  const isFormValid = form.formState.isValid && selectedDate && watchedValues.horaConsulta;
-
-  // ==================== HANDLERS ====================
+  // ✅ SUBMIT HANDLER CORREGIDO
   const onSubmit = useCallback(async (data: FormData) => {
     try {
-      console.log('📝 [NewPatientForm] Form data:', data);
-      
-      // ✅ Construir fecha y hora completa
-      const fechaHoraCompleta = new Date(data.fechaConsulta);
-      const [horas, minutos] = data.horaConsulta.split(':').map(Number);
-      fechaHoraCompleta.setHours(horas, minutos, 0, 0);
+      console.log('📝 [NewPatientForm] Submitting form data:', data);
 
-      // ✅ PREPARAR PAYLOAD CON NOMBRES EXACTOS DE LA RPC
-      const payload = {
-        p_nombre: data.nombre.trim(),
-        p_apellidos: data.apellidos.trim(),
-        p_telefono: data.telefono?.trim() || null,
-        p_email: data.email?.trim() || null,
-        p_edad: data.edad || null,
-        p_diagnostico_principal: data.diagnostico_principal,
-        p_comentarios_registro: data.comentarios_registro?.trim() || null,
-        p_probabilidad_cirugia: data.probabilidad_cirugia || null,
-        p_fecha_hora_cita: fechaHoraCompleta.toISOString(),
-        p_motivo_cita: data.motivoConsulta.trim(),
-        p_doctor_id: null, // Se puede agregar después si es necesario
-        p_creado_por_id: null, // Se obtiene en el backend
+      // ✅ Transformar datos al formato esperado por la API
+      const payload: AdmissionPayload = {
+        nombre: data.nombre.trim(),
+        apellidos: data.apellidos.trim(),
+        telefono: data.telefono?.trim() || undefined,
+        email: data.email?.trim() || undefined,
+        edad: data.edad,
+        diagnostico_principal: data.diagnostico_principal,
+        comentarios_registro: data.comentarios_registro?.trim() || undefined,
+        probabilidad_cirugia: data.probabilidad_cirugia,
+        fecha_hora_cita: `${data.fechaConsulta.toISOString().split('T')[0]}T${data.horaConsulta}:00`,
+        motivo_cita: `Primera consulta - ${diagnosisOptions.find(d => d.value === data.diagnostico_principal)?.label}`,
+        doctor_id: data.doctor_id,
       };
 
-      console.log('📞 [NewPatientForm] RPC payload:', payload);
+      console.log('🚀 [NewPatientForm] API payload:', payload);
 
-      await admissionMutation.mutateAsync(payload);
+      // ✅ Enviar datos usando el hook corregido
+      const result = await admissionMutation.mutateAsync(payload);
       
-      // ✅ Reset form on success
+      console.log('✅ [NewPatientForm] Admission successful:', result);
+
+      // ✅ Resetear formulario y llamar callback
       form.reset();
       setSelectedDate(undefined);
-      
-      // ✅ Callback de éxito
-      onSuccess?.();
+      onSuccess?.(result);
       
     } catch (error) {
       console.error('❌ [NewPatientForm] Submit error:', error);
@@ -217,6 +188,7 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
     }
   }, [admissionMutation, form, onSuccess]);
 
+  // ✅ HANDLERS OPTIMIZADOS
   const handleDateSelect = useCallback((date: Date | undefined) => {
     if (date && isValidDate(date)) {
       setSelectedDate(date);
@@ -236,15 +208,12 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
     form.setValue('telefono', formatted, { shouldValidate: true });
   }, [form]);
 
-  // ✅ Opciones memoizadas
-  const diagnosisOptions = useMemo(() => 
-    DIAGNOSIS_OPTIONS.map(value => ({ value, label: value })), 
-    []
-  );
+  // ✅ VALORES COMPUTADOS
+  const isLoading = admissionMutation.isPending;
+  const hasErrors = Object.keys(form.formState.errors).length > 0;
 
-  // ==================== RENDER ====================
   return (
-    <Card className="w-full max-w-4xl mx-auto">
+    <Card className={cn("w-full max-w-4xl mx-auto", className)}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <User className="h-5 w-5" />
@@ -277,19 +246,10 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
                         <Input 
                           placeholder="Juan" 
                           {...field}
-                          className={cn(
-                            fieldState.error && "border-red-500 focus:border-red-500",
-                            !fieldState.error && field.value && field.value.length >= 2 && "border-green-500"
-                          )}
+                          className={fieldState.error ? 'border-red-500' : ''}
                         />
                       </FormControl>
-                      {fieldState.error && <FormMessage />}
-                      {!fieldState.error && field.value && field.value.length >= 2 && (
-                        <div className="flex items-center gap-1 text-xs text-green-600">
-                          <CheckCircle className="h-3 w-3" />
-                          Válido
-                        </div>
-                      )}
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -302,21 +262,12 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
                       <FormLabel>Apellidos *</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="Pérez García" 
+                          placeholder="Pérez González" 
                           {...field}
-                          className={cn(
-                            fieldState.error && "border-red-500 focus:border-red-500",
-                            !fieldState.error && field.value && field.value.length >= 2 && "border-green-500"
-                          )}
+                          className={fieldState.error ? 'border-red-500' : ''}
                         />
                       </FormControl>
-                      {fieldState.error && <FormMessage />}
-                      {!fieldState.error && field.value && field.value.length >= 2 && (
-                        <div className="flex items-center gap-1 text-xs text-green-600">
-                          <CheckCircle className="h-3 w-3" />
-                          Válido
-                        </div>
-                      )}
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -328,21 +279,14 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
                     <FormItem>
                       <FormLabel>Teléfono</FormLabel>
                       <FormControl>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                          <Input 
-                            placeholder="55 1234 5678" 
-                            className={cn(
-                              "pl-10",
-                              fieldState.error && "border-red-500 focus:border-red-500",
-                              !fieldState.error && field.value && field.value.length >= 10 && "border-green-500"
-                            )}
-                            {...field}
-                            onChange={(e) => handlePhoneChange(e.target.value)}
-                          />
-                        </div>
+                        <Input 
+                          placeholder="(555) 123-4567" 
+                          {...field}
+                          onChange={(e) => handlePhoneChange(e.target.value)}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
                       </FormControl>
-                      {fieldState.error && <FormMessage />}
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -354,21 +298,14 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                          <Input 
-                            type="email" 
-                            placeholder="juan@email.com" 
-                            className={cn(
-                              "pl-10",
-                              fieldState.error && "border-red-500 focus:border-red-500",
-                              !fieldState.error && field.value && field.value.includes('@') && "border-green-500"
-                            )}
-                            {...field}
-                          />
-                        </div>
+                        <Input 
+                          type="email"
+                          placeholder="juan@email.com" 
+                          {...field}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
                       </FormControl>
-                      {fieldState.error && <FormMessage />}
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -381,70 +318,109 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
                       <FormLabel>Edad</FormLabel>
                       <FormControl>
                         <Input 
-                          type="number" 
+                          type="number"
                           placeholder="35" 
-                          className={cn(
-                            fieldState.error && "border-red-500 focus:border-red-500",
-                            !fieldState.error && field.value && "border-green-500"
-                          )}
                           {...field}
                           onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                          className={fieldState.error ? 'border-red-500' : ''}
                         />
                       </FormControl>
-                      {fieldState.error && <FormMessage />}
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="diagnostico_principal"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel>Diagnóstico Principal *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger className={cn(
-                            fieldState.error && "border-red-500 focus:border-red-500",
-                            !fieldState.error && field.value && "border-green-500"
-                          )}>
-                            <SelectValue placeholder="Seleccionar diagnóstico" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {diagnosisOptions.map((diagnosis) => (
-                            <SelectItem key={diagnosis.value} value={diagnosis.value}>
-                              {diagnosis.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {fieldState.error && <FormMessage />}
-                      {!fieldState.error && field.value && (
-                        <div className="flex items-center gap-1 text-xs text-green-600">
-                          <CheckCircle className="h-3 w-3" />
-                          Seleccionado
-                        </div>
-                      )}
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
             </div>
 
+            {/* ✅ INFORMACIÓN MÉDICA */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-green-600" />
+                <h3 className="text-lg font-medium">Información Médica</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="diagnostico_principal"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Diagnóstico Principal *</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className={fieldState.error ? 'border-red-500' : ''}>
+                            <SelectValue placeholder="Seleccione diagnóstico" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {diagnosisOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="probabilidad_cirugia"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Probabilidad de Cirugía (%)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="50" 
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) / 100 : undefined)}
+                          value={field.value ? Math.round(field.value * 100) : ''}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="comentarios_registro"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>Comentarios Adicionales</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Notas adicionales sobre el paciente o la condición..." 
+                        {...field}
+                        className={cn("min-h-[80px]", fieldState.error && 'border-red-500')}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             {/* ✅ PROGRAMACIÓN DE CITA */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-blue-600" />
-                <h3 className="text-lg font-medium">Programación de Cita</h3>
+                <CalendarIcon className="h-4 w-4 text-purple-600" />
+                <h3 className="text-lg font-medium">Programar Primera Consulta</h3>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="fechaConsulta"
                   render={({ field, fieldState }) => (
-                    <FormItem>
+                    <FormItem className="flex flex-col">
                       <FormLabel>Fecha de Consulta *</FormLabel>
                       <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
                         <PopoverTrigger asChild>
@@ -454,8 +430,7 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
                               className={cn(
                                 "w-full pl-3 text-left font-normal",
                                 !field.value && "text-muted-foreground",
-                                fieldState.error && "border-red-500",
-                                !fieldState.error && field.value && "border-green-500"
+                                fieldState.error && "border-red-500"
                               )}
                             >
                               {field.value ? (
@@ -472,22 +447,13 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
                             mode="single"
                             selected={field.value}
                             onSelect={handleDateSelect}
-                            disabled={(date: Date) => {
-                              if (date.getDay() === 0) return true; // Deshabilita domingos
-                              return !isValidDate(date); // Mantiene la lógica original
-                            }}
+                            disabled={(date) => !isValidDate(date)}
                             initialFocus
                             locale={es}
                           />
                         </PopoverContent>
                       </Popover>
-                      {fieldState.error && <FormMessage />}
-                      {!fieldState.error && field.value && (
-                        <div className="flex items-center gap-1 text-xs text-green-600">
-                          <CheckCircle className="h-3 w-3" />
-                          Fecha válida
-                        </div>
-                      )}
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -498,127 +464,56 @@ export const NewPatientForm: React.FC<NewPatientFormProps> = ({
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Hora de Consulta *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className={cn(
-                            fieldState.error && "border-red-500",
-                            !fieldState.error && field.value && "border-green-500"
-                          )}>
-                            <Clock className="h-4 w-4 mr-2" />
+                          <SelectTrigger className={fieldState.error ? 'border-red-500' : ''}>
                             <SelectValue placeholder="Seleccionar hora" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {TIME_SLOTS.map((time) => (
-                            <SelectItem key={time} value={time}>
-                              {time}
+                          {TIME_SLOTS.map((slot) => (
+                            <SelectItem key={slot.value} value={slot.value}>
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-3 w-3" />
+                                {slot.label}
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      {fieldState.error && <FormMessage />}
-                      {!fieldState.error && field.value && (
-                        <div className="flex items-center gap-1 text-xs text-green-600">
-                          <CheckCircle className="h-3 w-3" />
-                          Hora seleccionada
-                        </div>
-                      )}
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
             </div>
 
-            {/* ✅ MOTIVO Y COMENTARIOS */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-blue-600" />
-                <h3 className="text-lg font-medium">Detalles de la Consulta</h3>
-              </div>
-
-              <FormField
-                control={form.control}
-                name="motivoConsulta"
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormLabel>Motivo de la Consulta *</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Describa el motivo de la consulta..."
-                        className={cn(
-                          "min-h-[80px]",
-                          fieldState.error && "border-red-500",
-                          !fieldState.error && field.value && field.value.length >= 5 && "border-green-500"
-                        )}
-                        {...field}
-                      />
-                    </FormControl>
-                    {fieldState.error && <FormMessage />}
-                    <div className="text-xs text-muted-foreground">
-                      {field.value?.length || 0}/200 caracteres
-                    </div>
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="comentarios_registro"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Comentarios Adicionales</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Información adicional relevante..."
-                        className="min-h-[60px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <div className="text-xs text-muted-foreground">
-                      {field.value?.length || 0}/500 caracteres
-                    </div>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* ✅ ESTADO DE ERROR */}
-            {admissionMutation.isError && (
+            {/* ✅ ERRORES Y ACCIONES */}
+            {hasErrors && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Error al registrar paciente. Por favor, revise los datos e intente nuevamente.
+                  Por favor, corrija los errores antes de continuar.
                 </AlertDescription>
               </Alert>
             )}
 
-            {/* ✅ INDICADOR DE VALIDACIÓN */}
-            {isFormValid && (
-              <Alert>
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Formulario completo. Listo para registrar paciente.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* ✅ BOTONES */}
-            <div className="flex justify-end gap-3 pt-4 border-t">
+            <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <Button 
                 type="button" 
                 variant="outline" 
                 onClick={handleCancel}
-                disabled={admissionMutation.isPending}
+                disabled={isLoading}
+                className="sm:w-auto"
               >
                 Cancelar
               </Button>
-              
               <Button 
                 type="submit" 
-                disabled={admissionMutation.isPending || !isFormValid}
-                className="min-w-[140px]"
+                disabled={isLoading || hasErrors}
+                className="sm:flex-1"
               >
-                {admissionMutation.isPending ? (
+                {isLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Guardando...

@@ -1,7 +1,7 @@
 // hooks/use-patient-admission-optimized.ts
 // HOOK OPTIMIZADO PARA MANEJAR ADMISIÓN DE PACIENTES CON CACHE INTELIGENTE
 
-import { useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useInfiniteQuery, InfiniteData } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useCallback, useMemo } from 'react';
 import { startOfDay, endOfDay, addDays, isToday, isFuture, isPast } from 'date-fns';
@@ -228,12 +228,17 @@ export const useAdmissionData = (activeTab: TabType) => {
     isFetchingNextPage,
     error,
     refetch
-  } = useInfiniteQuery({
+  } = useInfiniteQuery<
+    AppointmentsResponse, 
+    Error, 
+    InfiniteData<AppointmentsResponse>
+  >({
     queryKey: [CACHE_KEYS.APPOINTMENTS, activeTab],
-    queryFn: ({ pageParam = 1 }) => fetchAppointmentsByTab(activeTab, pageParam, 20),
+    queryFn: ({ pageParam = 1 }) => fetchAppointmentsByTab(activeTab, pageParam as number, 20),
     getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.page + 1 : undefined,
+    initialPageParam: 1,
     staleTime: 2 * 60 * 1000, // 2 minutos cache
-    cacheTime: 5 * 60 * 1000, // 5 minutos en memoria
+    gcTime: 5 * 60 * 1000, // 5 minutos en memoria (anteriormente cacheTime)
     enabled: true,
     refetchOnWindowFocus: true,
   });

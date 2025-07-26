@@ -1,12 +1,11 @@
-// patient-admission-reschedule.tsx - Componente de reagendamiento optimizado
+// components/patient-admision/patient-admission-reschedule.tsx
 import React, { memo, useCallback, useMemo, useState } from "react";
+import { format, addDays, isWeekend, isBefore, startOfDay } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
@@ -16,25 +15,96 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { es } from "date-fns/locale";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
+import {
+  CalendarIcon, 
+  Clock, 
+  CheckCircle, 
+  AlertCircle, 
+  Loader2,
+  AlertTriangle,
+  Info
+} from "lucide-react";
 
+// ✅ IMPORTS CORREGIDOS - usando tipos unificados
+import type { 
+  AppointmentWithPatient, 
+  RescheduleProps,
+  getPatientFullName 
+} from './admision-types';
+
+// ✅ Hook corregido para datos de clínica
 import { useClinic } from "@/contexts/clinic-data-provider";
 
-// Importaciones unificadas
-import { AppointmentWithPatient, RescheduleProps } from "./admision-types";
+// ==================== CONFIGURACIÓN ====================
+const CLINIC_CONFIG = {
+  SLOT_CONFIG: {
+    DURATION_MINUTES: 30,
+    START_HOUR: 8, // 8:00 AM
+    END_HOUR: 15,  // 3:00 PM (última cita a las 15:30)
+    LUNCH_START: 12, // 12:00 PM
+    LUNCH_END: 13,   // 1:00 PM
+    MAX_ADVANCE_DAYS: 60, // Máximo 60 días en el futuro
+    MIN_ADVANCE_HOURS: 2,  // Mínimo 2 horas de anticipación
+  }
+};
 
-// Utilidades centralizadas
-import {
-  isValidAppointmentDate,
-  getAvailableTimeSlots,
-  formatAppointmentDate,
-  formatAppointmentTime,
-  canRescheduleAppointment,
-  CLINIC_CONFIG,
-} from "@/lib/appointment-utils";
+// ==================== UTILIDADES ====================
+const formatAppointmentDate = (date: Date): string => {
+  return format(date, "dd 'de' MMMM 'de' yyyy", { locale: es });
+};
 
-// ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
+const formatAppointmentTime = (time: string): string => {
+  return time;
+};
 
+const isValidAppointmentDate = (date: Date): boolean => {
+  const today = startOfDay(new Date());
+  const maxDate = addDays(today, CLINIC_CONFIG.SLOT_CONFIG.MAX_ADVANCE_DAYS);
+  return !isBefore(date, today) && !isBefore(maxDate, date) && !isWeekend(date);
+};
+
+const canRescheduleAppointment = (fechaHoraCita: string): boolean => {
+  const appointmentTime = new Date(fechaHoraCita);
+  const now = new Date();
+  const minRescheduleTime = new Date(appointmentTime.getTime() - (CLINIC_CONFIG.SLOT_CONFIG.MIN_ADVANCE_HOURS * 60 * 60 * 1000));
+  
+  return now < minRescheduleTime;
+};
+
+const getAvailableTimeSlots = (date: Date, existingAppointments: AppointmentWithPatient[]): string[] => {
+  const slots: string[] = [];
+  const { START_HOUR, END_HOUR, LUNCH_START, LUNCH_END, DURATION_MINUTES } = CLINIC_CONFIG.SLOT_CONFIG;
+  
+  // Generar todos los slots posibles
+  for (let hour = START_HOUR; hour < END_HOUR; hour++) {
+    for (let minute = 0; minute < 60; minute += DURATION_MINUTES) {
+      // Saltar hora de almuerzo
+      if (hour >= LUNCH_START && hour < LUNCH_END) continue;
+      
+      const timeSlot = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      slots.push(timeSlot);
+    }
+  }
+  
+  // Filtrar slots ocupados
+  const occupiedSlots = new Set(
+    existingAppointments
+      .filter(apt => {
+        const aptDate = new Date(apt.fecha_hora_cita);
+        return format(aptDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd');
+      })
+      .map(apt => format(new Date(apt.fecha_hora_cita), 'HH:mm'))
+  );
+  
+  return slots.filter(slot => !occupiedSlots.has(slot));
+};
+
+// ==================== COMPONENTES INTERNOS ====================
+
+// ✅ Spinner de carga
 const LoadingSpinner = memo(() => (
   <div className="flex items-center justify-center p-4">
     <Loader2 className="h-5 w-5 animate-spin text-blue-500" aria-hidden="true" />
@@ -43,9 +113,9 @@ const LoadingSpinner = memo(() => (
     </span>
   </div>
 ));
-
 LoadingSpinner.displayName = 'LoadingSpinner';
 
+// ✅ Slot de tiempo optimizado
 const TimeSlot = memo<{ 
   time: string; 
   isAvailable: boolean;
@@ -69,127 +139,58 @@ const TimeSlot = memo<{
       </span>
       <span className="ml-2 flex-shrink-0">
         {isAvailable ? (
-          <CheckCircle className="h-3 w-3 text-green-500" />
+          <CheckCircle className="h-3.5 w-3.5 text-green-500" />
         ) : (
-          <AlertCircle className="h-3 w-3 text-red-500" />
+          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
         )}
       </span>
     </div>
   </SelectItem>
 ));
+TimeSlot.displayName = 'TimeSlot';
 
-TimeSlot.displayName = "TimeSlot";
-
-const WorkingHoursInfo = memo(() => {
-  const workDaysLabels = ['L','M','X','J','V','S','D'];
-  const workDaysString = CLINIC_CONFIG.WORK_DAYS
-    .map(d => workDaysLabels[d-1])
-    .join(', ');
-
-  return (
-    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 sm:p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-        <h4 className="font-medium text-blue-900 dark:text-blue-100 text-sm">
-          Horarios de Atención
-        </h4>
-      </div>
-      <p className="text-sm text-blue-700 dark:text-blue-300">
-        <strong>{workDaysString}:</strong> {CLINIC_CONFIG.WORK_HOURS.START}:00 - {CLINIC_CONFIG.WORK_HOURS.LUNCH_START}:00 y {CLINIC_CONFIG.WORK_HOURS.LUNCH_END}:00 - {CLINIC_CONFIG.WORK_HOURS.END}:00
-      </p>
-      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-        Citas cada {CLINIC_CONFIG.APPOINTMENT_DURATION} minutos • No hay atención domingos
-      </p>
+// ✅ Estado sin slots disponibles
+const NoSlotsAvailable = memo(() => (
+  <div className="p-6 text-center">
+    <div className="mb-4">
+      <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto" />
     </div>
-  );
-});
-
-WorkingHoursInfo.displayName = "WorkingHoursInfo";
-
-const ConfirmationSummary = memo<{
-  selectedDate: Date;
-  selectedTime: string;
-  appointment: AppointmentWithPatient;
-}>(({ selectedDate, selectedTime, appointment }) => {
-  const patientName = appointment.patients 
-    ? `${appointment.patients.nombre} ${appointment.patients.apellidos}` 
-    : appointment.paciente 
-    ? `${appointment.paciente.nombre} ${appointment.paciente.apellidos}`
-    : 'Paciente sin nombre';
-
-  return (
-    <div 
-      className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4"
-      role="status"
-      aria-live="polite"
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
-        <h4 className="font-medium text-green-900 dark:text-green-100 text-sm">
-          Confirmación de Nueva Cita
-        </h4>
-      </div>
-      <div className="space-y-1 text-sm text-green-800 dark:text-green-200">
-        <p>
-          <span className="font-medium">Paciente:</span> {patientName}
-        </p>
-        <p>
-          <span className="font-medium">Nueva fecha:</span> {formatAppointmentDate(selectedDate)}
-        </p>
-        <p>
-          <span className="font-medium">Nueva hora:</span> {selectedTime}
-        </p>
-        <p>
-          <span className="font-medium">Fecha anterior:</span> {formatAppointmentDate(appointment.fecha_hora_cita)} a las {formatAppointmentTime(appointment.fecha_hora_cita)}
-        </p>
-      </div>
-      <p className="text-xs text-green-700 dark:text-green-300 mt-2 flex items-center gap-1">
-        <Clock className="h-3 w-3" />
-        Duración estimada: {CLINIC_CONFIG.APPOINTMENT_DURATION} minutos
+    <div className="space-y-2">
+      <h4 className="font-medium text-slate-900 dark:text-slate-100">
+        No hay horarios disponibles
+      </h4>
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        Todos los horarios para esta fecha están ocupados.
       </p>
-    </div>
-  );
-});
-
-ConfirmationSummary.displayName = "ConfirmationSummary";
-
-const NoSlotsAvailable = memo<{ selectedDate: Date }>(({ selectedDate }) => (
-  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
-    <div className="flex items-start gap-2">
-      <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
-      <div className="min-w-0">
-        <p className="text-sm text-yellow-800 dark:text-yellow-200">
-          No hay horarios disponibles para {formatAppointmentDate(selectedDate)}.
-        </p>
-        <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-          Intente seleccionar otra fecha o contacte al personal médico.
-        </p>
-      </div>
+      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+        Intente seleccionar otra fecha o contacte al personal médico.
+      </p>
     </div>
   </div>
 ));
-
 NoSlotsAvailable.displayName = "NoSlotsAvailable";
 
 // ==================== COMPONENTE PRINCIPAL ====================
-
 export const RescheduleDatePicker = memo<RescheduleProps>(({ 
   appointment, 
   onClose,
   onReschedule
 }) => {
+  // ✅ ESTADOS LOCALES
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   
+  // ✅ HOOK CORREGIDO para datos de clínica
   const { allAppointments, isLoading: isLoadingAppointments } = useClinic();
   
-  // Verificar si la cita puede ser reagendada
+  // ✅ VERIFICAR SI LA CITA PUEDE SER REAGENDADA
   const canReschedule = useMemo(() => {
     return canRescheduleAppointment(appointment.fecha_hora_cita);
   }, [appointment.fecha_hora_cita]);
 
-  // Calcular slots disponibles usando utilidades centralizadas
+  // ✅ CALCULAR SLOTS DISPONIBLES
   const availableTimeSlots = useMemo(() => {
     if (!selectedDate || !isValidAppointmentDate(selectedDate)) return [];
     
@@ -200,7 +201,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
     return getAvailableTimeSlots(selectedDate, otherAppointments);
   }, [selectedDate, allAppointments, appointment.id]);
 
-  // Handlers optimizados
+  // ✅ HANDLERS OPTIMIZADOS
   const handleClose = useCallback(() => {
     onClose();
   }, [onClose]);
@@ -219,13 +220,14 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
   const handleDateChange = useCallback((date: Date | undefined) => {
     setSelectedDate(date || null);
     setSelectedTime(null); // Reset time when date changes
+    setShowDatePicker(false);
   }, []);
 
   const handleTimeChange = useCallback((time: string) => {
     setSelectedTime(time);
   }, []);
 
-  // Estados computados memoizados
+  // ✅ ESTADOS COMPUTADOS MEMOIZADOS
   const dateButtonText = useMemo(() => {
     return selectedDate 
       ? formatAppointmentDate(selectedDate)
@@ -241,8 +243,9 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
 
   const showConfirmation = !!(selectedDate && selectedTime);
   const availableSlotsCount = availableTimeSlots.length;
+  const patientName = getPatientFullName(appointment.patients);
 
-  // Calcular límites de fechas
+  // ✅ LÍMITES DE FECHAS
   const today = useMemo(() => new Date(), []);
   const maxDate = useMemo(() => {
     const max = new Date();
@@ -250,7 +253,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
     return max;
   }, []);
 
-  // Si no se puede reagendar, mostrar mensaje
+  // ✅ VALIDACIÓN: Si no se puede reagendar
   if (!canReschedule) {
     return (
       <Dialog open onOpenChange={handleClose}>
@@ -261,7 +264,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
               No se puede reagendar
             </DialogTitle>
             <DialogDescription>
-              Esta cita no puede ser reagendada porque falta menos de {CLINIC_CONFIG.SLOT_CONFIG.MIN_ADVANCE_HOURS} horas para la fecha programada.
+              Esta cita no puede ser reagendada porque faltan menos de {CLINIC_CONFIG.SLOT_CONFIG.MIN_ADVANCE_HOURS} horas para la fecha programada.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -283,156 +286,125 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
             <span>Reagendar Cita</span>
           </DialogTitle>
           <DialogDescription>
-            Seleccione una nueva fecha y hora para la consulta.
+            Seleccione una nueva fecha y hora para la consulta de{' '}
+            <strong>{patientName}</strong>.
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="space-y-6 py-2">
-          {/* Información de horarios */}
-          <WorkingHoursInfo />
 
-          {/* Selector de Fecha */}
-          <div className="space-y-3">
-            <Label htmlFor="newDate" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Nueva Fecha <span className="text-red-500">*</span>
-            </Label>
-            <Popover>
+        <div className="grid gap-6 py-4">
+          {/* ✅ INFORMACIÓN DE LA CITA ACTUAL */}
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Cita actual:</strong> {formatAppointmentDate(new Date(appointment.fecha_hora_cita))} 
+              a las {format(new Date(appointment.fecha_hora_cita), 'HH:mm')}
+            </AlertDescription>
+          </Alert>
+
+          {/* ✅ SELECTOR DE FECHA */}
+          <div className="grid gap-2">
+            <Label htmlFor="date-picker">Nueva Fecha</Label>
+            <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
               <PopoverTrigger asChild>
-                <Button 
-                  id="newDate" 
-                  variant="outline" 
+                <Button
+                  id="date-picker"
+                  variant="outline"
                   className={cn(
-                    "w-full justify-start text-left font-normal h-11 border-slate-300 dark:border-slate-600",
-                    !selectedDate && "text-slate-500 dark:text-slate-400"
+                    "w-full justify-start text-left font-normal",
+                    !selectedDate && "text-muted-foreground"
                   )}
-                  aria-label="Seleccionar nueva fecha"
-                  disabled={isProcessing}
                 >
-                  <CalendarIcon className="mr-3 h-4 w-4 flex-shrink-0" />
-                  <span className="truncate flex-1 text-left">{dateButtonText}</span>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateButtonText}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <Calendar 
-                  mode="single" 
-                  selected={selectedDate || undefined} 
-                  onSelect={handleDateChange} 
-                  initialFocus 
-                  locale={es} 
+                <Calendar
+                  mode="single"
+                  selected={selectedDate || undefined}
+                  onSelect={handleDateChange}
                   disabled={(date) => !isValidAppointmentDate(date)}
-                  aria-label="Calendario para seleccionar nueva fecha"
-                  className="rounded-lg border border-slate-200 shadow-lg"
-                  fromMonth={today}
-                  toMonth={maxDate}
+                  initialFocus
+                  locale={es}
+                  fromDate={today}
+                  toDate={maxDate}
                 />
               </PopoverContent>
             </Popover>
+          </div>
+
+          {/* ✅ SELECTOR DE HORA */}
+          <div className="grid gap-2">
+            <Label htmlFor="time-picker">Nueva Hora</Label>
+            {isLoadingAppointments ? (
+              <LoadingSpinner />
+            ) : (
+              <Select onValueChange={handleTimeChange} disabled={!selectedDate}>
+                <SelectTrigger id="time-picker">
+                  <SelectValue placeholder={timePlaceholder} />
+                </SelectTrigger>
+                <SelectContent>
+                  <ScrollArea className="h-[200px]">
+                    {availableTimeSlots.length === 0 ? (
+                      selectedDate && <NoSlotsAvailable />
+                    ) : (
+                      availableTimeSlots.map((time) => (
+                        <TimeSlot
+                          key={time}
+                          time={time}
+                          isAvailable={true}
+                          isSelected={selectedTime === time}
+                        />
+                      ))
+                    )}
+                  </ScrollArea>
+                </SelectContent>
+              </Select>
+            )}
+            
+            {/* Información de disponibilidad */}
             {selectedDate && (
-              <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                <CheckCircle className="h-3 w-3 text-green-500" />
-                <span>Fecha válida seleccionada</span>
+              <p className="text-xs text-muted-foreground">
+                {availableSlotsCount > 0 
+                  ? `${availableSlotsCount} horarios disponibles para esta fecha`
+                  : "No hay horarios disponibles para esta fecha"
+                }
               </p>
             )}
           </div>
 
-          {/* Selector de Hora */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="newTime" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Nueva Hora <span className="text-red-500">*</span>
-              </Label>
-              {selectedDate && !isLoadingAppointments && (
-                <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                  {availableSlotsCount} {availableSlotsCount === 1 ? 'horario' : 'horarios'} disponible{availableSlotsCount !== 1 && 's'}
-                </span>
-              )}
-            </div>
-
-            <Select 
-              value={selectedTime || ""} 
-              onValueChange={handleTimeChange}
-              disabled={!selectedDate || isLoadingAppointments || availableSlotsCount === 0 || isProcessing}
-            >
-              <SelectTrigger 
-                id="newTime" 
-                className={cn(
-                  "h-11 border-slate-300 dark:border-slate-600",
-                  !selectedDate && "text-slate-500 dark:text-slate-400"
-                )}
-                aria-label="Seleccionar nueva hora"
-              >
-                <SelectValue placeholder={timePlaceholder} />
-              </SelectTrigger>
-              <SelectContent className="max-h-72 w-full">
-                {isLoadingAppointments ? (
-                  <LoadingSpinner />
-                ) : availableTimeSlots.length > 0 ? (
-                  <ScrollArea className="max-h-64">
-                    <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900 z-10">
-                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                        ✅ Disponible | ❌ Ocupado
-                      </p>
-                    </div>
-                    {availableTimeSlots.map((slot) => (
-                      <TimeSlot 
-                        key={slot} 
-                        time={slot}
-                        isAvailable={true}
-                        isSelected={slot === selectedTime}
-                      />
-                    ))}
-                  </ScrollArea>
-                ) : (
-                  <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                    {selectedDate 
-                      ? "No hay horarios disponibles para esta fecha" 
-                      : "Seleccione una fecha válida"
-                    }
-                  </div>
-                )}
-              </SelectContent>
-            </Select>
-            
-            {selectedDate && !isLoadingAppointments && availableSlotsCount === 0 && (
-              <NoSlotsAvailable selectedDate={selectedDate} />
-            )}
-          </div>
-
-          {/* Confirmación */}
-          {showConfirmation && !isProcessing && (
-            <ConfirmationSummary 
-              selectedDate={selectedDate}
-              selectedTime={selectedTime}
-              appointment={appointment}
-            />
+          {/* ✅ CONFIRMACIÓN DE NUEVA CITA */}
+          {showConfirmation && (
+            <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/50">
+              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <AlertDescription className="text-green-800 dark:text-green-200">
+                <strong>Nueva cita:</strong> {formatAppointmentDate(selectedDate)} 
+                a las {formatAppointmentTime(selectedTime)}
+              </AlertDescription>
+            </Alert>
           )}
         </div>
 
-        <DialogFooter className="flex flex-col gap-3">
-          {showConfirmation && (
-            <Button
-              onClick={handleConfirm}
-              className="bg-green-600 hover:bg-green-700 text-white py-3 h-auto w-full"
-              disabled={isProcessing}
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Procesando...
-                </>
-              ) : (
-                "Confirmar Reagendar"
-              )}
-            </Button>
-          )}
-          
-          <Button 
-            variant="outline" 
-            onClick={handleClose}
-            className="border-slate-300 dark:border-slate-600 w-full"
-            disabled={isProcessing}
-          >
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={handleClose} disabled={isProcessing}>
             Cancelar
+          </Button>
+          <Button 
+            onClick={handleConfirm} 
+            disabled={!showConfirmation || isProcessing}
+            className="gap-2"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Reagendando...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="h-4 w-4" />
+                Confirmar Reagendamiento
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,4 +1,4 @@
-// patient-history-modal.tsx - Modal de historial del paciente (Versión Optimizada)
+// components/patient-admision/patient-history-modal.tsx
 import React, { memo, useMemo, useState } from "react";
 import {
   Dialog,
@@ -13,8 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { format, isValid, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
 import {
   Calendar,
   Clock,
@@ -34,165 +35,199 @@ import {
   ClipboardList,
 } from "lucide-react";
 
-// Importaciones de tipos y hooks
-import { 
+// ✅ IMPORTS CORREGIDOS - usando tipos unificados
+import type { 
   AppointmentWithPatient, 
   PatientHistoryData,
+  PatientHistoryModalProps,
   APPOINTMENT_STATUS_CONFIG,
-  // getPatientData, // Se eliminó ya que no se usaba.
-} from "./admision-types";
-import { usePatientHistory } from "./actions";
-import {
-  formatAppointmentDate,
-  formatAppointmentTime,
-  isAppointmentInPast,
-} from "@/lib/appointment-utils";
+  getPatientFullName,
+  getStatusConfig
+} from './admision-types';
 
-// ==================== INTERFACES Y TIPOS ====================
+// ✅ Hook corregido
+import { usePatientHistory } from './actions';
 
-interface PatientHistoryModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  patientId: string;
-}
-
-type StatCardColor = "blue" | "green" | "red" | "purple";
-
-// ==================== CONSTANTES Y CONFIGURACIONES ====================
-
-// OPTIMIZACIÓN: Mapeo de colores para evitar purga de clases de Tailwind CSS.
-// En lugar de construir clases dinámicamente (ej: `bg-${color}-100`), usamos un objeto
-// que devuelve las clases completas. Esto asegura que el compilador JIT de Tailwind
-// las detecte y las incluya en el CSS final.
-const statCardColorClasses: Record<StatCardColor, string> = {
-  blue: "bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400",
-  green: "bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400",
-  red: "bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400",
-  purple: "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400",
-};
-
-// MEJORA: Centralizamos la lógica de los iconos de estado para mayor claridad y mantenibilidad.
-const statusIcons: Record<string, React.ReactNode> = {
-  COMPLETADA: <CheckCircle className="h-5 w-5 text-green-600" />,
-  CANCELADA: <XCircle className="h-5 w-5 text-red-600" />,
-  NO_ASISTIO: <CalendarX className="h-5 w-5 text-gray-600" />,
-  DEFAULT: <Calendar className="h-5 w-5 text-blue-600" />,
-};
-
-// ==================== COMPONENTES INTERNOS (MEMOIZADOS) ====================
-
-const StatCard = memo<{
+// ==================== INTERFACES LOCALES ====================
+interface StatCardProps {
   label: string;
   value: string | number;
   icon: React.ReactNode;
   trend?: number;
-  color?: StatCardColor;
-}>(({ label, value, icon, trend, color = "blue" }) => (
-  <Card className="border-slate-200 dark:border-slate-700 overflow-hidden">
-    <CardContent className="p-4">
-      <div className="flex items-center justify-between">
-        <div className={cn("p-2 rounded-lg", statCardColorClasses[color])}>
-          {icon}
-        </div>
-        {trend !== undefined && (
-          <div className={cn(
-            "flex items-center gap-1 text-xs font-medium",
-            trend >= 0 ? "text-green-600" : "text-red-600"
-          )}>
-            <TrendingUp className={cn("h-3 w-3", trend < 0 && "rotate-180")} />
-            {Math.abs(trend)}%
-          </div>
-        )}
-      </div>
-      <div className="mt-4">
-        <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          {value}
-        </p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
-          {label}
-        </p>
-      </div>
-    </CardContent>
-  </Card>
-));
-StatCard.displayName = "StatCard";
+  color?: 'blue' | 'green' | 'red' | 'purple';
+}
 
-const AppointmentHistoryCard = memo<{
+interface AppointmentHistoryCardProps {
   appointment: AppointmentWithPatient;
   isLast?: boolean;
-}>(({ appointment, isLast = false }) => {
-  const statusConfig = APPOINTMENT_STATUS_CONFIG[appointment.estado_cita];
-  const isPast = isAppointmentInPast(appointment.fecha_hora_cita);
-  const statusIcon = statusIcons[appointment.estado_cita] || statusIcons.DEFAULT;
+}
+
+interface EmptyStateProps {
+  message: string;
+  icon: React.ReactNode;
+}
+
+interface PatientInfoSectionProps {
+  patient: {
+    id: string;
+    nombre: string;
+    apellidos: string;
+    telefono?: string;
+    email?: string;
+    created_at: string;
+  };
+}
+
+// ==================== UTILIDADES ====================
+const formatAppointmentDate = (dateString: string): string => {
+  try {
+    const date = parseISO(dateString);
+    if (!isValid(date)) return 'Fecha inválida';
+    return format(date, "dd 'de' MMMM 'de' yyyy", { locale: es });
+  } catch {
+    return 'Fecha inválida';
+  }
+};
+
+const formatAppointmentTime = (dateString: string): string => {
+  try {
+    const date = parseISO(dateString);
+    if (!isValid(date)) return '--:--';
+    return format(date, 'HH:mm');
+  } catch {
+    return '--:--';
+  }
+};
+
+// ==================== COMPONENTES INTERNOS MEMOIZADOS ====================
+
+// ✅ Tarjeta de estadística optimizada
+const StatCard = memo<StatCardProps>(({ label, value, icon, trend, color = 'blue' }) => {
+  const colorClasses = {
+    blue: "bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400",
+    green: "bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400",
+    red: "bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400",
+    purple: "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400",
+  };
 
   return (
-    <div className="relative pl-14">
-      {/* Línea de tiempo */}
+    <Card className="border-slate-200 dark:border-slate-700">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{label}</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
+            {trend !== undefined && (
+              <p className={`text-xs ${trend >= 0 ? 'text-green-600' : 'text-red-600'} dark:${trend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {trend > 0 ? '+' : ''}{trend}% vs anterior
+              </p>
+            )}
+          </div>
+          <div className={cn("p-3 rounded-full", colorClasses[color])}>
+            {icon}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+StatCard.displayName = "StatCard";
+
+// ✅ Tarjeta de cita en historial
+const AppointmentHistoryCard = memo<AppointmentHistoryCardProps>(({ appointment, isLast = false }) => {
+  const statusConfig = useMemo(() => 
+    getStatusConfig(appointment.estado_cita), 
+    [appointment.estado_cita]
+  );
+
+  const dateTime = useMemo(() => ({
+    date: formatAppointmentDate(appointment.fecha_hora_cita),
+    time: formatAppointmentTime(appointment.fecha_hora_cita),
+  }), [appointment.fecha_hora_cita]);
+
+  const statusIcon = useMemo(() => {
+    switch (appointment.estado_cita) {
+      case 'COMPLETADA':
+        return <CheckCircle className="h-5 w-5 text-green-600" />;
+      case 'CANCELADA':
+        return <XCircle className="h-5 w-5 text-red-600" />;
+      case 'NO_ASISTIO':
+        return <CalendarX className="h-5 w-5 text-gray-600" />;
+      default:
+        return <Calendar className="h-5 w-5 text-blue-600" />;
+    }
+  }, [appointment.estado_cita]);
+
+  return (
+    <div className={cn("relative", !isLast && "pb-4")}>
+      {/* Línea conectora */}
       {!isLast && (
-        <div className="absolute left-5 top-5 -bottom-4 w-0.5 bg-slate-200 dark:bg-slate-700" />
+        <div className="absolute left-6 top-12 w-0.5 h-full bg-slate-200 dark:bg-slate-700" />
       )}
       
-      {/* Punto de la línea de tiempo */}
-      <div className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700">
-        {statusIcon}
-      </div>
-      
-      {/* Contenido */}
-      <Card className={cn(
-        "transition-all",
-        !isPast && "border-blue-300 dark:border-blue-700 shadow-sm"
-      )}>
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between mb-2 gap-2">
-            <div>
-              <p className="font-semibold text-slate-900 dark:text-slate-100">
-                {formatAppointmentDate(appointment.fecha_hora_cita)}
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-1">
-                <Clock className="h-3.5 w-3.5" />
-                {formatAppointmentTime(appointment.fecha_hora_cita)}
-              </p>
-            </div>
-            <Badge className={cn("text-xs font-semibold", statusConfig.bgClass)}>
-              {statusConfig.label}
-            </Badge>
+      <div className="flex items-start gap-4">
+        {/* Icono de estado */}
+        <div className="flex-shrink-0 relative">
+          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700">
+            {statusIcon}
           </div>
-          
-          <Separator className="my-3" />
-          
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 text-sm">
-              <Stethoscope className="h-5 w-5 text-slate-400 shrink-0" />
-              <span className="text-slate-800 dark:text-slate-200">
-                {appointment.motivo_cita}
-              </span>
-            </div>
-            
-            {appointment.notas_cita_seguimiento && (
-              <div className="flex items-start gap-3 text-sm">
-                <FileText className="h-5 w-5 text-slate-400 mt-0.5 shrink-0" />
-                <p className="text-slate-600 dark:text-slate-400 italic">
-                  "{appointment.notas_cita_seguimiento}"
-                </p>
-              </div>
-            )}
+        </div>
 
-            {appointment.es_primera_vez && (
-              <Badge variant="secondary" className="text-xs font-medium">
-                Primera consulta
-              </Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+        {/* Contenido de la cita */}
+        <div className="flex-1 min-w-0">
+          <Card className="border-slate-200 dark:border-slate-700">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge className={statusConfig.bgClass}>
+                      {statusConfig.label}
+                    </Badge>
+                    {appointment.es_primera_vez && (
+                      <Badge variant="outline" className="text-xs">
+                        Primera vez
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <h4 className="font-medium text-slate-900 dark:text-slate-100 mb-1">
+                    {appointment.motivo_cita}
+                  </h4>
+                  
+                  <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {dateTime.date}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {dateTime.time}
+                    </div>
+                  </div>
+
+                  {appointment.notas_cita_seguimiento && (
+                    <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-md">
+                      <div className="flex items-start gap-2">
+                        <FileText className="h-4 w-4 text-slate-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-slate-700 dark:text-slate-300">
+                          {appointment.notas_cita_seguimiento}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 });
 AppointmentHistoryCard.displayName = "AppointmentHistoryCard";
 
-const PatientInfoSection = memo<{
-  patient: PatientHistoryData['patient'];
-}>(({ patient }) => (
+// ✅ Información del paciente
+const PatientInfoSection = memo<PatientInfoSectionProps>(({ patient }) => (
   <Card className="border-slate-200 dark:border-slate-700">
     <CardHeader>
       <CardTitle className="flex items-center gap-2 text-lg">
@@ -201,139 +236,142 @@ const PatientInfoSection = memo<{
       </CardTitle>
     </CardHeader>
     <CardContent className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-        {/* Usamos un fragmento para renderizar la información y evitar anidación innecesaria */}
-        {[
-          { label: "Nombre Completo", value: `${patient.nombre} ${patient.apellidos}` },
-          { label: "Email", value: patient.email, icon: <Mail className="h-3.5 w-3.5" /> },
-          { label: "Edad", value: patient.edad ? `${patient.edad} años` : null },
-          { label: "Teléfono", value: patient.telefono, icon: <Phone className="h-3.5 w-3.5" /> },
-          { label: "Diagnóstico Principal", value: patient.diagnostico_principal?.replace(/_/g, ' ') },
-          { label: "Estado", value: patient.estado_paciente, isBadge: true },
-        ].map(item => item.value ? (
-          <div key={item.label}>
-            <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              {item.label}
-            </p>
-            {item.isBadge ? (
-              <Badge variant="outline" className="mt-1 font-medium">{item.value}</Badge>
-            ) : (
-              <p className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mt-1">
-                {item.icon}
-                {item.value}
-              </p>
-            )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {patient.telefono && (
+          <div className="flex items-center gap-3">
+            <Phone className="h-4 w-4 text-slate-500" />
+            <div>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Teléfono</p>
+              <p className="font-medium text-slate-900 dark:text-slate-100">{patient.telefono}</p>
+            </div>
           </div>
-        ) : null)}
+        )}
+        {patient.email && (
+          <div className="flex items-center gap-3">
+            <Mail className="h-4 w-4 text-slate-500" />
+            <div>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Email</p>
+              <p className="font-medium text-slate-900 dark:text-slate-100">{patient.email}</p>
+            </div>
+          </div>
+        )}
       </div>
-      
-      {patient.probabilidad_cirugia !== null && patient.probabilidad_cirugia !== undefined && (
-        <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-          <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-            Probabilidad de Cirugía
-          </p>
-          <div className="flex items-center gap-4">
-            <Progress value={patient.probabilidad_cirugia} className="h-2 flex-1" />
-            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
-              {patient.probabilidad_cirugia}%
-            </span>
-          </div>
-        </div>
-      )}
     </CardContent>
   </Card>
 ));
 PatientInfoSection.displayName = "PatientInfoSection";
 
+// ✅ Estado vacío
+const EmptyState = memo<EmptyStateProps>(({ message, icon }) => (
+  <div className="text-center py-12">
+    <div className="text-slate-400 dark:text-slate-500 mb-4">
+      {icon}
+    </div>
+    <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-2">
+      {message}
+    </h3>
+    <p className="text-slate-500 dark:text-slate-400">
+      Los datos aparecerán aquí cuando estén disponibles.
+    </p>
+  </div>
+));
+EmptyState.displayName = "EmptyState";
+
+// ✅ Skeleton de carga
 const LoadingSkeleton = memo(() => (
-  <div className="p-6 space-y-6">
+  <div className="space-y-6">
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {[...Array(4)].map((_, i) => (
+      {Array.from({ length: 4 }).map((_, i) => (
         <Card key={i} className="border-slate-200 dark:border-slate-700">
-          <CardContent className="p-4 space-y-3">
-            <Skeleton className="h-10 w-10 rounded-lg" />
-            <Skeleton className="h-7 w-16" />
-            <Skeleton className="h-4 w-24" />
+          <CardContent className="p-4">
+            <div className="animate-pulse space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-16"></div>
+                  <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-12"></div>
+                </div>
+                <div className="h-12 w-12 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       ))}
     </div>
     
     <Card className="border-slate-200 dark:border-slate-700">
-      <CardHeader>
-        <Skeleton className="h-6 w-1/2" />
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-4 w-5/6" />
+      <CardContent className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-48"></div>
+          <div className="space-y-3">
+            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full"></div>
+            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   </div>
 ));
 LoadingSkeleton.displayName = "LoadingSkeleton";
 
-const ErrorDisplay = memo<{ message?: string }>(({ message }) => (
-  <div className="p-6">
-    <div className="flex flex-col items-center justify-center text-center space-y-4 py-12 bg-red-50 dark:bg-red-900/10 rounded-lg">
-      <AlertCircle className="h-12 w-12 text-red-500" />
-      <div>
-        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Error al cargar el historial
-        </p>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-          {message || "Ocurrió un error inesperado. Por favor, intente de nuevo."}
-        </p>
-      </div>
-    </div>
+// ✅ Display de error
+const ErrorDisplay = memo<{ message: string }>(({ message }) => (
+  <div className="text-center py-12">
+    <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+    <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-2">
+      Error al cargar datos
+    </h3>
+    <p className="text-slate-500 dark:text-slate-400 mb-4">
+      {message}
+    </p>
   </div>
 ));
 ErrorDisplay.displayName = "ErrorDisplay";
 
-const EmptyState = memo<{ message: string; icon: React.ReactNode }>(({ message, icon }) => (
-    <Card className="border-dashed border-slate-300 dark:border-slate-700">
-        <CardContent className="p-12 text-center flex flex-col items-center">
-            <div className="text-slate-400 dark:text-slate-600 mb-4">{icon}</div>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">{message}</p>
-        </CardContent>
-    </Card>
-));
-EmptyState.displayName = "EmptyState";
-
 // ==================== COMPONENTE PRINCIPAL ====================
+const PatientHistoryModal = memo<PatientHistoryModalProps>(({ 
+  isOpen, 
+  onClose, 
+  patientId 
+}) => {
+  // ✅ ESTADOS LOCALES
+  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'details'>('overview');
 
-export const PatientHistoryModal = ({ isOpen, onClose, patientId }: PatientHistoryModalProps) => {
-  const [activeTab, setActiveTab] = useState("overview");
-  
-  // El hook de fetching ya está optimizado para ejecutarse solo cuando el modal está abierto.
-  const { data: historyData, isLoading, error } = usePatientHistory(
-    patientId,
-    { 
-      includeHistory: true,
-      enabled: isOpen && !!patientId
-    }
-  );
+  // ✅ HOOK CORREGIDO para obtener historial
+  const { 
+    data: historyData, 
+    isLoading, 
+    error 
+  } = usePatientHistory(patientId, { 
+    includeHistory: true,
+    enabled: isOpen && !!patientId 
+  });
 
-  // OPTIMIZACIÓN: `useMemo` para calcular estadísticas.
-  // Este cálculo solo se ejecuta si `historyData` cambia, evitando recálculos en cada render.
+  // ✅ ESTADÍSTICAS COMPUTADAS
   const stats = useMemo(() => {
-    if (!historyData) return null;
+    if (!historyData?.appointments) {
+      return { total: 0, completed: 0, cancelled: 0, noShow: 0, attendanceRate: 0 };
+    }
 
-    const { total_appointments = 0, completed_appointments = 0, cancelled_appointments = 0, no_show_appointments = 0 } = historyData;
-    const scheduledTotal = total_appointments - cancelled_appointments;
+    const appointments = historyData.appointments;
+    const total = appointments.length;
+    const completed = appointments.filter(apt => apt.estado_cita === 'COMPLETADA').length;
+    const cancelled = appointments.filter(apt => apt.estado_cita === 'CANCELADA').length;
+    const noShow = appointments.filter(apt => apt.estado_cita === 'NO_ASISTIO').length;
+    const scheduledTotal = appointments.filter(apt => 
+      ['COMPLETADA', 'CANCELADA', 'NO_ASISTIO'].includes(apt.estado_cita)
+    ).length;
     
     return {
-      total: total_appointments,
-      completed: completed_appointments,
-      cancelled: cancelled_appointments,
-      noShow: no_show_appointments,
-      attendanceRate: scheduledTotal > 0 ? Math.round((completed_appointments / scheduledTotal) * 100) : 0,
+      total,
+      completed,
+      cancelled,
+      noShow,
+      attendanceRate: scheduledTotal > 0 ? Math.round((completed / scheduledTotal) * 100) : 0,
     };
   }, [historyData]);
 
-  // OPTIMIZACIÓN: `useMemo` para clasificar y ordenar las citas.
-  // Filtra y ordena las citas UNA SOLA VEZ cuando `historyData` cambia.
-  // Anteriormente, la ordenación se hacía en el `map`, lo que es ineficiente.
+  // ✅ CLASIFICACIÓN DE CITAS por tiempo
   const appointmentsByStatus = useMemo(() => {
     if (!historyData?.appointments) {
       return { upcoming: [], history: [] };
@@ -344,20 +382,23 @@ export const PatientHistoryModal = ({ isOpen, onClose, patientId }: PatientHisto
     const past: AppointmentWithPatient[] = [];
 
     for (const apt of historyData.appointments) {
-      if (new Date(apt.fecha_hora_cita) > now && apt.estado_cita !== "CANCELADA" && apt.estado_cita !== "NO_ASISTIO") {
+      if (new Date(apt.fecha_hora_cita) > now && 
+          apt.estado_cita !== "CANCELADA" && 
+          apt.estado_cita !== "NO_ASISTIO") {
         upcoming.push(apt);
       } else {
         past.push(apt);
       }
     }
     
-    // Ordenamos las listas una sola vez aquí.
+    // Ordenar listas
     upcoming.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
     past.sort((a, b) => new Date(b.fecha_hora_cita).getTime() - new Date(a.fecha_hora_cita).getTime());
 
     return { upcoming, history: past };
   }, [historyData]);
 
+  // ✅ RENDERIZADO DEL CONTENIDO
   const renderContent = () => {
     if (isLoading) return <LoadingSkeleton />;
     if (error) return <ErrorDisplay message={error.message} />;
@@ -378,23 +419,55 @@ export const PatientHistoryModal = ({ isOpen, onClose, patientId }: PatientHisto
         <ScrollArea className="flex-1">
           <div className="p-6">
             <TabsContent value="overview" className="mt-0 space-y-6">
+              {/* Estadísticas principales */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Total Citas" value={stats.total} icon={<Calendar className="h-6 w-6" />} color="blue" />
-                <StatCard label="Completadas" value={stats.completed} icon={<CheckCircle className="h-6 w-6" />} color="green" />
-                <StatCard label="Canceladas/Ausente" value={stats.cancelled + stats.noShow} icon={<XCircle className="h-6 w-6" />} color="red" />
-                <StatCard label="Tasa Asistencia" value={`${stats.attendanceRate}%`} icon={<Activity className="h-6 w-6" />} color="purple" />
+                <StatCard 
+                  label="Total Citas" 
+                  value={stats.total} 
+                  icon={<Calendar className="h-6 w-6" />} 
+                  color="blue" 
+                />
+                <StatCard 
+                  label="Completadas" 
+                  value={stats.completed} 
+                  icon={<CheckCircle className="h-6 w-6" />} 
+                  color="green" 
+                />
+                <StatCard 
+                  label="Canceladas/Ausente" 
+                  value={stats.cancelled + stats.noShow} 
+                  icon={<XCircle className="h-6 w-6" />} 
+                  color="red" 
+                />
+                <StatCard 
+                  label="Tasa Asistencia" 
+                  value={`${stats.attendanceRate}%`} 
+                  icon={<Activity className="h-6 w-6" />} 
+                  color="purple" 
+                />
               </div>
+
+              {/* Información del paciente */}
               <PatientInfoSection patient={patient} />
+
+              {/* Satisfacción */}
               {survey_completion_rate !== undefined && (
                 <Card className="border-slate-200 dark:border-slate-700">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg"><Star className="h-5 w-5" /> Satisfacción</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Star className="h-5 w-5" /> 
+                      Satisfacción
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{Math.round(survey_completion_rate * 100)}%</p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Tasa de completación de encuestas</p>
+                        <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                          {Math.round(survey_completion_rate * 100)}%
+                        </p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          Tasa de completación de encuestas
+                        </p>
                       </div>
                       <MessageSquare className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                     </div>
@@ -405,29 +478,45 @@ export const PatientHistoryModal = ({ isOpen, onClose, patientId }: PatientHisto
 
             <TabsContent value="appointments" className="mt-0 space-y-6">
               {appointments.length === 0 ? (
-                <EmptyState message="No hay citas registradas para este paciente." icon={<ClipboardList className="h-16 w-16" />} />
+                <EmptyState 
+                  message="No hay citas registradas para este paciente." 
+                  icon={<ClipboardList className="h-16 w-16" />} 
+                />
               ) : (
                 <>
+                  {/* Próximas citas */}
                   {appointmentsByStatus.upcoming.length > 0 && (
                     <section>
                       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-blue-500" /> Próximas Citas
+                        <Calendar className="h-4 w-4 text-blue-500" /> 
+                        Próximas Citas
                       </h3>
                       <div className="space-y-4">
                         {appointmentsByStatus.upcoming.map((apt, index) => (
-                          <AppointmentHistoryCard key={apt.id} appointment={apt} isLast={index === appointmentsByStatus.upcoming.length - 1} />
+                          <AppointmentHistoryCard 
+                            key={apt.id} 
+                            appointment={apt} 
+                            isLast={index === appointmentsByStatus.upcoming.length - 1} 
+                          />
                         ))}
                       </div>
                     </section>
                   )}
+
+                  {/* Historial de citas */}
                   {appointmentsByStatus.history.length > 0 && (
                     <section>
                       <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-slate-500" /> Historial de Citas
+                        <Clock className="h-4 w-4 text-slate-500" /> 
+                        Historial de Citas
                       </h3>
                       <div className="space-y-4">
                         {appointmentsByStatus.history.map((apt, index) => (
-                          <AppointmentHistoryCard key={apt.id} appointment={apt} isLast={index === appointmentsByStatus.history.length - 1} />
+                          <AppointmentHistoryCard 
+                            key={apt.id} 
+                            appointment={apt} 
+                            isLast={index === appointmentsByStatus.history.length - 1} 
+                          />
                         ))}
                       </div>
                     </section>
@@ -438,22 +527,37 @@ export const PatientHistoryModal = ({ isOpen, onClose, patientId }: PatientHisto
 
             <TabsContent value="details" className="mt-0">
               <Card className="border-slate-200 dark:border-slate-700">
-                <CardHeader><CardTitle>Información Adicional</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle>Información Adicional</CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Paciente desde</p>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{patient.created_at ? formatAppointmentDate(patient.created_at) : "No disponible"}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
+                      Paciente desde
+                    </p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">
+                      {patient.created_at ? formatAppointmentDate(patient.created_at) : "No disponible"}
+                    </p>
                   </div>
+                  
                   {appointments.length > 0 && (
                     <>
                       <Separator />
                       <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Primera consulta</p>
-                        <p className="font-semibold text-slate-900 dark:text-slate-100">{formatAppointmentDate(appointments[appointments.length - 1].fecha_hora_cita)}</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
+                          Primera consulta
+                        </p>
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">
+                          {formatAppointmentDate(appointments[appointments.length - 1].fecha_hora_cita)}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Última consulta</p>
-                        <p className="font-semibold text-slate-900 dark:text-slate-100">{formatAppointmentDate(appointments[0].fecha_hora_cita)}</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
+                          Última consulta
+                        </p>
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">
+                          {formatAppointmentDate(appointments[0].fecha_hora_cita)}
+                        </p>
                       </div>
                     </>
                   )}
@@ -475,7 +579,7 @@ export const PatientHistoryModal = ({ isOpen, onClose, patientId }: PatientHisto
           </DialogTitle>
           {historyData?.patient && (
             <DialogDescription>
-              Resumen de {historyData.patient.nombre} {historyData.patient.apellidos}
+              Resumen de {getPatientFullName(historyData.patient)}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -485,11 +589,8 @@ export const PatientHistoryModal = ({ isOpen, onClose, patientId }: PatientHisto
       </DialogContent>
     </Dialog>
   );
-};
+});
 
-// Asignar displayName para facilitar la depuración en React DevTools
 PatientHistoryModal.displayName = "PatientHistoryModal";
 
-// No es estrictamente necesario memoizar el componente principal si sus props (isOpen, onClose, patientId)
-// cambian frecuentemente, pero lo mantenemos por consistencia.
-export default memo(PatientHistoryModal);
+export default PatientHistoryModal;
