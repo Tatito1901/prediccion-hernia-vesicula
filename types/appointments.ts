@@ -11,10 +11,10 @@ export interface ApiAppointment {
   patient_id: string;
   doctor_id: string | null;
   fecha_hora_cita: string; // ISO string
-  motivo_cita: string;
+  motivos_consulta: string[];
   estado_cita: 'PROGRAMADA' | 'CONFIRMADA' | 'CANCELADA' | 'COMPLETADA' | 'PRESENTE' | 'REAGENDADA' | 'NO ASISTIO';
   es_primera_vez: boolean;
-  notas_cita_seguimiento: string | null;
+  notas_breves: string | null;
   created_at: string;
   patients: {
     id: string;

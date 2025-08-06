@@ -9,57 +9,106 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      appointment_history: {
+      ai_predictions: {
         Row: {
-          appointment_id: string
-          created_at: string
-          estado_cita_anterior:
-            | Database["public"]["Enums"]["appointment_status_enum"]
-            | null
-          estado_cita_nuevo: Database["public"]["Enums"]["appointment_status_enum"]
-          fecha_cambio: string
-          fecha_cita_anterior: string | null
-          fecha_cita_nueva: string | null
           id: string
-          ip_address: string | null
-          modificado_por_id: string
-          motivo_cambio: string | null
-          notas: string | null
-          user_agent: string | null
+          appointment_id: string
+          survey_response_id: string | null
+          patient_id: string
+          propensity_score: number
+          confidence_level: number
+          predicted_category: string | null
+          talking_points: string[] | null
+          intervention_opportunities: string[] | null
+          risk_factors: string[] | null
+          positive_indicators: string[] | null
+          model_version: string
+          generated_at: string | null
         }
         Insert: {
-          appointment_id: string
-          created_at?: string
-          estado_cita_anterior?:
-            | Database["public"]["Enums"]["appointment_status_enum"]
-            | null
-          estado_cita_nuevo: Database["public"]["Enums"]["appointment_status_enum"]
-          fecha_cambio?: string
-          fecha_cita_anterior?: string | null
-          fecha_cita_nueva?: string | null
           id?: string
-          ip_address?: string | null
-          modificado_por_id: string
-          motivo_cambio?: string | null
-          notas?: string | null
-          user_agent?: string | null
+          appointment_id: string
+          survey_response_id?: string | null
+          patient_id: string
+          propensity_score: number
+          confidence_level: number
+          predicted_category?: string | null
+          talking_points?: string[] | null
+          intervention_opportunities?: string[] | null
+          risk_factors?: string[] | null
+          positive_indicators?: string[] | null
+          model_version: string
+          generated_at?: string | null
         }
         Update: {
-          appointment_id?: string
-          created_at?: string
-          estado_cita_anterior?:
-            | Database["public"]["Enums"]["appointment_status_enum"]
-            | null
-          estado_cita_nuevo?: Database["public"]["Enums"]["appointment_status_enum"]
-          fecha_cambio?: string
-          fecha_cita_anterior?: string | null
-          fecha_cita_nueva?: string | null
           id?: string
-          ip_address?: string | null
-          modificado_por_id?: string
-          motivo_cambio?: string | null
-          notas?: string | null
-          user_agent?: string | null
+          appointment_id?: string
+          survey_response_id?: string | null
+          patient_id?: string
+          propensity_score?: number
+          confidence_level?: number
+          predicted_category?: string | null
+          talking_points?: string[] | null
+          intervention_opportunities?: string[] | null
+          risk_factors?: string[] | null
+          positive_indicators?: string[] | null
+          model_version?: string
+          generated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_predictions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_predictions_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: true
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_predictions_survey_response_id_fkey"
+            columns: ["survey_response_id"]
+            isOneToOne: false
+            referencedRelation: "survey_responses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      appointment_history: {
+        Row: {
+          id: string
+          appointment_id: string
+          field_changed: string
+          value_before: string | null
+          value_after: string
+          change_reason: string | null
+          changed_at: string | null
+          changed_by: string | null
+        }
+        Insert: {
+          id?: string
+          appointment_id: string
+          field_changed: string
+          value_before?: string | null
+          value_after: string
+          change_reason?: string | null
+          changed_at?: string | null
+          changed_by?: string | null
+        }
+        Update: {
+          id?: string
+          appointment_id?: string
+          field_changed?: string
+          value_before?: string | null
+          value_after?: string
+          change_reason?: string | null
+          changed_at?: string | null
+          changed_by?: string | null
         }
         Relationships: [
           {
@@ -69,48 +118,77 @@ export type Database = {
             referencedRelation: "appointments"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "appointment_history_modificado_por_id_fkey"
-            columns: ["modificado_por_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
         ]
       }
       appointments: {
         Row: {
-          created_at: string | null
-          doctor_id: string | null
-          es_primera_vez: boolean | null
-          estado_cita: string
-          fecha_hora_cita: string
           id: string
-          motivo_cita: string
-          notas_cita_seguimiento: string | null
           patient_id: string
+          doctor_id: string | null
+          fecha_hora_cita: string
+          motivos_consulta: string[]
+          descripcion_motivos: string | null
+          estado_cita: Database["public"]["Enums"]["appointment_status_enum"]
+          es_primera_vez: boolean | null
+          origen_cita: string | null
+          canal_agendamiento: string | null
+          hora_llegada: string | null
+          puntualidad: Database["public"]["Enums"]["puntualidad_enum"] | null
+          decision_final: Database["public"]["Enums"]["surgical_decision_enum"]
+          probabilidad_cirugia_inicial: number | null
+          diagnostico_final: Database["public"]["Enums"]["diagnosis_enum"] | null
+          notas_breves: string | null
+          proxima_cita_sugerida: string | null
+          created_at: string | null
+          updated_at: string | null
+          agendado_por: string | null
+          fecha_agendamiento: string | null
         }
         Insert: {
-          created_at?: string | null
-          doctor_id?: string | null
-          es_primera_vez?: boolean | null
-          estado_cita?: string
-          fecha_hora_cita: string
           id?: string
-          motivo_cita: string
-          notas_cita_seguimiento?: string | null
           patient_id: string
+          doctor_id?: string | null
+          fecha_hora_cita: string
+          motivos_consulta: string[]
+          descripcion_motivos?: string | null
+          estado_cita?: Database["public"]["Enums"]["appointment_status_enum"]
+          es_primera_vez?: boolean | null
+          origen_cita?: string | null
+          canal_agendamiento?: string | null
+          hora_llegada?: string | null
+          puntualidad?: Database["public"]["Enums"]["puntualidad_enum"] | null
+          decision_final?: Database["public"]["Enums"]["surgical_decision_enum"]
+          probabilidad_cirugia_inicial?: number | null
+          diagnostico_final?: Database["public"]["Enums"]["diagnosis_enum"] | null
+          notas_breves?: string | null
+          proxima_cita_sugerida?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          agendado_por?: string | null
+          fecha_agendamiento?: string | null
         }
         Update: {
-          created_at?: string | null
-          doctor_id?: string | null
-          es_primera_vez?: boolean | null
-          estado_cita?: string
-          fecha_hora_cita?: string
           id?: string
-          motivo_cita?: string
-          notas_cita_seguimiento?: string | null
           patient_id?: string
+          doctor_id?: string | null
+          fecha_hora_cita?: string
+          motivos_consulta?: string[]
+          descripcion_motivos?: string | null
+          estado_cita?: Database["public"]["Enums"]["appointment_status_enum"]
+          es_primera_vez?: boolean | null
+          origen_cita?: string | null
+          canal_agendamiento?: string | null
+          hora_llegada?: string | null
+          puntualidad?: Database["public"]["Enums"]["puntualidad_enum"] | null
+          decision_final?: Database["public"]["Enums"]["surgical_decision_enum"]
+          probabilidad_cirugia_inicial?: number | null
+          diagnostico_final?: Database["public"]["Enums"]["diagnosis_enum"] | null
+          notas_breves?: string | null
+          proxima_cita_sugerida?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          agendado_por?: string | null
+          fecha_agendamiento?: string | null
         }
         Relationships: [
           {
@@ -131,31 +209,37 @@ export type Database = {
       }
       assigned_surveys: {
         Row: {
-          assigned_at: string | null
-          completed_at: string | null
           id: string
           patient_id: string
-          status: string
-          template_id: number
-          token: string | null
+          appointment_id: string | null
+          template_id: number | null
+          status: Database["public"]["Enums"]["survey_status_enum"]
+          assigned_at: string | null
+          completed_at: string | null
+          access_token: string | null
+          assigned_by: string | null
         }
         Insert: {
-          assigned_at?: string | null
-          completed_at?: string | null
           id?: string
           patient_id: string
-          status?: string
-          template_id: number
-          token?: string | null
-        }
-        Update: {
+          appointment_id?: string | null
+          template_id?: number | null
+          status?: Database["public"]["Enums"]["survey_status_enum"]
           assigned_at?: string | null
           completed_at?: string | null
+          access_token?: string | null
+          assigned_by?: string | null
+        }
+        Update: {
           id?: string
           patient_id?: string
-          status?: string
-          template_id?: number
-          token?: string | null
+          appointment_id?: string | null
+          template_id?: number | null
+          status?: Database["public"]["Enums"]["survey_status_enum"]
+          assigned_at?: string | null
+          completed_at?: string | null
+          access_token?: string | null
+          assigned_by?: string | null
         }
         Relationships: [
           {
@@ -176,33 +260,32 @@ export type Database = {
       }
       patients: {
         Row: {
-          apellidos: string
-          comentarios_registro: string | null
-          creado_por_id: string | null
-          created_at: string | null
-          diagnostico_principal:
-            | Database["public"]["Enums"]["diagnosis_enum"]
-            | null
-          diagnostico_principal_detalle: string | null
-          doctor_asignado_id: string | null
-          edad: number | null
-          email: string | null
-          estado_paciente:
-            | Database["public"]["Enums"]["patient_status_enum"]
-            | null
-          etiquetas: string[] | null
-          fecha_cirugia_programada: string | null
-          fecha_primera_consulta: string | null
-          fecha_registro: string
           id: string
-          id_legacy: number | null
-          nombre: string
-          origen_paciente: string | null
-          probabilidad_cirugia: number | null
-          proximo_contacto: string | null
+          lead_id: string | null
+          nombre: string | null
+          apellidos: string | null
           telefono: string | null
-          ultimo_contacto: string | null
+          email: string | null
+          fecha_nacimiento: string | null
+          edad: number | null
+          genero: string | null
+          diagnostico_principal: Database["public"]["Enums"]["diagnosis_enum"]
+          antecedentes_medicos: string | null
+          ciudad: string | null
+          estado: string | null
+          contacto_emergencia_nombre: string | null
+          contacto_emergencia_telefono: string | null
+          estado_paciente: Database["public"]["Enums"]["patient_status_enum"]
+          fecha_registro: string | null
+          fecha_ultima_consulta: string | null
+          numero_expediente: string | null
+          seguro_medico: string | null
+          creation_source: string | null
+          marketing_source: Database["public"]["Enums"]["marketing_source_enum"] | null
+          comentarios_registro: string | null
+          created_at: string | null
           updated_at: string | null
+          creado_por: string | null
         }
         Insert: {
           apellidos: string
@@ -279,212 +362,285 @@ export type Database = {
           },
         ]
       }
-      profiles: {
+      doctor_feedback: {
         Row: {
-          created_at: string | null
-          full_name: string | null
           id: string
-          role: string | null
-          updated_at: string | null
-          username: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          full_name?: string | null
-          id: string
-          role?: string | null
-          updated_at?: string | null
-          username?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          full_name?: string | null
-          id?: string
-          role?: string | null
-          updated_at?: string | null
-          username?: string | null
-        }
-        Relationships: []
-      }
-      questions: {
-        Row: {
-          created_at: string | null
-          id: number
-          options: Json | null
-          order: number
-          question_text: string
-          question_type: string
-          template_id: number
-        }
-        Insert: {
-          created_at?: string | null
-          id?: number
-          options?: Json | null
-          order: number
-          question_text: string
-          question_type: string
-          template_id: number
-        }
-        Update: {
-          created_at?: string | null
-          id?: number
-          options?: Json | null
-          order?: number
-          question_text?: string
-          question_type?: string
-          template_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "questions_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "survey_templates"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      survey_answer_items: {
-        Row: {
-          answer_text: string | null
-          created_at: string | null
-          id: string
-          question_id: number
-          response_id: string
-          selected_option_id: number | null
-        }
-        Insert: {
-          answer_text?: string | null
-          created_at?: string | null
-          id?: string
-          question_id: number
-          response_id: string
-          selected_option_id?: number | null
-        }
-        Update: {
-          answer_text?: string | null
-          created_at?: string | null
-          id?: string
-          question_id?: number
-          response_id?: string
-          selected_option_id?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "survey_answer_items_question_id_fkey"
-            columns: ["question_id"]
-            isOneToOne: false
-            referencedRelation: "questions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "survey_answer_items_response_id_fkey"
-            columns: ["response_id"]
-            isOneToOne: false
-            referencedRelation: "survey_responses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "survey_answer_items_selected_option_id_fkey"
-            columns: ["selected_option_id"]
-            isOneToOne: false
-            referencedRelation: "survey_question_options"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      survey_answers: {
-        Row: {
-          answer_value: string | null
-          assigned_survey_id: string
-          created_at: string | null
-          id: number
-          question_id: number
-        }
-        Insert: {
-          answer_value?: string | null
-          assigned_survey_id: string
-          created_at?: string | null
-          id?: number
-          question_id: number
-        }
-        Update: {
-          answer_value?: string | null
-          assigned_survey_id?: string
-          created_at?: string | null
-          id?: number
-          question_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "survey_answers_assigned_survey_id_fkey"
-            columns: ["assigned_survey_id"]
-            isOneToOne: false
-            referencedRelation: "assigned_surveys"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "survey_answers_question_id_fkey"
-            columns: ["question_id"]
-            isOneToOne: false
-            referencedRelation: "questions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      survey_question_options: {
-        Row: {
-          created_at: string | null
-          id: number
-          option_text: string
-          order_index: number
-          question_id: number
-          value_weight: number | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: number
-          option_text: string
-          order_index: number
-          question_id: number
-          value_weight?: number | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: number
-          option_text?: string
-          order_index?: number
-          question_id?: number
-          value_weight?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "survey_question_options_question_id_fkey"
-            columns: ["question_id"]
-            isOneToOne: false
-            referencedRelation: "questions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      survey_responses: {
-        Row: {
-          assigned_survey_id: string
-          id: string
-          patient_id: string
+          appointment_id: string
+          ai_prediction_id: string | null
+          doctor_id: string
+          prediction_accuracy_rating: number | null
+          prediction_usefulness_rating: number | null
+          actual_decision: Database["public"]["Enums"]["surgical_decision_enum"]
+          factors_that_influenced_acceptance: string | null
+          factors_that_prevented_acceptance: string | null
+          missed_important_factors: string[] | null
           submitted_at: string | null
         }
         Insert: {
-          assigned_survey_id: string
           id?: string
-          patient_id: string
+          appointment_id: string
+          ai_prediction_id?: string | null
+          doctor_id: string
+          prediction_accuracy_rating?: number | null
+          prediction_usefulness_rating?: number | null
+          actual_decision: Database["public"]["Enums"]["surgical_decision_enum"]
+          factors_that_influenced_acceptance?: string | null
+          factors_that_prevented_acceptance?: string | null
+          missed_important_factors?: string[] | null
           submitted_at?: string | null
         }
         Update: {
-          assigned_survey_id?: string
           id?: string
-          patient_id?: string
+          appointment_id?: string
+          ai_prediction_id?: string | null
+          doctor_id?: string
+          prediction_accuracy_rating?: number | null
+          prediction_usefulness_rating?: number | null
+          actual_decision?: Database["public"]["Enums"]["surgical_decision_enum"]
+          factors_that_influenced_acceptance?: string | null
+          factors_that_prevented_acceptance?: string | null
+          missed_important_factors?: string[] | null
           submitted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doctor_feedback_ai_prediction_id_fkey"
+            columns: ["ai_prediction_id"]
+            isOneToOne: false
+            referencedRelation: "ai_predictions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doctor_feedback_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: true
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads: {
+        Row: {
+          id: string
+          full_name: string
+          phone_number: string
+          email: string | null
+          channel: Database["public"]["Enums"]["channel_enum"]
+          motive: Database["public"]["Enums"]["motive_enum"]
+          notes: string | null
+          follow_up_notes: string | null
+          status: Database["public"]["Enums"]["lead_status_enum"]
+          lead_intent: Database["public"]["Enums"]["lead_intent_enum"] | null
+          last_contact_date: string | null
+          next_follow_up_date: string | null
+          created_at: string | null
+          updated_at: string | null
+          registered_by: string | null
+          assigned_to: string | null
+          converted_at: string | null
+          conversion_notes: string | null
+        }
+        Insert: {
+          id?: string
+          full_name: string
+          phone_number: string
+          email?: string | null
+          channel: Database["public"]["Enums"]["channel_enum"]
+          motive: Database["public"]["Enums"]["motive_enum"]
+          notes?: string | null
+          follow_up_notes?: string | null
+          status?: Database["public"]["Enums"]["lead_status_enum"]
+          lead_intent?: Database["public"]["Enums"]["lead_intent_enum"] | null
+          last_contact_date?: string | null
+          next_follow_up_date?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          registered_by?: string | null
+          assigned_to?: string | null
+          converted_at?: string | null
+          conversion_notes?: string | null
+        }
+        Update: {
+          id?: string
+          full_name?: string
+          phone_number?: string
+          email?: string | null
+          channel?: Database["public"]["Enums"]["channel_enum"]
+          motive?: Database["public"]["Enums"]["motive_enum"]
+          notes?: string | null
+          follow_up_notes?: string | null
+          status?: Database["public"]["Enums"]["lead_status_enum"]
+          lead_intent?: Database["public"]["Enums"]["lead_intent_enum"] | null
+          last_contact_date?: string | null
+          next_follow_up_date?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          registered_by?: string | null
+          assigned_to?: string | null
+          converted_at?: string | null
+          conversion_notes?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          id: string
+          full_name: string | null
+          role: Database["public"]["Enums"]["user_role_enum"] | null
+          avatar_url: string | null
+          updated_at: string | null
+          created_at: string | null
+          is_active: boolean | null
+        }
+        Insert: {
+          id: string
+          full_name?: string | null
+          role?: Database["public"]["Enums"]["user_role_enum"] | null
+          avatar_url?: string | null
+          updated_at?: string | null
+          created_at?: string | null
+          is_active?: boolean | null
+        }
+        Update: {
+          id?: string
+          full_name?: string | null
+          role?: Database["public"]["Enums"]["user_role_enum"] | null
+          avatar_url?: string | null
+          updated_at?: string | null
+          created_at?: string | null
+          is_active?: boolean | null
+        }
+        Relationships: []
+      }
+      survey_responses: {
+        Row: {
+          id: string
+          assigned_survey_id: string
+          appointment_id: string
+          patient_id: string
+          nombre_completo: string | null
+          apellidos_completos: string | null
+          edad: number | null
+          ubicacion_origen: string | null
+          alcaldia_cdmx: string | null
+          municipio_edomex: string | null
+          otro_municipio_edomex: string | null
+          otra_ciudad_municipio: string | null
+          como_nos_conocio: string | null
+          otro_como_nos_conocio: string | null
+          motivo_visita: string | null
+          diagnostico_previo: boolean | null
+          diagnostico_principal_previo: string | null
+          detalles_adicionales_diagnostico: string | null
+          condiciones_medicas_cronicas: string[] | null
+          otra_condicion_medica: string | null
+          estudios_medicos_previos: string | null
+          seguro_medico: string | null
+          otro_seguro_medico: string | null
+          aseguradora_seleccionada: string | null
+          otra_aseguradora: string | null
+          descripcion_sintoma_principal: string | null
+          desde_cuando_sintoma: string | null
+          severidad_sintomas: string | null
+          intensidad_dolor_actual: number | null
+          sintomas_adicionales: string[] | null
+          afectacion_actividades: string | null
+          aspectos_mas_importantes: string[] | null
+          preocupaciones_principales: string[] | null
+          mayor_preocupacion_cirugia: string | null
+          plazo_resolucion_ideal: string | null
+          tiempo_toma_decision: string | null
+          expectativa_principal_tratamiento: string | null
+          informacion_adicional_importante: string | null
+          mayor_beneficio_esperado: string | null
+          completed_at: string | null
+          completion_time_minutes: number | null
+        }
+        Insert: {
+          id?: string
+          assigned_survey_id: string
+          appointment_id: string
+          patient_id: string
+          nombre_completo?: string | null
+          apellidos_completos?: string | null
+          edad?: number | null
+          ubicacion_origen?: string | null
+          alcaldia_cdmx?: string | null
+          municipio_edomex?: string | null
+          otro_municipio_edomex?: string | null
+          otra_ciudad_municipio?: string | null
+          como_nos_conocio?: string | null
+          otro_como_nos_conocio?: string | null
+          motivo_visita?: string | null
+          diagnostico_previo?: boolean | null
+          diagnostico_principal_previo?: string | null
+          detalles_adicionales_diagnostico?: string | null
+          condiciones_medicas_cronicas?: string[] | null
+          otra_condicion_medica?: string | null
+          estudios_medicos_previos?: string | null
+          seguro_medico?: string | null
+          otro_seguro_medico?: string | null
+          aseguradora_seleccionada?: string | null
+          otra_aseguradora?: string | null
+          descripcion_sintoma_principal?: string | null
+          desde_cuando_sintoma?: string | null
+          severidad_sintomas?: string | null
+          intensidad_dolor_actual?: number | null
+          sintomas_adicionales?: string[] | null
+          afectacion_actividades?: string | null
+          aspectos_mas_importantes?: string[] | null
+          preocupaciones_principales?: string[] | null
+          mayor_preocupacion_cirugia?: string | null
+          plazo_resolucion_ideal?: string | null
+          tiempo_toma_decision?: string | null
+          expectativa_principal_tratamiento?: string | null
+          informacion_adicional_importante?: string | null
+          mayor_beneficio_esperado?: string | null
+          completed_at?: string | null
+          completion_time_minutes?: number | null
+        }
+        Update: {
+          id?: string
+          assigned_survey_id?: string
+          appointment_id?: string
+          patient_id?: string
+          nombre_completo?: string | null
+          apellidos_completos?: string | null
+          edad?: number | null
+          ubicacion_origen?: string | null
+          alcaldia_cdmx?: string | null
+          municipio_edomex?: string | null
+          otro_municipio_edomex?: string | null
+          otra_ciudad_municipio?: string | null
+          como_nos_conocio?: string | null
+          otro_como_nos_conocio?: string | null
+          motivo_visita?: string | null
+          diagnostico_previo?: boolean | null
+          diagnostico_principal_previo?: string | null
+          detalles_adicionales_diagnostico?: string | null
+          condiciones_medicas_cronicas?: string[] | null
+          otra_condicion_medica?: string | null
+          estudios_medicos_previos?: string | null
+          seguro_medico?: string | null
+          otro_seguro_medico?: string | null
+          aseguradora_seleccionada?: string | null
+          otra_aseguradora?: string | null
+          descripcion_sintoma_principal?: string | null
+          desde_cuando_sintoma?: string | null
+          severidad_sintomas?: string | null
+          intensidad_dolor_actual?: number | null
+          sintomas_adicionales?: string[] | null
+          afectacion_actividades?: string | null
+          aspectos_mas_importantes?: string[] | null
+          preocupaciones_principales?: string[] | null
+          mayor_preocupacion_cirugia?: string | null
+          plazo_resolucion_ideal?: string | null
+          tiempo_toma_decision?: string | null
+          expectativa_principal_tratamiento?: string | null
+          informacion_adicional_importante?: string | null
+          mayor_beneficio_esperado?: string | null
+          completed_at?: string | null
+          completion_time_minutes?: number | null
         }
         Relationships: [
           {
@@ -517,6 +673,36 @@ export type Database = {
         }
         Relationships: []
       }
+      system_metrics: {
+        Row: {
+          id: string
+          metric_name: string
+          metric_category: string
+          metric_value: number
+          period_start: string | null
+          period_end: string | null
+          calculated_at: string | null
+        }
+        Insert: {
+          id?: string
+          metric_name: string
+          metric_category: string
+          metric_value: number
+          period_start?: string | null
+          period_end?: string | null
+          calculated_at?: string | null
+        }
+        Update: {
+          id?: string
+          metric_name?: string
+          metric_category?: string
+          metric_value?: number
+          period_start?: string | null
+          period_end?: string | null
+          calculated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -536,6 +722,14 @@ export type Database = {
         | "NO ASISTIO"
         | "PRESENTE"
         | "REAGENDADA"
+      channel_enum:
+        | "TELEFONO"
+        | "WHATSAPP"
+        | "FACEBOOK"
+        | "INSTAGRAM"
+        | "REFERENCIA"
+        | "PAGINA_WEB"
+        | "OTRO"
       diagnosis_enum:
         | "HERNIA INGUINAL"
         | "HERNIA UMBILICAL"
@@ -551,14 +745,64 @@ export type Database = {
         | "VESICULA (COLECISTITIS CRONICA)"
         | "OTRO"
         | "HERNIA SPIGEL"
+        | "SIN_DIAGNOSTICO"
+      lead_intent_enum:
+        | "ONLY_WANTS_INFORMATION"
+        | "WANTS_TO_SCHEDULE_APPOINTMENT"
+        | "WANTS_TO_COMPARE_PRICES"
+        | "OTHER"
+
+    export type LeadIntent = Enums<"lead_intent_enum">
+      lead_status_enum:
+        | "NUEVO"
+        | "CONTACTADO"
+        | "CALIFICADO"
+        | "CITA_PROGRAMADA"
+        | "NO_INTERESADO"
+        | "PERDIDO"
+        | "CONVERTIDO"
+      marketing_source_enum:
+        | "FACEBOOK_ADS"
+        | "GOOGLE_ADS"
+        | "ORGANICO"
+        | "REFERENCIA"
+        | "OTRO"
+      motive_enum:
+        | "CONSULTA_GENERAL"
+        | "DOLOR_ABDOMINAL"
+        | "HERNIA"
+        | "VESICULA"
+        | "SEGUIMIENTO"
+        | "OTRO"
       patient_status_enum:
+        | "potencial"
         | "PENDIENTE DE CONSULTA"
         | "CONSULTADO"
         | "EN SEGUIMIENTO"
         | "OPERADO"
         | "NO OPERADO"
         | "INDECISO"
-      user_role_enum: "doctor" | "admin" | "recepcion"
+      puntualidad_enum:
+        | "PUNTUAL"
+        | "RETRASO_LEVE"
+        | "RETRASO_MODERADO"
+        | "RETRASO_SEVERO"
+      surgical_decision_enum:
+        | "PENDIENTE"
+        | "ACEPTADA"
+        | "RECHAZADA"
+        | "DIFERIDA"
+        | "EN_CONSIDERACION"
+      survey_status_enum:
+        | "assigned"
+        | "in_progress"
+        | "completed"
+        | "expired"
+      user_role_enum:
+        | "doctor"
+        | "admin"
+        | "recepcion"
+        | "asistente"
     }
     CompositeTypes: {
       [_ in never]: never

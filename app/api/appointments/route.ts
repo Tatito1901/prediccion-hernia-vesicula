@@ -30,25 +30,43 @@ export async function GET(request: Request) {
       .select(`
         id,
         fecha_hora_cita,
-        motivo_cita,
+        motivos_consulta,
+        descripcion_motivos,
         estado_cita,
         es_primera_vez,
-        notas_cita_seguimiento,
+        origen_cita,
+        canal_agendamiento,
+        hora_llegada,
+        puntualidad,
+        decision_final,
+        probabilidad_cirugia_inicial,
+        diagnostico_final,
+        notas_breves,
+        proxima_cita_sugerida,
         created_at,
+        updated_at,
         patient_id,
         doctor_id,
+        agendado_por,
+        fecha_agendamiento,
         patients:patient_id (
           id,
           nombre,
           apellidos,
           telefono,
           email,
-          estado_paciente
+          fecha_nacimiento,
+          edad,
+          genero,
+          diagnostico_principal,
+          estado_paciente,
+          fecha_registro,
+          numero_expediente,
+          seguro_medico
         ),
         profiles:doctor_id (
           id,
           full_name,
-          username,
           role
         )
       `, { count: 'exact' });
@@ -113,10 +131,10 @@ export async function POST(request: Request) {
       patient_id, // Este ID debe existir en la tabla patients
       doctor_id,
       fecha_hora_cita, // Asegúrate que llegue como un string ISO 8601 o un objeto Date
-      motivo_cita,
+      motivos_consulta,
       estado_cita,
       es_primera_vez,
-      notas_cita_seguimiento,
+      notas_breves,
     } = body;
 
     // Aquí deberías verificar que patient_id existe en la tabla 'patients'
@@ -129,10 +147,10 @@ export async function POST(request: Request) {
         patient_id,
         doctor_id,
         fecha_hora_cita,
-        motivo_cita,
+        motivos_consulta,
         estado_cita: estado_cita || 'PROGRAMADA',
         es_primera_vez: es_primera_vez !== undefined ? es_primera_vez : true,
-        notas_cita_seguimiento,
+        notas_breves,
       }])
       .select()
       .single();

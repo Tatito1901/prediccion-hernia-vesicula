@@ -39,6 +39,7 @@ export async function POST(
         estado_cita,
         patient_id,
         fecha_hora_cita,
+        notas_breves,
         patients (
           nombre,
           apellidos
@@ -152,7 +153,7 @@ export async function POST(
     await supabase
       .from('appointments')
       .update({ 
-        notas_cita_seguimiento: `${appointment.notas_cita_seguimiento ? appointment.notas_cita_seguimiento + ' | ' : ''}Encuesta completada - Calificación: ${body.overall_rating}/5`
+        notas_breves: `${appointment.notas_breves ? appointment.notas_breves + ' | ' : ''}Encuesta completada - Calificación: ${body.overall_rating}/5`
       })
       .eq('id', appointmentId);
 
@@ -161,7 +162,7 @@ export async function POST(
     return NextResponse.json({
       message: 'Encuesta completada exitosamente',
       survey_id: surveyId,
-      patient_name: `${appointment.patients.nombre} ${appointment.patients.apellidos}`,
+      patient_name: `${appointment.patients[0].nombre} ${appointment.patients[0].apellidos}`,
       rating: body.overall_rating
     }, { status: 201 });
 
@@ -326,7 +327,7 @@ export async function GET(
         id: appointment.id,
         estado_cita: appointment.estado_cita,
         fecha_hora_cita: appointment.fecha_hora_cita,
-        patient_name: `${appointment.patients.nombre} ${appointment.patients.apellidos}`
+        patient_name: `${appointment.patients[0].nombre} ${appointment.patients[0].apellidos}`
       }
     });
 

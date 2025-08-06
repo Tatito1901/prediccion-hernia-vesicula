@@ -9,10 +9,14 @@ export type Appointment = Database['public']['Tables']['appointments']['Row'];
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type AssignedSurvey = Database['public']['Tables']['assigned_surveys']['Row'];
 export type SurveyResponse = Database['public']['Tables']['survey_responses']['Row'];
-export type SurveyAnswerItem = Database['public']['Tables']['survey_answer_items']['Row'];
 export type SurveyTemplate = Database['public']['Tables']['survey_templates']['Row'];
-export type SurveyQuestion = Database['public']['Tables']['questions']['Row'];
-export type SurveyQuestionOption = Database['public']['Tables']['survey_question_options']['Row'];
+
+// --- NEW TABLES FROM UPDATED SCHEMA ---
+export type Lead = Database['public']['Tables']['leads']['Row'];
+export type AiPrediction = Database['public']['Tables']['ai_predictions']['Row'];
+export type AppointmentHistory = Database['public']['Tables']['appointment_history']['Row'];
+export type DoctorFeedback = Database['public']['Tables']['doctor_feedback']['Row'];
+export type SystemMetric = Database['public']['Tables']['system_metrics']['Row'];
 
 // --- Extended Types with Joined Relations ---
 
@@ -23,9 +27,9 @@ export interface ExtendedAppointment {
   doctor_id: string | null;
   created_at: string | null;
   fecha_hora_cita: string;
-  motivo_cita: string;
+  motivos_consulta: string[];
   estado_cita: string; // Nota: en el esquema esto es string, no enum
-  notas_cita_seguimiento: string | null;
+  notas_breves: string | null;
   es_primera_vez: boolean | null;
   patients?: {
     id: string;
@@ -43,17 +47,30 @@ export interface ExtendedAppointment {
 export type NewPatient = Database['public']['Tables']['patients']['Insert'];
 export type NewAppointment = Database['public']['Tables']['appointments']['Insert'];
 export type NewProfile = Database['public']['Tables']['profiles']['Insert'];
+export type NewLead = Database['public']['Tables']['leads']['Insert'];
+export type NewAiPrediction = Database['public']['Tables']['ai_predictions']['Insert'];
+export type NewSurveyResponse = Database['public']['Tables']['survey_responses']['Insert'];
 
 // --- Update Types (for updating data) ---
 export type UpdatePatient = Database['public']['Tables']['patients']['Update'];
 export type UpdateAppointment = Database['public']['Tables']['appointments']['Update'];
 export type UpdateProfile = Database['public']['Tables']['profiles']['Update'];
+export type UpdateLead = Database['public']['Tables']['leads']['Update'];
+export type UpdateAiPrediction = Database['public']['Tables']['ai_predictions']['Update'];
 
 // --- Enums as String Literal Types ---
 export type PatientStatus = Database['public']['Enums']['patient_status_enum'];
 export type DiagnosisEnum = Database['public']['Enums']['diagnosis_enum'];
 export type AppointmentStatus = Database['public']['Enums']['appointment_status_enum'];
 export type UserRole = Database['public']['Enums']['user_role_enum'];
+
+// --- NEW ENUMS FROM UPDATED SCHEMA ---
+export type LeadStatus = Database['public']['Enums']['lead_status_enum'];
+export type Channel = Database['public']['Enums']['channel_enum'];
+export type Motive = Database['public']['Enums']['motive_enum'];
+export type SurgicalDecision = Database['public']['Enums']['surgical_decision_enum'];
+export type SurveyStatus = Database['public']['Enums']['survey_status_enum'];
+export type MarketingSource = Database['public']['Enums']['marketing_source_enum'];
 
 // Mantenemos los objetos CONST para usarlos fácilmente en el código, 
 // pero ahora están validados por el tipo de arriba.
@@ -115,35 +132,21 @@ export type TimeString = string; // Format HH:MM
 export type PhoneString = string;
 export type EmailString = string;
 
-// --- Survey Types ---
+// --- Survey Types (Updated Schema) ---
 /**
- * Representa un survey template completo con preguntas
+ * Survey response is now self-contained with all fields directly in the table
  */
-export type SurveyTemplateWithQuestions = SurveyTemplate & {
-  questions: (SurveyQuestion & {
-    options: SurveyQuestionOption[];
-  })[];
+export type CompleteSurveyResponse = SurveyResponse & {
+  assigned_survey: AssignedSurvey;
+  patient: Patient;
 };
 
 /**
- * Representa un survey asignado con toda la información
+ * Assigned survey with template info
  */
-export type CompleteSurvey = AssignedSurvey & {
-  template: SurveyTemplateWithQuestions;
-  response?: SurveyResponse & {
-    answers: (SurveyAnswerItem & {
-      question: SurveyQuestion;
-      selected_option?: SurveyQuestionOption;
-    })[];
-  };
-};
-
-/**
- * An enriched survey response that includes the full list of answers.
- * This is a common pattern for representing a completed survey.
- */
-export type PatientSurvey = SurveyResponse & {
-  answers: (SurveyAnswerItem & { question: SurveyQuestion | null })[];
+export type AssignedSurveyWithTemplate = AssignedSurvey & {
+  template: SurveyTemplate;
+  response?: SurveyResponse;
 };
 
 // --- Frontend-Specific Enriched Types ---
@@ -162,7 +165,7 @@ export interface EnrichedPatient extends Patient {
   
   // La propiedad que causaba el error, ahora definida formalmente.
   // Es opcional ('?') porque no todos los pacientes tendrán una encuesta asociada.
-  encuesta?: PatientSurvey | null;
+  encuesta?: CompleteSurveyResponse | null;
 }
 
 // --- Stats Types ---
@@ -208,10 +211,42 @@ export interface PatientFormData {
 export interface AppointmentFormData {
   patient_id: string;
   fecha_hora_cita: string;
-  motivo_cita: string;
+  motivos_consulta: string[];
   doctor_id?: string;
-  notas_cita_seguimiento?: string;
+  notas_breves?: string;
   es_primera_vez?: boolean;
+}
+
+// --- Lead Form Types ---
+export interface LeadFormData {
+  full_name: string;
+  phone_number: string;
+  email?: string;
+  channel: Channel;
+  motive: Motive;
+  notes?: string;
+  lead_intent?: 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'WANTS_TO_COMPARE_PRICES' | 'OTHER';
+  next_follow_up_date?: string;
+}
+
+// --- Extended Lead Types ---
+export interface ExtendedLead extends Lead {
+  // Computed properties for UI
+  days_since_created: number;
+  days_until_follow_up?: number;
+  is_overdue: boolean;
+  conversion_patient?: Patient;
+}
+
+// --- Lead Stats Types ---
+export interface LeadStats {
+  total_leads: number;
+  new_leads: number;
+  in_follow_up: number;
+  converted_leads: number;
+  conversion_rate: number;
+  leads_by_channel: Record<Channel, number>;
+  leads_by_status: Record<LeadStatus, number>;
 }
 
 // --- Tipos Deprecados para Compatibilidad ---

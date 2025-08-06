@@ -16,14 +16,48 @@ export type AppointmentStatus =
   | 'NO_ASISTIO'
   | 'REAGENDADA';
 
-// ✅ Estados de paciente según la base de datos
+// ✅ Estados de paciente según la base de datos (ACTUALIZADO con nuevo esquema)
 export type PatientStatus = 
   | 'PENDIENTE_DE_CONSULTA'
   | 'CONSULTADO'
   | 'EN_SEGUIMIENTO'
   | 'OPERADO'
   | 'NO_OPERADO'
-  | 'INDECISO';
+  | 'INDECISO'
+  | 'potencial'; // ✅ NUEVO: Estado para leads convertidos
+
+// ✅ NUEVO: Tipos para manejo de Leads
+export type LeadChannel = 
+  | 'TELEFONO'
+  | 'WHATSAPP'
+  | 'FACEBOOK'
+  | 'INSTAGRAM'
+  | 'REFERENCIA'
+  | 'PAGINA_WEB'
+  | 'OTRO';
+
+export type LeadMotive = 
+  | 'CONSULTA_GENERAL'
+  | 'DOLOR_ABDOMINAL'
+  | 'HERNIA'
+  | 'VESICULA'
+  | 'SEGUIMIENTO'
+  | 'OTRO';
+
+export type LeadStatus = 
+  | 'NUEVO'
+  | 'CONTACTADO'
+  | 'CALIFICADO'
+
+export type LeadIntent = 
+  | 'ONLY_WANTS_INFORMATION'
+  | 'WANTS_TO_SCHEDULE_APPOINTMENT'
+  | 'WANTS_TO_COMPARE_PRICES'
+  | 'OTHER'
+  | 'CITA_PROGRAMADA'
+  | 'NO_INTERESADO'
+  | 'PERDIDO'
+  | 'CONVERTIDO';
 
 // ✅ Diagnósticos exactamente como en el enum de la base de datos
 export type DiagnosisType = 
@@ -56,25 +90,59 @@ export type AdmissionAction =
   | 'viewHistory';
 
 // ✅ Tipos de tabs en la interfaz
-export type TabType = 'newPatient' | 'today' | 'future' | 'past';
+// ✅ Tipos de tabs para flujo profesional de admisión médica
+export type TabType = 
+  | 'today' 
+  | 'future' 
+  | 'past' 
+  | 'schedule';
 
 // ==================== INTERFACES PRINCIPALES ====================
 
-// ✅ Datos del paciente según el esquema de BD
+// ✅ Datos del paciente según el esquema de BD (ACTUALIZADO con nuevos campos)
 export interface Patient {
   id: string;
   created_at: string;
   updated_at: string;
   creado_por_id?: string;
+  
+  // Información básica
   nombre: string;
   apellidos: string;
   edad?: number;
   telefono?: string;
   email?: string;
   fecha_registro: string;
+  
+  // ✅ NUEVOS CAMPOS DEMOGRÁFICOS
+  fecha_nacimiento?: string;
+  genero?: string;
+  
+  // ✅ NUEVOS CAMPOS DE UBICACIÓN
+  ciudad?: string;
+  estado?: string;
+  
+  // ✅ NUEVOS CAMPOS DE CONTACTO DE EMERGENCIA
+  contacto_emergencia_nombre?: string;
+  contacto_emergencia_telefono?: string;
+  
+  // ✅ NUEVOS CAMPOS MÉDICOS Y ADMINISTRATIVOS
+  antecedentes_medicos?: string;
+  numero_expediente?: string;
+  seguro_medico?: string;
+  fecha_ultima_consulta?: string;
+  
+  // ✅ NUEVOS CAMPOS DE ORIGEN Y MARKETING
+  lead_id?: string; // Relación con tabla leads
+  creation_source?: string;
+  marketing_source?: string;
+  
+  // Estado y diagnóstico
   estado_paciente: PatientStatus;
   diagnostico_principal?: DiagnosisType;
   diagnostico_principal_detalle?: string;
+  
+  // Asignaciones y seguimiento
   doctor_asignado_id?: string;
   fecha_primera_consulta?: string;
   comentarios_registro?: string;
@@ -84,6 +152,8 @@ export interface Patient {
   proximo_contacto?: string;
   etiquetas?: string[];
   fecha_cirugia_programada?: string;
+  
+  // Legacy
   id_legacy?: number;
 }
 
@@ -93,15 +163,30 @@ export interface Appointment {
   patient_id: string;
   doctor_id?: string;
   fecha_hora_cita: string; // TIMESTAMPTZ como ISO string
-  motivo_cita: string;
+  motivos_consulta: string[];
   estado_cita: AppointmentStatus;
   es_primera_vez?: boolean;
-  notas_cita_seguimiento?: string;
-  created_at?: string;
+  notas_breves?: string;
+  created_at?: string; // TIMESTAMPZ
+  updated_at?: string; // TIMESTAMPZ
+  agendado_por?: string;
+  fecha_agendamiento?: string; // DATE
 }
 
 // ✅ Cita con datos del paciente (TIPO UNIFICADO para toda la app)
-export interface AppointmentWithPatient extends Appointment {
+export interface AppointmentWithPatient {
+  id: string;
+  patient_id: string;
+  doctor_id?: string;
+  fecha_hora_cita: string; // TIMESTAMPTZ como ISO string
+  motivos_consulta: string[];
+  estado_cita: AppointmentStatus;
+  es_primera_vez?: boolean;
+  notas_breves?: string;
+  created_at?: string; // TIMESTAMPZ
+  updated_at?: string; // TIMESTAMPZ
+  agendado_por?: string;
+  fecha_agendamiento?: string; // DATE
   patients: {
     id: string;
     nombre?: string;
@@ -111,13 +196,22 @@ export interface AppointmentWithPatient extends Appointment {
     edad?: number;
     estado_paciente?: PatientStatus;
     diagnostico_principal?: DiagnosisType;
-  } | null;
-  profiles?: {
-    id: string;
-    full_name?: string;
-    username?: string;
-    role?: UserRole;
-  } | null;
+  };
+}
+
+// ✅ NUEVO: Interfaz para Lead (contacto inicial)
+export interface Lead {
+  id?: string;
+  full_name: string;
+  phone_number: string;
+  email?: string | null;
+  channel: LeadChannel;
+  motive: LeadMotive;
+  notes?: string | null;
+  status?: LeadStatus;
+  lead_intent?: LeadIntent;
+  created_at?: string;
+  registered_by?: string;
 }
 
 // ✅ Datos de encuesta
@@ -159,13 +253,13 @@ export interface PatientHistoryData {
 
 // ==================== SCHEMAS DE VALIDACIÓN ====================
 
-// ✅ Schema para nuevo paciente (CORREGIDO con valores exactos de la BD)
+// ✅ Schema para nuevo paciente (ACTUALIZADO con todos los campos del nuevo esquema)
 export const NewPatientSchema = z.object({
   // Campos requeridos
   nombre: z.string().min(2, "Nombre debe tener al menos 2 caracteres").max(50),
   apellidos: z.string().min(2, "Apellidos debe tener al menos 2 caracteres").max(50),
   
-  // Campos opcionales
+  // Campos opcionales básicos
   telefono: z.string()
     .regex(/^[0-9+\-\s()]{10,15}$/, "Teléfono inválido")
     .optional()
@@ -178,6 +272,59 @@ export const NewPatientSchema = z.object({
     .min(0, "Edad no puede ser negativa")
     .max(120, "Edad no puede ser mayor a 120")
     .optional(),
+  
+  // ✅ NUEVOS CAMPOS DEMOGRÁFICOS
+  fecha_nacimiento: z.string()
+    .optional()
+    .or(z.literal("")),
+  genero: z.enum(['Masculino', 'Femenino', 'Otro'], {
+    errorMap: () => ({ message: "Selecciona un género válido" })
+  }).optional(),
+  
+  // ✅ NUEVOS CAMPOS DE UBICACIÓN
+  ciudad: z.string()
+    .max(100, "Ciudad no puede exceder 100 caracteres")
+    .optional()
+    .or(z.literal("")),
+  estado: z.string()
+    .max(100, "Estado no puede exceder 100 caracteres")
+    .optional()
+    .or(z.literal("")),
+  
+  // ✅ NUEVOS CAMPOS DE CONTACTO DE EMERGENCIA
+  contacto_emergencia_nombre: z.string()
+    .max(100, "Nombre de contacto no puede exceder 100 caracteres")
+    .optional()
+    .or(z.literal("")),
+  contacto_emergencia_telefono: z.string()
+    .regex(/^[0-9+\-\s()]{10,15}$/, "Teléfono de emergencia inválido")
+    .optional()
+    .or(z.literal("")),
+  
+  // ✅ NUEVOS CAMPOS MÉDICOS Y ADMINISTRATIVOS
+  antecedentes_medicos: z.string()
+    .max(1000, "Antecedentes médicos no pueden exceder 1000 caracteres")
+    .optional()
+    .or(z.literal("")),
+  numero_expediente: z.string()
+    .max(50, "Número de expediente no puede exceder 50 caracteres")
+    .optional()
+    .or(z.literal("")),
+  seguro_medico: z.string()
+    .max(100, "Seguro médico no puede exceder 100 caracteres")
+    .optional()
+    .or(z.literal("")),
+  
+  // ✅ NUEVOS CAMPOS DE ORIGEN Y MARKETING
+  marketing_source: z.string()
+    .max(100, "Fuente de marketing no puede exceder 100 caracteres")
+    .optional()
+    .or(z.literal("")),
+  creation_source: z.string()
+    .max(100, "Fuente de creación no puede exceder 100 caracteres")
+    .optional()
+    .or(z.literal("")),
+  lead_id: z.string().uuid().optional(),
   
   // Diagnóstico usando valores exactos de la BD
   diagnostico_principal: z.enum([
@@ -220,20 +367,114 @@ export const AppointmentStatusUpdateSchema = z.object({
   notas_adicionales: z.string().optional(),
 });
 
+// ✅ NUEVO: Schema para nuevo lead (contacto inicial)
+export const NewLeadSchema = z.object({
+  full_name: z.string()
+    .min(2, "Nombre debe tener al menos 2 caracteres")
+    .max(100, "Nombre muy largo"),
+  
+  phone_number: z.string()
+    .regex(/^[0-9+\-\s()]{10,15}$/, "Teléfono inválido")
+    .min(10, "Teléfono debe tener al menos 10 dígitos"),
+  
+  email: z.string()
+    .email("Email inválido")
+    .optional()
+    .or(z.literal("")),
+  
+  channel: z.enum([
+    'TELEFONO',
+    'WHATSAPP', 
+    'FACEBOOK',
+    'INSTAGRAM',
+    'REFERENCIA',
+    'PAGINA_WEB',
+    'OTRO'
+  ], {
+    errorMap: () => ({ message: "Seleccione un canal válido" })
+  }),
+  
+  motive: z.enum([
+    'CONSULTA_GENERAL',
+    'DOLOR_ABDOMINAL',
+    'HERNIA',
+    'VESICULA',
+    'SEGUIMIENTO',
+    'OTRO'
+  ], {
+    errorMap: () => ({ message: "Seleccione un motivo válido" })
+  }),
+  
+  notes: z.string()
+    .max(500, "Notas muy largas")
+    .optional()
+    .or(z.literal("")),
+  
+  status: z.enum([
+    'NUEVO',
+    'CONTACTADO',
+    'CALIFICADO',
+    'CITA_PROGRAMADA',
+    'NO_INTERESADO',
+    'PERDIDO',
+    'CONVERTIDO'
+  ]).optional().default('NUEVO')
+});
+
+export type NewPatientFormData = z.infer<typeof NewPatientSchema>;
+export type NewLeadFormData = z.infer<typeof NewLeadSchema>;
+
+// ✅ Schema para el formulario de admisión (combina campos de paciente con campos adicionales)
+export const AdmissionFormSchema = NewPatientSchema.extend({
+  motivos_consulta: z.array(z.string()).min(1, "Debe seleccionar al menos un motivo de consulta"),
+  canal_contacto: z.enum(['TELEFONO', 'EMAIL', 'REDES_SOCIALES', 'PRESENCIAL', 'OTRO']),
+  comentarios: z.string().max(1000, "Comentarios no pueden exceder 1000 caracteres").optional(),
+  fecha_hora_cita: z.string().min(1, "Fecha y hora de cita son requeridos"),
+});
+
+export type AdmissionFormData = z.infer<typeof AdmissionFormSchema>;
+
 // ==================== TIPOS PARA API ====================
 
-// ✅ Payload para admisión (prefijos p_ según la función de BD)
+// ✅ Payload para admisión (ACTUALIZADO con todos los campos del nuevo esquema)
 export interface AdmissionPayload {
+  // Campos básicos requeridos
   nombre: string;
   apellidos: string;
+  diagnostico_principal: DiagnosisType;
+  fecha_hora_cita: string; // ISO string
+  motivos_consulta: string[];
+  
+  // Campos básicos opcionales
   telefono?: string;
   email?: string;
   edad?: number;
-  diagnostico_principal: DiagnosisType;
+  
+  // ✅ NUEVOS CAMPOS DEMOGRÁFICOS
+  fecha_nacimiento?: string;
+  genero?: string;
+  
+  // ✅ NUEVOS CAMPOS DE UBICACIÓN
+  ciudad?: string;
+  estado?: string;
+  
+  // ✅ NUEVOS CAMPOS DE CONTACTO DE EMERGENCIA
+  contacto_emergencia_nombre?: string;
+  contacto_emergencia_telefono?: string;
+  
+  // ✅ NUEVOS CAMPOS MÉDICOS Y ADMINISTRATIVOS
+  antecedentes_medicos?: string;
+  numero_expediente?: string;
+  seguro_medico?: string;
+  
+  // ✅ NUEVOS CAMPOS DE ORIGEN Y MARKETING
+  marketing_source?: string;
+  creation_source?: string;
+  lead_id?: string;
+  
+  // Campos médicos y de gestión
   comentarios_registro?: string;
   probabilidad_cirugia?: number;
-  fecha_hora_cita: string; // ISO string
-  motivo_cita: string;
   doctor_id?: string;
 }
 

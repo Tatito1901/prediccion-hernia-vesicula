@@ -38,7 +38,7 @@ const PatientAdmissionSchema = z.object({
   p_comentarios_registro: z.string().nullable().optional(),
   p_probabilidad_cirugia: z.number().min(0).max(1).nullable().optional(),
   p_fecha_hora_cita: z.string().datetime("Fecha y hora inválida"),
-  p_motivo_cita: z.string().min(1, "Motivo de consulta requerido"),
+  p_motivos_consulta: z.array(z.string()).min(1, "Motivos de consulta requeridos"),
   p_doctor_id: z.string().uuid().nullable().optional(),
   p_creado_por_id: z.string().uuid().nullable().optional(),
 });
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       p_comentarios_registro: data.p_comentarios_registro,
       p_probabilidad_cirugia: data.p_probabilidad_cirugia,
       p_fecha_hora_cita: data.p_fecha_hora_cita,
-      p_motivo_cita: data.p_motivo_cita,
+      p_motivos_consulta: data.p_motivos_consulta,
       p_doctor_id: data.p_doctor_id,
       p_creado_por_id: userId || null,
     };

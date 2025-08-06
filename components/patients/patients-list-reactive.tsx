@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { useSpecificPatients } from '@/contexts/clinic-data-provider-new';
+import { useClinic } from '@/contexts/clinic-data-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,43 +37,78 @@ export function PatientsListReactive({
   const [sortBy, setSortBy] = useState<'created_at' | 'nombre' | 'apellidos'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // 🎯 FETCH ESPECÍFICO - Solo datos necesarios desde backend
+  // 🎯 FETCH desde contexto centralizado
   const {
-    data: patientsResponse,
+    allPatients: allPatientsData,
     isLoading,
     error,
     refetch,
-  } = useSpecificPatients({
-    search: search.trim() || undefined,
-    status: status === 'all' ? undefined : status,
+  } = useClinic();
+
+  // 🎯 Filtrado y paginación local
+  const filteredAndPaginatedData = useMemo(() => {
+    if (!allPatientsData) return { data: [], total: 0, stats: null };
+
+    let filtered = [...allPatientsData];
+
+    // Filtro por búsqueda
+    if (search.trim()) {
+      const searchTerm = search.toLowerCase().trim();
+      filtered = filtered.filter(patient => 
+        patient.nombre?.toLowerCase().includes(searchTerm) ||
+        patient.apellidos?.toLowerCase().includes(searchTerm) ||
+        patient.email?.toLowerCase().includes(searchTerm) ||
+        patient.telefono?.includes(searchTerm)
+      );
+    }
+
+    // Filtro por estado
+    if (status !== 'all') {
+      filtered = filtered.filter(patient => patient.estado_paciente === status);
+    }
+
+    // Ordenamiento
+    filtered.sort((a, b) => {
+      const aValue = a[sortBy as keyof typeof a] || '';
+      const bValue = b[sortBy as keyof typeof b] || '';
+      const comparison = String(aValue).localeCompare(String(bValue));
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    // Paginación
+    const total = filtered.length;
+    const startIndex = (page - 1) * pageSize;
+    const paginatedData = filtered.slice(startIndex, startIndex + pageSize);
+
+    // Stats básicas si se requieren
+    const stats = showStats ? {
+      total,
+      active: filtered.filter(p => ['PENDIENTE DE CONSULTA', 'CONSULTADO', 'EN SEGUIMIENTO'].includes(p.estado_paciente || '')).length,
+      completed: filtered.filter(p => p.estado_paciente === 'OPERADO').length,
+      // Propiedades esperadas por el componente
+      totalPatients: total,
+      surveyRate: 0, // No tenemos datos de encuestas en el contexto actual
+      pendingConsults: filtered.filter(p => p.estado_paciente === 'PENDIENTE DE CONSULTA').length,
+      operatedPatients: filtered.filter(p => p.estado_paciente === 'OPERADO').length
+    } : null;
+
+    return { data: paginatedData, total, stats };
+  }, [allPatientsData, search, status, page, pageSize, sortBy, sortOrder, showStats]);
+
+  // 🎯 Datos memoizados para el componente
+  const patients = filteredAndPaginatedData.data;
+  const totalPatients = filteredAndPaginatedData.total;
+  const patientsStats = filteredAndPaginatedData.stats;
+
+  const pagination = useMemo(() => ({
     page,
     pageSize,
-    sortBy,
-    sortOrder,
-    includeStats: showStats,
-  });
+    total: totalPatients,
+    totalPages: Math.ceil(totalPatients / pageSize),
+    hasMore: page < Math.ceil(totalPatients / pageSize),
+  }), [page, pageSize, totalPatients]);
 
-  // 🎯 Datos memoizados (NO filtrado local)
-  const patients = useMemo(() => 
-    patientsResponse?.data || [], 
-    [patientsResponse?.data]
-  );
-
-  const pagination = useMemo(() => 
-    patientsResponse?.pagination || {
-      page: 1,
-      pageSize: initialPageSize,
-      total: 0,
-      totalPages: 0,
-      hasMore: false,
-    }, 
-    [patientsResponse?.pagination, initialPageSize]
-  );
-
-  const stats = useMemo(() => 
-    patientsResponse?.stats, 
-    [patientsResponse?.stats]
-  );
+  const stats = patientsStats;
 
   // 🎯 Handlers para cambios de filtros
   const handleSearchChange = useCallback((value: string) => {
@@ -114,7 +149,8 @@ export function PatientsListReactive({
   };
 
   // 🎯 Calcular edad
-  const calculateAge = (birthDate: string) => {
+  const calculateAge = (birthDate: string | null) => {
+    if (!birthDate) return 'N/A';
     const today = new Date();
     const birth = new Date(birthDate);
     let age = today.getFullYear() - birth.getFullYear();
@@ -284,15 +320,13 @@ export function PatientsListReactive({
                         {patient.nombre} {patient.apellidos}
                       </h4>
                       {getStatusBadge(patient.estado_paciente)}
-                      {patient.es_primera_vez && (
-                        <Badge variant="outline">Primera vez</Badge>
-                      )}
+                      {/* Badge removed - es_primera_vez property doesn't exist in current schema */}
                     </div>
                     
                     <div className="text-sm text-muted-foreground space-y-1">
                       <div className="flex items-center gap-4">
                         <span>
-                          🎂 {calculateAge(patient.fecha_nacimiento)} años
+                          🎂 {patient.fecha_nacimiento ? calculateAge(patient.fecha_nacimiento) : 'N/A'} años
                         </span>
                         {patient.telefono && (
                           <span className="flex items-center gap-1">
@@ -313,7 +347,7 @@ export function PatientsListReactive({
                       )}
                       
                       <p>
-                        📅 Registrado: {format(new Date(patient.created_at), 'PPP', { locale: es })}
+                        📅 Registrado: {patient.fecha_registro ? format(new Date(patient.fecha_registro), 'PPP', { locale: es }) : 'N/A'}
                       </p>
                     </div>
                   </div>

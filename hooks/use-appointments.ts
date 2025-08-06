@@ -58,9 +58,9 @@ interface ApiAppointment {
   created_at?: string | null;
   updated_at?: string | null;
   fecha_hora_cita: string;
-  motivo_cita?: string;
+  motivos_consulta?: string[];
   estado_cita: string;
-  notas_cita_seguimiento?: string | null;
+  notas_breves?: string | null;
   es_primera_vez?: boolean | null;
   doctor?: {
     id: string;
@@ -90,9 +90,9 @@ const transformAppointment = (apiAppointment: ApiAppointment): AppointmentWithPa
     created_at: apiAppointment.created_at || undefined,
     updated_at: apiAppointment.updated_at || undefined,
     fecha_hora_cita: apiAppointment.fecha_hora_cita,
-    motivo_cita: apiAppointment.motivo_cita || '',
+    motivos_consulta: apiAppointment.motivos_consulta || [],
     estado_cita: apiAppointment.estado_cita as AppointmentStatus,
-    notas_cita_seguimiento: apiAppointment.notas_cita_seguimiento || undefined,
+    notas_breves: apiAppointment.notas_breves || undefined,
     es_primera_vez: apiAppointment.es_primera_vez || false,
     patients: apiAppointment.patients ? {
       id: patientId,
@@ -120,18 +120,19 @@ interface UpdateStatusParams {
 interface CreateAppointmentParams {
   patient_id: string;
   fecha_hora_cita: string;
-  motivo_cita: string;
+  motivos_consulta: string[];
+  estado_cita?: AppointmentStatus;
   doctor_id?: string | null;
-  notas_cita_seguimiento?: string;
+  notas_breves?: string;
   es_primera_vez?: boolean;
 }
 
 interface UpdateAppointmentParams {
   id: string;
   fecha_hora_cita?: string;
-  motivo_cita?: string;
+  motivos_consulta?: string[];
   estado_cita?: AppointmentStatus;
-  notas_cita_seguimiento?: string;
+  notas_breves?: string;
   doctor_id?: string | null;
 }
 

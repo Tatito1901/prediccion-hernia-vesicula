@@ -52,9 +52,11 @@ import {
 import type { 
   NewPatientFormProps, 
   DiagnosisType,
-  AdmissionPayload,
-  NewPatientSchema 
+  AdmissionPayload
 } from './admision-types';
+
+// ✅ Schema importado como valor para zodResolver
+import { NewPatientSchema } from './admision-types';
 
 // ✅ Hook corregido para admisión
 import { useAdmitPatient } from './actions';
@@ -89,15 +91,43 @@ const TIME_SLOTS = Array.from({ length: 16 }, (_, i) => {
 });
 
 // ==================== TIPOS PARA EL FORMULARIO ====================
+// ✅ ACTUALIZADO para incluir todos los campos del nuevo esquema
 type FormData = {
+  // Campos básicos requeridos
   nombre: string;
   apellidos: string;
-  telefono?: string;
-  email?: string;
-  edad?: number;
   diagnostico_principal: DiagnosisType;
   fechaConsulta: Date;
   horaConsulta: string;
+  
+  // Campos básicos opcionales
+  telefono?: string;
+  email?: string;
+  edad?: number;
+  
+  // ✅ NUEVOS CAMPOS DEMOGRÁFICOS
+  fecha_nacimiento?: string;
+  genero?: 'Masculino' | 'Femenino' | 'Otro';
+  
+  // ✅ NUEVOS CAMPOS DE UBICACIÓN
+  ciudad?: string;
+  estado?: string;
+  
+  // ✅ NUEVOS CAMPOS DE CONTACTO DE EMERGENCIA
+  contacto_emergencia_nombre?: string;
+  contacto_emergencia_telefono?: string;
+  
+  // ✅ NUEVOS CAMPOS MÉDICOS Y ADMINISTRATIVOS
+  antecedentes_medicos?: string;
+  numero_expediente?: string;
+  seguro_medico?: string;
+  
+  // ✅ NUEVOS CAMPOS DE ORIGEN Y MARKETING
+  marketing_source?: string;
+  creation_source?: string;
+  lead_id?: string;
+  
+  // Campos médicos
   comentarios_registro?: string;
   probabilidad_cirugia?: number;
   doctor_id?: string;
@@ -132,18 +162,45 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
   // ✅ HOOK DE ADMISIÓN CORREGIDO
   const admissionMutation = useAdmitPatient();
 
-  // ✅ FORMULARIO CON VALIDACIÓN CORREGIDA
+  // ✅ FORMULARIO CON VALIDACIÓN CORREGIDA Y CAMPOS COMPLETOS
   const form = useForm<FormData>({
     resolver: zodResolver(NewPatientSchema),
     defaultValues: {
+      // Campos básicos requeridos
       nombre: '',
       apellidos: '',
-      telefono: '',
-      email: '',
-      edad: undefined,
       diagnostico_principal: 'HERNIA INGUINAL',
       fechaConsulta: undefined,
       horaConsulta: '09:00',
+      
+      // Campos básicos opcionales
+      telefono: '',
+      email: '',
+      edad: undefined,
+      
+      // ✅ NUEVOS CAMPOS DEMOGRÁFICOS
+      fecha_nacimiento: '',
+      genero: undefined,
+      
+      // ✅ NUEVOS CAMPOS DE UBICACIÓN
+      ciudad: '',
+      estado: '',
+      
+      // ✅ NUEVOS CAMPOS DE CONTACTO DE EMERGENCIA
+      contacto_emergencia_nombre: '',
+      contacto_emergencia_telefono: '',
+      
+      // ✅ NUEVOS CAMPOS MÉDICOS Y ADMINISTRATIVOS
+      antecedentes_medicos: '',
+      numero_expediente: '',
+      seguro_medico: '',
+      
+      // ✅ NUEVOS CAMPOS DE ORIGEN Y MARKETING
+      marketing_source: '',
+      creation_source: 'admision_form', // Valor por defecto
+      lead_id: undefined,
+      
+      // Campos médicos
       comentarios_registro: '',
       probabilidad_cirugia: 0.5,
       doctor_id: undefined,
@@ -155,18 +212,45 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
     try {
       console.log('📝 [NewPatientForm] Submitting form data:', data);
 
-      // ✅ Transformar datos al formato esperado por la API
+      // ✅ Transformar datos al formato esperado por la API (COMPLETO con nuevos campos)
       const payload: AdmissionPayload = {
+        // Campos básicos requeridos
         nombre: data.nombre.trim(),
         apellidos: data.apellidos.trim(),
+        diagnostico_principal: data.diagnostico_principal,
+        fecha_hora_cita: `${data.fechaConsulta.toISOString().split('T')[0]}T${data.horaConsulta}:00`,
+        motivos_consulta: [`Primera consulta - ${diagnosisOptions.find(d => d.value === data.diagnostico_principal)?.label}`],
+        
+        // Campos básicos opcionales
         telefono: data.telefono?.trim() || undefined,
         email: data.email?.trim() || undefined,
         edad: data.edad,
-        diagnostico_principal: data.diagnostico_principal,
+        
+        // ✅ NUEVOS CAMPOS DEMOGRÁFICOS
+        fecha_nacimiento: data.fecha_nacimiento?.trim() || undefined,
+        genero: data.genero || undefined,
+        
+        // ✅ NUEVOS CAMPOS DE UBICACIÓN
+        ciudad: data.ciudad?.trim() || undefined,
+        estado: data.estado?.trim() || undefined,
+        
+        // ✅ NUEVOS CAMPOS DE CONTACTO DE EMERGENCIA
+        contacto_emergencia_nombre: data.contacto_emergencia_nombre?.trim() || undefined,
+        contacto_emergencia_telefono: data.contacto_emergencia_telefono?.trim() || undefined,
+        
+        // ✅ NUEVOS CAMPOS MÉDICOS Y ADMINISTRATIVOS
+        antecedentes_medicos: data.antecedentes_medicos?.trim() || undefined,
+        numero_expediente: data.numero_expediente?.trim() || undefined,
+        seguro_medico: data.seguro_medico?.trim() || undefined,
+        
+        // ✅ NUEVOS CAMPOS DE ORIGEN Y MARKETING
+        marketing_source: data.marketing_source?.trim() || undefined,
+        creation_source: data.creation_source?.trim() || 'admision_form',
+        lead_id: data.lead_id || undefined,
+        
+        // Campos médicos y de gestión
         comentarios_registro: data.comentarios_registro?.trim() || undefined,
         probabilidad_cirugia: data.probabilidad_cirugia,
-        fecha_hora_cita: `${data.fechaConsulta.toISOString().split('T')[0]}T${data.horaConsulta}:00`,
-        motivo_cita: `Primera consulta - ${diagnosisOptions.find(d => d.value === data.diagnostico_principal)?.label}`,
         doctor_id: data.doctor_id,
       };
 
@@ -332,6 +416,153 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               </div>
             </div>
 
+            {/* ✅ INFORMACIÓN DEMOGRÁFICA */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-purple-600" />
+                <h3 className="text-lg font-medium">Información Demográfica</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="fecha_nacimiento"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Fecha de Nacimiento</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="date"
+                          {...field}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="genero"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Género</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className={fieldState.error ? 'border-red-500' : ''}>
+                            <SelectValue placeholder="Seleccione género" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Masculino">Masculino</SelectItem>
+                          <SelectItem value="Femenino">Femenino</SelectItem>
+                          <SelectItem value="Otro">Otro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* ✅ INFORMACIÓN DE UBICACIÓN */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-orange-600" />
+                <h3 className="text-lg font-medium">Información de Ubicación</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="ciudad"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Ciudad</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Ciudad de residencia" 
+                          {...field}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="estado"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Estado/Provincia</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Estado o provincia" 
+                          {...field}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* ✅ CONTACTO DE EMERGENCIA */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-red-600" />
+                <h3 className="text-lg font-medium">Contacto de Emergencia</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="contacto_emergencia_nombre"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Nombre del Contacto</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Nombre completo del contacto" 
+                          {...field}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="contacto_emergencia_telefono"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Teléfono de Contacto</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="(555) 123-4567" 
+                          {...field}
+                          onChange={(e) => {
+                            const formatted = formatPhoneNumber(e.target.value);
+                            field.onChange(formatted);
+                          }}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
             {/* ✅ INFORMACIÓN MÉDICA */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -406,6 +637,109 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
                   </FormItem>
                 )}
               />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="antecedentes_medicos"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Antecedentes Médicos</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Historial médico relevante..." 
+                          {...field}
+                          className={cn("min-h-[60px]", fieldState.error && 'border-red-500')}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="seguro_medico"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Seguro Médico</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Nombre del seguro médico" 
+                          {...field}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <FormField
+                control={form.control}
+                name="numero_expediente"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>Número de Expediente</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Número de expediente médico" 
+                        {...field}
+                        className={fieldState.error ? 'border-red-500' : ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* ✅ INFORMACIÓN DE ORIGEN Y MARKETING */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <h3 className="text-lg font-medium">Información de Origen y Marketing</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="marketing_source"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Fuente de Marketing</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Cómo conoció sobre nosotros" 
+                          {...field}
+                          className={fieldState.error ? 'border-red-500' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="creation_source"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel>Fuente de Creación</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Sistema de origen" 
+                          {...field}
+                          disabled
+                          className={cn("bg-muted", fieldState.error && 'border-red-500')}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
 
             {/* ✅ PROGRAMACIÓN DE CITA */}

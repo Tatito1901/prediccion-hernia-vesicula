@@ -35,10 +35,15 @@ import PatientTable from "./patient-table"
 
 // --- Hooks unificados y Tipos ---
 import { useClinic } from "@/contexts/clinic-data-provider"
-import { 
-  usePatientStats,
-  type PatientStatsData 
-} from "@/hooks/use-unified-filtering"
+import { usePatientStats } from "@/hooks/use-paginated-patients"
+
+// ✅ Tipo para estadísticas de pacientes
+type PatientStatsData = {
+  totalPatients: number;
+  surveyRate: number;
+  pendingConsults: number;
+  operatedPatients: number;
+}
 import { 
   EnrichedPatient, 
   PatientStatusEnum, 
@@ -316,7 +321,7 @@ const PatientManagement: React.FC = () => {
     error,
     
     // Pacientes - ÚNICA FUENTE DE VERDAD
-    patients: paginatedPatients,
+    paginatedPatients,
     patientsPagination,
     patientsStats,
     patientsFilters,
@@ -330,7 +335,13 @@ const PatientManagement: React.FC = () => {
   } = useClinic()
   
   // ✅ HOOKS UNIFICADOS - Estadísticas optimizadas
-  const patientStatsData: PatientStatsData = usePatientStats(paginatedPatients || [])
+  const patientStatsQuery = usePatientStats()
+  const patientStatsData: PatientStatsData = patientStatsQuery.data || {
+    totalPatients: 0,
+    surveyRate: 0,
+    pendingConsults: 0,
+    operatedPatients: 0
+  }
   
   // Extraer valores de filtros actuales
   const currentPage = patientsFilters.page

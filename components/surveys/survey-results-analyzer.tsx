@@ -55,7 +55,7 @@ import {
 import { useCreateAppointment } from '@/hooks/use-appointments';
 // TODO: [Refactor] The helper file was not found. The logic for these functions needs to be restored.
 // import { calculateConversionScore, generateInsights, generateRecommendationCategories } from "@/lib/utils/survey-analyzer-helpers"
-import { AppointmentStatusEnum, type Patient, type PatientSurvey } from "@/lib/types"
+import { AppointmentStatusEnum, type Patient, type PatientSurveyDataData } from "@/lib/types"
 
 // Define the structure for conversion insights
 export interface ConversionInsight {
@@ -98,7 +98,7 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
   const createAppointment = useCreateAppointment();
 
   // TODO: [Refactor] Survey data needs to be fetched separately for this patient.
-  const surveyData: PatientSurvey | null = null; 
+  const surveyData: PatientSurveyData | null = null; 
 
   const [modelError, setModelError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("resumen");
@@ -117,13 +117,13 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
     // TODO: [Refactor] This logic is based on the old, flat survey structure.
     // It needs to be rewritten to use the normalized `surveyData.answers` array.
     /*
-    const calculateBenefitScore = (survey: PatientSurvey) => {
+    const calculateBenefitScore = (survey: PatientSurveyData) => {
       const severityScore = survey.severidadSintomasActuales === "severa" ? 3 : (survey.severidadSintomasActuales === "moderada" ? 2 : 1)
       const impactScore = survey.afectacionActividadesDiarias === "mucho" ? 3 : (survey.afectacionActividadesDiarias === "moderadamente" ? 2 : 1)
       return (severityScore + impactScore) * 10
     }
 
-    const calculateRiskScore = (survey: PatientSurvey) => {
+    const calculateRiskScore = (survey: PatientSurveyData) => {
       let score = 0
       score += (survey.condicionesMedicasCronicas?.length || 0) * 5
       return score || 1
@@ -156,7 +156,7 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
       patient_id: patientData.id,
       fecha_hora_cita: followUpDate.toISOString(),
       estado_cita: AppointmentStatusEnum.PROGRAMADA,
-      motivo_cita: 'Seguimiento de encuesta pre-quirúrgica',
+      motivos_consulta: ['Seguimiento de encuesta pre-quirúrgica'],
       es_primera_vez: false,
     });
   };
@@ -169,7 +169,7 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
   }
 
   // TODO: [Refactor] This logic needs to be rewritten to use the new normalized survey data structure.
-  function generatePersuasivePoints(patient: Patient, survey: PatientSurvey | null): PersuasivePoint[] {
+  function generatePersuasivePoints(patient: Patient, survey: PatientSurveyData | null): PersuasivePoint[] {
     const points: PersuasivePoint[] = []
     if (!survey) return points
 

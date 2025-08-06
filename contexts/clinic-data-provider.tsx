@@ -29,6 +29,10 @@ type ExtendedClinicDataContextType = ReturnType<typeof useClinicData> & {
   isPatientsFetching: boolean;
   patientsError: Error | null;
   refetchPatients: () => void;
+  // ✅ Propiedades adicionales proporcionadas en el contexto
+  paginatedPatients?: any[];
+  patientsPagination?: any;
+  patientsStats?: any;
 };
 
 export type ClinicDataContextType = ExtendedClinicDataContextType;

@@ -262,7 +262,7 @@ export function AppointmentsListReactive({
                     <p>
                       📅 {format(new Date(appointment.fecha_hora_cita), 'PPP p', { locale: es })}
                     </p>
-                    <p>📋 {appointment.motivo_cita}</p>
+                    <p>📋 {Array.isArray(appointment.motivos_consulta) ? appointment.motivos_consulta.join(', ') : 'Sin especificar'}</p>
                     {appointment.doctor?.full_name && (
                       <p>👨‍⚕️ Dr. {appointment.doctor.full_name}</p>
                     )}

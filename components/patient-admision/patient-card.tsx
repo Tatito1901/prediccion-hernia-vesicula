@@ -360,7 +360,11 @@ export const PatientCard = memo<PatientCardProps>(({
             </div>
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-muted-foreground" />
-              <span className="truncate">{appointment.motivo_cita}</span>
+              <span className="truncate">
+                {Array.isArray(appointment.motivos_consulta) 
+                  ? appointment.motivos_consulta.join(', ') 
+                  : "Sin motivos especificados"}
+              </span>
             </div>
             {patientData?.telefono && (
               <div className="flex items-center gap-2">

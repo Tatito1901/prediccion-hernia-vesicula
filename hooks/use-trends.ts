@@ -48,32 +48,7 @@ export function useTrends(period: string = 'month', enabled: boolean = true) {
   });
 }
 
-// ==================== HOOKS ESPECÍFICOS PARA COMPONENTES ====================
-
-/**
- * Hook optimizado para métricas del dashboard principal
- */
-export function useDashboardTrends(enabled: boolean = true) {
-  return useTrends('month', enabled);
-}
-
-/**
- * Hook para analytics de pacientes con período personalizable
- */
-export function usePatientAnalyticsTrends(period: string = 'month', enabled: boolean = true) {
-  return useTrends(period, enabled);
-}
-
-/**
- * Hook para tendencias semanales
- */
-export function useWeeklyTrends(enabled: boolean = true) {
-  return useTrends('week', enabled);
-}
-
-/**
- * Hook para tendencias trimestrales
- */
-export function useQuarterlyTrends(enabled: boolean = true) {
-  return useTrends('quarter', enabled);
-}
+// ==================== NOTA ====================
+// Los hooks wrapper específicos (useDashboardTrends, usePatientAnalyticsTrends, 
+// useWeeklyTrends, useQuarterlyTrends) fueron eliminados por ser código muerto.
+// Usar directamente useTrends(period, enabled) en su lugar.

@@ -70,7 +70,7 @@ export async function GET(
         motivo_cita,
         estado_cita,
         es_primera_vez,
-        notas_cita_seguimiento,
+        notas_breves,
         created_at,
         doctor_id,
         profiles:doctor_id (
@@ -164,7 +164,7 @@ export async function GET(
       surveys_completed: surveys?.filter(s => s.completed_at).length || 0,
       average_rating: surveys?.reduce((acc, s) => {
         const responses = s.survey_responses;
-        if (responses && responses.length > 0) {
+        if (responses && responses.length > 0 && responses[0]) {
           const rating = responses[0].overall_rating;
           return rating ? acc + rating : acc;
         }
@@ -185,7 +185,7 @@ export async function GET(
       return {
         ...appointment,
         // Información del doctor
-        doctor_name: appointment.profiles?.full_name || appointment.profiles?.username || 'No asignado',
+        doctor_name: appointment.profiles?.[0]?.full_name || appointment.profiles?.[0]?.username || 'Dr. No Asignado',
         
         // Estado y etiquetas
         status_label: getStatusLabel(appointment.estado_cita),
@@ -208,7 +208,7 @@ export async function GET(
         // Campos calculados
         full_name: `${patient.nombre} ${patient.apellidos}`.trim(),
         display_diagnosis: patient.diagnostico_principal || 'Sin diagnóstico específico',
-        doctor_name: patient.profiles?.full_name || patient.profiles?.username || 'No asignado',
+        doctor_name: patient.profiles?.[0]?.full_name || patient.profiles?.[0]?.username || 'No asignado',
         
         // Estado del paciente
         surgery_probability_percentage: patient.probabilidad_cirugia ? Math.round(patient.probabilidad_cirugia * 100) : null,

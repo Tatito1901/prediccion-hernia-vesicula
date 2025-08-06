@@ -127,10 +127,10 @@ export function transformApiAppointments(apiAppointments: ApiAppointment[]): Nor
       patientId: appointment.patient_id,
       doctorId: appointment.doctor_id,
       dateTime: parseAppointmentDate(appointment.fecha_hora_cita), // ✅ Fecha validada
-      motivo: appointment.motivo_cita || 'Consulta general',
+      motivo: Array.isArray(appointment.motivos_consulta) ? appointment.motivos_consulta.join(', ') : 'Consulta general',
       status: appointment.estado_cita,
       isFirstTime: appointment.es_primera_vez || false,
-      notes: appointment.notas_cita_seguimiento,
+      notes: appointment.notas_breves,
       createdAt: parseCreatedDate(appointment.created_at), // ✅ Fecha validada
       patient: {
         id: appointment.patients.id,

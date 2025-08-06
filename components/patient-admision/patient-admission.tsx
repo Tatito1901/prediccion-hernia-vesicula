@@ -1,174 +1,193 @@
 // components/patient-admision/patient-admission.tsx
 'use client';
-
-import React, { useState, useCallback, memo, useMemo } from 'react';
-import { Badge } from '@/components/ui/badge';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-
-// Icons
-import {
-  CalendarCheck,
-  CalendarClock,
-  History,
-  UserPlus,
-  RefreshCw,
-  Wifi,
-  WifiOff,
+import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
+import { 
+  RefreshCw, 
+  Clock, 
+  Calendar, 
+  CalendarClock, 
+  UserPlus, 
+  CalendarCheck, 
   AlertCircle,
-  Loader2,
-  TrendingUp,
-  Clock,
+  Plus
 } from 'lucide-react';
+import { isToday, isFuture, isPast } from 'date-fns';
+import { useAdmissionUnified, useAppointmentActionsUnified } from '@/hooks/use-admission-unified';
+import type { TabType, AppointmentWithPatient, AdmissionAction } from './admision-types';
 
-// ✅ IMPORTS CORREGIDOS - usando tipos unificados
-import type { 
-  TabType, 
-  AdmissionAction, 
-  AppointmentWithPatient,
-  AdmissionDBResponse 
-} from './admision-types';
+// Carga diferida de componentes pesados
+const PatientCard = dynamic(() => import('./patient-card'), { 
+  ssr: false,
+  loading: () => <Skeleton className="h-40 w-full rounded-xl" />
+});
 
-// ✅ Hooks corregidos
-import { useAdmissionData, useRefreshAdmissionData } from '@/hooks/use-admission-data';
-
-// ✅ Componentes corregidos
-import AppointmentsList from './appointments-list';
-import NewPatientForm from './new-patient-form';
-import PatientCard from './patient-card';
+import { PatientModal } from './patient-modal';
+import { LeadModal } from '@/components/leads/lead-modal';
 
 // ==================== CONFIGURACIÓN DE TABS ====================
-const TAB_CONFIG = [
+const TABS_CONFIG = [
   {
-    key: 'newPatient' as TabType,
-    label: 'Nuevo Paciente',
-    shortLabel: 'Nuevo',
-    icon: UserPlus,
-    description: 'Registrar un nuevo paciente y agendar su primera cita',
-    color: 'blue',
+    key: 'today',
+    label: 'Hoy',
+    icon: <Calendar className="w-4 h-4" />,
+    color: 'bg-blue-500',
+    description: 'Citas de hoy'
   },
   {
-    key: 'today' as TabType,
-    label: 'Citas de Hoy',
-    shortLabel: 'Hoy',
-    icon: CalendarCheck,
-    description: 'Citas programadas para el día de hoy',
-    color: 'green',
+    key: 'future',
+    label: 'Futuras',
+    icon: <CalendarClock className="w-4 h-4" />,
+    color: 'bg-green-500',
+    description: 'Citas programadas'
   },
   {
-    key: 'future' as TabType,
-    label: 'Próximas Citas',
-    shortLabel: 'Próximas',
-    icon: CalendarClock,
-    description: 'Citas programadas para fechas futuras',
-    color: 'purple',
-  },
-  {
-    key: 'past' as TabType,
-    label: 'Historial',
-    shortLabel: 'Historial',
-    icon: History,
-    description: 'Historial de citas pasadas y completadas',
-    color: 'gray',
-  },
+    key: 'past',
+    label: 'Pasadas',
+    icon: <Clock className="w-4 h-4" />,
+    color: 'bg-gray-500',
+    description: 'Historial de citas'
+  }
 ] as const;
 
-// ==================== COMPONENTES INTERNOS MEMOIZADOS ====================
+// Opciones estáticas para modales
+const CHANNEL_OPTIONS = [
+  { value: 'TELEFONO', label: 'Teléfono' },
+  { value: 'WHATSAPP', label: 'WhatsApp' },
+  { value: 'FACEBOOK', label: 'Facebook' },
+  { value: 'INSTAGRAM', label: 'Instagram' },
+  { value: 'REFERENCIA', label: 'Referencia' },
+  { value: 'PAGINA_WEB', label: 'Página Web' },
+  { value: 'OTRO', label: 'Otro' }
+] as const;
 
-// ✅ Tab de navegación optimizado con tipos corregidos
-const TabNavigation = memo<{
-  activeTab: TabType;
-  onTabChange: (tab: TabType) => void;
-  counts: Record<TabType, number>;
-  isLoading: boolean;
+const MOTIVE_OPTIONS = [
+  { value: 'CONSULTA_GENERAL', label: 'Consulta General' },
+  { value: 'DOLOR_ABDOMINAL', label: 'Dolor Abdominal' },
+  { value: 'HERNIA', label: 'Hernia' },
+  { value: 'VESICULA', label: 'Vesícula' },
+  { value: 'SEGUIMIENTO', label: 'Seguimiento' },
+  { value: 'OTRO', label: 'Otro' }
+] as const;
+
+// ==================== COMPONENTES MEMOIZADOS ====================
+const TabNavigation = React.memo<{
+  activeTab: TabType; 
+  onTabChange: (tab: TabType) => void; 
+  counts: Record<TabType, number>; 
+  isLoading: boolean; 
 }>(({ activeTab, onTabChange, counts, isLoading }) => (
-  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-    {TAB_CONFIG.map((tab) => {
-      const Icon = tab.icon;
-      const isActive = activeTab === tab.key;
-      const count = counts[tab.key] || 0;
-      
-      return (
-        <Button
-          key={tab.key}
-          variant={isActive ? 'default' : 'outline'}
-          onClick={() => onTabChange(tab.key)}
-          disabled={isLoading}
-          className={`
-            relative h-auto p-4 flex-col items-start text-left
-            ${isActive ? `bg-${tab.color}-600 hover:bg-${tab.color}-700 text-white` : ''}
-          `}
-        >
-          <div className="flex items-center justify-between w-full mb-2">
-            <Icon className={`h-5 w-5 ${isActive ? 'text-white' : `text-${tab.color}-600`}`} />
-            <Badge variant={isActive ? 'secondary' : 'outline'} className="ml-2">
-              {isLoading ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                count
-              )}
-            </Badge>
-          </div>
-          <div>
-            <div className="font-semibold text-sm sm:text-base">
-              <span className="hidden sm:inline">{tab.label}</span>
-              <span className="sm:hidden">{tab.shortLabel}</span>
+  <div className="mb-6">
+    <div className="flex flex-wrap gap-2">
+      {TABS_CONFIG.map((tab) => {
+        const isActive = activeTab === tab.key;
+        const count = counts[tab.key] || 0;
+        
+        return (
+          <Button
+            key={tab.key}
+            variant={isActive ? "default" : "outline"}
+            size="lg"
+            className={`
+              flex flex-col items-center justify-center h-auto py-3 px-4 relative
+              transition-all duration-200 rounded-xl
+              ${isActive ? 'shadow-md scale-[1.02]' : 'hover:shadow-sm'}
+              min-w-[100px] sm:min-w-[120px]
+            `}
+            onClick={() => onTabChange(tab.key)}
+            disabled={isLoading}
+          >
+            <div className={`p-2 rounded-full ${isActive ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'} mb-2`}>
+              {tab.icon}
             </div>
-            <p className={`text-xs mt-1 hidden sm:block ${
-              isActive ? 'text-white/80' : 'text-muted-foreground'
-            }`}>
+            <span className="font-medium text-sm">{tab.label}</span>
+            {count > 0 && (
+              <Badge 
+                variant={isActive ? "secondary" : "outline"}
+                className={`
+                  absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs
+                  ${isActive ? 'bg-white text-primary border-0' : 'bg-primary text-white'}
+                `}
+              >
+                {count}
+              </Badge>
+            )}
+            <span className="text-xs opacity-70 mt-1 text-center line-clamp-1">
               {tab.description}
-            </p>
-          </div>
-        </Button>
-      );
-    })}
+            </span>
+          </Button>
+        );
+      })}
+    </div>
   </div>
 ));
+TabNavigation.displayName = 'TabNavigation';
 
-TabNavigation.displayName = "TabNavigation";
-
-// ✅ Header optimizado con indicadores de estado
-const AdmissionHeader = memo<{
-  isOnline: boolean;
+const AdmissionHeader = React.memo<{
   isRefreshing: boolean;
   onRefresh: () => void;
-}>(({ isOnline, isRefreshing, onRefresh }) => {
+}>(({ isRefreshing, onRefresh }) => {
   return (
-    <Card className="mb-6">
-      <CardHeader className="pb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <CardTitle className="text-xl font-bold flex items-center gap-2">
-              <CalendarCheck className="h-6 w-6 text-blue-600" />
-              Admisión de Pacientes
-            </CardTitle>
-            <p className="text-muted-foreground mt-1">
-              Gestione las citas y el flujo de pacientes de manera eficiente
-            </p>
+    <Card className="mb-6 border-0 shadow-sm bg-gradient-to-r from-primary/5 to-primary/10">
+      <CardHeader className="pb-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-primary rounded-xl">
+              <CalendarCheck className="h-6 w-6 text-primary-foreground" />
+            </div>
+            <div>
+              <CardTitle className="text-2xl font-bold">
+                Admisión de Pacientes
+              </CardTitle>
+              <p className="text-muted-foreground text-sm">
+                Gestión eficiente de citas y pacientes
+              </p>
+            </div>
           </div>
           
-          <div className="flex items-center gap-3">
-            {/* Indicador de conexión */}
-            <div className="flex items-center gap-2">
-              {isOnline ? (
-                <Wifi className="h-4 w-4 text-green-600" />
-              ) : (
-                <WifiOff className="h-4 w-4 text-red-600" />
-              )}
-              <span className={`text-xs ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
-                {isOnline ? 'En línea' : 'Sin conexión'}
-              </span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="flex gap-2">
+              <LeadModal
+                trigger={
+                  <Button variant="outline" className="gap-2 rounded-xl">
+                    <UserPlus className="h-4 w-4" />
+                    <span className="hidden xs:inline">Nuevo Lead</span>
+                  </Button>
+                }
+                channelOptions={CHANNEL_OPTIONS}
+                motiveOptions={MOTIVE_OPTIONS}
+                onSuccess={() => {
+                  toast.success('Lead registrado exitosamente');
+                  onRefresh();
+                }}
+              />
+              <PatientModal
+                trigger={
+                  <Button className="gap-2 rounded-xl">
+                    <Plus className="h-4 w-4" />
+                    <span className="hidden xs:inline">Nuevo Paciente</span>
+                  </Button>
+                }
+                onSuccess={() => {
+                  toast.success('Paciente registrado exitosamente');
+                  onRefresh();
+                }}
+              />
             </div>
-
-            {/* Botón de actualizar */}
+            
             <Button
               variant="outline"
-              size="sm"
               onClick={onRefresh}
               disabled={isRefreshing}
-              className="gap-2"
+              className="gap-2 h-10 px-4 rounded-xl"
             >
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">
@@ -181,95 +200,69 @@ const AdmissionHeader = memo<{
     </Card>
   );
 });
+AdmissionHeader.displayName = 'AdmissionHeader';
 
-AdmissionHeader.displayName = "AdmissionHeader";
-
-// ✅ Lista de citas optimizada
-const AppointmentsSection = memo<{
+const AppointmentsSection = React.memo<{
   appointments: AppointmentWithPatient[];
   isLoading: boolean;
   isLoadingMore: boolean;
-  hasMore: boolean;
-  onLoadMore: () => void;
-  onAppointmentAction: (action: AdmissionAction, appointmentId: string) => void;
+  hasMore: boolean | undefined;
+  loadMore: () => void;
+  refresh: () => void;
   emptyMessage: string;
-}>(({ 
-  appointments, 
-  isLoading, 
-  isLoadingMore, 
-  hasMore, 
-  onLoadMore, 
-  onAppointmentAction,
-  emptyMessage 
-}) => {
+  onAction: (action: AdmissionAction, appointmentId: string) => void;
+}>(({ appointments, isLoading, isLoadingMore, hasMore, loadMore, refresh, emptyMessage, onAction }) => {
   if (isLoading) {
     return (
       <div className="space-y-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i} className="p-4">
-            <div className="animate-pulse space-y-3">
-              <div className="flex items-center space-x-3">
-                <div className="rounded-full bg-gray-200 h-12 w-12"></div>
-                <div className="space-y-2 flex-1">
-                  <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="h-3 bg-gray-200 rounded w-full"></div>
-                <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-              </div>
-            </div>
-          </Card>
+          <Skeleton key={i} className="h-40 w-full rounded-xl" />
         ))}
       </div>
     );
   }
-
-  if (appointments.length === 0) {
+  
+  if (!appointments.length) {
     return (
-      <Card className="p-8">
-        <div className="text-center">
-          <CalendarClock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            {emptyMessage}
-          </h3>
-          <p className="text-gray-500">
-            Las citas aparecerán aquí una vez que sean programadas.
-          </p>
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="mb-4 p-4 bg-secondary rounded-full">
+          <Calendar className="h-8 w-8 text-muted-foreground" />
         </div>
-      </Card>
+        <h3 className="text-lg font-medium mb-1">{emptyMessage}</h3>
+        <p className="text-muted-foreground text-sm max-w-md">
+          Las citas aparecerán aquí una vez que sean programadas.
+        </p>
+      </div>
     );
   }
-
+  
   return (
     <div className="space-y-4">
       {appointments.map((appointment) => (
         <PatientCard
           key={appointment.id}
           appointment={appointment}
-          onAction={onAppointmentAction}
+          onAction={(action: AdmissionAction) => onAction(action, appointment.id)}
         />
       ))}
       
-      {/* Botón para cargar más */}
       {hasMore && (
         <div className="flex justify-center pt-4">
           <Button
             variant="outline"
-            onClick={onLoadMore}
+            onClick={loadMore}
             disabled={isLoadingMore}
-            className="gap-2"
+            className="gap-2 rounded-xl"
           >
             {isLoadingMore ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Cargando...
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Cargando...</span>
               </>
             ) : (
               <>
-                <TrendingUp className="h-4 w-4" />
-                Cargar más citas
+                <Clock className="h-4 w-4" />
+                <span className="text-sm">Cargar más</span>
               </>
             )}
           </Button>
@@ -278,138 +271,134 @@ const AppointmentsSection = memo<{
     </div>
   );
 });
-
-AppointmentsSection.displayName = "AppointmentsSection";
+AppointmentsSection.displayName = 'AppointmentsSection';
 
 // ==================== COMPONENTE PRINCIPAL ====================
 const PatientAdmission: React.FC = () => {
-  // ✅ ESTADOS LOCALES
   const [activeTab, setActiveTab] = useState<TabType>('today');
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  // ✅ HOOKS CORREGIDOS con tipos unificados
-  const {
+  
+  const { 
+    isLoading, 
+    refetch: refresh, 
+    fetchNextPage, 
+    hasNextPage,
     appointments,
-    counts,
-    isLoading,
-    isLoadingMore,
-    hasMore,
-    isError,
-    error,
-    loadMore,
-    refresh,
-  } = useAdmissionData(activeTab);
+    error: queryError,
+    isError: queryIsError
+  } = useAdmissionUnified(activeTab);
+  
+  const { handleAppointmentAction } = useAppointmentActionsUnified();
 
-  const { refreshAll } = useRefreshAdmissionData();
-
-  // ✅ EFECTOS para estado de conexión
-  React.useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+  // Filtrado optimizado de citas
+  const { todayAppointments, futureAppointments, pastAppointments } = useMemo(() => {
+    const allApps = appointments || [];
+    
+    return {
+      todayAppointments: allApps.filter(app => 
+        app?.estado_cita === 'PROGRAMADA' && 
+        app.fecha_hora_cita && 
+        isToday(new Date(app.fecha_hora_cita))
+      ),
+      futureAppointments: allApps.filter(app => 
+        app?.estado_cita === 'PROGRAMADA' && 
+        app.fecha_hora_cita && 
+        isFuture(new Date(app.fecha_hora_cita))
+      ),
+      pastAppointments: allApps.filter(app => 
+        app?.fecha_hora_cita && 
+        (app.estado_cita !== 'PROGRAMADA' || isPast(new Date(app.fecha_hora_cita)))
+      )
     };
-  }, []);
+  }, [appointments]);
 
-  // ✅ HANDLERS OPTIMIZADOS
+  // Contadores memoizados
+  const counts = useMemo(() => ({
+    today: todayAppointments.length,
+    future: futureAppointments.length,
+    past: pastAppointments.length
+  }), [todayAppointments.length, futureAppointments.length, pastAppointments.length]);
+
   const handleTabChange = useCallback((tab: TabType) => {
     setActiveTab(tab);
   }, []);
 
-  const handleRefresh = useCallback(async () => {
-    try {
-      await refreshAll();
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    }
-  }, [refreshAll]);
-
-  const handleAppointmentAction = useCallback((action: AdmissionAction, appointmentId: string) => {
-    console.log(`🎯 [PatientAdmission] Action ${action} for appointment ${appointmentId}`);
-    // La acción se maneja en el PatientCard directamente
-  }, []);
-
-  const handleNewPatientSuccess = useCallback((result: AdmissionDBResponse) => {
-    console.log('✅ [PatientAdmission] New patient created:', result);
-    // Cambiar a la tab de hoy para ver la nueva cita
-    setActiveTab('today');
-    // Refrescar datos
+  const handleRefresh = useCallback(() => {
     refresh();
   }, [refresh]);
 
-  // ✅ MENSAJES PARA ESTADOS VACÍOS
-  const emptyMessages = useMemo(() => ({
-    newPatient: 'Complete el formulario para registrar un nuevo paciente',
-    today: 'No hay citas programadas para hoy',
-    future: 'No hay citas futuras programadas',
-    past: 'No hay historial de citas disponible',
-  }), []);
+  const handleLoadMore = useCallback(() => {
+    if (hasNextPage && !isLoading) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isLoading, fetchNextPage]);
 
-  // ✅ RENDERIZADO CONDICIONAL DEL CONTENIDO
   const renderTabContent = () => {
-    if (activeTab === 'newPatient') {
-      return (
-        <NewPatientForm
-          onSuccess={handleNewPatientSuccess}
-          onCancel={() => setActiveTab('today')}
-        />
-      );
+    const emptyStates = {
+      today: 'No hay citas programadas para hoy',
+      future: 'No hay citas futuras programadas',
+      past: 'No hay citas pasadas registradas'
+    };
+
+    let currentAppointments: AppointmentWithPatient[] = [];
+    switch (activeTab) {
+      case 'today':
+        currentAppointments = todayAppointments;
+        break;
+      case 'future':
+        currentAppointments = futureAppointments;
+        break;
+      case 'past':
+        currentAppointments = pastAppointments;
+        break;
+      default:
+        currentAppointments = [];
     }
 
     return (
       <AppointmentsSection
-        appointments={appointments}
+        appointments={currentAppointments}
         isLoading={isLoading}
-        isLoadingMore={isLoadingMore}
-        hasMore={hasMore}
-        onLoadMore={loadMore}
-        onAppointmentAction={handleAppointmentAction}
-        emptyMessage={emptyMessages[activeTab]}
+        isLoadingMore={isLoading}
+        hasMore={hasNextPage}
+        loadMore={handleLoadMore}
+        refresh={handleRefresh}
+        emptyMessage={emptyStates[activeTab]}
+        onAction={handleAppointmentAction}
       />
     );
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6">
-      {/* ✅ HEADER CON INDICADORES */}
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-6">
       <AdmissionHeader
-        isOnline={isOnline}
         isRefreshing={isLoading}
         onRefresh={handleRefresh}
       />
-
-      {/* ✅ ALERTA DE ERROR */}
-      {isError && error && (
-        <Alert variant="destructive">
+      
+      {queryIsError && queryError && (
+        <Alert variant="destructive" className="rounded-xl">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Error al cargar datos: {error.message}
+          <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <span className="flex-1">Error al cargar datos: {queryError.message}</span>
             <Button 
               variant="outline" 
               size="sm" 
               onClick={handleRefresh}
-              className="ml-2"
+              className="h-8 text-xs whitespace-nowrap rounded-lg"
             >
               Reintentar
             </Button>
           </AlertDescription>
         </Alert>
       )}
-
-      {/* ✅ NAVEGACIÓN DE TABS */}
+      
       <TabNavigation
         activeTab={activeTab}
         onTabChange={handleTabChange}
         counts={counts}
         isLoading={isLoading}
       />
-
-      {/* ✅ CONTENIDO PRINCIPAL */}
+      
       <div className="min-h-[400px]">
         {renderTabContent()}
       </div>
@@ -417,4 +406,4 @@ const PatientAdmission: React.FC = () => {
   );
 };
 
-export default PatientAdmission;
+export default React.memo(PatientAdmission);

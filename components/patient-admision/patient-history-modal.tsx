@@ -1,5 +1,6 @@
 // components/patient-admision/patient-history-modal.tsx
-import React, { memo, useMemo, useState } from "react";
+
+import React, { memo, useMemo, useState, Suspense } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +12,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { format, isValid, parseISO } from 'date-fns';
@@ -24,28 +24,30 @@ import {
   Activity,
   Phone,
   Mail,
-  TrendingUp,
   AlertCircle,
   CheckCircle,
   XCircle,
   CalendarX,
   Star,
   MessageSquare,
-  Stethoscope,
   ClipboardList,
+  Loader2,
 } from "lucide-react";
 
-// ✅ IMPORTS CORREGIDOS - usando tipos unificados
+// Tipos unificados
 import type { 
   AppointmentWithPatient, 
   PatientHistoryData,
   PatientHistoryModalProps,
-  APPOINTMENT_STATUS_CONFIG,
+} from './admision-types';
+
+// Funciones auxiliares de tipos
+import { 
   getPatientFullName,
   getStatusConfig
 } from './admision-types';
 
-// ✅ Hook corregido
+// Hook corregido
 import { usePatientHistory } from './actions';
 
 // ==================== INTERFACES LOCALES ====================
@@ -53,7 +55,6 @@ interface StatCardProps {
   label: string;
   value: string | number;
   icon: React.ReactNode;
-  trend?: number;
   color?: 'blue' | 'green' | 'red' | 'purple';
 }
 
@@ -100,16 +101,15 @@ const formatAppointmentTime = (dateString: string): string => {
 };
 
 // ==================== COMPONENTES INTERNOS MEMOIZADOS ====================
-
-// ✅ Tarjeta de estadística optimizada
-const StatCard = memo<StatCardProps>(({ label, value, icon, trend, color = 'blue' }) => {
+// Tarjeta de estadística optimizada
+const StatCard = memo<StatCardProps>(({ label, value, icon, color = 'blue' }) => {
   const colorClasses = {
     blue: "bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400",
     green: "bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400",
     red: "bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400",
     purple: "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400",
   };
-
+  
   return (
     <Card className="border-slate-200 dark:border-slate-700">
       <CardContent className="p-4">
@@ -117,11 +117,6 @@ const StatCard = memo<StatCardProps>(({ label, value, icon, trend, color = 'blue
           <div>
             <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{label}</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
-            {trend !== undefined && (
-              <p className={`text-xs ${trend >= 0 ? 'text-green-600' : 'text-red-600'} dark:${trend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {trend > 0 ? '+' : ''}{trend}% vs anterior
-              </p>
-            )}
           </div>
           <div className={cn("p-3 rounded-full", colorClasses[color])}>
             {icon}
@@ -133,18 +128,18 @@ const StatCard = memo<StatCardProps>(({ label, value, icon, trend, color = 'blue
 });
 StatCard.displayName = "StatCard";
 
-// ✅ Tarjeta de cita en historial
+// Tarjeta de cita en historial
 const AppointmentHistoryCard = memo<AppointmentHistoryCardProps>(({ appointment, isLast = false }) => {
   const statusConfig = useMemo(() => 
     getStatusConfig(appointment.estado_cita), 
     [appointment.estado_cita]
   );
-
+  
   const dateTime = useMemo(() => ({
     date: formatAppointmentDate(appointment.fecha_hora_cita),
     time: formatAppointmentTime(appointment.fecha_hora_cita),
   }), [appointment.fecha_hora_cita]);
-
+  
   const statusIcon = useMemo(() => {
     switch (appointment.estado_cita) {
       case 'COMPLETADA':
@@ -157,14 +152,20 @@ const AppointmentHistoryCard = memo<AppointmentHistoryCardProps>(({ appointment,
         return <Calendar className="h-5 w-5 text-blue-600" />;
     }
   }, [appointment.estado_cita]);
-
+  
+  const displayMotivos = useMemo(() => {
+    if (Array.isArray(appointment.motivos_consulta) && appointment.motivos_consulta.length > 0) {
+      return appointment.motivos_consulta.join(', ');
+    }
+    return 'Sin especificar';
+  }, [appointment.motivos_consulta]);
+  
   return (
     <div className={cn("relative", !isLast && "pb-4")}>
       {/* Línea conectora */}
       {!isLast && (
         <div className="absolute left-6 top-12 w-0.5 h-full bg-slate-200 dark:bg-slate-700" />
       )}
-      
       <div className="flex items-start gap-4">
         {/* Icono de estado */}
         <div className="flex-shrink-0 relative">
@@ -172,14 +173,13 @@ const AppointmentHistoryCard = memo<AppointmentHistoryCardProps>(({ appointment,
             {statusIcon}
           </div>
         </div>
-
         {/* Contenido de la cita */}
         <div className="flex-1 min-w-0">
           <Card className="border-slate-200 dark:border-slate-700">
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
                     <Badge className={statusConfig.bgClass}>
                       {statusConfig.label}
                     </Badge>
@@ -189,12 +189,10 @@ const AppointmentHistoryCard = memo<AppointmentHistoryCardProps>(({ appointment,
                       </Badge>
                     )}
                   </div>
-                  
                   <h4 className="font-medium text-slate-900 dark:text-slate-100 mb-1">
-                    {appointment.motivo_cita}
+                    {displayMotivos}
                   </h4>
-                  
-                  <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
                     <div className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
                       {dateTime.date}
@@ -204,14 +202,13 @@ const AppointmentHistoryCard = memo<AppointmentHistoryCardProps>(({ appointment,
                       {dateTime.time}
                     </div>
                   </div>
-
-                  {appointment.notas_cita_seguimiento && (
+                  {appointment.notas_breves && (
                     <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-md">
                       <div className="flex items-start gap-2">
-                        <FileText className="h-4 w-4 text-slate-500 mt-0.5 flex-shrink-0" />
-                        <p className="text-sm text-slate-700 dark:text-slate-300">
-                          {appointment.notas_cita_seguimiento}
-                        </p>
+                        <FileText className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm text-muted-foreground">
+                          {appointment.notas_breves}
+                        </span>
                       </div>
                     </div>
                   )}
@@ -226,7 +223,7 @@ const AppointmentHistoryCard = memo<AppointmentHistoryCardProps>(({ appointment,
 });
 AppointmentHistoryCard.displayName = "AppointmentHistoryCard";
 
-// ✅ Información del paciente
+// Información del paciente
 const PatientInfoSection = memo<PatientInfoSectionProps>(({ patient }) => (
   <Card className="border-slate-200 dark:border-slate-700">
     <CardHeader>
@@ -261,7 +258,7 @@ const PatientInfoSection = memo<PatientInfoSectionProps>(({ patient }) => (
 ));
 PatientInfoSection.displayName = "PatientInfoSection";
 
-// ✅ Estado vacío
+// Estado vacío
 const EmptyState = memo<EmptyStateProps>(({ message, icon }) => (
   <div className="text-center py-12">
     <div className="text-slate-400 dark:text-slate-500 mb-4">
@@ -277,7 +274,7 @@ const EmptyState = memo<EmptyStateProps>(({ message, icon }) => (
 ));
 EmptyState.displayName = "EmptyState";
 
-// ✅ Skeleton de carga
+// Skeleton de carga
 const LoadingSkeleton = memo(() => (
   <div className="space-y-6">
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -297,7 +294,6 @@ const LoadingSkeleton = memo(() => (
         </Card>
       ))}
     </div>
-    
     <Card className="border-slate-200 dark:border-slate-700">
       <CardContent className="p-6">
         <div className="animate-pulse space-y-4">
@@ -314,7 +310,7 @@ const LoadingSkeleton = memo(() => (
 ));
 LoadingSkeleton.displayName = "LoadingSkeleton";
 
-// ✅ Display de error
+// Display de error
 const ErrorDisplay = memo<{ message: string }>(({ message }) => (
   <div className="text-center py-12">
     <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
@@ -334,10 +330,10 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
   onClose, 
   patientId 
 }) => {
-  // ✅ ESTADOS LOCALES
+  // Estados locales
   const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'details'>('overview');
-
-  // ✅ HOOK CORREGIDO para obtener historial
+  
+  // Hook corregido para obtener historial
   const { 
     data: historyData, 
     isLoading, 
@@ -346,13 +342,13 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
     includeHistory: true,
     enabled: isOpen && !!patientId 
   });
-
-  // ✅ ESTADÍSTICAS COMPUTADAS
+  
+  // Estadísticas computadas
   const stats = useMemo(() => {
     if (!historyData?.appointments) {
       return { total: 0, completed: 0, cancelled: 0, noShow: 0, attendanceRate: 0 };
     }
-
+    
     const appointments = historyData.appointments;
     const total = appointments.length;
     const completed = appointments.filter(apt => apt.estado_cita === 'COMPLETADA').length;
@@ -370,17 +366,17 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
       attendanceRate: scheduledTotal > 0 ? Math.round((completed / scheduledTotal) * 100) : 0,
     };
   }, [historyData]);
-
-  // ✅ CLASIFICACIÓN DE CITAS por tiempo
+  
+  // Clasificación de citas por tiempo
   const appointmentsByStatus = useMemo(() => {
     if (!historyData?.appointments) {
       return { upcoming: [], history: [] };
     }
-
+    
     const now = new Date();
     const upcoming: AppointmentWithPatient[] = [];
     const past: AppointmentWithPatient[] = [];
-
+    
     for (const apt of historyData.appointments) {
       if (new Date(apt.fecha_hora_cita) > now && 
           apt.estado_cita !== "CANCELADA" && 
@@ -394,20 +390,20 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
     // Ordenar listas
     upcoming.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
     past.sort((a, b) => new Date(b.fecha_hora_cita).getTime() - new Date(a.fecha_hora_cita).getTime());
-
+    
     return { upcoming, history: past };
   }, [historyData]);
-
-  // ✅ RENDERIZADO DEL CONTENIDO
+  
+  // Renderizado del contenido
   const renderContent = () => {
     if (isLoading) return <LoadingSkeleton />;
     if (error) return <ErrorDisplay message={error.message} />;
     if (!historyData || !stats) return null;
-
+    
     const { patient, survey_completion_rate, appointments } = historyData;
-
+    
     return (
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="h-full flex flex-col">
         <div className="px-6 border-b border-slate-200 dark:border-slate-800">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview">Resumen</TabsTrigger>
@@ -415,12 +411,11 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
             <TabsTrigger value="details">Detalles</TabsTrigger>
           </TabsList>
         </div>
-
         <ScrollArea className="flex-1">
           <div className="p-6">
             <TabsContent value="overview" className="mt-0 space-y-6">
               {/* Estadísticas principales */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard 
                   label="Total Citas" 
                   value={stats.total} 
@@ -446,10 +441,8 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
                   color="purple" 
                 />
               </div>
-
               {/* Información del paciente */}
               <PatientInfoSection patient={patient} />
-
               {/* Satisfacción */}
               {survey_completion_rate !== undefined && (
                 <Card className="border-slate-200 dark:border-slate-700">
@@ -475,7 +468,6 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
                 </Card>
               )}
             </TabsContent>
-
             <TabsContent value="appointments" className="mt-0 space-y-6">
               {appointments.length === 0 ? (
                 <EmptyState 
@@ -502,7 +494,6 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
                       </div>
                     </section>
                   )}
-
                   {/* Historial de citas */}
                   {appointmentsByStatus.history.length > 0 && (
                     <section>
@@ -524,7 +515,6 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
                 </>
               )}
             </TabsContent>
-
             <TabsContent value="details" className="mt-0">
               <Card className="border-slate-200 dark:border-slate-700">
                 <CardHeader>
@@ -539,7 +529,6 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
                       {patient.created_at ? formatAppointmentDate(patient.created_at) : "No disponible"}
                     </p>
                   </div>
-                  
                   {appointments.length > 0 && (
                     <>
                       <Separator />
@@ -548,7 +537,7 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
                           Primera consulta
                         </p>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatAppointmentDate(appointments[appointments.length - 1].fecha_hora_cita)}
+                          {formatAppointmentDate(appointments[appointments.length - 1]?.fecha_hora_cita || '')}
                         </p>
                       </div>
                       <div>
@@ -556,7 +545,7 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
                           Última consulta
                         </p>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatAppointmentDate(appointments[0].fecha_hora_cita)}
+                          {formatAppointmentDate(appointments[0]?.fecha_hora_cita || '')}
                         </p>
                       </div>
                     </>
@@ -569,7 +558,7 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
       </Tabs>
     );
   };
-
+  
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0">
@@ -590,7 +579,5 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
     </Dialog>
   );
 });
-
 PatientHistoryModal.displayName = "PatientHistoryModal";
-
 export default PatientHistoryModal;

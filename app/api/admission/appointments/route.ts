@@ -64,7 +64,7 @@ const buildSearchFilter = (search: string) => {
   const searchTerm = search.toLowerCase().trim();
   
   // ✅ Búsqueda en múltiples campos
-  return `patients.nombre.ilike.%${searchTerm}%,patients.apellidos.ilike.%${searchTerm}%,patients.telefono.ilike.%${searchTerm}%,motivo_cita.ilike.%${searchTerm}%`;
+  return `patients.nombre.ilike.%${searchTerm}%,patients.apellidos.ilike.%${searchTerm}%,patients.telefono.ilike.%${searchTerm}%,motivos_consulta.cs.{${searchTerm}}`;
 };
 
 const validatePagination = (page?: string, pageSize?: string) => {
@@ -84,10 +84,10 @@ const getAppointmentsQuery = (supabase: any, filters: AppointmentFilters) => {
     .select(`
       id,
       fecha_hora_cita,
-      motivo_cita,
+      motivos_consulta,
       estado_cita,
       es_primera_vez,
-      notas_cita_seguimiento,
+      notas_breves,
       created_at,
       patient_id,
       doctor_id,
@@ -103,7 +103,7 @@ const getAppointmentsQuery = (supabase: any, filters: AppointmentFilters) => {
       profiles:doctor_id (
         id,
         full_name,
-        username
+        role
       )
     `, { count: 'exact' });
 

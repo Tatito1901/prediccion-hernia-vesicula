@@ -133,7 +133,7 @@ export async function PATCH(
         motivo_cita,
         estado_cita,
         es_primera_vez,
-        notas_cita_seguimiento,
+        notas_breves,
         created_at,
         patients!inner (
           id,
@@ -204,9 +204,9 @@ export async function PATCH(
     
     // Agregar notas adicionales
     if (notas_adicionales) {
-      const existingNotes = currentAppointment.notas_cita_seguimiento || '';
+      const existingNotes = currentAppointment.notas_breves || '';
       const timestamp = new Date().toLocaleString('es-MX');
-      updateData.notas_cita_seguimiento = existingNotes 
+      updateData.notas_breves = existingNotes 
         ? `${existingNotes} | [${timestamp}] ${notas_adicionales}`
         : `[${timestamp}] ${notas_adicionales}`;
     }
@@ -224,7 +224,7 @@ export async function PATCH(
         motivo_cita,
         estado_cita,
         es_primera_vez,
-        notas_cita_seguimiento,
+        notas_breves,
         created_at,
         patients!inner (
           id,
