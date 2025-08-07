@@ -1,29 +1,19 @@
-import React from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
+// ✅ ELIMINADO: InsightCard redundante - consolidado en StatsCard
+// Este archivo ha sido eliminado para evitar duplicación de código
+// Usar StatsCard desde '@/components/ui/stats-card' en su lugar
 
-interface InsightCardProps {
-  title: string;
+import { StatsCard } from '@/components/ui/stats-card';
+
+// Re-exportamos StatsCard como InsightCard para compatibilidad
+export const InsightCard = StatsCard;
+
+// Tipo alias para compatibilidad
+export interface InsightCardProps {
+  title?: string;
+  label: string;
   value: string | number;
-  icon?: React.ReactNode;
+  icon?: React.ComponentType<any> | React.ReactNode;
+  color?: "blue" | "red" | "purple" | "emerald" | "amber" | "slate";
+  trend?: string;
   isLoading?: boolean;
 }
-
-export const InsightCard: React.FC<InsightCardProps> = ({ title, value, icon, isLoading = false }) => {
-  if (isLoading) {
-    return (
-      <div className="p-4 border rounded-lg shadow-sm">
-        <Skeleton className="h-6 w-3/4 mb-2" />
-        <Skeleton className="h-8 w-1/2" />
-      </div>
-    );
-  }
-  return (
-    <div className="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-      <div className="flex items-center justify-between mb-2">
-        <h4 className="text-sm font-medium text-muted-foreground">{title}</h4>
-        {icon}
-      </div>
-      <p className="text-2xl font-bold">{value}</p>
-    </div>
-  );
-};

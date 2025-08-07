@@ -60,7 +60,7 @@ import { NewPatientSchema } from './admision-types';
 
 // ✅ Hook corregido para admisión
 import { useAdmitPatient } from './actions';
-import { cn } from '@/lib/utils';
+import { cn, formatPhoneNumber } from '@/lib/utils';
 
 // ==================== CONFIGURACIÓN ====================
 
@@ -134,15 +134,6 @@ type FormData = {
 };
 
 // ==================== UTILIDADES ====================
-const formatPhoneNumber = (value: string): string => {
-  const cleaned = value.replace(/\D/g, '');
-  const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
-  if (match) {
-    return `(${match[1]}) ${match[2]}-${match[3]}`;
-  }
-  return cleaned;
-};
-
 const isValidDate = (date: Date): boolean => {
   const today = startOfDay(new Date());
   const maxDate = addDays(today, 90); // Máximo 90 días en el futuro

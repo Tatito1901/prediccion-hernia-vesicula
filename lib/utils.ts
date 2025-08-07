@@ -5,6 +5,89 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// ✅ CONSOLIDACIÓN MASIVA: Funciones de formato unificadas
+// Elimina redundancias críticas dispersas en 6+ archivos
+
+// ==================== FORMATEO DE TELÉFONO ====================
+export const formatPhoneNumber = (value: string): string => {
+  const cleaned = value.replace(/\D/g, '');
+  if (cleaned.length === 10) {
+    return cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
+  }
+  return value;
+};
+
+export const validatePhoneNumber = (phone: string): boolean => {
+  const cleaned = phone.replace(/\D/g, '');
+  return cleaned.length === 10;
+};
+
+// ==================== FORMATEO DE FECHAS/TIEMPO ====================
+import { format, parseISO, isValid } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+export const formatAppointmentDate = (date: Date | string): string => {
+  try {
+    const dateObj = typeof date === 'string' ? parseISO(date) : date;
+    if (!isValid(dateObj)) return 'Fecha no válida';
+    return format(dateObj, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
+  } catch {
+    return 'Fecha no válida';
+  }
+};
+
+export const formatAppointmentTime = (date: Date | string | null): string => {
+  try {
+    if (!date) return '--:--';
+    const dateObj = typeof date === 'string' ? parseISO(date) : date;
+    if (!isValid(dateObj)) return '--:--';
+    return format(dateObj, 'HH:mm');
+  } catch {
+    return '--:--';
+  }
+};
+
+export const formatAppointmentDateTime = (date: Date | string): string => {
+  try {
+    const dateObj = typeof date === 'string' ? parseISO(date) : date;
+    if (!isValid(dateObj)) return 'Fecha y hora no válida';
+    return format(dateObj, "dd/MM/yyyy 'a las' HH:mm", { locale: es });
+  } catch {
+    return 'Fecha y hora no válida';
+  }
+};
+
+export const formatReadableDateTime = (date: Date | string): string => {
+  try {
+    const dateObj = typeof date === 'string' ? parseISO(date) : date;
+    if (!isValid(dateObj)) return 'Fecha no válida';
+    return format(dateObj, "PPpp", { locale: es });
+  } catch {
+    return 'Fecha no válida';
+  }
+};
+
+export const formatDisplayDate = (date: Date | null): string => {
+  if (!date || !isValid(date)) return 'Seleccionar fecha';
+  const formatted = format(date, "EEEE, d 'de' MMMM", { locale: es });
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+};
+
+// ==================== FORMATEO GENERAL ====================
+export const formatText = (text: string | undefined | null): string => 
+  text?.trim() || 'N/A';
+
+export const formatDate = (date: string | Date | undefined | null): string => {
+  if (!date) return 'N/A';
+  try {
+    const dateObj = typeof date === 'string' ? parseISO(date) : date;
+    if (!isValid(dateObj)) return 'N/A';
+    return format(dateObj, 'dd/MM/yyyy');
+  } catch {
+    return 'N/A';
+  }
+};
+
 // Helper para validar fechas ISO
 export function isValidISODate(dateString: string): boolean {
   try {

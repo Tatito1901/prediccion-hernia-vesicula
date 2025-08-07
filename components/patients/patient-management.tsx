@@ -121,16 +121,9 @@ interface FilterBarProps {
 }
 
 // ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
-import { MetricsCardsSkeleton, PatientTableSkeleton } from '@/components/ui/unified-skeletons';
+import { LoadingSpinner, PatientTableSkeleton, PageSkeleton } from '@/components/ui/unified-skeletons';
 
-const LoadingSkeleton = memo(() => (
-  <div className="bg-white dark:bg-slate-950 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
-    <MetricsCardsSkeleton className="mb-6" />
-    <PatientTableSkeleton rows={5} />
-  </div>
-))
-LoadingSkeleton.displayName = "LoadingSkeleton"
-
+// ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
 const PatientHeader = memo<PatientHeaderProps>(({ statsData, isLoadingStats, onRefresh }) => (
   <div className="bg-white dark:bg-slate-950 rounded-xl border shadow-sm border-slate-200 dark:border-slate-800 p-6">
     <div className="flex items-center justify-between mb-6">
@@ -435,7 +428,7 @@ const PatientManagement: React.FC = () => {
   const hasPatients = paginatedPatients && paginatedPatients.length > 0
 
   if (isLoading && !paginatedPatients) {
-    return <LoadingSkeleton />
+    return <PageSkeleton />
   }
 
   if (error) {

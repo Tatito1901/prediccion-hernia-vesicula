@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useSurveyTemplates, useAssignSurvey } from '@/hooks/use-survey-templates';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CheckCircle, FileText, XCircle, Loader2 } from 'lucide-react';
 
@@ -33,6 +33,7 @@ interface SurveyTemplateCardProps {
   onAssign: (template: SurveyTemplate) => void;
 }
 
+// ✅ OPTIMIZADO: SurveyTemplateCard usando componentes base consolidados
 const SurveyTemplateCard = React.memo(({ template, isAssigning, isCurrentlyAssigning, onAssign }: SurveyTemplateCardProps) => {
   const handleClick = useCallback(() => {
     if (!isAssigning) {
@@ -41,21 +42,19 @@ const SurveyTemplateCard = React.memo(({ template, isAssigning, isCurrentlyAssig
   }, [isAssigning, onAssign, template]);
 
   return (
-    <Card
-      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200 cursor-pointer"
-      onClick={handleClick}
-    >
-      <CardContent className="p-4 flex items-center justify-between">
-        <div>
-          <h4 className="font-semibold text-slate-800 dark:text-slate-100">{template.title}</h4>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{template.description || 'Sin descripción.'}</p>
-        </div>
-        <Button
-          size="sm"
-          disabled={isAssigning}
-          className="ml-4 w-32"
-          aria-label={`Asignar encuesta ${template.title}`}
-        >
+    <Card className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200 cursor-pointer" onClick={handleClick}>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h4 className="text-base font-semibold">{template.title}</h4>
+            <p className="text-sm text-muted-foreground mt-1">{template.description || 'Sin descripción.'}</p>
+          </div>
+          <Button
+            size="sm"
+            disabled={isAssigning}
+            className="ml-4 w-32"
+            aria-label={`Asignar encuesta ${template.title}`}
+          >
           {isCurrentlyAssigning ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (

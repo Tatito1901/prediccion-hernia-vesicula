@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+import { cn, formatPhoneNumber } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,13 +97,7 @@ export function EditLeadForm({
     });
   };
 
-  const formatPhoneNumber = (value: string) => {
-    const numeric = value.replace(/\D/g, '');
-    if (numeric.length <= 10) {
-      return numeric.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
-    }
-    return numeric;
-  };
+  // ✅ ELIMINADO: formatPhoneNumber redundante - consolidado en lib/utils.ts
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">

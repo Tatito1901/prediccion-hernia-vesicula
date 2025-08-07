@@ -9,12 +9,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { StatsCard } from "@/components/ui/stats-card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { cn, formatAppointmentDate, formatAppointmentTime } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/empty-state';
 import { format, isValid, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -77,53 +78,10 @@ interface PatientInfoSectionProps {
 }
 
 // ==================== UTILIDADES ====================
-const formatAppointmentDate = (dateString: string): string => {
-  try {
-    const date = parseISO(dateString);
-    if (!isValid(date)) return 'Fecha inválida';
-    return format(date, "dd 'de' MMMM 'de' yyyy", { locale: es });
-  } catch {
-    return 'Fecha inválida';
-  }
-};
-
-const formatAppointmentTime = (dateString: string): string => {
-  try {
-    const date = parseISO(dateString);
-    if (!isValid(date)) return '--:--';
-    return format(date, 'HH:mm');
-  } catch {
-    return '--:--';
-  }
-};
+// ✅ ELIMINADO: formatAppointmentDate/Time redundantes - consolidados en lib/utils.ts
 
 // ==================== COMPONENTES INTERNOS MEMOIZADOS ====================
-// Tarjeta de estadística optimizada
-const StatCard = memo<StatCardProps>(({ label, value, icon, color = 'blue' }) => {
-  const colorClasses = {
-    blue: "bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400",
-    green: "bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400",
-    red: "bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400",
-    purple: "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400",
-  };
-  
-  return (
-    <Card className="border-slate-200 dark:border-slate-700">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{label}</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
-          </div>
-          <div className={cn("p-3 rounded-full", colorClasses[color])}>
-            {icon}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
-StatCard.displayName = "StatCard";
+// ✅ ELIMINADO: StatCard redundante - usando StatsCard unificado
 
 // Tarjeta de cita en historial
 const AppointmentHistoryCard = memo<AppointmentHistoryCardProps>(({ appointment, isLast = false }) => {
@@ -256,10 +214,20 @@ const PatientInfoSection = memo<PatientInfoSectionProps>(({ patient }) => (
 PatientInfoSection.displayName = "PatientInfoSection";
 
 // Skeleton de carga
-import { PageSkeleton } from '@/components/ui/unified-skeletons';
+import { LoadingSpinner, PatientTableSkeleton, AppointmentListSkeleton } from '@/components/ui/unified-skeletons';
 
 const LoadingSkeleton = memo(() => (
-  <PageSkeleton />
+  <div className="space-y-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {[...Array(3)].map((_, i) => (
+        <Card key={i} className="p-4">
+          <Skeleton className="h-6 w-24 mb-2" />
+          <Skeleton className="h-8 w-16" />
+        </Card>
+      ))}
+    </div>
+    <AppointmentListSkeleton count={2} />
+  </div>
 ));
 LoadingSkeleton.displayName = "LoadingSkeleton";
 
@@ -369,29 +337,29 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
             <TabsContent value="overview" className="mt-0 space-y-6">
               {/* Estadísticas principales */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard 
-                  label="Total Citas" 
-                  value={stats.total} 
-                  icon={<Calendar className="h-6 w-6" />} 
-                  color="blue" 
+                <StatsCard
+                  label="Total de Citas"
+                  value={stats.total.toString()}
+                  icon={<Calendar className="h-6 w-6" />}
+                  color="blue"
                 />
-                <StatCard 
-                  label="Completadas" 
-                  value={stats.completed} 
-                  icon={<CheckCircle className="h-6 w-6" />} 
-                  color="green" 
+                <StatsCard
+                  label="Citas Completadas"
+                  value={stats.completed.toString()}
+                  icon={<CheckCircle className="h-6 w-6" />}
+                  color="emerald"
                 />
-                <StatCard 
-                  label="Canceladas/Ausente" 
-                  value={stats.cancelled + stats.noShow} 
-                  icon={<XCircle className="h-6 w-6" />} 
-                  color="red" 
+                <StatsCard
+                  label="Citas Canceladas/Ausente"
+                  value={(stats.cancelled + stats.noShow).toString()}
+                  icon={<XCircle className="h-6 w-6" />}
+                  color="red"
                 />
-                <StatCard 
-                  label="Tasa Asistencia" 
-                  value={`${stats.attendanceRate}%`} 
-                  icon={<Activity className="h-6 w-6" />} 
-                  color="purple" 
+                <StatsCard
+                  label="Tasa Asistencia"
+                  value={`${stats.attendanceRate}%`}
+                  icon={<Activity className="h-6 w-6" />}
+                  color="purple"
                 />
               </div>
               {/* Información del paciente */}

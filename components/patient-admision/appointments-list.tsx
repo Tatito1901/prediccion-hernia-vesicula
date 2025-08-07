@@ -115,12 +115,7 @@ const formatAppointmentDateTime = (dateTime: string): { date: string; time: stri
 // ==================== COMPONENTES INTERNOS ====================
 
 // ✅ Skeleton de carga
-import { AppointmentListSkeleton } from '@/components/ui/unified-skeletons';
-
-const LoadingSkeleton = () => (
-  <AppointmentListSkeleton count={3} />
-);
-LoadingSkeleton.displayName = "LoadingSkeleton";
+import { LoadingSpinner, AppointmentListSkeleton } from '@/components/ui/unified-skeletons';
 
 // ✅ Estado vacío
 
@@ -386,7 +381,7 @@ const AppointmentsList = memo<AppointmentsListProps>(({
 
   // ✅ RENDERIZADO
   if (isLoading) {
-    return <LoadingSkeleton />;
+    return <AppointmentListSkeleton count={3} />;
   }
 
   if (appointments.length === 0) {

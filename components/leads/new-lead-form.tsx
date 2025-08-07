@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { cn } from '@/lib/utils';
+import { cn, formatPhoneNumber } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,18 +95,6 @@ export function NewLeadForm({ trigger, onSuccess }: NewLeadFormProps) {
         onSuccess?.();
       },
     });
-  };
-
-  const formatPhoneNumber = (value: string) => {
-    // Remove all non-numeric characters
-    const numeric = value.replace(/\D/g, '');
-    
-    // Format as Mexican phone number if applicable
-    if (numeric.length <= 10) {
-      return numeric.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
-    }
-    
-    return numeric;
   };
 
   return (

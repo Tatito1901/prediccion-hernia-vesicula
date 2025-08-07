@@ -30,7 +30,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
+import { LoadingSpinner, PatientTableSkeleton } from '@/components/ui/unified-skeletons';
 import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from "@/lib/utils"
 import { Patient, PatientStatusEnum, EnrichedPatient } from "@/lib/types"
@@ -222,98 +222,7 @@ const PatientActions = ({
   )
 }
 
-// Vista de tarjeta optimizada
-const PatientCard = ({ 
-  patient, 
-  onSelectPatient, 
-  onShareSurvey, 
-  onAnswerSurvey, 
-  onEditPatient,
-  onScheduleAppointment
-}: {
-  patient: EnrichedPatient
-  onSelectPatient: (patient: EnrichedPatient) => void
-  onShareSurvey?: (patient: EnrichedPatient) => void
-  onAnswerSurvey?: (patient: EnrichedPatient) => void
-  onEditPatient?: (patient: EnrichedPatient) => void
-  onScheduleAppointment?: (patient: EnrichedPatient) => void
-}) => {
-  return (
-    <div 
-      className="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer shadow-sm hover:shadow transition-all duration-150 dark:bg-slate-950 dark:border-slate-800"
-      onClick={() => onSelectPatient(patient)}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-sm font-medium text-blue-800 dark:text-blue-200 flex-shrink-0">
-            {patient.nombreCompleto.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-slate-900 dark:text-slate-100 truncate">
-              {formatText(patient.nombreCompleto)}
-            </p>
-            <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-              <span className="font-mono truncate">ID: {patient.id.slice(0, 8)}</span>
-            </div>
-          </div>
-        </div>
-        <PatientActions
-          patient={patient}
-          onSelectPatient={onSelectPatient}
-          onShareSurvey={onShareSurvey}
-          onAnswerSurvey={onAnswerSurvey}
-          onEditPatient={onEditPatient}
-          onScheduleAppointment={onScheduleAppointment}
-        />
-      </div>
-
-      <div className="mt-3 space-y-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <Stethoscope className="h-4 w-4 text-slate-400 dark:text-slate-500 flex-shrink-0" />
-          <span className={cn(
-            "inline-flex items-center px-2 py-1 rounded text-xs font-medium truncate",
-            getDiagnosticStyle(patient.diagnostico_principal)
-          )}>
-            {formatText(patient.diagnostico_principal) || "Sin diagnóstico"}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between text-sm gap-2">
-          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 min-w-0">
-            <Calendar className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">{formatDate(patient.fecha_registro)}</span>
-          </div>
-          {patient.edad && (
-            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 flex-shrink-0">
-              <span>{patient.edad} años</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 gap-2">
-          <div>
-            {patient.estado_paciente && (
-              <span className={cn(
-                "inline-flex items-center px-2 py-1 rounded text-xs font-medium truncate",
-                STATUS_STYLES[patient.estado_paciente]
-              )}>
-                {STATUS_LABELS[patient.estado_paciente] || "Sin estado"}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 dark:text-slate-400">Encuesta:</span>
-            {patient.encuesta_completada ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+// ✅ ELIMINADO: JSX flotante corregido - era parte de PatientCard duplicado ya eliminado
 
 // Fila de tabla optimizada
 const PatientRow = ({ 
@@ -424,26 +333,7 @@ const PatientRow = ({
 }
 
 // Estados de carga y vacío
-const LoadingState = () => (
-  <div className="bg-white dark:bg-slate-950 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-    <div className="animate-pulse">
-      <div className="h-12 bg-slate-100 dark:bg-slate-800" />
-      <div className="divide-y divide-slate-100 dark:divide-slate-800">
-        {Array(5).fill(0).map((_, i) => (
-          <div key={i} className="p-4 flex items-center gap-4">
-            <div className="h-10 w-10 bg-slate-200 dark:bg-slate-700 rounded-full" />
-            <div className="flex-1 space-y-2 min-w-0">
-              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/4" />
-              <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/3" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-)
-
-
+// ✅ ELIMINADO: LoadingState redundante - consolidado en unified-skeletons.tsx
 
 // Componente principal optimizado
 const PatientTable: React.FC<PatientTableProps> = ({
@@ -497,7 +387,7 @@ const PatientTable: React.FC<PatientTableProps> = ({
     }))
   }
 
-  if (loading) return <LoadingState />
+  if (loading) return <PatientTableSkeleton />
   if (sortedPatients.length === 0) return <EmptyState title="No hay pacientes registrados" description="Los pacientes aparecerán aquí cuando sean agregados" icon={<Stethoscope className="h-8 w-8 text-slate-400 dark:text-slate-500" />} />
 
   return (

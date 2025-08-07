@@ -4,6 +4,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format, addDays, isWeekend, isBefore, startOfDay } from 'date-fns';
+import { cn, formatPhoneNumber } from '@/lib/utils';
 import { es } from 'date-fns/locale';
 
 // UI Components
@@ -94,15 +95,6 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
     }
     return date;
   }, [tomorrow]);
-
-  // 📞 Phone formatting
-  const formatPhoneNumber = useCallback((value: string) => {
-    const numeric = value.replace(/\D/g, '');
-    if (numeric.length <= 10) {
-      return numeric.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
-    }
-    return numeric;
-  }, []);
 
   // 📤 Submit handler
   const onSubmit = (data: TAdmissionForm) => {
