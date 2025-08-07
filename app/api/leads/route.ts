@@ -130,18 +130,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Preparar datos del lead
+    // Si hay especificación del problema, la agregamos a las notas
+    let notesContent = body.notes?.trim() || '';
+    if (body.problem_specification?.trim()) {
+      const problemSpec = `Especificación del problema: ${body.problem_specification.trim()}`;
+      notesContent = notesContent ? `${notesContent}\n\n${problemSpec}` : problemSpec;
+    }
+    
+    // Fausto Mario Medina's profile ID as default
+    const FAUSTO_PROFILE_ID = 'fbc26deb-e467-4f9d-92a9-904312229002';
+    
     const newLeadData: NewLead = {
       full_name: full_name.trim(),
       phone_number: phone_number.trim(),
-      email: body.email?.trim() || null,
+      email: null, // Campo eliminado del formulario pero mantenido en BD
       channel,
       motive,
-      notes: body.notes?.trim() || null,
-      lead_intent: body.lead_intent || null,
-      next_follow_up_date: body.next_follow_up_date || null,
+      notes: notesContent || null,
       status: 'NUEVO',
-      registered_by: null, // TODO: obtener del usuario autenticado
-      assigned_to: body.assigned_to || null
+      registered_by: FAUSTO_PROFILE_ID,
+      assigned_to: body.assigned_to || FAUSTO_PROFILE_ID
     };
 
     const { data: lead, error } = await supabase

@@ -52,11 +52,11 @@ type AppointmentVariantType = "default" | "secondary" | "destructive" | "outline
 
 // Configuraciones estáticas optimizadas
 const STATUS_CONFIG = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: {
+  [PatientStatusEnum.POTENCIAL]: {
     variant: "secondary" as StatusVariantType,
     className: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
   },
-  [PatientStatusEnum.CONSULTADO]: {
+  [PatientStatusEnum.ACTIVO]: {
     variant: "default" as StatusVariantType,
     className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
   },
@@ -72,7 +72,11 @@ const STATUS_CONFIG = {
     variant: "destructive" as StatusVariantType,
     className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
   },
-  [PatientStatusEnum.INDECISO]: {
+  [PatientStatusEnum.INACTIVO]: {
+    variant: "outline" as StatusVariantType,
+    className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+  },
+  [PatientStatusEnum.ALTA_MEDICA]: {
     variant: "outline" as StatusVariantType,
     className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
   }
@@ -178,8 +182,8 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
 
   // Valores memoizados
   const fullName = `${nombre} ${apellidos}`
-  const status = estado_paciente ?? PatientStatusEnum.PENDIENTE_DE_CONSULTA
-  const statusConfig = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG[PatientStatusEnum.INDECISO]
+  const status = estado_paciente ?? PatientStatusEnum.POTENCIAL
+  const statusConfig = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG[PatientStatusEnum.INACTIVO]
   
   // Breakpoints
   const isDesktop = useMediaQuery("(min-width: 1024px)")
@@ -207,7 +211,7 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold flex-shrink-0">
-                  {nombre.charAt(0).toUpperCase()}
+                  {nombre ? nombre.charAt(0).toUpperCase() : 'P'}
                 </div>
                 <div className="min-w-0 flex-1">
                   <DrawerTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">

@@ -83,13 +83,13 @@ export function PatientsListReactive({
     // Stats básicas si se requieren
     const stats = showStats ? {
       total,
-      active: filtered.filter(p => ['PENDIENTE DE CONSULTA', 'CONSULTADO', 'EN SEGUIMIENTO'].includes(p.estado_paciente || '')).length,
-      completed: filtered.filter(p => p.estado_paciente === 'OPERADO').length,
+      active: filtered.filter(p => ['potencial', 'activo', 'en_seguimiento'].includes(p.estado_paciente || '')).length,
+      completed: filtered.filter(p => p.estado_paciente === 'operado').length,
       // Propiedades esperadas por el componente
       totalPatients: total,
       surveyRate: 0, // No tenemos datos de encuestas en el contexto actual
-      pendingConsults: filtered.filter(p => p.estado_paciente === 'PENDIENTE DE CONSULTA').length,
-      operatedPatients: filtered.filter(p => p.estado_paciente === 'OPERADO').length
+      pendingConsults: filtered.filter(p => p.estado_paciente === 'potencial').length,
+      operatedPatients: filtered.filter(p => p.estado_paciente === 'operado').length
     } : null;
 
     return { data: paginatedData, total, stats };

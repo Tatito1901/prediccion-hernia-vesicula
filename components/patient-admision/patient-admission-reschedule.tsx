@@ -104,16 +104,8 @@ const getAvailableTimeSlots = (date: Date, existingAppointments: AppointmentWith
 
 // ==================== COMPONENTES INTERNOS ====================
 
-// ✅ Spinner de carga
-const LoadingSpinner = memo(() => (
-  <div className="flex items-center justify-center p-4">
-    <Loader2 className="h-5 w-5 animate-spin text-blue-500" aria-hidden="true" />
-    <span className="ml-2 text-sm text-slate-600 dark:text-slate-400">
-      Verificando disponibilidad...
-    </span>
-  </div>
-));
-LoadingSpinner.displayName = 'LoadingSpinner';
+// ✅ Importamos LoadingSpinner unificado desde unified-skeletons
+import { LoadingSpinner } from '@/components/ui/unified-skeletons';
 
 // ✅ Slot de tiempo optimizado
 const TimeSlot = memo<{ 
@@ -337,7 +329,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
           <div className="grid gap-2">
             <Label htmlFor="time-picker">Nueva Hora</Label>
             {isLoadingAppointments ? (
-              <LoadingSpinner />
+              <LoadingSpinner size="sm" message="Verificando disponibilidad..." />
             ) : (
               <Select onValueChange={handleTimeChange} disabled={!selectedDate}>
                 <SelectTrigger id="time-picker">

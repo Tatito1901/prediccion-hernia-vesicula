@@ -2,15 +2,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
-import { useClinicData } from '@/hooks/use-clinic-data';
-import { usePaginatedPatients } from '@/hooks/use-paginated-patients';
+import { useUnifiedPatientData } from '@/hooks/use-unified-patient-data';
 // Importar sistema unificado para futuras migraciones
 import { queryKeys } from '@/lib/query-keys';
 
 // ==================== TIPOS Y CONTRATOS ====================
 
 // Tipo extendido que incluye tanto los datos básicos como la funcionalidad de paginación
-type ExtendedClinicDataContextType = ReturnType<typeof useClinicData> & {
+type ExtendedClinicDataContextType = ReturnType<typeof useUnifiedPatientData> & {
   // Funcionalidad de paginación de pacientes
   patientsData?: {
     data: any[];
@@ -45,7 +44,7 @@ const ClinicDataContext = createContext<ClinicDataContextType | undefined>(
 
 export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   // Datos básicos de la clínica
-  const clinicData = useClinicData();
+  const clinicData = useUnifiedPatientData();
   
   // Estado local para filtros de paginación
   const [patientsFilters, setPatientsFilters] = useState({
@@ -56,14 +55,20 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
 
   // Hook de pacientes paginados
   const {
-    patients,
-    pagination,
+    paginatedPatients: patients,
+    patientsPagination: pagination,
     stats: patientsStats,
     isLoading: isPatientsLoading,
     isFetching: isPatientsFetching,
     error: patientsError,
     refetch: refetchPatients,
-  } = usePaginatedPatients(patientsFilters);
+  } = useUnifiedPatientData({
+    fetchEssentialData: false,
+    page: patientsFilters.page,
+    pageSize: 15,
+    search: patientsFilters.search,
+    status: patientsFilters.status,
+  });
 
   // Crear estructura de datos compatible
   const patientsData = useMemo(() => {

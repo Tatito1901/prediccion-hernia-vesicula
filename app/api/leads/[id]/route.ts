@@ -5,11 +5,11 @@ import type { UpdateLead } from '@/lib/types';
 // GET /api/leads/[id] - Obtener lead específico
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    const supabase = createClient();
-    const { id } = params;
+    const supabase = await createClient();
+    const { id } = context.params;
 
     const { data: lead, error } = await supabase
       .from('leads')
@@ -53,12 +53,12 @@ export async function GET(
 // PUT /api/leads/[id] - Actualizar lead
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    const supabase = createClient();
-    const { id } = params;
-    const body = await request.json();
+    const supabase = await createClient();
+    const { id } = context.params;
+    const body: UpdateLead = await request.json();
 
     // Verificar que el lead existe
     const { data: existingLead, error: fetchError } = await supabase
@@ -74,10 +74,15 @@ export async function PUT(
       );
     }
 
+    // Fausto Mario Medina's profile ID as default
+    const FAUSTO_PROFILE_ID = 'fbc26deb-e467-4f9d-92a9-904312229002';
+    
     // Preparar datos de actualización
     const updateData: UpdateLead = {
       ...body,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      registered_by: body.registered_by || FAUSTO_PROFILE_ID,
+      assigned_to: body.assigned_to || FAUSTO_PROFILE_ID
     };
 
     // Remover campos que no deben actualizarse
@@ -115,11 +120,11 @@ export async function PUT(
 // DELETE /api/leads/[id] - Eliminar lead
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    const supabase = createClient();
-    const { id } = params;
+    const supabase = await createClient();
+    const { id } = context.params;
 
     // Verificar que el lead existe y no está convertido
     const { data: existingLead, error: fetchError } = await supabase

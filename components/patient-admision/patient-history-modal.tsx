@@ -13,7 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/ui/empty-state';
 import { format, isValid, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -61,11 +63,6 @@ interface StatCardProps {
 interface AppointmentHistoryCardProps {
   appointment: AppointmentWithPatient;
   isLast?: boolean;
-}
-
-interface EmptyStateProps {
-  message: string;
-  icon: React.ReactNode;
 }
 
 interface PatientInfoSectionProps {
@@ -258,55 +255,11 @@ const PatientInfoSection = memo<PatientInfoSectionProps>(({ patient }) => (
 ));
 PatientInfoSection.displayName = "PatientInfoSection";
 
-// Estado vacío
-const EmptyState = memo<EmptyStateProps>(({ message, icon }) => (
-  <div className="text-center py-12">
-    <div className="text-slate-400 dark:text-slate-500 mb-4">
-      {icon}
-    </div>
-    <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-2">
-      {message}
-    </h3>
-    <p className="text-slate-500 dark:text-slate-400">
-      Los datos aparecerán aquí cuando estén disponibles.
-    </p>
-  </div>
-));
-EmptyState.displayName = "EmptyState";
-
 // Skeleton de carga
+import { PageSkeleton } from '@/components/ui/unified-skeletons';
+
 const LoadingSkeleton = memo(() => (
-  <div className="space-y-6">
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <Card key={i} className="border-slate-200 dark:border-slate-700">
-          <CardContent className="p-4">
-            <div className="animate-pulse space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="space-y-2">
-                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-16"></div>
-                  <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-12"></div>
-                </div>
-                <div className="h-12 w-12 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-    <Card className="border-slate-200 dark:border-slate-700">
-      <CardContent className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-48"></div>
-          <div className="space-y-3">
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full"></div>
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
+  <PageSkeleton />
 ));
 LoadingSkeleton.displayName = "LoadingSkeleton";
 
@@ -471,8 +424,9 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
             <TabsContent value="appointments" className="mt-0 space-y-6">
               {appointments.length === 0 ? (
                 <EmptyState 
-                  message="No hay citas registradas para este paciente." 
-                  icon={<ClipboardList className="h-16 w-16" />} 
+                  title="No hay citas registradas para este paciente" 
+                  description="Los datos aparecerán aquí cuando estén disponibles." 
+                  icon={<ClipboardList className="h-16 w-16 text-slate-400 dark:text-slate-500" />} 
                 />
               ) : (
                 <>

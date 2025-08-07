@@ -18,13 +18,13 @@ export type AppointmentStatus =
 
 // ✅ Estados de paciente según la base de datos (ACTUALIZADO con nuevo esquema)
 export type PatientStatus = 
-  | 'PENDIENTE_DE_CONSULTA'
-  | 'CONSULTADO'
-  | 'EN_SEGUIMIENTO'
-  | 'OPERADO'
-  | 'NO_OPERADO'
-  | 'INDECISO'
-  | 'potencial'; // ✅ NUEVO: Estado para leads convertidos
+  | 'potencial'
+  | 'activo'
+  | 'operado'
+  | 'no_operado'
+  | 'en_seguimiento'
+  | 'inactivo'
+  | 'alta_medica';
 
 // ✅ NUEVO: Tipos para manejo de Leads
 export type LeadChannel = 
@@ -47,17 +47,17 @@ export type LeadMotive =
 export type LeadStatus = 
   | 'NUEVO'
   | 'CONTACTADO'
-  | 'CALIFICADO'
+  | 'CITA_AGENDADA'
+  | 'CONVERTIDO'
+  | 'NO_INTERESADO'
+  | 'PERDIDO'
+  | 'SEGUIMIENTO_PENDIENTE';
 
 export type LeadIntent = 
   | 'ONLY_WANTS_INFORMATION'
   | 'WANTS_TO_SCHEDULE_APPOINTMENT'
   | 'WANTS_TO_COMPARE_PRICES'
-  | 'OTHER'
-  | 'CITA_PROGRAMADA'
-  | 'NO_INTERESADO'
-  | 'PERDIDO'
-  | 'CONVERTIDO';
+  | 'OTHER';
 
 // ✅ Diagnósticos exactamente como en el enum de la base de datos
 export type DiagnosisType = 
@@ -73,6 +73,7 @@ export type DiagnosisType =
   | 'QUISTE SEBACEO INFECTADO'
   | 'EVENTRACION ABDOMINAL'
   | 'VESICULA (COLECISTITIS CRONICA)'
+  | 'SIN_DIAGNOSTICO'
   | 'OTRO'
   | 'HERNIA SPIGEL';
 
@@ -341,7 +342,8 @@ export const NewPatientSchema = z.object({
     'EVENTRACION ABDOMINAL',
     'VESICULA (COLECISTITIS CRONICA)',
     'OTRO',
-    'HERNIA SPIGEL'
+    'HERNIA SPIGEL',
+    'SIN_DIAGNOSTICO'
   ], { required_error: "Diagnóstico principal es requerido" }),
   
   // Cita
@@ -359,8 +361,8 @@ export const NewPatientSchema = z.object({
 export const AppointmentStatusUpdateSchema = z.object({
   appointmentId: z.string().uuid(),
   newStatus: z.enum([
-    'PROGRAMADA', 'CONFIRMADA', 'PRESENTE', 'EN_CONSULTA', 
-    'COMPLETADA', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'
+    'PROGRAMADA', 'CONFIRMADA', 'PRESENTE', 
+    'COMPLETADA', 'CANCELADA', 'NO ASISTIO', 'REAGENDADA'
   ]),
   motivo_cambio: z.string().optional(),
   fecha_hora_cita: z.string().optional(),
@@ -413,11 +415,11 @@ export const NewLeadSchema = z.object({
   status: z.enum([
     'NUEVO',
     'CONTACTADO',
-    'CALIFICADO',
-    'CITA_PROGRAMADA',
+    'CITA_AGENDADA',
+    'CONVERTIDO',
     'NO_INTERESADO',
     'PERDIDO',
-    'CONVERTIDO'
+    'SEGUIMIENTO_PENDIENTE'
   ]).optional().default('NUEVO')
 });
 
@@ -427,7 +429,7 @@ export type NewLeadFormData = z.infer<typeof NewLeadSchema>;
 // ✅ Schema para el formulario de admisión (combina campos de paciente con campos adicionales)
 export const AdmissionFormSchema = NewPatientSchema.extend({
   motivos_consulta: z.array(z.string()).min(1, "Debe seleccionar al menos un motivo de consulta"),
-  canal_contacto: z.enum(['TELEFONO', 'EMAIL', 'REDES_SOCIALES', 'PRESENCIAL', 'OTRO']),
+  canal_contacto: z.enum(['TELEFONO', 'WHATSAPP', 'FACEBOOK', 'INSTAGRAM', 'REFERENCIA', 'PAGINA_WEB', 'OTRO']),
   comentarios: z.string().max(1000, "Comentarios no pueden exceder 1000 caracteres").optional(),
   fecha_hora_cita: z.string().min(1, "Fecha y hora de cita son requeridos"),
 });

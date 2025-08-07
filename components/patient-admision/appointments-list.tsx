@@ -2,9 +2,12 @@
 import React, { memo, useMemo, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 import { 
   Select, 
   SelectContent, 
@@ -112,33 +115,16 @@ const formatAppointmentDateTime = (dateTime: string): { date: string; time: stri
 // ==================== COMPONENTES INTERNOS ====================
 
 // ✅ Skeleton de carga
-const LoadingSkeleton = memo(() => (
-  <div className="space-y-4">
-    {Array.from({ length: 3 }).map((_, i) => (
-      <Card key={i} className="p-4">
-        <div className="animate-pulse space-y-3">
-          <div className="flex items-center space-x-3">
-            <div className="rounded-full bg-gray-200 dark:bg-gray-700 h-12 w-12"></div>
-            <div className="space-y-2 flex-1">
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
-              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
-            </div>
-            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
-          </div>
-          <div className="space-y-2">
-            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
-          </div>
-        </div>
-      </Card>
-    ))}
-  </div>
-));
+import { AppointmentListSkeleton } from '@/components/ui/unified-skeletons';
+
+const LoadingSkeleton = () => (
+  <AppointmentListSkeleton count={3} />
+);
 LoadingSkeleton.displayName = "LoadingSkeleton";
 
 // ✅ Estado vacío
-const EmptyState = memo<{ message: string; tabType?: TabType }>(({ message, tabType }) => {
-  const getEmptyIcon = () => {
+
+  const getEmptyIcon = (tabType?: TabType) => {
     switch (tabType) {
       case 'today':
         return <Calendar className="h-12 w-12 text-gray-400" />;
@@ -151,7 +137,7 @@ const EmptyState = memo<{ message: string; tabType?: TabType }>(({ message, tabT
     }
   };
 
-  const getEmptyDescription = () => {
+  const getEmptyDescription = (tabType?: TabType) => {
     switch (tabType) {
       case 'today':
         return 'Las citas de hoy aparecerán aquí una vez que sean programadas.';
@@ -164,21 +150,6 @@ const EmptyState = memo<{ message: string; tabType?: TabType }>(({ message, tabT
     }
   };
 
-  return (
-    <Card className="p-8">
-      <div className="text-center">
-        {getEmptyIcon()}
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2 mt-4">
-          {message}
-        </h3>
-        <p className="text-gray-500 dark:text-gray-400">
-          {getEmptyDescription()}
-        </p>
-      </div>
-    </Card>
-  );
-});
-EmptyState.displayName = "EmptyState";
 
 // ✅ Barra de filtros
 const FilterBar = memo<{
@@ -227,7 +198,7 @@ const FilterBar = memo<{
             <Input
               placeholder="Buscar por nombre de paciente..."
               value={filters.search}
-              onChange={(e) => handleSearchChange(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearchChange(e.target.value)}
               className="pl-10"
             />
           </div>
@@ -419,7 +390,7 @@ const AppointmentsList = memo<AppointmentsListProps>(({
   }
 
   if (appointments.length === 0) {
-    return <EmptyState message={emptyMessage} tabType={tabType} />;
+    return <EmptyState title={emptyMessage} description={getEmptyDescription(tabType)} icon={getEmptyIcon(tabType)} />;
   }
 
   return (
@@ -440,8 +411,9 @@ const AppointmentsList = memo<AppointmentsListProps>(({
       {/* Lista de citas */}
       {filteredAppointments.length === 0 ? (
         <EmptyState 
-          message="No se encontraron citas con los filtros aplicados" 
-          tabType={tabType} 
+          title="No se encontraron citas con los filtros aplicados" 
+          description="Intenta ajustar los criterios de búsqueda para obtener resultados." 
+          icon={getEmptyIcon(tabType)} 
         />
       ) : (
         <List

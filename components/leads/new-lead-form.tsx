@@ -3,76 +3,96 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { CalendarIcon } from 'lucide-react';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/ui/unified-skeletons';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from '@/components/ui/dialog';
 
 import { useCreateLead } from '@/hooks/use-leads';
 import type { Channel, Motive } from '@/lib/types';
 
 // Validation schema
 const leadFormSchema = z.object({
-  full_name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  first_name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  last_name: z.string().min(2, 'El apellido debe tener al menos 2 caracteres'),
   phone_number: z.string().min(10, 'Debe ser un número de teléfono válido'),
-  email: z.string().email('Debe ser un email válido').optional().or(z.literal('')),
-  channel: z.string().min(1, 'Selecciona un canal'),
-  motive: z.string().min(1, 'Selecciona un motivo'),
+  channel: z.enum(['TELEFONO', 'WHATSAPP', 'FACEBOOK', 'INSTAGRAM', 'REFERENCIA', 'PAGINA_WEB', 'OTRO'], {
+    required_error: 'Selecciona el método de contacto'
+  }),
+  call_reason: z.enum(['ONLY_WANTS_INFORMATION', 'WANTS_TO_SCHEDULE_APPOINTMENT', 'WANTS_TO_COMPARE_PRICES', 'OTHER'], {
+    required_error: 'Selecciona el motivo de la llamada'
+  }),
+  problem_type: z.enum(['INFORMES', 'AGENDAR_CITA', 'URGENCIA_MEDICA', 'SEGUIMIENTO', 'CANCELACION', 'REAGENDAMIENTO', 'OTRO'], {
+    required_error: 'Por favor seleccione el motivo de contacto'
+  }),
+  problem_specification: z.string().optional(),
   notes: z.string().optional(),
-  lead_intent: z.enum(['ONLY_WANTS_INFORMATION', 'WANTS_TO_SCHEDULE_APPOINTMENT', 'WANTS_TO_COMPARE_PRICES', 'OTHER']).optional(),
-  next_follow_up_date: z.date().optional(),
 });
 
 type LeadFormData = z.infer<typeof leadFormSchema>;
 
 interface NewLeadFormProps {
-  onSuccess: () => void;
-  channelOptions: { value: Channel; label: string }[];
-  motiveOptions: { value: Motive; label: string }[];
+  trigger: React.ReactNode;
+  onSuccess?: () => void;
 }
 
-export function NewLeadForm({ onSuccess, channelOptions, motiveOptions }: NewLeadFormProps) {
-  const [followUpDate, setFollowUpDate] = useState<Date>();
+export function NewLeadForm({ trigger, onSuccess }: NewLeadFormProps) {
+  const [open, setOpen] = useState(false);
   const { mutate: createLead, isPending } = useCreateLead();
 
   const form = useForm<LeadFormData>({
     resolver: zodResolver(leadFormSchema),
     defaultValues: {
-      full_name: '',
+      first_name: '',
+      last_name: '',
       phone_number: '',
-      email: '',
-      channel: '',
-      motive: '',
+      channel: undefined,
+      call_reason: undefined,
+      problem_type: undefined,
+      problem_specification: '',
       notes: '',
-      lead_intent: undefined,
     },
   });
 
   const onSubmit = (data: LeadFormData) => {
+    // Mapear problem_type a motive según los enums existentes
+    const motiveMapping: Record<string, Motive> = {
+      'INFORMES': 'INFORMES' as Motive,
+      'AGENDAR_CITA': 'AGENDAR_CITA' as Motive,
+      'URGENCIA_MEDICA': 'URGENCIA_MEDICA' as Motive,
+      'SEGUIMIENTO': 'SEGUIMIENTO' as Motive,
+      'CANCELACION': 'CANCELACION' as Motive,
+      'REAGENDAMIENTO': 'REAGENDAMIENTO' as Motive,
+      'OTRO': 'OTRO' as Motive
+    };
+    
     const submitData = {
-      ...data,
-      email: data.email || undefined,
-      notes: data.notes || undefined,
-      next_follow_up_date: followUpDate ? followUpDate.toISOString() : undefined,
+      full_name: `${data.first_name} ${data.last_name}`,
+      phone_number: data.phone_number,
       channel: data.channel as Channel,
-      motive: data.motive as Motive,
+      motive: motiveMapping[data.problem_type],
+      problem_specification: data.problem_specification || undefined,
+      notes: data.notes || undefined,
+      // La fecha de contacto se almacenará automáticamente en el backend
     };
 
     createLead(submitData, {
       onSuccess: () => {
         form.reset();
-        setFollowUpDate(undefined);
-        onSuccess();
+        setOpen(false);
+        onSuccess?.();
       },
     });
   };
@@ -90,22 +110,46 @@ export function NewLeadForm({ onSuccess, channelOptions, motiveOptions }: NewLea
   };
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-      <Card>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger}
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Nuevo Lead</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <Card>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Full Name */}
-            <div className="md:col-span-2">
-              <Label htmlFor="full_name">Nombre Completo *</Label>
+            {/* Nombre */}
+            <div>
+              <Label htmlFor="first_name">Nombre *</Label>
               <Input
-                id="full_name"
-                placeholder="Ej: Juan Pérez García"
-                {...form.register('full_name')}
-                className={form.formState.errors.full_name ? 'border-red-500' : ''}
+                id="first_name"
+                placeholder="Ej: Juan"
+                {...form.register('first_name')}
+                className={form.formState.errors.first_name ? 'border-red-500' : ''}
               />
-              {form.formState.errors.full_name && (
+              {form.formState.errors.first_name && (
                 <p className="text-sm text-red-500 mt-1">
-                  {form.formState.errors.full_name.message}
+                  {form.formState.errors.first_name.message}
+                </p>
+              )}
+            </div>
+
+            {/* Apellido */}
+            <div>
+              <Label htmlFor="last_name">Apellido *</Label>
+              <Input
+                id="last_name"
+                placeholder="Ej: Pérez García"
+                {...form.register('last_name')}
+                className={form.formState.errors.last_name ? 'border-red-500' : ''}
+              />
+              {form.formState.errors.last_name && (
+                <p className="text-sm text-red-500 mt-1">
+                  {form.formState.errors.last_name.message}
                 </p>
               )}
             </div>
@@ -130,39 +174,24 @@ export function NewLeadForm({ onSuccess, channelOptions, motiveOptions }: NewLea
               )}
             </div>
 
-            {/* Email */}
+            {/* Método de Contacto */}
             <div>
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="juan@ejemplo.com"
-                {...form.register('email')}
-                className={form.formState.errors.email ? 'border-red-500' : ''}
-              />
-              {form.formState.errors.email && (
-                <p className="text-sm text-red-500 mt-1">
-                  {form.formState.errors.email.message}
-                </p>
-              )}
-            </div>
-
-            {/* Channel */}
-            <div>
-              <Label htmlFor="channel">Canal de Contacto *</Label>
+              <Label htmlFor="channel">Método de Contacto *</Label>
               <Select
-                value={form.watch('channel')}
-                onValueChange={(value) => form.setValue('channel', value)}
+                value={form.watch('channel') || ''}
+                onValueChange={(value) => form.setValue('channel', value as 'WHATSAPP' | 'TELEFONO' | 'FACEBOOK' | 'INSTAGRAM' | 'REFERENCIA' | 'PAGINA_WEB' | 'OTRO')}
               >
                 <SelectTrigger className={form.formState.errors.channel ? 'border-red-500' : ''}>
-                  <SelectValue placeholder="Seleccionar canal" />
+                  <SelectValue placeholder="¿Cómo se comunicó?" />
                 </SelectTrigger>
                 <SelectContent>
-                  {channelOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="TELEFONO">Llamada telefónica</SelectItem>
+                  <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                  <SelectItem value="FACEBOOK">Facebook</SelectItem>
+                  <SelectItem value="INSTAGRAM">Instagram</SelectItem>
+                  <SelectItem value="REFERENCIA">Referencia</SelectItem>
+                  <SelectItem value="PAGINA_WEB">Página web</SelectItem>
+                  <SelectItem value="OTRO">Otro</SelectItem>
                 </SelectContent>
               </Select>
               {form.formState.errors.channel && (
@@ -172,81 +201,74 @@ export function NewLeadForm({ onSuccess, channelOptions, motiveOptions }: NewLea
               )}
             </div>
 
-            {/* Motive */}
+            {/* Motivo de la Llamada */}
             <div>
-              <Label htmlFor="motive">Motivo de Consulta *</Label>
+              <Label htmlFor="call_reason">Motivo de la Llamada *</Label>
               <Select
-                value={form.watch('motive')}
-                onValueChange={(value) => form.setValue('motive', value)}
+                value={form.watch('call_reason') || ''}
+                onValueChange={(value) => form.setValue('call_reason', value as 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'OTHER')}
               >
-                <SelectTrigger className={form.formState.errors.motive ? 'border-red-500' : ''}>
-                  <SelectValue placeholder="Seleccionar motivo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {motiveOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.motive && (
-                <p className="text-sm text-red-500 mt-1">
-                  {form.formState.errors.motive.message}
-                </p>
-              )}
-            </div>
-
-            {/* Lead Intent */}
-            <div>
-              <Label htmlFor="lead_intent">Intención del Lead</Label>
-              <Select
-                value={form.watch('lead_intent') || ''}
-                onValueChange={(value) => form.setValue('lead_intent', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona la intención" />
+                <SelectTrigger className={form.formState.errors.call_reason ? 'border-red-500' : ''}>
+                  <SelectValue placeholder="¿Para qué llamó?" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ONLY_WANTS_INFORMATION">Solo quiere información</SelectItem>
                   <SelectItem value="WANTS_TO_SCHEDULE_APPOINTMENT">Quiere agendar cita</SelectItem>
                   <SelectItem value="WANTS_TO_COMPARE_PRICES">Quiere comparar precios</SelectItem>
-                  <SelectItem value="OTHER">Otro</SelectItem>
+                  <SelectItem value="OTHER">Otro motivo</SelectItem>
                 </SelectContent>
               </Select>
+              {form.formState.errors.call_reason && (
+                <p className="text-sm text-red-500 mt-1">
+                  {form.formState.errors.call_reason.message}
+                </p>
+              )}
             </div>
 
-            {/* Follow Up Date */}
+            {/* Tipo de Problema */}
             <div>
-              <Label>Fecha de Seguimiento</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !followUpDate && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {followUpDate ? (
-                      format(followUpDate, "PPP", { locale: es })
-                    ) : (
-                      "Seleccionar fecha"
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={followUpDate}
-                    onSelect={setFollowUpDate}
-                    disabled={(date) => date < new Date()}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <Label htmlFor="problem_type">Tipo de Problema *</Label>
+              <Select
+                value={form.watch('problem_type') || ''}
+                onValueChange={(value) => form.setValue('problem_type', value as 'INFORMES' | 'AGENDAR_CITA' | 'URGENCIA_MEDICA' | 'SEGUIMIENTO' | 'CANCELACION' | 'REAGENDAMIENTO' | 'OTRO')}
+              >
+                <SelectTrigger className={form.formState.errors.problem_type ? 'border-red-500' : ''}>
+                  <SelectValue placeholder="¿Qué problema tiene?" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INFORMES">Informes</SelectItem>
+                  <SelectItem value="AGENDAR_CITA">Agendar cita</SelectItem>
+                  <SelectItem value="URGENCIA_MEDICA">Urgencia médica</SelectItem>
+                  <SelectItem value="SEGUIMIENTO">Seguimiento</SelectItem>
+                  <SelectItem value="CANCELACION">Cancelación</SelectItem>
+                  <SelectItem value="REAGENDAMIENTO">Reagendamiento</SelectItem>
+                  <SelectItem value="OTRO">Otro</SelectItem>
+                </SelectContent>
+              </Select>
+              {form.formState.errors.problem_type && (
+                <p className="text-sm text-red-500 mt-1">
+                  {form.formState.errors.problem_type.message}
+                </p>
+              )}
             </div>
+
+            {/* Especificación del Problema (condicional) */}
+            {form.watch('problem_type') === 'OTRO' && (
+              <div>
+                <Label htmlFor="problem_specification">Especificar Problema</Label>
+                <Input
+                  id="problem_specification"
+                  placeholder="Describa brevemente el problema"
+                  {...form.register('problem_specification')}
+                  className={form.formState.errors.problem_specification ? 'border-red-500' : ''}
+                />
+                {form.formState.errors.problem_specification && (
+                  <p className="text-sm text-red-500 mt-1">
+                    {form.formState.errors.problem_specification.message}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Notes */}
             <div className="md:col-span-2">
@@ -264,7 +286,7 @@ export function NewLeadForm({ onSuccess, channelOptions, motiveOptions }: NewLea
 
       {/* Submit Button */}
       <div className="flex justify-end gap-3">
-        <Button type="button" variant="outline" onClick={onSuccess}>
+        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
           Cancelar
         </Button>
         <Button type="submit" disabled={isPending}>
@@ -279,5 +301,7 @@ export function NewLeadForm({ onSuccess, channelOptions, motiveOptions }: NewLea
         </Button>
       </div>
     </form>
+  </DialogContent>
+</Dialog>
   );
 }

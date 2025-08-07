@@ -31,7 +31,7 @@ const PatientCard = dynamic(() => import('./patient-card'), {
 });
 
 import { PatientModal } from './patient-modal';
-import { LeadModal } from '@/components/leads/lead-modal';
+import { NewLeadForm } from '@/components/leads/new-lead-form';
 
 // ==================== CONFIGURACIÓN DE TABS ====================
 const TABS_CONFIG = [
@@ -155,18 +155,16 @@ const AdmissionHeader = React.memo<{
           
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex gap-2">
-              <LeadModal
+              <NewLeadForm
                 trigger={
                   <Button variant="outline" className="gap-2 rounded-xl">
                     <UserPlus className="h-4 w-4" />
                     <span className="hidden xs:inline">Nuevo Lead</span>
                   </Button>
                 }
-                channelOptions={CHANNEL_OPTIONS}
-                motiveOptions={MOTIVE_OPTIONS}
                 onSuccess={() => {
-                  toast.success('Lead registrado exitosamente');
-                  onRefresh();
+                  toast.success('Lead creado exitosamente');
+                  window.location.reload();
                 }}
               />
               <PatientModal
@@ -315,7 +313,8 @@ const PatientAdmission: React.FC = () => {
   const counts = useMemo(() => ({
     today: todayAppointments.length,
     future: futureAppointments.length,
-    past: pastAppointments.length
+    past: pastAppointments.length,
+    schedule: todayAppointments.length + futureAppointments.length + pastAppointments.length
   }), [todayAppointments.length, futureAppointments.length, pastAppointments.length]);
 
   const handleTabChange = useCallback((tab: TabType) => {
@@ -336,7 +335,8 @@ const PatientAdmission: React.FC = () => {
     const emptyStates = {
       today: 'No hay citas programadas para hoy',
       future: 'No hay citas futuras programadas',
-      past: 'No hay citas pasadas registradas'
+      past: 'No hay citas pasadas registradas',
+      schedule: 'No hay citas programadas'
     };
 
     let currentAppointments: AppointmentWithPatient[] = [];

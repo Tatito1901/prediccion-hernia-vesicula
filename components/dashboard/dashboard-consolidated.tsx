@@ -60,7 +60,7 @@ export function DashboardConsolidated() {
 
     // Pacientes activos (estados relevantes)
     const activePatients = allPatients.filter(patient => 
-      ['PENDIENTE DE CONSULTA', 'CONSULTADO', 'EN SEGUIMIENTO', 'INDECISO'].includes(
+      ['potencial', 'activo', 'en_seguimiento', 'inactivo', 'alta_medica'].includes(
         patient.estado_paciente || ''
       )
     ).length;
@@ -127,7 +127,7 @@ export function DashboardConsolidated() {
 
     // Pacientes operados
     const operatedPatients = allPatients.filter(patient => 
-      patient.estado_paciente === 'OPERADO'
+      patient.estado_paciente === 'operado'
     ).length;
 
     return [

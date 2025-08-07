@@ -32,7 +32,7 @@ const editLeadFormSchema = z.object({
   status: z.string().min(1, 'Selecciona un estado'),
   notes: z.string().optional(),
   follow_up_notes: z.string().optional(),
-  lead_intent: z.string().optional(),
+  lead_intent: z.enum(['ONLY_WANTS_INFORMATION', 'WANTS_TO_SCHEDULE_APPOINTMENT', 'WANTS_TO_COMPARE_PRICES', 'OTHER']).optional(),
   next_follow_up_date: z.date().optional(),
 });
 
@@ -70,7 +70,7 @@ export function EditLeadForm({
       status: lead.status,
       notes: lead.notes || '',
       follow_up_notes: lead.follow_up_notes || '',
-      lead_intent: lead.lead_intent || null,
+      lead_intent: lead.lead_intent as 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'WANTS_TO_COMPARE_PRICES' | 'OTHER' | undefined,
     },
   });
 
@@ -246,7 +246,7 @@ export function EditLeadForm({
               <Label htmlFor="lead_intent">Intención del Lead</Label>
               <Select
                 value={form.watch('lead_intent') || ''}
-                onValueChange={(value) => form.setValue('lead_intent', value)}
+                onValueChange={(value) => form.setValue('lead_intent', value as 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'WANTS_TO_COMPARE_PRICES' | 'OTHER' | undefined)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona la intención" />
@@ -334,11 +334,11 @@ export function EditLeadForm({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground">
             <div>
               <Label className="text-xs font-medium">Creado</Label>
-              <p>{format(new Date(lead.created_at), 'PPP', { locale: es })}</p>
+              <p>{lead.created_at ? format(new Date(lead.created_at), 'PPP', { locale: es }) : 'N/A'}</p>
             </div>
             <div>
               <Label className="text-xs font-medium">Última Actualización</Label>
-              <p>{format(new Date(lead.updated_at), 'PPP', { locale: es })}</p>
+              <p>{lead.updated_at ? format(new Date(lead.updated_at), 'PPP', { locale: es }) : 'N/A'}</p>
             </div>
             {lead.last_contact_date && (
               <div>

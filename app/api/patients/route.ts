@@ -102,8 +102,8 @@ export async function GET(request: Request) {
       stats = {
         totalPatients,
         surveyRate,
-        pendingConsults: statusStats['PENDIENTE_DE_CONSULTA'] || 0,
-        operatedPatients: statusStats['OPERADO'] || 0,
+        pendingConsults: statusStats['potencial'] || 0,
+        operatedPatients: statusStats['operado'] || 0,
         statusStats: { ...statusStats, all: totalPatients }
       };
     }

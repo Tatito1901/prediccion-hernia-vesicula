@@ -21,36 +21,41 @@ interface StatusConfig {
   readonly className: string
 }
 
-const STATUS_CONFIG: Record<PatientStatusEnum, StatusConfig> = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: {
-    label: "Pendiente",
+const STATUS_CONFIG: Record<keyof typeof PatientStatusEnum, StatusConfig> = {
+  POTENCIAL: {
+    label: "Potencial",
     icon: Clock,
     className: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   },
-  [PatientStatusEnum.CONSULTADO]: {
-    label: "Consultado", 
+  ACTIVO: {
+    label: "Activo",
     icon: Stethoscope,
     className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   },
-  [PatientStatusEnum.EN_SEGUIMIENTO]: {
-    label: "Seguimiento",
-    icon: Activity, 
+  EN_SEGUIMIENTO: {
+    label: "En Seguimiento",
+    icon: ClipboardList,
     className: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
   },
-  [PatientStatusEnum.OPERADO]: {
+  OPERADO: {
     label: "Operado",
     icon: CheckCircle2,
     className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
   },
-  [PatientStatusEnum.NO_OPERADO]: {
-    label: "No operado",
+  NO_OPERADO: {
+    label: "No Operado",
     icon: XCircle,
     className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   },
-  [PatientStatusEnum.INDECISO]: {
-    label: "Indeciso",
-    icon: AlertTriangle,
-    className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200", 
+  INACTIVO: {
+    label: "Inactivo",
+    icon: User,
+    className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+  },
+  ALTA_MEDICA: {
+    label: "Alta Médica",
+    icon: User,
+    className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
   },
 } as const
 
@@ -113,7 +118,13 @@ const getStatusConfig = (
     return SURVEY_PENDING_CONFIG
   }
   
-  return status ? STATUS_CONFIG[status] ?? DEFAULT_CONFIG : DEFAULT_CONFIG
+  if (!status) return DEFAULT_CONFIG
+  
+  const statusKey = Object.keys(PatientStatusEnum).find(
+    key => PatientStatusEnum[key as keyof typeof PatientStatusEnum] === status
+  ) as keyof typeof STATUS_CONFIG || 'POTENCIAL'
+  
+  return STATUS_CONFIG[statusKey] ?? DEFAULT_CONFIG
 }
 
 const PatientStatus: React.FC<PatientStatusProps> = ({
@@ -240,7 +251,7 @@ export const usePatientStatusInfo = (
     label: config.label,
     icon: config.icon,
     className: config.className,
-    needsAttention: status === PatientStatusEnum.PENDIENTE_DE_CONSULTA
+    needsAttention: status === PatientStatusEnum.POTENCIAL
   } as const
 }
 
@@ -250,13 +261,13 @@ export const sortByStatusPriority = <T extends PatientStatusItem>(
   if (!patients.length) return []
   
   return [...patients].sort((a, b) => {
-    // Priorizar pacientes pendientes primero
-    if (a.status === PatientStatusEnum.PENDIENTE_DE_CONSULTA && 
-        b.status !== PatientStatusEnum.PENDIENTE_DE_CONSULTA) {
+    // Priorizar pacientes potenciales primero
+    if (a.status === PatientStatusEnum.POTENCIAL && 
+        b.status !== PatientStatusEnum.POTENCIAL) {
       return -1
     }
-    if (b.status === PatientStatusEnum.PENDIENTE_DE_CONSULTA && 
-        a.status !== PatientStatusEnum.PENDIENTE_DE_CONSULTA) {
+    if (b.status === PatientStatusEnum.POTENCIAL && 
+        a.status !== PatientStatusEnum.POTENCIAL) {
       return 1
     }
     

@@ -31,11 +31,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { StatsCard } from "@/components/ui/stats-card"
 import { SimplePagination } from "@/components/ui/simple-pagination"
+import { EmptyState } from '@/components/ui/empty-state'
 import PatientTable from "./patient-table"
 
 // --- Hooks unificados y Tipos ---
 import { useClinic } from "@/contexts/clinic-data-provider"
-import { usePatientStats } from "@/hooks/use-paginated-patients"
 
 // ✅ Tipo para estadísticas de pacientes
 type PatientStatsData = {
@@ -62,18 +62,18 @@ const ScheduleAppointmentDialog = React.lazy(() => import("./schedule-appointmen
 const PAGE_SIZE = 15
 
 const STATUS_CONFIG = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: { 
-    label: "Pendiente", 
+  [PatientStatusEnum.POTENCIAL]: { 
+    label: "Potencial", 
     className: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
     icon: AlertTriangle
   },
-  [PatientStatusEnum.CONSULTADO]: { 
-    label: "Consultado", 
+  [PatientStatusEnum.ACTIVO]: { 
+    label: "Activo", 
     className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
     icon: Stethoscope
   },
   [PatientStatusEnum.EN_SEGUIMIENTO]: { 
-    label: "Seguimiento", 
+    label: "En Seguimiento", 
     className: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
     icon: ClipboardCheck
   },
@@ -87,8 +87,13 @@ const STATUS_CONFIG = {
     className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
     icon: X
   },
-  [PatientStatusEnum.INDECISO]: { 
-    label: "Indeciso", 
+  [PatientStatusEnum.INACTIVO]: { 
+    label: "Inactivo", 
+    className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+    icon: Inbox
+  },
+  [PatientStatusEnum.ALTA_MEDICA]: { 
+    label: "Alta Médica", 
     className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
     icon: Inbox
   }
@@ -116,18 +121,12 @@ interface FilterBarProps {
 }
 
 // ==================== COMPONENTES INTERNOS OPTIMIZADOS ====================
+import { MetricsCardsSkeleton, PatientTableSkeleton } from '@/components/ui/unified-skeletons';
+
 const LoadingSkeleton = memo(() => (
   <div className="bg-white dark:bg-slate-950 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      {Array(4).fill(0).map((_, i) => (
-        <div key={i} className="h-20 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
-      ))}
-    </div>
-    <div className="space-y-3">
-      {Array(5).fill(0).map((_, i) => (
-        <div key={i} className="h-16 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
-      ))}
-    </div>
+    <MetricsCardsSkeleton className="mb-6" />
+    <PatientTableSkeleton rows={5} />
   </div>
 ))
 LoadingSkeleton.displayName = "LoadingSkeleton"
@@ -273,34 +272,20 @@ const FilterBar = memo<FilterBarProps>(({
 ))
 FilterBar.displayName = "FilterBar"
 
-const EmptyState = memo<{
-  hasFilters: boolean
-  onClearFilters: () => void
-}>(({ hasFilters, onClearFilters }) => (
-  <div className="bg-white dark:bg-slate-950 rounded-xl border shadow-sm border-slate-200 dark:border-slate-800 p-12">
-    <div className="text-center">
-      <div className="rounded-full bg-slate-100 dark:bg-slate-800 p-4 mx-auto w-16 h-16 flex items-center justify-center mb-4">
-        <Users className="h-8 w-8 text-slate-400" />
-      </div>
-      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
-        {hasFilters ? "No se encontraron pacientes" : "No hay pacientes registrados"}
-      </h3>
-      <p className="text-slate-500 dark:text-slate-400 mb-4 max-w-sm mx-auto">
-        {hasFilters 
-          ? "No hay pacientes que coincidan con los filtros aplicados. Intenta ajustar los criterios de búsqueda."
-          : "Aún no tienes pacientes registrados en el sistema."
-        }
-      </p>
-      {hasFilters && (
-        <Button onClick={onClearFilters} variant="outline">
-          <X className="w-4 h-4 mr-2" />
-          Limpiar filtros
-        </Button>
-      )}
-    </div>
-  </div>
+const EmptyStateComponent = memo(({ hasFilters, onClearFilters }: { hasFilters: boolean; onClearFilters: () => void; }) => (
+  <EmptyState
+    title={hasFilters ? "No se encontraron pacientes" : "No hay pacientes registrados"}
+    description={hasFilters 
+      ? "No hay pacientes que coincidan con los filtros aplicados. Intenta ajustar los criterios de búsqueda."
+      : "Aún no tienes pacientes registrados en el sistema."
+    }
+    actionText={hasFilters ? "Limpiar filtros" : undefined}
+    onAction={hasFilters ? onClearFilters : undefined}
+    icon={<Users className="h-8 w-8 text-slate-400" />}
+  />
 ))
-EmptyState.displayName = "EmptyState"
+
+EmptyStateComponent.displayName = "EmptyState"
 
 // ==================== COMPONENTE PRINCIPAL REFACTORIZADO ====================
 const PatientManagement: React.FC = () => {
@@ -334,9 +319,8 @@ const PatientManagement: React.FC = () => {
     refetchPatients,
   } = useClinic()
   
-  // ✅ HOOKS UNIFICADOS - Estadísticas optimizadas
-  const patientStatsQuery = usePatientStats()
-  const patientStatsData: PatientStatsData = patientStatsQuery.data || {
+  // ✅ HOOKS UNIFICADOS - Estadísticas optimizadas (ya disponibles desde useClinic)
+  const patientStatsData: PatientStatsData = patientsStats || {
     totalPatients: 0,
     surveyRate: 0,
     pendingConsults: 0,
@@ -530,7 +514,7 @@ const PatientManagement: React.FC = () => {
           )}
         </>
       ) : (
-        <EmptyState 
+        <EmptyStateComponent 
           hasFilters={hasFilters}
           onClearFilters={handleClearFilters}
         />

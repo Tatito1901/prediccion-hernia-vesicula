@@ -5,17 +5,15 @@ import { z } from 'zod';
 
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const UpdateStatusSchema = z.object({
-  // estado_cita es TEXT en tu esquema, no ENUM
+  // estado_cita debe coincidir EXACTAMENTE con appointment_status_enum de la BD
   newStatus: z.enum([
     'PROGRAMADA',
     'CONFIRMADA', 
-    'EN_SALA',
-    'EN_CONSULTA',
-    'COMPLETADA',
     'CANCELADA',
-    'NO_ASISTIO',
-    'REAGENDADA',
-    'PRESENTE'
+    'COMPLETADA',
+    'NO ASISTIO',
+    'PRESENTE',
+    'REAGENDADA'
   ] as const),
   motivo_cambio: z.string().optional(),
   nuevaFechaHora: z.string().datetime().optional(),

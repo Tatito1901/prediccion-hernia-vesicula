@@ -5,22 +5,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { z } from 'zod';
 
-// Definición del enum de diagnóstico (debe coincidir con el enum en la base de datos)
+// Definición del enum de diagnóstico (debe coincidir EXACTAMENTE con el enum en la base de datos)
 const DIAGNOSIS_ENUM = [
-  'HERNIA_INGUINAL',
-  'HERNIA_UMBILICAL', 
+  'HERNIA INGUINAL',
+  'HERNIA UMBILICAL', 
   'COLECISTITIS',
   'COLEDOCOLITIASIS',
   'COLANGITIS',
   'APENDICITIS',
-  'HERNIA_HIATAL',
-  'LIPOMA_GRANDE',
-  'HERNIA_INGUINAL_RECIDIVANTE',
-  'QUISTE_SEBACEO_INFECTADO',
-  'EVENTRACION_ABDOMINAL',
-  'VESICULA',
+  'HERNIA HIATAL',
+  'LIPOMA GRANDE',
+  'HERNIA INGUINAL RECIDIVANTE',
+  'QUISTE SEBACEO INFECTADO',
+  'EVENTRACION ABDOMINAL',
+  'VESICULA (COLECISTITIS CRONICA)',
   'OTRO',
-  'HERNIA_SPIGEL'
+  'HERNIA SPIGEL',
+  'SIN_DIAGNOSTICO'
 ] as const;
 
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================

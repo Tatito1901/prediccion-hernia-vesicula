@@ -9,41 +9,44 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { LeadsTable } from '@/components/leads/leads-table';
-import { LeadModal } from '@/components/leads/lead-modal';
+import { NewLeadForm } from '@/components/leads/new-lead-form';
 import { LeadStats } from '@/components/leads/lead-stats';
 import { useLeads, useLeadStats } from '@/hooks/use-leads';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { AppSidebar } from '@/components/navigation/app-sidebar';
+import { ClinicDataProvider } from '@/contexts/clinic-data-provider';
 import type { LeadStatus, Channel, Motive } from '@/lib/types';
 
 const LEAD_STATUS_OPTIONS: { value: LeadStatus; label: string; color: string }[] = [
   { value: 'NUEVO', label: 'Nuevo', color: 'bg-blue-500' },
   { value: 'CONTACTADO', label: 'Contactado', color: 'bg-yellow-500' },
-  { value: 'EN_SEGUIMIENTO', label: 'En Seguimiento', color: 'bg-orange-500' },
-  { value: 'INTERESADO', label: 'Interesado', color: 'bg-green-500' },
-  { value: 'NO_INTERESADO', label: 'No Interesado', color: 'bg-red-500' },
+  { value: 'SEGUIMIENTO_PENDIENTE', label: 'En Seguimiento', color: 'bg-orange-500' },
   { value: 'CONVERTIDO', label: 'Convertido', color: 'bg-emerald-500' },
+  { value: 'NO_INTERESADO', label: 'No Interesado', color: 'bg-red-500' },
   { value: 'PERDIDO', label: 'Perdido', color: 'bg-gray-500' },
+  { value: 'CITA_AGENDADA', label: 'Cita Agendada', color: 'bg-green-500' },
 ];
 
 const CHANNEL_OPTIONS: { value: Channel; label: string }[] = [
-  { value: 'TELEFONO', label: 'Teléfono' },
+  { value: 'PHONE_CALL', label: 'Teléfono' },
   { value: 'WHATSAPP', label: 'WhatsApp' },
-  { value: 'EMAIL', label: 'Email' },
-  { value: 'REDES_SOCIALES', label: 'Redes Sociales' },
-  { value: 'REFERIDO', label: 'Referido' },
-  { value: 'SITIO_WEB', label: 'Sitio Web' },
+  { value: 'SOCIAL_MEDIA', label: 'Redes Sociales' },
+  { value: 'REFERRAL', label: 'Referido' },
+  { value: 'WEBSITE', label: 'Sitio Web' },
   { value: 'WALK_IN', label: 'Visita Directa' },
 ];
 
 const MOTIVE_OPTIONS: { value: Motive; label: string }[] = [
-  { value: 'HERNIA_INGUINAL', label: 'Hernia Inguinal' },
-  { value: 'HERNIA_UMBILICAL', label: 'Hernia Umbilical' },
-  { value: 'VESICULA', label: 'Vesícula' },
-  { value: 'CONSULTA_GENERAL', label: 'Consulta General' },
-  { value: 'SEGUNDA_OPINION', label: 'Segunda Opinión' },
+  { value: 'INFORMES', label: 'Informes' },
+  { value: 'AGENDAR_CITA', label: 'Agendar Cita' },
+  { value: 'URGENCIA_MEDICA', label: 'Urgencia Médica' },
   { value: 'SEGUIMIENTO', label: 'Seguimiento' },
+  { value: 'CANCELACION', label: 'Cancelación' },
+  { value: 'REAGENDAMIENTO', label: 'Reagendamiento' },
+  { value: 'OTRO', label: 'Otro' },
 ];
 
-export default function LeadsPage() {
+function LeadsContent() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<LeadStatus | undefined>();
@@ -85,24 +88,15 @@ export default function LeadsPage() {
           </p>
         </div>
         
-        <Dialog open={isNewLeadOpen} onOpenChange={setIsNewLeadOpen}>
-          <DialogTrigger asChild>
+        <NewLeadForm 
+          trigger={
             <Button>
               <Plus className="mr-2 h-4 w-4" />
               Nuevo Lead
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Crear Nuevo Lead</DialogTitle>
-            </DialogHeader>
-            <NewLeadForm 
-              onSuccess={() => setIsNewLeadOpen(false)}
-              channelOptions={CHANNEL_OPTIONS}
-              motiveOptions={MOTIVE_OPTIONS}
-            />
-          </DialogContent>
-        </Dialog>
+          }
+          onSuccess={() => setIsNewLeadOpen(false)}
+        />
       </div>
 
       {/* Stats Cards */}
@@ -132,15 +126,12 @@ export default function LeadsPage() {
             {/* Status Filter */}
             <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as LeadStatus)}>
               <SelectTrigger>
-                <SelectValue placeholder="Filtrar por estado" />
+                <SelectValue placeholder="Estado" />
               </SelectTrigger>
               <SelectContent>
-                {LEAD_STATUS_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${option.color}`} />
-                      {option.label}
-                    </div>
+                {LEAD_STATUS_OPTIONS.map((status) => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -149,12 +140,12 @@ export default function LeadsPage() {
             {/* Channel Filter */}
             <Select value={channelFilter} onValueChange={(value) => setChannelFilter(value as Channel)}>
               <SelectTrigger>
-                <SelectValue placeholder="Filtrar por canal" />
+                <SelectValue placeholder="Canal" />
               </SelectTrigger>
               <SelectContent>
-                {CHANNEL_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+                {CHANNEL_OPTIONS.map((channel) => (
+                  <SelectItem key={channel.value} value={channel.value}>
+                    {channel.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -163,12 +154,12 @@ export default function LeadsPage() {
             {/* Motive Filter */}
             <Select value={motiveFilter} onValueChange={(value) => setMotiveFilter(value as Motive)}>
               <SelectTrigger>
-                <SelectValue placeholder="Filtrar por motivo" />
+                <SelectValue placeholder="Motivo" />
               </SelectTrigger>
               <SelectContent>
-                {MOTIVE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+                {MOTIVE_OPTIONS.map((motive) => (
+                  <SelectItem key={motive.value} value={motive.value}>
+                    {motive.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -187,20 +178,15 @@ export default function LeadsPage() {
             </Button>
 
             {hasFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                Limpiar Filtros
-              </Button>
+              <Badge variant="secondary" className="cursor-pointer" onClick={clearFilters}>
+                Limpiar filtros
+              </Badge>
             )}
           </div>
 
           {/* Active Filters */}
           {hasFilters && (
             <div className="flex flex-wrap gap-2 mt-4">
-              {search && (
-                <Badge variant="secondary">
-                  Búsqueda: {search}
-                </Badge>
-              )}
               {statusFilter && (
                 <Badge variant="secondary">
                   Estado: {LEAD_STATUS_OPTIONS.find(s => s.value === statusFilter)?.label}
@@ -238,5 +224,18 @@ export default function LeadsPage() {
         motiveOptions={MOTIVE_OPTIONS}
       />
     </div>
+  );
+}
+
+export default function LeadsPage() {
+  return (
+    <ClinicDataProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <LeadsContent />
+        </SidebarInset>
+      </SidebarProvider>
+    </ClinicDataProvider>
   );
 }

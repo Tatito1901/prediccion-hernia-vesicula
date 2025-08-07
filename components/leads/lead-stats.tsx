@@ -13,17 +13,15 @@ export function LeadStats({ stats }: LeadStatsProps) {
   // Channel icons mapping
   const getChannelIcon = (channel: Channel) => {
     switch (channel) {
-      case 'TELEFONO':
-        return <Phone className="h-4 w-4" />;
       case 'WHATSAPP':
         return <Phone className="h-4 w-4" />;
-      case 'EMAIL':
+      case 'PHONE_CALL':
         return <Phone className="h-4 w-4" />;
-      case 'REDES_SOCIALES':
+      case 'SOCIAL_MEDIA':
         return <Phone className="h-4 w-4" />;
-      case 'REFERIDO':
+      case 'REFERRAL':
         return <Users className="h-4 w-4" />;
-      case 'SITIO_WEB':
+      case 'WEBSITE':
         return <Phone className="h-4 w-4" />;
       case 'WALK_IN':
         return <Phone className="h-4 w-4" />;
@@ -35,13 +33,12 @@ export function LeadStats({ stats }: LeadStatsProps) {
   // Channel labels mapping
   const getChannelLabel = (channel: Channel) => {
     const labels: Record<Channel, string> = {
-      'TELEFONO': 'Teléfono',
       'WHATSAPP': 'WhatsApp',
-      'EMAIL': 'Email',
-      'REDES_SOCIALES': 'Redes Sociales',
-      'REFERIDO': 'Referido',
-      'SITIO_WEB': 'Sitio Web',
+      'PHONE_CALL': 'Llamada Telefónica',
       'WALK_IN': 'Visita Directa',
+      'REFERRAL': 'Referido',
+      'WEBSITE': 'Sitio Web',
+      'SOCIAL_MEDIA': 'Redes Sociales',
     };
     return labels[channel] || channel;
   };
@@ -50,12 +47,12 @@ export function LeadStats({ stats }: LeadStatsProps) {
   const getStatusConfig = (status: LeadStatus) => {
     const configs: Record<LeadStatus, { label: string; color: string }> = {
       'NUEVO': { label: 'Nuevo', color: 'bg-blue-500' },
-      'CONTACTADO': { label: 'Contactado', color: 'bg-yellow-500' },
-      'EN_SEGUIMIENTO': { label: 'En Seguimiento', color: 'bg-orange-500' },
-      'INTERESADO': { label: 'Interesado', color: 'bg-green-500' },
-      'NO_INTERESADO': { label: 'No Interesado', color: 'bg-red-500' },
-      'CONVERTIDO': { label: 'Convertido', color: 'bg-emerald-500' },
-      'PERDIDO': { label: 'Perdido', color: 'bg-gray-500' },
+      'CONTACTADO': { label: 'Contactado', color: 'bg-green-500' },
+      'CITA_AGENDADA': { label: 'Cita Agendada', color: 'bg-purple-500' },
+      'CONVERTIDO': { label: 'Convertido', color: 'bg-green-500' },
+      'NO_INTERESADO': { label: 'No Interesado', color: 'bg-gray-500' },
+      'PERDIDO': { label: 'Perdido', color: 'bg-red-500' },
+      'SEGUIMIENTO_PENDIENTE': { label: 'Seguimiento Pendiente', color: 'bg-orange-500' },
     };
     return configs[status] || { label: status, color: 'bg-gray-500' };
   };

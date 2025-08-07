@@ -68,6 +68,7 @@ export type UserRole = Database['public']['Enums']['user_role_enum'];
 export type LeadStatus = Database['public']['Enums']['lead_status_enum'];
 export type Channel = Database['public']['Enums']['channel_enum'];
 export type Motive = Database['public']['Enums']['motive_enum'];
+export type LeadIntent = Database['public']['Enums']['lead_intent_enum'];
 export type SurgicalDecision = Database['public']['Enums']['surgical_decision_enum'];
 export type SurveyStatus = Database['public']['Enums']['survey_status_enum'];
 export type MarketingSource = Database['public']['Enums']['marketing_source_enum'];
@@ -75,12 +76,13 @@ export type MarketingSource = Database['public']['Enums']['marketing_source_enum
 // Mantenemos los objetos CONST para usarlos fácilmente en el código, 
 // pero ahora están validados por el tipo de arriba.
 export const PatientStatusEnum = {
-  PENDIENTE_DE_CONSULTA: 'PENDIENTE DE CONSULTA' as PatientStatus,
-  CONSULTADO: 'CONSULTADO' as PatientStatus,
-  EN_SEGUIMIENTO: 'EN SEGUIMIENTO' as PatientStatus,
-  OPERADO: 'OPERADO' as PatientStatus,
-  NO_OPERADO: 'NO OPERADO' as PatientStatus,
-  INDECISO: 'INDECISO' as PatientStatus,
+  POTENCIAL: 'potencial' as PatientStatus,
+  ACTIVO: 'activo' as PatientStatus,
+  OPERADO: 'operado' as PatientStatus,
+  NO_OPERADO: 'no_operado' as PatientStatus,
+  EN_SEGUIMIENTO: 'en_seguimiento' as PatientStatus,
+  INACTIVO: 'inactivo' as PatientStatus,
+  ALTA_MEDICA: 'alta_medica' as PatientStatus,
 };
 
 export const AppointmentStatusEnum = {
@@ -221,12 +223,11 @@ export interface AppointmentFormData {
 export interface LeadFormData {
   full_name: string;
   phone_number: string;
-  email?: string;
   channel: Channel;
   motive: Motive;
-  notes?: string;
   lead_intent?: 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'WANTS_TO_COMPARE_PRICES' | 'OTHER';
-  next_follow_up_date?: string;
+  problem_specification?: string;
+  notes?: string;
 }
 
 // --- Extended Lead Types ---

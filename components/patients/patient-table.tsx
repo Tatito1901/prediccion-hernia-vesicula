@@ -27,9 +27,13 @@ import {
   Clock,
   Hash,
 } from "lucide-react"
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from "@/lib/utils"
 import { Patient, PatientStatusEnum, EnrichedPatient } from "@/lib/types"
-import { Button } from "@/components/ui/button"
 
 // Usamos EnrichedPatient importado desde @/lib/types
 
@@ -80,21 +84,23 @@ const DIAGNOSTIC_STYLES = {
 } as const
 
 const STATUS_STYLES = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-  [PatientStatusEnum.CONSULTADO]: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  [PatientStatusEnum.POTENCIAL]: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+  [PatientStatusEnum.ACTIVO]: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   [PatientStatusEnum.EN_SEGUIMIENTO]: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
   [PatientStatusEnum.OPERADO]: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
   [PatientStatusEnum.NO_OPERADO]: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  [PatientStatusEnum.INDECISO]: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+  [PatientStatusEnum.INACTIVO]: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+  [PatientStatusEnum.ALTA_MEDICA]: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
 } as const
 
 const STATUS_LABELS = {
-  [PatientStatusEnum.PENDIENTE_DE_CONSULTA]: "Pendiente",
-  [PatientStatusEnum.CONSULTADO]: "Consultado",
-  [PatientStatusEnum.EN_SEGUIMIENTO]: "Seguimiento",
+  [PatientStatusEnum.POTENCIAL]: "Potencial",
+  [PatientStatusEnum.ACTIVO]: "Activo",
+  [PatientStatusEnum.EN_SEGUIMIENTO]: "En Seguimiento",
   [PatientStatusEnum.OPERADO]: "Operado",
   [PatientStatusEnum.NO_OPERADO]: "No Operado",
-  [PatientStatusEnum.INDECISO]: "Indeciso",
+  [PatientStatusEnum.INACTIVO]: "Inactivo",
+  [PatientStatusEnum.ALTA_MEDICA]: "Alta Médica",
 } as const
 
 const getDiagnosticStyle = (diagnostic: string | null | undefined): string => {
@@ -437,23 +443,7 @@ const LoadingState = () => (
   </div>
 )
 
-const EmptyState = () => (
-  <div className="bg-white dark:bg-slate-950 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-12 text-center">
-    <div className="flex flex-col items-center gap-4">
-      <div className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-        <Stethoscope className="h-8 w-8 text-slate-400 dark:text-slate-500" />
-      </div>
-      <div>
-        <p className="font-medium text-slate-900 dark:text-slate-100">
-          No hay pacientes registrados
-        </p>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Los pacientes aparecerán aquí cuando sean agregados
-        </p>
-      </div>
-    </div>
-  </div>
-)
+
 
 // Componente principal optimizado
 const PatientTable: React.FC<PatientTableProps> = ({
@@ -508,7 +498,7 @@ const PatientTable: React.FC<PatientTableProps> = ({
   }
 
   if (loading) return <LoadingState />
-  if (sortedPatients.length === 0) return <EmptyState />
+  if (sortedPatients.length === 0) return <EmptyState title="No hay pacientes registrados" description="Los pacientes aparecerán aquí cuando sean agregados" icon={<Stethoscope className="h-8 w-8 text-slate-400 dark:text-slate-500" />} />
 
   return (
     <div className="w-full">

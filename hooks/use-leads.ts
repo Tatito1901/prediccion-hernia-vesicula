@@ -111,34 +111,93 @@ export function useCreateLead() {
 
   return useMutation({
     mutationFn: async (leadData: LeadFormData): Promise<Lead> => {
-      const response = await fetch('/api/leads', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(leadData),
-      });
+      console.log('🚀 Enviando datos del lead:', leadData);
+      
+      try {
+        // Validar datos requeridos antes de enviar
+        if (!leadData.full_name || !leadData.phone_number || !leadData.channel || !leadData.motive) {
+          throw new Error('Faltan campos requeridos: nombre completo, teléfono, canal o motivo');
+        }
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create lead');
+        const response = await fetch('/api/leads', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(leadData),
+        });
+
+        console.log('📡 Respuesta del servidor:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok
+        });
+
+        if (!response.ok) {
+          let errorMessage = `Error HTTP ${response.status}: ${response.statusText}`;
+          
+          try {
+            const errorData = await response.json();
+            console.error('❌ Error del servidor:', errorData);
+            errorMessage = errorData.error || errorData.message || errorMessage;
+            
+            // Si hay detalles adicionales del error, incluirlos
+            if (errorData.details) {
+              console.error('🔍 Detalles del error:', errorData.details);
+              errorMessage += ` - ${errorData.details}`;
+            }
+          } catch (parseError) {
+            console.error('❌ No se pudo parsear el error del servidor:', parseError);
+          }
+          
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        console.log('✅ Lead creado exitosamente:', result);
+        
+        if (!result.lead) {
+          throw new Error('El servidor no devolvió los datos del lead creado');
+        }
+        
+        return result.lead;
+      } catch (error) {
+        console.error('💥 Error completo en useCreateLead:', error);
+        throw error;
       }
-
-      const { lead } = await response.json();
-      return lead;
     },
     onSuccess: (newLead) => {
-      // Invalidate leads queries to refresh the list
+      console.log('🎉 Hook onSuccess ejecutado:', newLead);
+      
+      // Invalidar queries para refrescar la lista
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       
-      // Optionally set the new lead in cache
-      queryClient.setQueryData(['lead', newLead.id], newLead);
+      // Actualizar el cache con el nuevo lead
+      if (newLead?.id) {
+        queryClient.setQueryData(['lead', newLead.id], newLead);
+      }
       
-      toast.success('Lead creado exitosamente');
+      toast.success(`Lead "${newLead.full_name}" creado exitosamente`);
     },
     onError: (error: Error) => {
-      console.error('Error creating lead:', error);
-      toast.error(error.message || 'Error al crear lead');
+      console.error('🚨 Hook onError ejecutado:', error);
+      
+      // Crear mensaje de error más descriptivo
+      let userMessage = 'Error al crear el lead';
+      
+      if (error.message.includes('Faltan campos requeridos')) {
+        userMessage = error.message;
+      } else if (error.message.includes('already exists')) {
+        userMessage = 'Ya existe un lead con este número de teléfono';
+      } else if (error.message.includes('HTTP 500')) {
+        userMessage = 'Error interno del servidor. Intenta nuevamente.';
+      } else if (error.message.includes('HTTP 400')) {
+        userMessage = 'Datos inválidos. Revisa el formulario.';
+      } else if (error.message) {
+        userMessage = error.message;
+      }
+      
+      toast.error(userMessage);
     },
   });
 }
@@ -148,7 +207,7 @@ export function useUpdateLead() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<LeadFormData> }): Promise<Lead> => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Lead> }): Promise<Lead> => {
       const response = await fetch(`/api/leads/${id}`, {
         method: 'PUT',
         headers: {
@@ -260,7 +319,7 @@ export function useLeadStats() {
       // Calculate statistics
       const total_leads = leads.length;
       const new_leads = leads.filter(lead => lead.status === 'NUEVO').length;
-      const in_follow_up = leads.filter(lead => lead.status === 'EN_SEGUIMIENTO').length;
+      const in_follow_up = leads.filter(lead => lead.status === 'SEGUIMIENTO_PENDIENTE').length;
       const converted_leads = leads.filter(lead => lead.status === 'CONVERTIDO').length;
       const conversion_rate = total_leads > 0 ? (converted_leads / total_leads) * 100 : 0;
       

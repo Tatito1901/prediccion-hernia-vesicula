@@ -220,7 +220,7 @@ export function LeadsTable({
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm">
                           <Phone className="h-4 w-4 text-muted-foreground" />
-                          {lead.phone_number}
+                          {lead.phone_number || 'No phone number'}
                         </div>
                         {lead.email && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -274,7 +274,7 @@ export function LeadsTable({
 
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
-                        {calculateDaysAgo(lead.created_at)}
+                        {lead.created_at ? calculateDaysAgo(lead.created_at) : 'N/A'}
                       </span>
                     </TableCell>
 
@@ -301,7 +301,7 @@ export function LeadsTable({
                           
                           {lead.status === 'CONTACTADO' && (
                             <DropdownMenuItem
-                              onClick={() => handleQuickStatusUpdate(lead.id, 'EN_SEGUIMIENTO')}
+                              onClick={() => handleQuickStatusUpdate(lead.id, 'SEGUIMIENTO_PENDIENTE')}
                             >
                               <Calendar className="mr-2 h-4 w-4" />
                               Poner en Seguimiento
