@@ -164,7 +164,6 @@ const AdmissionHeader = React.memo<{
                 }
                 onSuccess={() => {
                   toast.success('Lead creado exitosamente');
-                  window.location.reload();
                 }}
               />
               <PatientModal

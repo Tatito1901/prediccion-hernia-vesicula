@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { LeadsTable } from '@/components/leads/leads-table';
 import { NewLeadForm } from '@/components/leads/new-lead-form';
 import { LeadStats } from '@/components/leads/lead-stats';
 import { useLeads, useLeadStats } from '@/hooks/use-leads';
@@ -235,17 +234,96 @@ function LeadsContent() {
             </CardContent>
           </Card>
 
-          {/* Table */}
-          <LeadsTable 
-            data={leadsData}
-            isLoading={isLoading}
-            error={error}
-            page={page}
-            onPageChange={setPage}
-            statusOptions={LEAD_STATUS_OPTIONS}
-            channelOptions={CHANNEL_OPTIONS}
-            motiveOptions={MOTIVE_OPTIONS}
-          />
+          {/* Listado mínimo inline (reemplazo de LeadsTable) */}
+          <div className="space-y-4">
+            {error && (
+              <Card className="border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="text-destructive">Error al cargar leads</CardTitle>
+                  <CardDescription>{(error as Error).message}</CardDescription>
+                </CardHeader>
+              </Card>
+            )}
+
+            {isLoading && !leadsData && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Card key={i} className="animate-pulse">
+                    <CardHeader>
+                      <CardTitle className="h-4 w-40 bg-muted rounded" />
+                      <CardDescription className="h-3 w-24 bg-muted rounded mt-2" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-3 w-32 bg-muted rounded" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {leadsData && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {leadsData.data.length === 0 ? (
+                    <Card className="md:col-span-2 lg:col-span-3">
+                      <CardHeader>
+                        <CardTitle className="text-base">Sin resultados</CardTitle>
+                        <CardDescription>
+                          No se encontraron leads con los filtros actuales.
+                        </CardDescription>
+                      </CardHeader>
+                    </Card>
+                  ) : (
+                    leadsData.data.map((lead) => (
+                      <Card key={lead.id}>
+                        <CardHeader>
+                          <CardTitle className="flex items-center justify-between text-base">
+                            <span>{lead.full_name}</span>
+                            <Badge>
+                              {LEAD_STATUS_OPTIONS.find((s) => s.value === lead.status)?.label || lead.status}
+                            </Badge>
+                          </CardTitle>
+                          <CardDescription>
+                            {lead.phone_number} · {CHANNEL_OPTIONS.find(c => c.value === lead.channel)?.label || lead.channel}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-sm text-muted-foreground">
+                          Creado: {lead.created_at ? new Date(lead.created_at).toLocaleString() : '—'}
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+
+                {/* Paginación */}
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Página {leadsData.pagination.page} de {leadsData.pagination.totalPages}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={
+                        leadsData.pagination.totalPages
+                          ? page >= leadsData.pagination.totalPages
+                          : !leadsData.pagination.hasMore
+                      }
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>

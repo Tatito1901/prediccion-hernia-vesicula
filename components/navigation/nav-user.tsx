@@ -1,160 +1,147 @@
-import React, { memo, useState, useMemo, useCallback } from "react";
-import dynamic from "next/dynamic";
-import Link from "next/link";
-import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import type * as React from "react"
+import Link from "next/link"
+import { useCallback, useState, memo } from "react"
+
 import {
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar";
+} from "@/components/ui/sidebar"
+import { cn } from "@/lib/utils"
 
-// Lazy-load heavy icon components to reduce initial bundle
-const CircleUser = dynamic(() => import("lucide-react").then(mod => mod.CircleUser), { ssr: false });
-const UserIcon = dynamic(() => import("lucide-react").then(mod => mod.UserIcon), { ssr: false });
-const SettingsIcon = dynamic(() => import("lucide-react").then(mod => mod.SettingsIcon), { ssr: false });
-const LogOutIcon = dynamic(() => import("lucide-react").then(mod => mod.LogOutIcon), { ssr: false });
-const ChevronRight = dynamic(() => import("lucide-react").then(mod => mod.ChevronRight), { ssr: false });
-
-interface NavUserProps extends React.HTMLAttributes<HTMLDivElement> {
-  user: { name: string; email: string };
-  collapsed?: boolean;
+interface NavSecondaryProps extends React.HTMLAttributes<HTMLDivElement> {
+  items: {
+    title: string
+    url: string
+    icon: React.ElementType
+  }[]
+  pathname?: string
+  onNavigate?: () => void
 }
 
-const NavUser = memo(({ user, className, collapsed = false, ...props }: NavUserProps) => {
-  const [isOpen, setIsOpen] = useState(false);
+// Componente memoizado para items individuales
+const NavSecondaryItem = memo(({ 
+  item, 
+  isActive, 
+  isHovered, 
+  onMouseEnter, 
+  onMouseLeave, 
+  onClick 
+}: {
+  item: { title: string; url: string; icon: React.ElementType }
+  isActive: boolean
+  isHovered: boolean
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+  onClick: () => void
+}) => (
+  <SidebarMenuItem key={item.title}>
+    <SidebarMenuButton 
+      asChild 
+      isActive={isActive}
+      className={cn(
+        "relative group transition-all duration-300 ease-out",
+        "hover:scale-[1.02] active:scale-[0.98]",
+        "rounded-xl px-3 py-2.5 h-auto",
+        isActive && [
+          "bg-gradient-to-r from-blue-500/10 to-purple-500/10",
+          "dark:from-blue-400/20 dark:to-purple-400/20",
+          "border border-blue-200/30 dark:border-blue-700/30",
+          "shadow-md shadow-blue-500/10"
+        ],
+        !isActive && [
+          "hover:bg-gradient-to-r hover:from-slate-50/80 hover:to-slate-100/60",
+          "dark:hover:from-slate-800/50 dark:hover:to-slate-700/30",
+          "hover:shadow-md hover:shadow-slate-200/50",
+          "dark:hover:shadow-slate-800/50"
+        ]
+      )}
+    >
+      <Link 
+        href={item.url} 
+        onClick={onClick}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        className="flex items-center gap-3 w-full"
+      >
+        <div className={cn(
+          "flex-shrink-0 w-5 h-5 transition-all duration-300",
+          isActive && "text-blue-600 dark:text-blue-400 scale-110",
+          !isActive && "text-slate-600 dark:text-slate-400",
+          !isActive && isHovered && "text-blue-600 dark:text-blue-400 scale-110"
+        )}>
+          <item.icon className="w-full h-full" />
+        </div>
+        
+        <span className={cn(
+          "font-medium text-sm transition-all duration-300",
+          isActive && "text-blue-700 dark:text-blue-300 font-semibold",
+          !isActive && "text-slate-700 dark:text-slate-300",
+          !isActive && isHovered && "text-blue-700 dark:text-blue-300"
+        )}>
+          {item.title}
+        </span>
+        
+        {isActive && (
+          <div className="ml-auto">
+            <div className="w-2 h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 animate-pulse" />
+          </div>
+        )}
+      </Link>
+      
+      {isActive && (
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-gradient-to-b from-blue-500 to-purple-500" />
+      )}
+    </SidebarMenuButton>
+  </SidebarMenuItem>
+))
 
-  // Only recalc initials when name changes
-  const initials = useMemo(
-    () => user.name.split(" ").map(n => n[0]).join("").toUpperCase(),
-    [user.name]
-  );
+NavSecondaryItem.displayName = 'NavSecondaryItem'
 
-  const handleOpenChange = useCallback((open: boolean) => {
-    setIsOpen(open);
-  }, []);
+export const NavSecondary = memo(({ items, pathname, className, onNavigate, ...props }: NavSecondaryProps) => {
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null)
+
+  const closeSidebarOnMobile = useCallback(() => {
+    onNavigate?.()
+  }, [onNavigate])
+
+  if (items.length === 0) return null
 
   return (
     <SidebarGroup className={className} {...props}>
+      <SidebarGroupLabel className={cn(
+        "text-xs font-semibold tracking-wider uppercase",
+        "text-slate-500 dark:text-slate-400",
+        "mb-3 px-2 transition-colors duration-300",
+        "hover:text-blue-600 dark:hover:text-blue-400"
+      )}>
+        Soporte y Herramientas
+      </SidebarGroupLabel>
       <SidebarGroupContent>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuButton
-                  className={cn(
-                    "group relative rounded-xl p-3",
-                    "focus-visible:ring-2 focus-visible:ring-emerald-500/30",
-                    isOpen
-                      ? "bg-gradient-to-r from-slate-100/80 to-slate-200/60 dark:from-slate-700/50 dark:to-slate-600/30"
-                      : "hover:bg-slate-50 dark:hover:bg-slate-800"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "flex items-center justify-center rounded-full border-2 overflow-hidden",
-                        "border-emerald-200 dark:border-emerald-700",
-                        collapsed ? "h-8 w-8" : "h-10 w-10",
-                        "bg-slate-100 dark:bg-slate-800"
-                      )}
-                    >
-                      <CircleUser className={cn(
-                        collapsed ? "h-6 w-6" : "h-8 w-8",
-                        "text-emerald-600 dark:text-emerald-400"
-                      )} />
-                      {/* Screen-readers: show initials fallback */}
-                      <span className="sr-only">{initials}</span>
-                    </div>
-
-                    {/* Hide text on mobile */}
-                    {!collapsed && (
-                      <div className="flex-1 min-w-0 hidden sm:flex flex-col truncate">
-                        <span className="font-semibold text-sm truncate">
-                          {user.name}
-                        </span>
-                        <span className="text-xs truncate text-slate-500 dark:text-slate-400">
-                          {user.email}
-                        </span>
-                      </div>
-                    )}
-
-                    {!collapsed && (
-                      <ChevronRight
-                        className={cn(
-                          "h-4 w-4 text-slate-400 transition-transform",
-                          isOpen && "rotate-90 text-emerald-600"
-                        )}
-                      />
-                    )}
-                  </div>
-                </SidebarMenuButton>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent
-                align="start"
-                sideOffset={8}
-                className={cn(
-                  "w-64 rounded-xl border bg-white/95 dark:bg-slate-900/95 backdrop-blur-md",
-                  "border-slate-200/50 dark:border-slate-700/50 shadow-lg"
-                )}
-              >
-                <DropdownMenuLabel className="px-4 py-3 flex items-center gap-3">
-                  <div className="flex items-center justify-center h-10 w-10 border-2 rounded-full bg-slate-100 dark:bg-slate-800 border-emerald-200 dark:border-emerald-700">
-                    <CircleUser className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {user.name}
-                    </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {user.email}
-                    </span>
-                  </div>
-                </DropdownMenuLabel>
-
-                <div className="p-2">
-                  {[
-                    { href: "/perfil", Icon: UserIcon, label: "Mi Perfil" },
-                    { href: "/configuracion", Icon: SettingsIcon, label: "Configuración" },
-                  ].map(({ href, Icon, label }) => (
-                    <DropdownMenuItem key={href} asChild>
-                      <Link href={href} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
-                        <Icon className="h-4 w-4" />
-                        <span className="font-medium truncate">{label}</span>
-                      </Link>
-                    </DropdownMenuItem>
-                  ))}
-                </div>
-
-                <DropdownMenuSeparator className="my-2 bg-slate-200 dark:bg-slate-700" />
-
-                <div className="p-2">
-                  <DropdownMenuItem asChild>
-                    <Link href="/logout" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900">
-                      <LogOutIcon className="h-4 w-4" />
-                      <span className="font-medium">Cerrar Sesión</span>
-                    </Link>
-                  </DropdownMenuItem>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarMenuItem>
+        <SidebarMenu className="space-y-1">
+          {items.map((item) => {
+            const isActive = pathname === item.url || pathname?.startsWith(`${item.url}/`)
+            const isHovered = hoveredItem === item.title
+            
+            return (
+              <NavSecondaryItem
+                key={item.title}
+                item={item}
+                isActive={isActive}
+                isHovered={isHovered}
+                onMouseEnter={() => setHoveredItem(item.title)}
+                onMouseLeave={() => setHoveredItem(null)}
+                onClick={closeSidebarOnMobile}
+              />
+            )
+          })}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  );
-});
+  )
+})
 
-NavUser.displayName = 'NavUser';
-
-export default NavUser;
+NavSecondary.displayName = 'NavSecondary'

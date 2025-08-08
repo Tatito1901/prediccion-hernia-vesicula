@@ -11,7 +11,7 @@ import {
   type MetricValue 
 } from '@/components/ui/metrics-system';
 import { AppointmentsListReactive } from '@/components/appointments/appointments-list-reactive';
-import { PatientsListReactive } from '@/components/patients/patients-list-reactive';
+// Reemplazado: PatientsListReactive eliminado. Mostramos una lista mínima inline.
 import { 
   Calendar, 
   Users, 
@@ -206,7 +206,42 @@ export function DashboardConsolidated() {
           error={error}
           onRefresh={refetch}
         >
-          <PatientsListReactive />
+          {/* Lista mínima de pacientes activos (máx. 10) */}
+          {isLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-10 w-full bg-muted animate-pulse rounded" />
+              ))}
+            </div>
+          ) : (!allPatients || allPatients.length === 0) ? (
+            <div className="text-muted-foreground">No hay pacientes registrados.</div>
+          ) : (
+            <div className="space-y-2">
+              {(allPatients
+                .filter(p => ['potencial','activo','en_seguimiento','inactivo','alta_medica','operado','no_operado'].includes((p as any).estado_paciente || ''))
+                .slice(0, 10)
+              ).map((p: any) => (
+                <div key={p.id} className="flex items-center justify-between p-3 border rounded-md">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-sm font-medium flex-shrink-0">
+                      {(p.nombreCompleto || `${p.nombre ?? ''} ${p.apellidos ?? ''}` || '?').trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">
+                        {p.nombreCompleto || `${p.nombre ?? ''} ${p.apellidos ?? ''}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">ID: {(p.id || '').slice(0,8)}</p>
+                    </div>
+                  </div>
+                  {p.estado_paciente && (
+                    <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700">
+                      {String(p.estado_paciente).replaceAll('_',' ').replace(/\b\w/g, (c:string) => c.toUpperCase())}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </ChartContainer>
       </div>
     </div>
