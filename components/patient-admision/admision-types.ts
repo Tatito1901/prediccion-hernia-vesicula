@@ -26,22 +26,22 @@ export type PatientStatus =
   | 'inactivo'
   | 'alta_medica';
 
-// ✅ NUEVO: Tipos para manejo de Leads
+// ✅ NUEVO: Tipos para manejo de Leads (ALINEADO CON BASE DE DATOS)
 export type LeadChannel = 
-  | 'TELEFONO'
   | 'WHATSAPP'
-  | 'FACEBOOK'
-  | 'INSTAGRAM'
-  | 'REFERENCIA'
-  | 'PAGINA_WEB'
-  | 'OTRO';
+  | 'PHONE_CALL'
+  | 'WALK_IN'
+  | 'REFERRAL'
+  | 'WEBSITE'
+  | 'SOCIAL_MEDIA';
 
 export type LeadMotive = 
-  | 'CONSULTA_GENERAL'
-  | 'DOLOR_ABDOMINAL'
-  | 'HERNIA'
-  | 'VESICULA'
+  | 'INFORMES'
+  | 'AGENDAR_CITA'
+  | 'URGENCIA_MEDICA'
   | 'SEGUIMIENTO'
+  | 'CANCELACION'
+  | 'REAGENDAMIENTO'
   | 'OTRO';
 
 export type LeadStatus = 
@@ -229,7 +229,7 @@ export interface SurveyData {
 export interface SurveyStatus {
   id: string;
   appointment_id: string;
-  survey_status: 'pendiente' | 'iniciada' | 'completada';
+  survey_status: 'assigned' | 'in_progress' | 'completed';
   start_time?: string;
   completion_time?: string;
   survey_data?: SurveyData;
@@ -385,23 +385,23 @@ export const NewLeadSchema = z.object({
     .or(z.literal("")),
   
   channel: z.enum([
-    'TELEFONO',
-    'WHATSAPP', 
-    'FACEBOOK',
-    'INSTAGRAM',
-    'REFERENCIA',
-    'PAGINA_WEB',
-    'OTRO'
+    'WHATSAPP',
+    'PHONE_CALL',
+    'WALK_IN',
+    'REFERRAL',
+    'WEBSITE',
+    'SOCIAL_MEDIA'
   ], {
     errorMap: () => ({ message: "Seleccione un canal válido" })
   }),
   
   motive: z.enum([
-    'CONSULTA_GENERAL',
-    'DOLOR_ABDOMINAL',
-    'HERNIA',
-    'VESICULA',
+    'INFORMES',
+    'AGENDAR_CITA',
+    'URGENCIA_MEDICA',
     'SEGUIMIENTO',
+    'CANCELACION',
+    'REAGENDAMIENTO',
     'OTRO'
   ], {
     errorMap: () => ({ message: "Seleccione un motivo válido" })
@@ -429,7 +429,7 @@ export type NewLeadFormData = z.infer<typeof NewLeadSchema>;
 // ✅ Schema para el formulario de admisión (combina campos de paciente con campos adicionales)
 export const AdmissionFormSchema = NewPatientSchema.extend({
   motivos_consulta: z.array(z.string()).min(1, "Debe seleccionar al menos un motivo de consulta"),
-  canal_contacto: z.enum(['TELEFONO', 'WHATSAPP', 'FACEBOOK', 'INSTAGRAM', 'REFERENCIA', 'PAGINA_WEB', 'OTRO']),
+  canal_contacto: z.enum(['WHATSAPP', 'PHONE_CALL', 'WALK_IN', 'REFERRAL', 'WEBSITE', 'SOCIAL_MEDIA']),
   comentarios: z.string().max(1000, "Comentarios no pueden exceder 1000 caracteres").optional(),
   fecha_hora_cita: z.string().min(1, "Fecha y hora de cita son requeridos"),
 });

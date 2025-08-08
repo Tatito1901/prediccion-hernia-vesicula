@@ -64,6 +64,7 @@ const SurveyTemplateCard = React.memo(({ template, isAssigning, isCurrentlyAssig
             </>
           )}
         </Button>
+        </div>
       </CardContent>
     </Card>
   );

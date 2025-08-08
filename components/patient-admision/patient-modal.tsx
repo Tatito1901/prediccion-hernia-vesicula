@@ -79,7 +79,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
       telefono: '',
       email: undefined,
       motivos_consulta: [],
-      canal_contacto: 'TELEFONO',
+      canal_contacto: 'PHONE_CALL',
       comentarios: '',
       fecha_hora_cita: undefined,
     },
@@ -229,13 +229,12 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="TELEFONO">Teléfono</SelectItem>
+                            <SelectItem value="PHONE_CALL">Llamada telefónica</SelectItem>
                             <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
-                            <SelectItem value="EMAIL">Email</SelectItem>
-                            <SelectItem value="REDES_SOCIALES">Redes Sociales</SelectItem>
-                            <SelectItem value="REFERIDO">Referido</SelectItem>
-                            <SelectItem value="SITIO_WEB">Sitio Web</SelectItem>
-                            <SelectItem value="WALK_IN">Visita Directa</SelectItem>
+                            <SelectItem value="WALK_IN">Visita directa</SelectItem>
+                            <SelectItem value="REFERRAL">Referencia</SelectItem>
+                            <SelectItem value="WEBSITE">Página web</SelectItem>
+                            <SelectItem value="SOCIAL_MEDIA">Redes sociales</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />

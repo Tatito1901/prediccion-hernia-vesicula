@@ -7,7 +7,7 @@ import type {
   LeadStatus, 
   Channel, 
   Motive,
-  LeadIntent,
+  // LeadIntent, // Eliminado: no existe en el esquema de la BD
   PaginatedResponse 
 } from '@/lib/types';
 
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') as LeadStatus | null;
     const channel = searchParams.get('channel') as Channel | null;
     const motive = searchParams.get('motive') as Motive | null;
-    const lead_intent = searchParams.get('lead_intent') as LeadIntent | null;
+    const lead_intent = searchParams.get('lead_intent') as string | null;
     const search = searchParams.get('search') || '';
     const overdue = searchParams.get('overdue') === 'true';
 

@@ -58,23 +58,23 @@ const TABS_CONFIG = [
   }
 ] as const;
 
-// Opciones estáticas para modales
+// Opciones estáticas para modales (ALINEADAS CON BASE DE DATOS)
 const CHANNEL_OPTIONS = [
-  { value: 'TELEFONO', label: 'Teléfono' },
+  { value: 'PHONE_CALL', label: 'Llamada telefónica' },
   { value: 'WHATSAPP', label: 'WhatsApp' },
-  { value: 'FACEBOOK', label: 'Facebook' },
-  { value: 'INSTAGRAM', label: 'Instagram' },
-  { value: 'REFERENCIA', label: 'Referencia' },
-  { value: 'PAGINA_WEB', label: 'Página Web' },
-  { value: 'OTRO', label: 'Otro' }
+  { value: 'WALK_IN', label: 'Visita directa' },
+  { value: 'REFERRAL', label: 'Referencia' },
+  { value: 'WEBSITE', label: 'Página web' },
+  { value: 'SOCIAL_MEDIA', label: 'Redes sociales' }
 ] as const;
 
 const MOTIVE_OPTIONS = [
-  { value: 'CONSULTA_GENERAL', label: 'Consulta General' },
-  { value: 'DOLOR_ABDOMINAL', label: 'Dolor Abdominal' },
-  { value: 'HERNIA', label: 'Hernia' },
-  { value: 'VESICULA', label: 'Vesícula' },
+  { value: 'INFORMES', label: 'Solicitud de informes' },
+  { value: 'AGENDAR_CITA', label: 'Agendar cita' },
+  { value: 'URGENCIA_MEDICA', label: 'Urgencia médica' },
   { value: 'SEGUIMIENTO', label: 'Seguimiento' },
+  { value: 'CANCELACION', label: 'Cancelación' },
+  { value: 'REAGENDAMIENTO', label: 'Reagendamiento' },
   { value: 'OTRO', label: 'Otro' }
 ] as const;
 

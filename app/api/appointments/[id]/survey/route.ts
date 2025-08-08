@@ -201,7 +201,7 @@ export async function POST(
       .eq('id', assignedSurvey.id);
 
     // 8. AGREGAR NOTA A LA CITA (opcional)
-    const currentNotes = appointment.notas_cita_seguimiento || '';
+    const currentNotes = (appointment as any).notas_cita_seguimiento || '';
     const surveyNote = `${currentNotes ? currentNotes + ' | ' : ''}Encuesta completada - Calificación: ${overall_rating}/5${would_recommend ? ' - Recomendaría: Sí' : ''}`;
     
     await supabase
@@ -219,11 +219,11 @@ export async function POST(
       survey: {
         id: surveyResponse.id,
         assigned_survey_id: assignedSurvey.id,
-        template_title: assignedSurvey.survey_templates?.title || 'Encuesta de Satisfacción',
+        template_title: (assignedSurvey.survey_templates as any)?.[0]?.title || 'Encuesta de Satisfacción',
         overall_rating: overall_rating,
         would_recommend: would_recommend
       },
-      patient_name: `${appointment.patients.nombre} ${appointment.patients.apellidos}`,
+      patient_name: `${appointment.patients[0]?.nombre} ${appointment.patients[0]?.apellidos}`,
       appointment_id: appointmentId
     }, { status: 201 });
 
@@ -351,8 +351,8 @@ export async function PATCH(
       survey: {
         id: assignedSurvey.id,
         template_id: assignedSurvey.template_id,
-        title: assignedSurvey.survey_templates?.title || 'Encuesta de Satisfacción',
-        description: assignedSurvey.survey_templates?.description || 'Por favor comparta su experiencia',
+        title: (assignedSurvey.survey_templates as any)?.[0]?.title || 'Encuesta de Satisfacción',
+        description: (assignedSurvey.survey_templates as any)?.[0]?.description || 'Por favor comparta su experiencia',
         status: assignedSurvey.status
       },
       questions: questions || [],
@@ -456,7 +456,7 @@ export async function GET(
     return NextResponse.json({
       // Estado de la encuesta
       survey_exists: surveyExists,
-      survey_started: surveyExists && assignedSurvey.status !== 'pending',
+      survey_started: surveyExists && assignedSurvey.status !== 'assigned',
       survey_completed: isCompleted,
       can_start_survey: canStartSurvey && !isCompleted,
       
@@ -464,8 +464,8 @@ export async function GET(
       survey: surveyExists ? {
         id: assignedSurvey.id,
         template_id: assignedSurvey.template_id,
-        title: assignedSurvey.survey_templates?.title || 'Encuesta de Satisfacción',
-        description: assignedSurvey.survey_templates?.description || '',
+        title: (assignedSurvey.survey_templates as any)?.[0]?.title || 'Encuesta de Satisfacción',
+        description: (assignedSurvey.survey_templates as any)?.[0]?.description || '',
         status: assignedSurvey.status,
         assigned_at: assignedSurvey.assigned_at,
         completed_at: assignedSurvey.completed_at
@@ -482,7 +482,7 @@ export async function GET(
         id: appointment.id,
         estado_cita: appointment.estado_cita,
         fecha_hora_cita: appointment.fecha_hora_cita,
-        patient_name: `${appointment.patients.nombre} ${appointment.patients.apellidos}`
+        patient_name: `${appointment.patients[0]?.nombre} ${appointment.patients[0]?.apellidos}`
       }
     });
 

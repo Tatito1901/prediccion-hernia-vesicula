@@ -31,7 +31,7 @@ export async function GET() {
       supabase
         .from('appointments')
         .select('id', { count: 'exact', head: true })
-        .eq('estado_cita', 'programada'),
+        .eq('estado_cita', 'PROGRAMADA'),
       
       // Encuestas completadas
       supabase
@@ -57,7 +57,7 @@ export async function GET() {
     const newPatients = recentPatients.length;
     
     const completedAppointments = recentPatients.reduce((count, patient) => {
-      const completed = patient.appointments?.filter((apt: any) => apt.estado_cita === 'completada').length || 0;
+      const completed = patient.appointments?.filter((apt: any) => apt.estado_cita === 'COMPLETADA').length || 0;
       return count + completed;
     }, 0);
     

@@ -318,7 +318,7 @@ export async function GET(
     // 4. Construir respuesta
     return NextResponse.json({
       survey_exists: surveyExists,
-      survey_started: surveyExists && survey.status !== 'pending',
+      survey_started: surveyExists && survey.status !== 'assigned',
       survey_completed: isCompleted,
       can_start_survey: canStartSurvey && !isCompleted,
       survey_id: survey?.id || null,

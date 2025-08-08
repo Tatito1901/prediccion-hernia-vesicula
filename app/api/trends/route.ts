@@ -184,7 +184,7 @@ export async function GET(request: NextRequest) {
         .select('fecha_hora_cita, created_at')
         .gte('fecha_hora_cita', current.start.toISOString())
         .lte('fecha_hora_cita', current.end.toISOString())
-        .eq('estado_cita', 'completada'),
+        .eq('estado_cita', 'COMPLETADA'),
 
       // Citas período anterior (para tiempo promedio)
       supabase
@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
         .select('fecha_hora_cita, created_at')
         .gte('fecha_hora_cita', previous.start.toISOString())
         .lte('fecha_hora_cita', previous.end.toISOString())
-        .eq('estado_cita', 'completada')
+        .eq('estado_cita', 'COMPLETADA')
     ]);
 
     // 📊 EXTRAER CONTEOS

@@ -308,7 +308,7 @@ const PatientManagement: React.FC = () => {
     setPatientsStatus,
     clearPatientsFilters,
     isPatientsLoading,
-    isPatientsFetching,
+    // isPatientsFetching, // Removed: not available in UnifiedPatientDataResponse
     refetchPatients,
   } = useClinic()
   
@@ -423,7 +423,7 @@ const PatientManagement: React.FC = () => {
 
   // ==================== RENDERIZADO ====================
   const isLoading = isLoadingClinicData || isPatientsLoading
-  const isFetching = isPatientsFetching
+  const isFetching = isPatientsLoading // Using isPatientsLoading since isPatientsFetching was removed
   const hasFilters = searchTerm !== "" || statusFilter !== "all"
   const hasPatients = paginatedPatients && paginatedPatients.length > 0
 

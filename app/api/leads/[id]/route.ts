@@ -5,11 +5,11 @@ import type { UpdateLead } from '@/lib/types';
 // GET /api/leads/[id] - Obtener lead específico
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const { id } = context.params;
+    const { id } = await params;
 
     const { data: lead, error } = await supabase
       .from('leads')
@@ -53,11 +53,11 @@ export async function GET(
 // PUT /api/leads/[id] - Actualizar lead
 export async function PUT(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const { id } = context.params;
+    const { id } = await params;
     const body: UpdateLead = await request.json();
 
     // Verificar que el lead existe
@@ -120,11 +120,11 @@ export async function PUT(
 // DELETE /api/leads/[id] - Eliminar lead
 export async function DELETE(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const { id } = context.params;
+    const { id } = await params;
 
     // Verificar que el lead existe y no está convertido
     const { data: existingLead, error: fetchError } = await supabase

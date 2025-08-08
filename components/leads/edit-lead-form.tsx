@@ -70,7 +70,7 @@ export function EditLeadForm({
       status: lead.status,
       notes: lead.notes || '',
       follow_up_notes: lead.follow_up_notes || '',
-      lead_intent: lead.lead_intent as 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'WANTS_TO_COMPARE_PRICES' | 'OTHER' | undefined,
+      lead_intent: (lead as any).lead_intent as 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'WANTS_TO_COMPARE_PRICES' | 'OTHER' | undefined,
     },
   });
 

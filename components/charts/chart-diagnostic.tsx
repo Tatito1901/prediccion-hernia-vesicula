@@ -333,7 +333,7 @@ export const ChartDiagnosticClient: FC<ChartDiagnosticClientProps> = memo(({
                 {insights.map((insight, index) => (
                   <InsightCard 
                     key={index} 
-                    title={insight.title}
+                    label={insight.title}
                     value={insight.description}
                   />
                 ))}

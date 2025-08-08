@@ -28,7 +28,7 @@ const leadFormSchema = z.object({
   first_name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   last_name: z.string().min(2, 'El apellido debe tener al menos 2 caracteres'),
   phone_number: z.string().min(10, 'Debe ser un número de teléfono válido'),
-  channel: z.enum(['TELEFONO', 'WHATSAPP', 'FACEBOOK', 'INSTAGRAM', 'REFERENCIA', 'PAGINA_WEB', 'OTRO'], {
+  channel: z.enum(['PHONE_CALL', 'WHATSAPP', 'WALK_IN', 'REFERRAL', 'WEBSITE', 'SOCIAL_MEDIA'], {
     required_error: 'Selecciona el método de contacto'
   }),
   call_reason: z.enum(['ONLY_WANTS_INFORMATION', 'WANTS_TO_SCHEDULE_APPOINTMENT', 'WANTS_TO_COMPARE_PRICES', 'OTHER'], {
@@ -167,19 +167,18 @@ export function NewLeadForm({ trigger, onSuccess }: NewLeadFormProps) {
               <Label htmlFor="channel">Método de Contacto *</Label>
               <Select
                 value={form.watch('channel') || ''}
-                onValueChange={(value) => form.setValue('channel', value as 'WHATSAPP' | 'TELEFONO' | 'FACEBOOK' | 'INSTAGRAM' | 'REFERENCIA' | 'PAGINA_WEB' | 'OTRO')}
+                onValueChange={(value) => form.setValue('channel', value as 'WHATSAPP' | 'PHONE_CALL' | 'WALK_IN' | 'REFERRAL' | 'WEBSITE' | 'SOCIAL_MEDIA')}
               >
                 <SelectTrigger className={form.formState.errors.channel ? 'border-red-500' : ''}>
                   <SelectValue placeholder="¿Cómo se comunicó?" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="TELEFONO">Llamada telefónica</SelectItem>
+                  <SelectItem value="PHONE_CALL">Llamada telefónica</SelectItem>
                   <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
-                  <SelectItem value="FACEBOOK">Facebook</SelectItem>
-                  <SelectItem value="INSTAGRAM">Instagram</SelectItem>
-                  <SelectItem value="REFERENCIA">Referencia</SelectItem>
-                  <SelectItem value="PAGINA_WEB">Página web</SelectItem>
-                  <SelectItem value="OTRO">Otro</SelectItem>
+                  <SelectItem value="WALK_IN">Visita directa</SelectItem>
+                  <SelectItem value="REFERRAL">Referencia</SelectItem>
+                  <SelectItem value="WEBSITE">Página web</SelectItem>
+                  <SelectItem value="SOCIAL_MEDIA">Redes sociales</SelectItem>
                 </SelectContent>
               </Select>
               {form.formState.errors.channel && (

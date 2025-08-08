@@ -162,14 +162,14 @@ export async function GET(
       // Estadísticas de encuestas
       surveys_assigned: surveys?.length || 0,
       surveys_completed: surveys?.filter(s => s.completed_at).length || 0,
-      average_rating: surveys?.reduce((acc, s) => {
+      average_rating: surveys && surveys.length > 0 ? surveys.reduce((acc, s) => {
         const responses = s.survey_responses;
         if (responses && responses.length > 0 && responses[0]) {
           const rating = responses[0].overall_rating;
           return rating ? acc + rating : acc;
         }
         return acc;
-      }, 0) / Math.max(1, surveys?.filter(s => s.survey_responses?.length > 0).length || 1),
+      }, 0) / Math.max(1, surveys.filter(s => s.survey_responses?.length > 0).length || 1) : 0,
       
       // Estadísticas de seguimiento
       days_since_first_contact: patient.fecha_registro ? 

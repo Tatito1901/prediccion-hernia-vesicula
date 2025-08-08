@@ -15,7 +15,7 @@ import {
 } from '@/lib/cache-invalidation';
 
 // Importar tipos actualizados
-import { AppointmentStatus, AppointmentWithPatient } from '@/components/patient-admission/types'
+import { AppointmentStatus, AppointmentWithPatient, PatientStatus, DiagnosisType } from '@/components/patient-admision/admision-types'
 
 // ==================== QUERY KEYS GRANULARES ====================
 export const appointmentKeys = {
@@ -101,10 +101,18 @@ const transformAppointment = (apiAppointment: ApiAppointment): AppointmentWithPa
       telefono: apiAppointment.patients.telefono || undefined,
       email: apiAppointment.patients.email || undefined,
       edad: apiAppointment.patients.edad || undefined,
-      diagnostico_principal: apiAppointment.patients.diagnostico_principal || undefined,
-      estado_paciente: apiAppointment.patients.estado_paciente || undefined,
-      probabilidad_cirugia: apiAppointment.patients.probabilidad_cirugia || undefined,
-    } : null,
+      diagnostico_principal: apiAppointment.patients.diagnostico_principal as DiagnosisType | undefined,
+      estado_paciente: apiAppointment.patients.estado_paciente as PatientStatus | undefined,
+    } : {
+      id: patientId,
+      nombre: '',
+      apellidos: '',
+      telefono: undefined,
+      email: undefined,
+      edad: undefined,
+      diagnostico_principal: undefined,
+      estado_paciente: undefined,
+    },
   };
 };
 
@@ -348,6 +356,7 @@ export const useUpdateAppointmentStatus = (
         'PROGRAMADA': 'Cita programada',
         'CONFIRMADA': 'Cita confirmada',
         'PRESENTE': 'Check-in registrado',
+        'EN_CONSULTA': 'En consulta',
         'COMPLETADA': 'Consulta completada',
         'CANCELADA': 'Cita cancelada',
         'NO_ASISTIO': 'Marcado como no asistió',

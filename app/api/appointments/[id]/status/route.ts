@@ -47,11 +47,7 @@ const createAuditRecord = async (
     created_at: new Date().toISOString(),
   };
   
-  // Agregar fechas si es reagendamiento
-  if (newStatus === 'REAGENDADA' && oldDateTime && newDateTime) {
-    auditData['fecha_cita_anterior'] = oldDateTime;
-    auditData['fecha_cita_nueva'] = newDateTime;
-  }
+  // Nota: fechas de reagendamiento se manejan en la tabla appointments, no en appointment_history
   
   const { error } = await supabase
     .from('appointment_history')
@@ -181,13 +177,13 @@ export async function PATCH(
     
     // 5. OBTENER INFORMACIÓN DEL USUARIO PARA AUDITORÍA
     const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id;
+    const userId = user?.id || null;
     
     // Obtener información adicional de la request
-    const userAgent = request.headers.get('user-agent');
+    const userAgent = request.headers.get('user-agent') || undefined;
     const forwardedFor = request.headers.get('x-forwarded-for');
     const realIp = request.headers.get('x-real-ip');
-    const ipAddress = forwardedFor?.split(',')[0] || realIp || 'unknown';
+    const ipAddress = forwardedFor?.split(',')[0] || realIp || undefined;
     
     // 6. PREPARAR DATOS DE ACTUALIZACIÓN
     const updateData: any = {
@@ -272,8 +268,8 @@ export async function PATCH(
     }
     
     // 10. LOG PARA MONITOREO
-    const patientName = currentAppointment.patients 
-      ? `${currentAppointment.patients.nombre} ${currentAppointment.patients.apellidos}`.trim()
+    const patientName = currentAppointment.patients && currentAppointment.patients[0]
+      ? `${currentAppointment.patients[0].nombre} ${currentAppointment.patients[0].apellidos}`.trim()
       : 'Paciente desconocido';
     
     console.log(`✅ [Status Update] Success:`, {

@@ -106,7 +106,7 @@ const fetchAllAppointments = async (): Promise<EnrichedAppointmentsResponse> => 
 const fetchActivePatients = async (): Promise<{ data: Patient[] }> => {
   try {
     // ✅ Solo trae pacientes activos recientes (máx. 50)
-    const response = await fetch('/api/patients?estado=ACTIVO&pageSize=50');
+    const response = await fetch('/api/patients?estado=activo&pageSize=50');
     
     if (!response.ok) {
       throw new Error('Failed to fetch active patients');
@@ -270,7 +270,7 @@ export const useUnifiedPatientData = (params: UnifiedPatientDataParams = {}): Un
     
     // ✅ Asociar citas con pacientes enriquecidos (todo en backend)
     return essentialData.appointments.map((appointment: Appointment) => {
-      const patient = essentialData.patients.find((p: Patient) => p.id === appointment.paciente_id);
+      const patient = essentialData.patients.find((p: Patient) => p.id === appointment.patient_id);
       return {
         ...appointment,
         patient: patient || null,

@@ -1,7 +1,7 @@
 import React from "react"
 import { Suspense } from "react"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"; // Sin llaves {}
-import { LoadingSpinner } from "@/components/ui/loading-state"
+import { LoadingSpinner } from "@/components/ui/unified-skeletons"
 
 export default async function SurveyPage({ params }: { params: Promise<{ id: string }> }) {
   // Await the params object to resolve it before accessing properties
@@ -18,7 +18,7 @@ export default async function SurveyPage({ params }: { params: Promise<{ id: str
       <Suspense
         fallback={
           <div className="flex justify-center">
-            <LoadingSpinner size={40} />
+            <LoadingSpinner size="lg" />
           </div>
         }
       >

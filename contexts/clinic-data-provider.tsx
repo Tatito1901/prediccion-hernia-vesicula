@@ -25,7 +25,7 @@ type ExtendedClinicDataContextType = ReturnType<typeof useUnifiedPatientData> & 
   setPatientsStatus: (status: string) => void;
   clearPatientsFilters: () => void;
   isPatientsLoading: boolean;
-  isPatientsFetching: boolean;
+  // isPatientsFetching: boolean; // Removed: not available in UnifiedPatientDataResponse
   patientsError: Error | null;
   refetchPatients: () => void;
   // ✅ Propiedades adicionales proporcionadas en el contexto
@@ -57,9 +57,7 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   const {
     paginatedPatients: patients,
     patientsPagination: pagination,
-    stats: patientsStats,
     isLoading: isPatientsLoading,
-    isFetching: isPatientsFetching,
     error: patientsError,
     refetch: refetchPatients,
   } = useUnifiedPatientData({
@@ -106,13 +104,13 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     setPatientsStatus,
     clearPatientsFilters,
     isPatientsLoading,
-    isPatientsFetching,
+    // isPatientsFetching, // Removed: not available in UnifiedPatientDataResponse
     patientsError,
     refetchPatients,
     // Datos adicionales de paginación
     paginatedPatients: patients,
     patientsPagination: pagination,
-    patientsStats,
+    // patientsStats, // Removed: not available in UnifiedPatientDataResponse
   }), [
     clinicData,
     patientsData,
@@ -122,12 +120,12 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     setPatientsStatus,
     clearPatientsFilters,
     isPatientsLoading,
-    isPatientsFetching,
+    // isPatientsFetching, // Removed: not available in UnifiedPatientDataResponse
     patientsError,
     refetchPatients,
     patients,
     pagination,
-    patientsStats,
+    // patientsStats, // Removed: not available in UnifiedPatientDataResponse
   ]);
 
   return (

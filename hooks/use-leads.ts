@@ -21,6 +21,7 @@ interface UseLeadsParams {
   search?: string;
   priority?: number;
   overdue?: boolean;
+  enabled?: boolean;
 }
 
 interface UseLeadParams {
@@ -38,7 +39,8 @@ export function useLeads(params: UseLeadsParams = {}) {
     motive,
     search,
     priority,
-    overdue
+    overdue,
+    enabled = true,
   } = params;
 
   const queryKey = ['leads', { page, pageSize, status, channel, motive, search, priority, overdue }];
@@ -67,6 +69,7 @@ export function useLeads(params: UseLeadsParams = {}) {
       
       return response.json();
     },
+    enabled,
     staleTime: 2 * 60 * 1000, // 2 minutes
     gcTime: 5 * 60 * 1000, // 5 minutes
   });
@@ -171,6 +174,8 @@ export function useCreateLead() {
       
       // Invalidar queries para refrescar la lista
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      // Invalidar estadísticas para mantener resumen sincronizado
+      queryClient.invalidateQueries({ queryKey: ['leadStats'] });
       
       // Actualizar el cache con el nuevo lead
       if (newLead?.id) {
@@ -230,6 +235,8 @@ export function useUpdateLead() {
       
       // Invalidate leads queries to refresh the list
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+      // Invalidate stats to refresh summary
+      queryClient.invalidateQueries({ queryKey: ['leadStats'] });
       
       toast.success('Lead actualizado exitosamente');
     },
@@ -302,7 +309,7 @@ export function useConvertLead() {
 }
 
 // Hook for lead statistics (for dashboard)
-export function useLeadStats() {
+export function useLeadStats(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['leadStats'],
     queryFn: async (): Promise<LeadStats> => {
@@ -345,6 +352,7 @@ export function useLeadStats() {
         leads_by_status,
       };
     },
+    enabled: options?.enabled ?? true,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
   });

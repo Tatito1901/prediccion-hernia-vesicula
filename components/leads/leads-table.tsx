@@ -115,6 +115,19 @@ export function LeadsTable({
     return new Date(date) < new Date();
   };
 
+  const isNewStatusExpired = (lead: Lead) => {
+    const base = lead.last_contact_date ?? lead.created_at;
+    if (!base) return false;
+    const diffMs = new Date().getTime() - new Date(base).getTime();
+    return diffMs >= 48 * 60 * 60 * 1000; // 48 hours
+  };
+
+  const handleContactedAgain = (leadId: string) => {
+    updateLead({
+      id: leadId,
+      data: { last_contact_date: new Date().toISOString() }
+    });
+  };
   const handleQuickStatusUpdate = (leadId: string, newStatus: LeadStatus) => {
     updateLead({
       id: leadId,
@@ -192,7 +205,6 @@ export function LeadsTable({
                   <TableHead>Motivo</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Seguimiento</TableHead>
-                  <TableHead>Prioridad</TableHead>
                   <TableHead>Creado</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
@@ -244,33 +256,35 @@ export function LeadsTable({
                     </TableCell>
 
                     <TableCell>
-                      {getStatusBadge(lead.status)}
+                      {lead.status === 'NUEVO' && isNewStatusExpired(lead)
+                        ? null
+                        : getStatusBadge(lead.status)}
                     </TableCell>
 
                     <TableCell>
-                      {lead.next_follow_up_date ? (
-                        <div className={`flex items-center gap-2 text-sm ${
-                          isOverdue(lead.next_follow_up_date) 
-                            ? 'text-red-600' 
-                            : 'text-muted-foreground'
-                        }`}>
-                          {isOverdue(lead.next_follow_up_date) ? (
-                            <AlertTriangle className="h-4 w-4" />
-                          ) : (
-                            <Calendar className="h-4 w-4" />
-                          )}
-                          {format(new Date(lead.next_follow_up_date), 'dd MMM', { locale: es })}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <CheckCircle className="h-4 w-4" />
+                          {lead.last_contact_date
+                            ? format(new Date(lead.last_contact_date), 'dd MMM', { locale: es })
+                            : 'Sin contacto'}
                         </div>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">Sin programar</span>
-                      )}
+                        {lead.next_follow_up_date && (
+                          <div className={`flex items-center gap-2 text-sm ${
+                            isOverdue(lead.next_follow_up_date) ? 'text-red-600' : 'text-muted-foreground'
+                          }`}>
+                            {isOverdue(lead.next_follow_up_date) ? (
+                              <AlertTriangle className="h-4 w-4" />
+                            ) : (
+                              <Calendar className="h-4 w-4" />
+                            )}
+                            {format(new Date(lead.next_follow_up_date), 'dd MMM', { locale: es })}
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
 
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">
-                        {lead.lead_intent || 'Sin especificar'}
-                      </span>
-                    </TableCell>
+                    
 
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
@@ -307,6 +321,13 @@ export function LeadsTable({
                               Poner en Seguimiento
                             </DropdownMenuItem>
                           )}
+
+                          <DropdownMenuItem
+                            onClick={() => handleContactedAgain(lead.id)}
+                          >
+                            <Phone className="mr-2 h-4 w-4" />
+                            Se contactó nuevamente
+                          </DropdownMenuItem>
 
                           <DropdownMenuSeparator />
                           

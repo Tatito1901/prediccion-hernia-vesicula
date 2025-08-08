@@ -91,7 +91,7 @@ export const GenericLineChart: React.FC<GenericLineChartProps> = ({
   const averageValue = data.reduce((sum, item) => sum + item[yAxisKey], 0) / data.length;
   
   return (
-    <div style={animated ? animations.enter : {}}>
+    <div style={{}}>
       <ResponsiveContainer width="100%" height={350}>
         {area ? (
           <AreaChart 

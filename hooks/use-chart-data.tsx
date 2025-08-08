@@ -83,7 +83,7 @@ export function useChartData({
       
       // Check if patient was operated (simplified logic)
       const patient = patients.find(p => p.id === apt.patient_id);
-      if (patient && patient.estado_paciente === 'OPERADO') {
+      if (patient && patient.estado_paciente === 'operado') {
         groupedData[key].operados += 1;
       }
     });

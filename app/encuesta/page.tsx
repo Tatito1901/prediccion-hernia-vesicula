@@ -177,7 +177,7 @@ function EncuestaContent() {
                       patientId={patientId}
                       surveyTemplateId={surveyId}
                       assignedSurveyId={surveyId}
-                      initialData={patient ? { nombre: patient.nombre, apellidos: patient.apellidos, edad: patient.edad || undefined } : undefined}
+                      initialData={patient ? { nombre: patient.nombre || undefined, apellidos: patient.apellidos || undefined, edad: patient.edad || undefined } : undefined}
                       onComplete={handleSurveyComplete}
                     />
                   ) : (

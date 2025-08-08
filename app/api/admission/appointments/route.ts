@@ -167,7 +167,7 @@ const getCountsQuery = async (supabase: any) => {
     newPatient: 0, // Siempre 0 para el formulario
   };
 
-  allAppointments?.forEach(appointment => {
+  allAppointments?.forEach((appointment: any) => {
     try {
       const appointmentDate = new Date(appointment.fecha_hora_cita);
       
@@ -199,8 +199,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const { page, pageSize } = validatePagination(
-      searchParams.get('page'),
-      searchParams.get('pageSize')
+      searchParams.get('page') || undefined,
+      searchParams.get('pageSize') || undefined
     );
 
     const filters: AppointmentFilters = {
@@ -226,7 +226,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ✅ Validar y limpiar datos
-    const validAppointments = appointments?.filter(appointment => {
+    const validAppointments = appointments?.filter((appointment: any) => {
       // Validar estructura básica
       if (!appointment.id || !appointment.fecha_hora_cita) {
         console.warn('⚠️ [Appointments API] Invalid appointment structure:', appointment.id);

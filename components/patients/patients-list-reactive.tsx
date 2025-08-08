@@ -319,7 +319,7 @@ export function PatientsListReactive({
                       <h4 className="font-medium">
                         {patient.nombre} {patient.apellidos}
                       </h4>
-                      {getStatusBadge(patient.estado_paciente)}
+                      {getStatusBadge(patient.estado_paciente || 'activo')}
                       {/* Badge removed - es_primera_vez property doesn't exist in current schema */}
                     </div>
                     

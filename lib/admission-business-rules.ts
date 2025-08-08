@@ -52,7 +52,7 @@ const isWithinWorkHours = (date: Date): boolean => {
   const day = date.getDay();
   return hour >= BUSINESS_RULES.WORK_START_HOUR && 
          hour < BUSINESS_RULES.WORK_END_HOUR && 
-         BUSINESS_RULES.WORK_DAYS.includes(day);
+         BUSINESS_RULES.WORK_DAYS.includes(day as 1 | 2 | 3 | 4 | 5);
 };
 
 const isLunchTime = (date: Date): boolean => {

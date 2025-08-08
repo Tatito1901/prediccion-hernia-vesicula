@@ -66,12 +66,10 @@ export type UserRole = Database['public']['Enums']['user_role_enum'];
 
 // --- NEW ENUMS FROM UPDATED SCHEMA ---
 export type LeadStatus = Database['public']['Enums']['lead_status_enum'];
-export type Channel = Database['public']['Enums']['channel_enum'];
-export type Motive = Database['public']['Enums']['motive_enum'];
-export type LeadIntent = Database['public']['Enums']['lead_intent_enum'];
+export type Channel = Database['public']['Enums']['contact_channel_enum'];
+export type Motive = Database['public']['Enums']['lead_motive_enum'];
 export type SurgicalDecision = Database['public']['Enums']['surgical_decision_enum'];
-export type SurveyStatus = Database['public']['Enums']['survey_status_enum'];
-export type MarketingSource = Database['public']['Enums']['marketing_source_enum'];
+export type MarketingSource = Database['public']['Enums']['patient_source_enum'];
 
 // Mantenemos los objetos CONST para usarlos fácilmente en el código, 
 // pero ahora están validados por el tipo de arriba.

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react"
+import PatientCard from '@/components/patient-admision/patient-card'
 import {
   Table,
   TableHeader,
@@ -396,15 +397,20 @@ const PatientTable: React.FC<PatientTableProps> = ({
       <div className="block lg:hidden">
         <div className="space-y-3">
           {sortedPatients.map((patient) => (
-            <PatientCard
-              key={patient.id}
-              patient={patient}
-              onSelectPatient={onSelectPatient}
-              onShareSurvey={onShareSurvey}
-              onAnswerSurvey={onAnswerSurvey}
-              onEditPatient={onEditPatient}
-              onScheduleAppointment={onScheduleAppointment}
-            />
+            <div key={patient.id} className="bg-white dark:bg-slate-950 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h4 className="font-semibold">{patient.nombre} {patient.apellidos}</h4>
+                  <p className="text-sm text-muted-foreground">{patient.telefono || 'Sin teléfono'}</p>
+                  <p className="text-sm text-muted-foreground">{patient.diagnostico_principal || 'Sin diagnóstico'}</p>
+                </div>
+                <div className="flex gap-2">
+                  {onSelectPatient && (
+                    <Button size="sm" onClick={() => onSelectPatient(patient)}>Ver</Button>
+                  )}
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       </div>

@@ -31,9 +31,9 @@ import {
 // ✅ IMPORTS CORREGIDOS - usando tipos unificados
 import type { 
   AppointmentWithPatient, 
-  RescheduleProps,
-  getPatientFullName 
+  RescheduleProps
 } from './admision-types';
+import { getPatientFullName } from './admision-types';
 
 // ✅ Hook corregido para datos de clínica
 import { useClinic } from "@/contexts/clinic-data-provider";
@@ -190,7 +190,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
     // Excluir la cita actual de la verificación de disponibilidad
     const otherAppointments = appointments.filter(apt => apt.id !== appointment.id);
     
-    return getAvailableTimeSlots(selectedDate, otherAppointments);
+    return getAvailableTimeSlots(selectedDate, otherAppointments as any);
   }, [selectedDate, allAppointments, appointment.id]);
 
   // ✅ HANDLERS OPTIMIZADOS
