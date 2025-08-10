@@ -2,6 +2,8 @@
 // TIPOS UNIFICADOS Y CORREGIDOS PARA EL FLUJO DE ADMISIÓN
 
 import { z } from 'zod';
+import type { UserRole as DbUserRole } from '@/lib/types';
+import { ZAppointmentStatus, ZContactChannel, ZLeadMotive, ZLeadStatus, ZDiagnosisDisplay, type DbDiagnosis } from '@/lib/validation/enums';
 
 // ==================== TIPOS BASE SEGÚN DATABASE.TYPES.TS ====================
 
@@ -78,7 +80,8 @@ export type DiagnosisType =
   | 'HERNIA SPIGEL';
 
 // ✅ Roles de usuario
-export type UserRole = 'doctor' | 'admin' | 'recepcion';
+// Centralized UserRole type aligned with DB ('asistente' instead of legacy 'recepcion')
+export type UserRole = DbUserRole;
 
 // ✅ Acciones disponibles en el flujo de admisión
 export type AdmissionAction = 
@@ -327,24 +330,8 @@ export const NewPatientSchema = z.object({
     .or(z.literal("")),
   lead_id: z.string().uuid().optional(),
   
-  // Diagnóstico usando valores exactos de la BD
-  diagnostico_principal: z.enum([
-    'HERNIA INGUINAL',
-    'HERNIA UMBILICAL', 
-    'COLECISTITIS',
-    'COLEDOCOLITIASIS',
-    'COLANGITIS',
-    'APENDICITIS',
-    'HERNIA HIATAL',
-    'LIPOMA GRANDE',
-    'HERNIA INGUINAL RECIDIVANTE',
-    'QUISTE SEBACEO INFECTADO',
-    'EVENTRACION ABDOMINAL',
-    'VESICULA (COLECISTITIS CRONICA)',
-    'OTRO',
-    'HERNIA SPIGEL',
-    'SIN_DIAGNOSTICO'
-  ], { required_error: "Diagnóstico principal es requerido" }),
+  // Diagnóstico validado contra lista centralizada de "display" (mapeado a DB en el submit)
+  diagnostico_principal: ZDiagnosisDisplay,
   
   // Cita
   fechaConsulta: z.date({ required_error: "Fecha de consulta es requerida" }),
@@ -360,10 +347,7 @@ export const NewPatientSchema = z.object({
 // ✅ Schema para actualización de estado de cita
 export const AppointmentStatusUpdateSchema = z.object({
   appointmentId: z.string().uuid(),
-  newStatus: z.enum([
-    'PROGRAMADA', 'CONFIRMADA', 'PRESENTE', 
-    'COMPLETADA', 'CANCELADA', 'NO ASISTIO', 'REAGENDADA'
-  ]),
+  newStatus: ZAppointmentStatus,
   motivo_cambio: z.string().optional(),
   fecha_hora_cita: z.string().optional(),
   notas_adicionales: z.string().optional(),
@@ -384,43 +368,16 @@ export const NewLeadSchema = z.object({
     .optional()
     .or(z.literal("")),
   
-  channel: z.enum([
-    'WHATSAPP',
-    'PHONE_CALL',
-    'WALK_IN',
-    'REFERRAL',
-    'WEBSITE',
-    'SOCIAL_MEDIA'
-  ], {
-    errorMap: () => ({ message: "Seleccione un canal válido" })
-  }),
+  channel: ZContactChannel,
   
-  motive: z.enum([
-    'INFORMES',
-    'AGENDAR_CITA',
-    'URGENCIA_MEDICA',
-    'SEGUIMIENTO',
-    'CANCELACION',
-    'REAGENDAMIENTO',
-    'OTRO'
-  ], {
-    errorMap: () => ({ message: "Seleccione un motivo válido" })
-  }),
+  motive: ZLeadMotive,
   
   notes: z.string()
     .max(500, "Notas muy largas")
     .optional()
     .or(z.literal("")),
   
-  status: z.enum([
-    'NUEVO',
-    'CONTACTADO',
-    'CITA_AGENDADA',
-    'CONVERTIDO',
-    'NO_INTERESADO',
-    'PERDIDO',
-    'SEGUIMIENTO_PENDIENTE'
-  ]).optional().default('NUEVO')
+  status: ZLeadStatus.optional().default('NUEVO')
 });
 
 export type NewPatientFormData = z.infer<typeof NewPatientSchema>;
@@ -429,7 +386,7 @@ export type NewLeadFormData = z.infer<typeof NewLeadSchema>;
 // ✅ Schema para el formulario de admisión (combina campos de paciente con campos adicionales)
 export const AdmissionFormSchema = NewPatientSchema.extend({
   motivos_consulta: z.array(z.string()).min(1, "Debe seleccionar al menos un motivo de consulta"),
-  canal_contacto: z.enum(['WHATSAPP', 'PHONE_CALL', 'WALK_IN', 'REFERRAL', 'WEBSITE', 'SOCIAL_MEDIA']),
+  canal_contacto: ZContactChannel,
   comentarios: z.string().max(1000, "Comentarios no pueden exceder 1000 caracteres").optional(),
   fecha_hora_cita: z.string().min(1, "Fecha y hora de cita son requeridos"),
 });
@@ -443,7 +400,7 @@ export interface AdmissionPayload {
   // Campos básicos requeridos
   nombre: string;
   apellidos: string;
-  diagnostico_principal: DiagnosisType;
+  diagnostico_principal: DbDiagnosis;
   fecha_hora_cita: string; // ISO string
   motivos_consulta: string[];
   
@@ -501,7 +458,7 @@ export interface AppointmentStatusUpdatePayload {
   appointmentId: string;
   newStatus: AppointmentStatus;
   motivo_cambio?: string;
-  fecha_hora_cita?: string;
+  nuevaFechaHora?: string;
   notas_adicionales?: string;
 }
 

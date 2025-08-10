@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useClinic } from '@/contexts/clinic-data-provider';
+import { PatientStatusEnum } from '@/lib/types';
 import { format, parseISO, startOfMonth, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -60,7 +61,7 @@ export default function TemporalTrendsChart() {
 
       // Pacientes operados en el mes
       const operatedInMonth = allPatients.filter((patient: any) => {
-        if (patient.estado_paciente !== 'OPERADO' || !patient.fecha_cirugia_programada) return false;
+        if (patient.estado_paciente !== PatientStatusEnum.OPERADO || !patient.fecha_cirugia_programada) return false;
         const opDate = parseISO(patient.fecha_cirugia_programada);
         return opDate >= monthStart && opDate < nextMonth;
       }).length;

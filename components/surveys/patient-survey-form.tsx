@@ -32,12 +32,13 @@ import {
   Target,
   MapPin,
 } from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@components/ui/select"
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { useUpdatePatient } from "@/hooks/use-appointments"
 import { toast } from "sonner"
+import { PatientStatusEnum } from "@/lib/types"
 
 // Importar directamente del store de Zustand
 
@@ -815,11 +816,11 @@ export default function PatientSurveyForm({
       updatePatient(
         {
           id: String(patientId),
-          updates: { encuesta: true, estado: "Pendiente de consulta" },
+          updates: { estado_paciente: PatientStatusEnum.POTENCIAL },
         },
         {
           onSuccess: () => {
-            toast.success("Encuesta enviada y estado del paciente actualizado.")
+            toast.success("Encuesta enviada y estado del paciente actualizado a 'potencial'.")
             localStorage.removeItem(`survey_${surveyTemplateId}`)
             setLastSaved(null)
             if (onSubmitSuccess) onSubmitSuccess(data)

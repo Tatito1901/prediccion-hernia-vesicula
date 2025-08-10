@@ -2,7 +2,7 @@
 "use client"
 
 import { useSearchParams } from "next/navigation"
-import { useState, useEffect, useRef, memo, type FC } from "react"
+import { useState, useEffect, useRef, memo, type FC, useMemo } from "react"
 import { useFormStatus } from "react-dom"
 import { login } from "@/components/auth/actions"
 import { 
@@ -14,7 +14,7 @@ import {
   AlertCircle 
 } from "lucide-react"
 
-// --- Paleta de Colores (sin cambios) ---
+// --- Paleta de Colores ---
 const brandColors = {
   primary: {
     solidBg: 'bg-teal-600',
@@ -30,19 +30,56 @@ const brandColors = {
     circle1: 'bg-blue-600/10',
     circle2: 'bg-teal-600/10',
   }
-};
+}
+
+// --- Botón de Login ---
+const LoginButton = memo(() => {
+  const { pending } = useFormStatus()
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-disabled={pending}
+      className={`w-full py-3.5 px-6 rounded-lg font-semibold text-white transition-all duration-300 ease-in-out transform hover:scale-105 ${
+        pending
+          ? 'bg-slate-700 cursor-wait'
+          : `${brandColors.primary.solidBg} ${brandColors.primary.hoverSolidBg} shadow-lg hover:shadow-xl ${brandColors.primary.shadow} active:translate-y-0.5`
+      }`}
+    >
+      {pending ? (
+        <span className="flex items-center justify-center gap-2">
+          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          Autenticando...
+        </span>
+      ) : (
+        <span className="flex items-center justify-center gap-2">
+          <LogIn className="w-5 h-5" />
+          Iniciar Sesión
+        </span>
+      )}
+    </button>
+  )
+})
+LoginButton.displayName = "LoginButton"
 
 // --- Componente Principal del Formulario ---
 const ProfessionalLoginForm: FC = () => {
   const [showPassword, setShowPassword] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
-  
   const searchParams = useSearchParams()
   const errorMessage = searchParams.get('message')
 
   useEffect(() => {
     emailRef.current?.focus()
   }, [])
+
+  // Memoizar estilos para evitar recalcularlos
+  const inputClasses = useMemo(() => ({
+    base: `w-full pl-10 pr-4 py-3 bg-slate-800/50 border rounded-lg text-slate-100 placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0`,
+    error: 'border-red-500/50 focus:ring-red-500/30 focus:border-red-500',
+    normal: `border-slate-700 ${brandColors.primary.focusBorder} ${brandColors.primary.focusRing}`,
+  }), [])
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-8 bg-gradient-to-br from-slate-900 to-slate-800 font-sans">
@@ -79,11 +116,7 @@ const ProfessionalLoginForm: FC = () => {
                 name="email"
                 type="email"
                 ref={emailRef}
-                className={`w-full pl-10 pr-4 py-3 bg-slate-800/50 border rounded-lg text-slate-100 placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 ${
-                  errorMessage
-                    ? 'border-red-500/50 focus:ring-red-500/30 focus:border-red-500'
-                    : `border-slate-700 ${brandColors.primary.focusBorder} ${brandColors.primary.focusRing}`
-                }`}
+                className={`${inputClasses.base} ${errorMessage ? inputClasses.error : inputClasses.normal}`}
                 placeholder="Correo Electrónico"
                 required
                 aria-required="true"
@@ -103,11 +136,7 @@ const ProfessionalLoginForm: FC = () => {
                 id="password"
                 name="password"
                 type={showPassword ? "text" : "password"}
-                className={`w-full pl-10 pr-12 py-3 bg-slate-800/50 border rounded-lg text-slate-100 placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 ${
-                  errorMessage
-                    ? 'border-red-500/50 focus:ring-red-500/30 focus:border-red-500'
-                    : `border-slate-700 ${brandColors.primary.focusBorder} ${brandColors.primary.focusRing}`
-                }`}
+                className={`${inputClasses.base} pr-12 ${errorMessage ? inputClasses.error : inputClasses.normal}`}
                 placeholder="Contraseña"
                 required
                 aria-required="true"
@@ -115,7 +144,7 @@ const ProfessionalLoginForm: FC = () => {
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
+                onClick={() => setShowPassword(prev => !prev)}
                 className={`absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 ${brandColors.primary.hoverText} transition-colors duration-200 focus:outline-none focus:ring-2 ${brandColors.primary.focusRing} rounded-full p-1`}
                 aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                 tabIndex={-1}
@@ -125,13 +154,15 @@ const ProfessionalLoginForm: FC = () => {
             </div>
 
             {errorMessage && (
-              <div className="p-3 bg-red-900/20 border border-red-800/30 rounded-lg text-sm text-red-400 flex items-center gap-2" role="alert" aria-live="assertive">
+              <div 
+                className="p-3 bg-red-900/20 border border-red-800/30 rounded-lg text-sm text-red-400 flex items-center gap-2" 
+                role="alert" 
+                aria-live="assertive"
+              >
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{errorMessage.replace('Error: ', '')}</span>
               </div>
             )}
-
-            {/* Opciones adicionales: Se eliminó "¿Olvidó su contraseña?" */}
             <div className="flex items-center justify-start">
               <label className="flex items-center gap-2 cursor-pointer group">
                 <input
@@ -156,36 +187,6 @@ const ProfessionalLoginForm: FC = () => {
         </div>
       </div>
     </div>
-  )
-}
-
-// --- Componente del Botón de Login (sin cambios) ---
-function LoginButton() {
-  const { pending } = useFormStatus()
-
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      aria-disabled={pending}
-      className={`w-full py-3.5 px-6 rounded-lg font-semibold text-white transition-all duration-300 ease-in-out transform hover:scale-105 ${
-        pending
-          ? 'bg-slate-700 cursor-wait'
-          : `${brandColors.primary.solidBg} ${brandColors.primary.hoverSolidBg} shadow-lg hover:shadow-xl ${brandColors.primary.shadow} active:translate-y-0.5`
-      }`}
-    >
-      {pending ? (
-        <span className="flex items-center justify-center gap-2">
-          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          Autenticando...
-        </span>
-      ) : (
-        <span className="flex items-center justify-center gap-2">
-          <LogIn className="w-5 h-5" />
-          Iniciar Sesión
-        </span>
-      )}
-    </button>
   )
 }
 

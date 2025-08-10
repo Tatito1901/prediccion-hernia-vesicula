@@ -197,6 +197,30 @@ export const useTodayAppointments = (
   });
 };
 
+// Hook para obtener citas por fecha específica (YYYY-MM-DD)
+export const useAppointmentsByDate = (
+  dateISO: string | undefined,
+  options?: Omit<UseQueryOptions<AppointmentWithPatient[], Error>, 'queryKey' | 'queryFn'>
+) => {
+  return useQuery<AppointmentWithPatient[], Error>({
+    queryKey: appointmentKeys.byDate(dateISO || ''),
+    queryFn: async () => {
+      if (!dateISO) return [];
+      const response = await fetch(`/api/appointments?onDate=${encodeURIComponent(dateISO)}`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || 'Error al obtener citas por fecha');
+      }
+      const data = await response.json();
+      const appointments = data.data || data;
+      return appointments.map(transformAppointment);
+    },
+    enabled: !!dateISO,
+    staleTime: 60 * 1000,
+    ...options,
+  });
+};
+
 // ==================== MUTACIONES OPTIMIZADAS ====================
 
 export const useCreateAppointment = (
@@ -302,9 +326,9 @@ export const useUpdateAppointmentStatus = (
   return useMutation<AppointmentWithPatient, Error, UpdateStatusParams, UpdateStatusContext>({
     mutationFn: async ({ appointmentId, newStatus, motivo, nuevaFechaHora }) => {
       const payload = {
-        estado_cita: newStatus,
+        newStatus,
         motivo_cambio: motivo,
-        fecha_hora_cita: nuevaFechaHora
+        nuevaFechaHora
       };
       
       const response = await fetch(`/api/appointments/${appointmentId}/status`, {

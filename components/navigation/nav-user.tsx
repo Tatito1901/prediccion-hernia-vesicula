@@ -123,7 +123,8 @@ export const NavSecondary = memo(({ items, pathname, className, onNavigate, ...p
       <SidebarGroupContent>
         <SidebarMenu className="space-y-1">
           {items.map((item) => {
-            const isActive = pathname === item.url || pathname?.startsWith(`${item.url}/`)
+            // Asegurarse de que isActive sea siempre booleano
+            const isActive = pathname === item.url || (pathname?.startsWith(`${item.url}/`) ?? false)
             const isHovered = hoveredItem === item.title
             
             return (

@@ -32,7 +32,7 @@ interface UpdateStatusParams {
   appointmentId: string;
   newStatus: AppointmentStatus;
   motivo_cambio?: string;
-  fecha_hora_cita?: string;
+  nuevaFechaHora?: string;
   notas_adicionales?: string;
 }
 
@@ -57,9 +57,9 @@ const api = {
         'Accept': 'application/json'
       },
       body: JSON.stringify({
-        estado_cita: params.newStatus,
+        newStatus: params.newStatus,
         motivo_cambio: params.motivo_cambio,
-        fecha_hora_cita: params.fecha_hora_cita,
+        nuevaFechaHora: params.nuevaFechaHora,
         notas_adicionales: params.notas_adicionales
       })
     });
@@ -290,7 +290,7 @@ export const useAppointmentActions = () => {
     return updateStatus.mutateAsync({
       appointmentId,
       newStatus: 'REAGENDADA',
-      fecha_hora_cita: newDateTime,
+      nuevaFechaHora: newDateTime,
       motivo_cambio: motivo || 'Cita reagendada por solicitud'
     });
   };

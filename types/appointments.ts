@@ -12,7 +12,7 @@ export interface ApiAppointment {
   doctor_id: string | null;
   fecha_hora_cita: string; // ISO string
   motivos_consulta: string[];
-  estado_cita: 'PROGRAMADA' | 'CONFIRMADA' | 'CANCELADA' | 'COMPLETADA' | 'PRESENTE' | 'REAGENDADA' | 'NO ASISTIO';
+  estado_cita: 'PROGRAMADA' | 'CONFIRMADA' | 'PRESENTE' | 'EN_CONSULTA' | 'COMPLETADA' | 'CANCELADA' | 'REAGENDADA' | 'NO_ASISTIO';
   es_primera_vez: boolean;
   notas_breves: string | null;
   created_at: string;
@@ -33,7 +33,7 @@ export interface NormalizedAppointment {
   doctorId: string | null;
   dateTime: Date;
   motivo: string;
-  status: 'PROGRAMADA' | 'CONFIRMADA' | 'CANCELADA' | 'COMPLETADA' | 'PRESENTE' | 'REAGENDADA' | 'NO ASISTIO';
+  status: 'PROGRAMADA' | 'CONFIRMADA' | 'PRESENTE' | 'EN_CONSULTA' | 'COMPLETADA' | 'CANCELADA' | 'REAGENDADA' | 'NO_ASISTIO';
   isFirstTime: boolean;
   notes: string | null;
   createdAt: Date;

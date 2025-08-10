@@ -28,7 +28,7 @@ export interface ExtendedAppointment {
   created_at: string | null;
   fecha_hora_cita: string;
   motivos_consulta: string[];
-  estado_cita: string; // Nota: en el esquema esto es string, no enum
+  estado_cita: AppointmentStatus;
   notas_breves: string | null;
   es_primera_vez: boolean | null;
   patients?: {
@@ -88,8 +88,9 @@ export const AppointmentStatusEnum = {
   CONFIRMADA: 'CONFIRMADA' as AppointmentStatus,
   CANCELADA: 'CANCELADA' as AppointmentStatus,
   COMPLETADA: 'COMPLETADA' as AppointmentStatus,
-  NO_ASISTIO: 'NO ASISTIO' as AppointmentStatus,
+  NO_ASISTIO: 'NO_ASISTIO' as AppointmentStatus,
   PRESENTE: 'PRESENTE' as AppointmentStatus,
+  EN_CONSULTA: 'EN_CONSULTA' as AppointmentStatus,
   REAGENDADA: 'REAGENDADA' as AppointmentStatus,
 };
 
@@ -121,7 +122,7 @@ export const DiagnosisEnum = {
 export const UserRoleEnum = {
   DOCTOR: 'doctor' as UserRole,
   ADMIN: 'admin' as UserRole,
-  RECEPCION: 'recepcion' as UserRole,
+  ASISTENTE: 'asistente' as UserRole,
 };
 
 // --- Helper Types ---

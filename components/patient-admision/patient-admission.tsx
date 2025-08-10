@@ -239,7 +239,7 @@ const AppointmentsSection = React.memo<{
         <PatientCard
           key={appointment.id}
           appointment={appointment}
-          onAction={(action: AdmissionAction) => onAction(action, appointment.id)}
+          onAction={onAction}
         />
       ))}
       

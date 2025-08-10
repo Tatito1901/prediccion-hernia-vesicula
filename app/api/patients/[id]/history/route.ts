@@ -67,7 +67,7 @@ export async function GET(
       .select(`
         id,
         fecha_hora_cita,
-        motivo_cita,
+        motivos_consulta,
         estado_cita,
         es_primera_vez,
         notas_breves,
@@ -259,7 +259,8 @@ function getStatusLabel(status: string): string {
   const statusLabels: Record<string, string> = {
     'PROGRAMADA': 'Programada',
     'CONFIRMADA': 'Confirmada', 
-    'PRESENTE': 'En consulta',
+    'PRESENTE': 'Presente',
+    'EN_CONSULTA': 'En consulta',
     'COMPLETADA': 'Completada',
     'CANCELADA': 'Cancelada',
     'NO_ASISTIO': 'No asistió',

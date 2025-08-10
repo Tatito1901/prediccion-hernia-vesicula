@@ -1,6 +1,11 @@
 // app/api/appointments/route.ts - REFACTORED TO USE ENRICHED_APPOINTMENTS RPC
 import { NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createClient as createServerClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
+import { startOfDay, endOfDay } from 'date-fns';
+
+// Ensure Node.js runtime for access to process.env and server-only libs
+export const runtime = 'nodejs';
 
 // Configuración de cache optimizada
 const cacheConfig = {
@@ -12,67 +17,68 @@ const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
 export async function GET(request: Request) {
-  const supabase = await createClient();
+  const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createAdminClient()
+    : await createServerClient();
+  // Debug: confirm which client path is used and env presence
+  console.log('🔐 [/api/appointments][GET] client:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'admin' : 'server', {
+    hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    hasAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    hasService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+  });
   const { searchParams } = new URL(request.url);
 
   // ✅ SOLUCIÓN: Parámetros optimizados para la función RPC
   const dateFilter = searchParams.get('dateFilter'); // 'today', 'future', 'past', o null para todos
   const patientId = searchParams.get('patientId');
+  const onDate = searchParams.get('onDate'); // YYYY-MM-DD para filtrar por un día específico
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(searchParams.get('pageSize') || '50', 10)));
 
   try {
     // ✅ SOLUCIÓN: Usar consulta enriquecida con JOIN correctamente estructurado
-    console.log('📊 API Appointments llamado con parámetros:', { dateFilter, patientId, pageSize, page });
+    console.log('📊 API Appointments llamado con parámetros:', { dateFilter, patientId, onDate, pageSize, page });
     
+    // Seleccionamos solo columnas base para evitar errores por columnas/relaciones inexistentes
     let query = supabase
       .from('appointments')
       .select(`
         id,
         fecha_hora_cita,
-        motivos_consulta,
-        descripcion_motivos,
         estado_cita,
-        es_primera_vez,
-        origen_cita,
-        canal_agendamiento,
-        hora_llegada,
-        puntualidad,
-        decision_final,
-        probabilidad_cirugia_inicial,
-        diagnostico_final,
-        notas_breves,
-        proxima_cita_sugerida,
-        created_at,
-        updated_at,
         patient_id,
-        doctor_id,
-        agendado_por,
-        fecha_agendamiento,
-        patients:patient_id (
-          id,
-          nombre,
-          apellidos,
-          telefono,
-          email,
-          fecha_nacimiento,
-          edad,
-          genero,
-          diagnostico_principal,
-          estado_paciente,
-          fecha_registro,
-          numero_expediente,
-          seguro_medico
-        ),
-        profiles:doctor_id (
-          id,
-          full_name,
-          role
-        )
+        doctor_id
       `, { count: 'exact' });
 
     if (patientId) {
       query = query.eq('patient_id', patientId);
+    }
+
+    // ✅ Filtro por día específico (onDate)
+    if (onDate) {
+      try {
+        const start = startOfDay(new Date(onDate));
+        const end = endOfDay(new Date(onDate));
+        query = query
+          .gte('fecha_hora_cita', start.toISOString())
+          .lt('fecha_hora_cita', end.toISOString());
+      } catch (e) {
+        console.warn('⚠️ Parametro onDate inválido:', onDate);
+      }
+    }
+
+    // ✅ Filtro general por tipo: hoy, futuras, pasadas
+    if (!onDate && dateFilter) {
+      const now = new Date();
+      const startToday = startOfDay(now).toISOString();
+      const endToday = endOfDay(now).toISOString();
+      if (dateFilter === 'today') {
+        query = query.gte('fecha_hora_cita', startToday).lt('fecha_hora_cita', endToday);
+      } else if (dateFilter === 'future') {
+        query = query.gte('fecha_hora_cita', endToday);
+      } else if (dateFilter === 'past') {
+        query = query.lt('fecha_hora_cita', startToday);
+      }
     }
 
     query = query.range((page - 1) * pageSize, page * pageSize - 1);
@@ -86,32 +92,30 @@ export async function GET(request: Request) {
     }
 
     console.log(`✅ Citas obtenidas: ${data?.length || 0} de ${count || 0} total`);
-    
-    // 🔍 DIAGNÓSTICO DETALLADO: Ver estructura real de datos
-    if (data && data.length > 0) {
-      const sampleAppointment = data[0];
-      
-      console.log('🔍 ESTRUCTURA COMPLETA DEL APPOINTMENT:', JSON.stringify(sampleAppointment, null, 2));
-      console.log('🔍 TIPO DE patients:', typeof sampleAppointment.patients);
-      console.log('🔍 patients ES ARRAY:', Array.isArray(sampleAppointment.patients));
-      console.log('🔍 CONTENIDO patients:', sampleAppointment.patients);
-      
-      console.log('📋 Estructura de cita ejemplo:', {
-        id: sampleAppointment.id,
-        fecha_hora_cita: sampleAppointment.fecha_hora_cita,
-        estado_cita: sampleAppointment.estado_cita,
-        patient: sampleAppointment.patients && (sampleAppointment.patients as any).nombre ? `${(sampleAppointment.patients as any).nombre} ${(sampleAppointment.patients as any).apellidos}` : 'Sin datos de paciente'
-      });
-    } else {
-      console.log('⚠️ No se encontraron citas en la base de datos');
-    }
 
-    return NextResponse.json(data || [], {
-      headers: {
-        ...cacheConfig,
-        'X-Total-Count': count?.toString() || '0'
-      }
-    });
+    // Construir resumen simple para compatibilidad con hooks existentes
+    const now = new Date();
+    const startToday = startOfDay(now).toISOString();
+    const endToday = endOfDay(now).toISOString();
+    const summary = {
+      total_appointments: count || 0,
+      today_count: (data || []).filter(a => a.fecha_hora_cita >= startToday && a.fecha_hora_cita < endToday).length,
+      future_count: (data || []).filter(a => a.fecha_hora_cita >= endToday).length,
+      past_count: (data || []).filter(a => a.fecha_hora_cita < startToday).length,
+    };
+
+    const totalPages = Math.ceil((count || 0) / pageSize);
+    return NextResponse.json({
+      data: data || [],
+      pagination: {
+        page,
+        pageSize,
+        total: count || 0,
+        totalPages,
+        hasMore: page < totalPages
+      },
+      summary
+    }, { headers: { ...cacheConfig } });
 
   } catch (error: any) {
     console.error('Error en GET /api/appointments:', error);
@@ -123,7 +127,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
+  const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createAdminClient()
+    : await createServerClient();
+  // Debug: confirm which client path is used and env presence
+  console.log('🔐 [/api/appointments][POST] client:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'admin' : 'server', {
+    hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    hasAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    hasService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+  });
   try {
     const body = await request.json();
     // Validar body

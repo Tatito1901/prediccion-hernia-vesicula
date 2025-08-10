@@ -1,5 +1,6 @@
 // components/patient-admision/patient-card.tsx
 import React, { memo, useMemo, useCallback, useState } from "react";
+import dynamic from 'next/dynamic';
 import { format, isValid, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,8 +67,14 @@ import {
 } from '@/lib/admission-business-rules';
 
 // ✅ Imports de componentes secundarios
-import { RescheduleDatePicker } from './patient-admission-reschedule';
-import PatientHistoryModal from './patient-history-modal';
+const RescheduleDatePicker = dynamic(
+  () => import('./patient-admission-reschedule').then(m => m.RescheduleDatePicker),
+  { ssr: false, loading: () => <div className="h-24 rounded-md bg-muted animate-pulse" /> }
+);
+const PatientHistoryModal = dynamic(
+  () => import('./patient-history-modal'),
+  { ssr: false, loading: () => <div className="h-24 rounded-md bg-muted animate-pulse" /> }
+);
 
 // ==================== INTERFACES LOCALES ====================
 interface ConfirmationState {

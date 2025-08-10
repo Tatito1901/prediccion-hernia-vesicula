@@ -1,408 +1,495 @@
-'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { User, CalendarIcon, Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { format, addDays, isWeekend, isBefore, startOfDay } from 'date-fns';
-import { cn, formatPhoneNumber } from '@/lib/utils';
-import { es } from 'date-fns/locale';
-
-// UI Components
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-
-// Icons
-import {
-  CalendarIcon,
-  Clock,
-  User,
-  Phone,
-  Mail,
-  CheckCircle,
-  Loader2,
-  AlertCircle,
-  FileText,
-} from 'lucide-react';
-
-// Types and hooks
+import { addDays, format, isBefore, isSunday, startOfDay } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { cn, formatPhoneNumber } from '@/lib/utils';
 import { useAdmitPatient } from './actions';
-import type { AdmissionFormData as TAdmissionForm } from '@/components/patient-admision/admision-types';
-import { AdmissionFormSchema } from '@/components/patient-admision/admision-types';
+import type { AdmissionPayload, Lead } from './admision-types';
+import { useAppointmentsByDate } from '@/hooks/use-appointments';
+import { type DbDiagnosis } from '@/lib/validation/enums';
 
 interface PatientModalProps {
   trigger: React.ReactNode;
   onSuccess?: () => void;
 }
 
+// ==================== Esquema y utilidades ====================
+const MinimalSchema = z.object({
+  nombre: z.string().min(2, 'Nombre muy corto'),
+  apellidos: z.string().min(2, 'Apellidos muy cortos'),
+  edad: z.coerce.number().int().min(0).max(120).optional(),
+  genero: z.enum(['Masculino', 'Femenino'], { required_error: 'Selecciona género' }),
+  telefono: z.string().regex(/^[0-9+\-\s()]{10,15}$/i, 'Teléfono inválido'),
+  email: z.string().email('Email inválido').optional().or(z.literal('')),
+  motivo: z.enum(['HERNIA', 'VESICULA', 'URGENCIA'], { required_error: 'Selecciona motivo' }),
+  fecha: z.date({ required_error: 'Fecha requerida' }),
+  hora: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/i, 'Hora inválida (HH:MM)'),
+});
+
+type MinimalFormData = z.infer<typeof MinimalSchema>;
+
+// Horarios disponibles (09:00 - 14:30 cada 30 min) — backend valida hour < 15
+const TIME_SLOTS = (() => {
+  const slots: { value: string; label: string }[] = [];
+  let hour = 9;
+  let minute = 0;
+  while (hour < 15) {
+    const hh = hour.toString().padStart(2, '0');
+    const mm = minute.toString().padStart(2, '0');
+    const time = `${hh}:${mm}`;
+    slots.push({ value: time, label: time });
+    minute += 30;
+    if (minute >= 60) { minute = 0; hour += 1; }
+  }
+  return slots;
+})();
+
+// Estados de cita que bloquean el horario (reutilizable, evita re-creación)
+const BLOCKED_APPOINTMENT_STATUSES = new Set([
+  'PROGRAMADA',
+  'CONFIRMADA',
+  'PRESENTE',
+  'EN_CONSULTA',
+  'REAGENDADA',
+]);
+
+const isValidDate = (date: Date): boolean => {
+  const today = startOfDay(new Date());
+  const maxDate = addDays(today, 90);
+  const isPast = isBefore(date, today);
+  const isAfterMax = isBefore(maxDate, date);
+  return !isPast && !isAfterMax && !isSunday(date);
+};
+
+function combineDateTime(date: Date, hhmm: string): Date {
+  const [hh, mm] = hhmm.split(':').map((v) => parseInt(v, 10));
+  const d = new Date(date);
+  d.setHours(hh, mm, 0, 0);
+  return d;
+}
+
+function mapMotivoToDiagnosis(motivo: MinimalFormData['motivo']): DbDiagnosis {
+  switch (motivo) {
+    case 'HERNIA':
+      return 'HERNIA_INGUINAL';
+    case 'VESICULA':
+      return 'COLECISTITIS_CRONICA';
+    case 'URGENCIA':
+    default:
+      return 'SIN_DIAGNOSTICO';
+  }
+}
+
 export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
   const [open, setOpen] = useState(false);
-  const { mutate: admitPatient, isPending, isError, error } = useAdmitPatient();
 
-  const form = useForm<TAdmissionForm>({
-    resolver: zodResolver(AdmissionFormSchema),
+  // ==================== Lead Search State ====================
+  const [leadQuery, setLeadQuery] = useState('');
+  const [debouncedLeadQuery, setDebouncedLeadQuery] = useState('');
+  const [leadResults, setLeadResults] = useState<Lead[]>([]);
+  const [searchingLeads, setSearchingLeads] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const form = useForm<MinimalFormData>({
+    resolver: zodResolver(MinimalSchema),
     defaultValues: {
       nombre: '',
       apellidos: '',
       edad: undefined,
+      genero: undefined as unknown as MinimalFormData['genero'],
       telefono: '',
-      email: undefined,
-      motivos_consulta: [],
-      canal_contacto: 'PHONE_CALL',
-      comentarios: '',
-      fecha_hora_cita: undefined,
+      email: '',
+      motivo: undefined as unknown as MinimalFormData['motivo'],
+      fecha: undefined as unknown as Date,
+      hora: undefined as unknown as string,
     },
   });
 
-  // 🔄 Memoized date calculations
-  const today = useMemo(() => new Date(), []);
-  const tomorrow = useMemo(() => addDays(today, 1), [today]);
-  const nextAvailableDate = useMemo(() => {
-    let date = tomorrow;
-    while (isWeekend(date)) {
-      date = addDays(date, 1);
-    }
-    return date;
-  }, [tomorrow]);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedLeadQuery(leadQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [leadQuery]);
 
-  // 📤 Submit handler
-  const onSubmit = (data: TAdmissionForm) => {
-    admitPatient(data, {
+  useEffect(() => {
+    if (!debouncedLeadQuery) {
+      setLeadResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    setSearchingLeads(true);
+    fetch(`/api/leads?search=${encodeURIComponent(debouncedLeadQuery)}&pageSize=10`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Error al buscar leads'))))
+      .then((json) => {
+        const data = Array.isArray(json?.data) ? json.data : [];
+        setLeadResults(data as Lead[]);
+      })
+      .catch((err) => {
+        if ((err as any)?.name !== 'AbortError') {
+          console.error('Lead search error:', err);
+        }
+      })
+      .finally(() => setSearchingLeads(false));
+    return () => controller.abort();
+  }, [debouncedLeadQuery]);
+
+  const splitFullName = (full_name: string): { nombre: string; apellidos: string } => {
+    const parts = (full_name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length <= 1) return { nombre: parts[0] || '', apellidos: '' };
+    return { nombre: parts[0], apellidos: parts.slice(1).join(' ') };
+  };
+
+  const handleSelectLead = useCallback((lead: Lead) => {
+    setSelectedLead(lead);
+    setLeadQuery(lead.full_name || '');
+    const { nombre, apellidos } = splitFullName(lead.full_name || '');
+    form.setValue('nombre', nombre, { shouldValidate: true });
+    form.setValue('apellidos', apellidos, { shouldValidate: true });
+    if (lead.phone_number) form.setValue('telefono', lead.phone_number, { shouldValidate: true });
+    if (lead.email) form.setValue('email', lead.email || '', { shouldValidate: false });
+
+    // Prefill clinical motivo using lead information (non-intrusive)
+    const currentMotivo = form.getValues('motivo');
+    if (!currentMotivo) {
+      let inferred: MinimalFormData['motivo'] | undefined;
+      // Strong mapping: URGENCIA_MEDICA -> URGENCIA
+      if ((lead as any).motive === 'URGENCIA_MEDICA') {
+        inferred = 'URGENCIA';
+      } else {
+        // Heuristics from notes
+        const notes = ((lead as any).notes || '').toString().toLowerCase();
+        if (/ves[íi]cula|colecist/i.test(notes)) {
+          inferred = 'VESICULA';
+        } else if (/hernia|eventraci[óo]n|eventracion/i.test(notes)) {
+          inferred = 'HERNIA';
+        }
+      }
+      if (inferred) {
+        form.setValue('motivo', inferred, { shouldValidate: true });
+      }
+    }
+  }, [form]);
+
+  // form inicializado arriba para uso en callbacks memoizados
+
+  const selectedDate = form.watch('fecha');
+  const selectedDateISO = useMemo(
+    () => (selectedDate ? selectedDate.toISOString().split('T')[0] : undefined),
+    [selectedDate]
+  );
+  const { data: dayAppointments } = useAppointmentsByDate(selectedDateISO);
+
+  const occupiedTimes = useMemo(() => {
+    if (!dayAppointments || !Array.isArray(dayAppointments)) return new Set<string>();
+    const s = new Set<string>();
+    for (const ap of dayAppointments) {
+      const st = (ap as any).estado_cita as string | undefined;
+      if (st && BLOCKED_APPOINTMENT_STATUSES.has(st)) {
+        const dt = new Date((ap as any).fecha_hora_cita);
+        const hh = dt.getHours().toString().padStart(2, '0');
+        const mm = dt.getMinutes().toString().padStart(2, '0');
+        s.add(`${hh}:${mm}`);
+      }
+    }
+    return s;
+  }, [dayAppointments]);
+
+  const { mutate: admitPatient, isPending } = useAdmitPatient();
+
+  const onSubmit = useCallback((values: MinimalFormData) => {
+    const payload: AdmissionPayload = {
+      nombre: values.nombre,
+      apellidos: values.apellidos,
+      edad: values.edad,
+      telefono: values.telefono,
+      email: values.email || undefined,
+      genero: values.genero,
+      diagnostico_principal: mapMotivoToDiagnosis(values.motivo),
+      fecha_hora_cita: combineDateTime(values.fecha, values.hora).toISOString(),
+      motivos_consulta: [values.motivo],
+    };
+
+    admitPatient(payload, {
       onSuccess: () => {
         form.reset();
         setOpen(false);
         onSuccess?.();
       },
     });
-  };
+  }, [admitPatient, form, onSuccess]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger}
-      </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
             Nuevo Paciente y Cita
           </DialogTitle>
         </DialogHeader>
-        
+
+        {/* Lead Search */}
+        <div className="space-y-2 mb-4" aria-busy={searchingLeads}>
+          <label htmlFor="lead-search" className="text-sm font-medium leading-none">Buscar lead</label>
+          <Input
+            id="lead-search"
+            placeholder="Nombre, teléfono o email"
+            value={leadQuery}
+            onChange={(e) => {
+              setLeadQuery(e.target.value);
+              setSelectedLead(null);
+            }}
+            autoComplete="off"
+          />
+          {leadQuery && (
+            <div className="text-xs text-muted-foreground" aria-live="polite">
+              {searchingLeads ? 'Buscando…' : `Resultados: ${leadResults.length}`}
+            </div>
+          )}
+          {leadQuery && searchingLeads && (
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded animate-pulse" />
+              <div className="h-4 bg-muted rounded animate-pulse" />
+            </div>
+          )}
+          {leadQuery && leadResults.length > 0 && (
+            <ScrollArea className="h-56 border rounded-md">
+              <div className="divide-y">
+                {leadResults.map((l) => (
+                  <button
+                    type="button"
+                    key={l.id ?? `${l.phone_number}-${l.full_name}`}
+                    onClick={() => handleSelectLead(l)}
+                    className="w-full text-left px-3 py-2 hover:bg-accent"
+                  >
+                    <div className="font-medium">{l.full_name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {l.phone_number}
+                      {l.email ? ` • ${l.email}` : ''}
+                      {l.channel ? ` • ${l.channel}` : ''}
+                      {l.motive ? ` • ${l.motive}` : ''}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Información del Paciente</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="nombre"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nombre *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Nombre del paciente" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="apellidos"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Apellidos *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Apellidos del paciente" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="edad"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Edad</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="Edad del paciente" 
-                            {...field} 
-                            value={field.value ?? ''}
-                            onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="telefono"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Teléfono *</FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="555-123-4567" 
-                            {...field}
-                            onChange={(e) => {
-                              const formatted = formatPhoneNumber(e.target.value);
-                              field.onChange(formatted);
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="email" 
-                            placeholder="paciente@ejemplo.com" 
-                            {...field} 
-                            value={field.value ?? ''}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="canal_contacto"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Canal de Contacto *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona canal" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="PHONE_CALL">Llamada telefónica</SelectItem>
-                            <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
-                            <SelectItem value="WALK_IN">Visita directa</SelectItem>
-                            <SelectItem value="REFERRAL">Referencia</SelectItem>
-                            <SelectItem value="WEBSITE">Página web</SelectItem>
-                            <SelectItem value="SOCIAL_MEDIA">Redes sociales</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <FormField
-                  control={form.control}
-                  name="comentarios"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Comentarios</FormLabel>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="nombre"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Nombre" autoComplete="given-name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="apellidos"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Apellidos *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Apellidos" autoComplete="family-name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="edad"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Edad</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="Edad"
+                        inputMode="numeric"
+                        value={field.value ?? ''}
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="genero"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Género *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Notas adicionales sobre el paciente..." 
-                          className="min-h-[80px]" 
-                          {...field}
-                          value={field.value ?? ''}
-                        />
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona" />
+                        </SelectTrigger>
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Información de la Cita</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="motivos_consulta"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Motivo de Consulta *</FormLabel>
+                      <SelectContent>
+                        <SelectItem value="Masculino">Masculino</SelectItem>
+                        <SelectItem value="Femenino">Femenino</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="telefono"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono *</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="555-123-4567"
+                        {...field}
+                        onChange={(e) => field.onChange(formatPhoneNumber(e.target.value))}
+                        autoComplete="tel"
+                        inputMode="tel"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (opcional)</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="email@ejemplo.com" autoComplete="email" {...field} />
+                      
+                      
+                      
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="motivo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Motivo de consulta *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <Select 
-                          onValueChange={(value: string) => {
-                            // Handle multiple selections
-                            const currentValues = Array.isArray(field.value) ? field.value : [];
-                            if (currentValues.includes(value)) {
-                              field.onChange(currentValues.filter((v: string) => v !== value));
-                            } else {
-                              field.onChange([...currentValues, value]);
-                            }
-                          }}
-                          value={Array.isArray(field.value) && field.value.length > 0 ? field.value[0] : ''} // For display purposes in single select
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona motivo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="HERNIA_INGUINAL">Hernia Inguinal</SelectItem>
-                            <SelectItem value="HERNIA_UMBILICAL">Hernia Umbilical</SelectItem>
-                            <SelectItem value="VESICULA">Vesícula</SelectItem>
-                            <SelectItem value="CONSULTA_GENERAL">Consulta General</SelectItem>
-                            <SelectItem value="SEGUNDA_OPINION">Segunda Opinión</SelectItem>
-                            <SelectItem value="SEGUIMIENTO">Seguimiento</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona" />
+                        </SelectTrigger>
                       </FormControl>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {Array.isArray(field.value) && field.value.map((motivo: string) => (
-                          <Badge 
-                            key={motivo} 
-                            variant="secondary" 
-                            className="cursor-pointer"
-                            onClick={() => {
-                              field.onChange(field.value?.filter((v: string) => v !== motivo));
-                            }}
+                      <SelectContent>
+                        <SelectItem value="HERNIA">Hernia</SelectItem>
+                        <SelectItem value="VESICULA">Vesícula</SelectItem>
+                        <SelectItem value="URGENCIA">Urgencia</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="fecha"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Fecha *</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn('pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}
                           >
-                            {motivo}
-                            <span className="ml-1">×</span>
-                          </Badge>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {field.value ? (
+                              format(field.value, 'PPP', { locale: es })
+                            ) : (
+                              <span>Selecciona fecha</span>
+                            )}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          locale={es}
+                          disabled={(date) => !isValidDate(date)}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="hora"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Hora *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={!selectedDate}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={selectedDate ? 'Selecciona hora' : 'Selecciona fecha primero'} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {TIME_SLOTS.map((slot) => (
+                          <SelectItem
+                            key={slot.value}
+                            value={slot.value}
+                            disabled={occupiedTimes.has(slot.value)}
+                            className={occupiedTimes.has(slot.value) ? 'opacity-50 pointer-events-none' : ''}
+                          >
+                            {slot.label}
+                          </SelectItem>
                         ))}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="fecha_hora_cita"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Fecha y Hora de Cita *</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              className="pl-3 text-left font-normal"
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {field.value ? (
-                                format(field.value, "PPP 'a las' p", { locale: es })
-                              ) : (
-                                <span>Selecciona fecha</span>
-                              )}
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value ? new Date(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date ? date.toISOString() : undefined)}
-                            locale={es}
-                            disabled={(date) => 
-                              isBefore(date, startOfDay(today)) || isWeekend(date)
-                            }
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    La cita se programará automáticamente para el próximo día hábil disponible si no se selecciona una fecha específica.
-                  </AlertDescription>
-                </Alert>
-              </CardContent>
-            </Card>
-            
-            {isError && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Error al crear paciente y cita: {error?.message || 'Error desconocido'}
-                </AlertDescription>
-              </Alert>
-            )}
-            
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <div className="flex justify-end gap-3">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setOpen(false)}
-                disabled={isPending}
-              >
+              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
                 Cancelar
               </Button>
-              <Button 
-                type="submit" 
-                disabled={isPending}
-              >
-                {isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creando...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Crear Paciente y Cita
-                  </>
-                )}
+              <Button type="submit" disabled={isPending} aria-busy={isPending}>
+                {isPending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando…</>) : 'Guardar'}
               </Button>
             </div>
           </form>

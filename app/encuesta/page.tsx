@@ -16,6 +16,7 @@ import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 import MedicalSurveyAnalysis from "@/components/surveys/medical-survey-analysis"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"
 import { toast } from "sonner"
+import { PatientStatusEnum } from "@/lib/types";
 
 // Componente interno que utiliza useSearchParams
 function EncuestaContent() {
@@ -57,16 +58,14 @@ function EncuestaContent() {
       updatePatient({ 
         id: String(patientId), 
         updates: {
-          ...patient, // Asegúrate que los datos del paciente son los correctos aquí
-          encuesta: true,
-          estado: "Pendiente de consulta",
-          probabilidadCirugia: data.probabilidadCirugia || Math.random() * 100, // Simulación
+          // Solo actualizamos las columnas válidas del esquema
+          estado_paciente: PatientStatusEnum.POTENCIAL,
         }
       });
 
       // Mostrar notificación de éxito
       toast.success("Encuesta completada con éxito", {
-        description: "El paciente ha sido actualizado a 'Pendiente de consulta'",
+        description: "El paciente ha sido marcado como 'potencial'",
       })
 
       // Redirigir a la página de gracias

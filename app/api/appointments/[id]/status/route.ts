@@ -2,21 +2,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { z } from 'zod';
+import { ZAppointmentStatus } from '@/lib/validation/enums';
 
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const UpdateStatusSchema = z.object({
   // estado_cita debe coincidir EXACTAMENTE con appointment_status_enum de la BD
-  newStatus: z.enum([
-    'PROGRAMADA',
-    'CONFIRMADA', 
-    'CANCELADA',
-    'COMPLETADA',
-    'NO ASISTIO',
-    'PRESENTE',
-    'REAGENDADA'
-  ] as const),
+  newStatus: ZAppointmentStatus,
   motivo_cambio: z.string().optional(),
   nuevaFechaHora: z.string().datetime().optional(),
+  // Alias para compatibilidad con payloads antiguos del frontend
+  fecha_hora_cita: z.string().datetime().optional(),
   notas_adicionales: z.string().max(500).optional(),
 });
 
@@ -67,10 +62,10 @@ const validateStatusTransition = (
 ): { valid: boolean; reason?: string } => {
   // Transiciones permitidas según tu workflow
   const allowedTransitions: Record<string, string[]> = {
-    'PROGRAMADA': ['CONFIRMADA', 'EN_SALA', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'],
-    'CONFIRMADA': ['EN_SALA', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'],
-    'EN_SALA': ['EN_CONSULTA', 'CANCELADA'],
-    'EN_CONSULTA': ['COMPLETADA', 'REAGENDADA'],
+    'PROGRAMADA': ['CONFIRMADA', 'PRESENTE', 'CANCELADA', 'REAGENDADA', 'NO_ASISTIO'],
+    'CONFIRMADA': ['PRESENTE', 'CANCELADA', 'REAGENDADA', 'NO_ASISTIO'],
+    'PRESENTE': ['EN_CONSULTA', 'CANCELADA'],
+    'EN_CONSULTA': ['COMPLETADA', 'REAGENDADA', 'CANCELADA'],
     'COMPLETADA': [], // Estado final
     'CANCELADA': ['REAGENDADA'],
     'NO_ASISTIO': ['REAGENDADA'],
@@ -97,7 +92,16 @@ export async function PATCH(
   try {
     const supabase = await createClient();
     const { id: appointmentId } = await params;
-    const body = await request.json();
+    const rawBody = await request.json();
+    
+    // Backward-compat: aceptar claves antiguas del frontend
+    // - estado_cita -> newStatus
+    // - fecha_hora_cita -> nuevaFechaHora
+    const body = {
+      ...rawBody,
+      newStatus: rawBody?.newStatus ?? rawBody?.estado_cita,
+      nuevaFechaHora: rawBody?.nuevaFechaHora ?? rawBody?.fecha_hora_cita,
+    };
     
     console.log(`🔄 [Status Update] Processing update for appointment: ${appointmentId}`);
     
@@ -114,7 +118,8 @@ export async function PATCH(
       );
     }
     
-    const { newStatus, motivo_cambio, nuevaFechaHora, notas_adicionales } = validationResult.data;
+    const { newStatus, motivo_cambio, nuevaFechaHora, fecha_hora_cita, notas_adicionales } = validationResult.data;
+    const effectiveNewDateTime = nuevaFechaHora ?? fecha_hora_cita;
     
     // 2. OBTENER CITA ACTUAL (según tu esquema real)
     const { data: currentAppointment, error: fetchError } = await supabase
@@ -124,7 +129,7 @@ export async function PATCH(
         patient_id,
         doctor_id,
         fecha_hora_cita,
-        motivo_cita,
+        motivos_consulta,
         estado_cita,
         es_primera_vez,
         notas_breves,
@@ -192,8 +197,8 @@ export async function PATCH(
     };
     
     // Agregar nueva fecha/hora si es reagendamiento
-    if (newStatus === 'REAGENDADA' && nuevaFechaHora) {
-      updateData.fecha_hora_cita = nuevaFechaHora;
+    if (newStatus === 'REAGENDADA' && effectiveNewDateTime) {
+      updateData.fecha_hora_cita = effectiveNewDateTime;
     }
     
     // Agregar notas adicionales
@@ -215,7 +220,7 @@ export async function PATCH(
         patient_id,
         doctor_id,
         fecha_hora_cita,
-        motivo_cita,
+        motivos_consulta,
         estado_cita,
         es_primera_vez,
         notas_breves,
@@ -247,7 +252,7 @@ export async function PATCH(
       currentStatus,
       newStatus,
       currentAppointment.fecha_hora_cita,
-      nuevaFechaHora,
+      effectiveNewDateTime,
       motivo_cambio,
       userAgent,
       ipAddress
@@ -259,7 +264,7 @@ export async function PATCH(
       await supabase
         .from('patients')
         .update({ 
-          estado_paciente: 'CONSULTADO', // Valor según tu enum patient_status_enum
+          estado_paciente: 'en_seguimiento', // Valor válido en patient_status_enum
           fecha_primera_consulta: currentAppointment.fecha_hora_cita.split('T')[0],
           ultimo_contacto: new Date().toISOString().split('T')[0], // DATE field
           updated_at: new Date().toISOString(),
@@ -268,15 +273,18 @@ export async function PATCH(
     }
     
     // 10. LOG PARA MONITOREO
-    const patientName = currentAppointment.patients && currentAppointment.patients[0]
-      ? `${currentAppointment.patients[0].nombre} ${currentAppointment.patients[0].apellidos}`.trim()
+    const patientObj: any = Array.isArray(currentAppointment.patients)
+      ? currentAppointment.patients[0]
+      : currentAppointment.patients;
+    const patientName = patientObj
+      ? `${patientObj.nombre ?? ''} ${patientObj.apellidos ?? ''}`.trim() || 'Paciente sin nombre'
       : 'Paciente desconocido';
     
     console.log(`✅ [Status Update] Success:`, {
       appointmentId,
       patient: patientName,
       statusChange: `${currentStatus} → ${newStatus}`,
-      datetime: nuevaFechaHora || 'sin cambio',
+      datetime: effectiveNewDateTime || 'sin cambio',
       userId: userId || 'usuario no disponible',
       auditCreated: auditResult.success,
       ipAddress,

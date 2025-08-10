@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { format, addDays, isWeekend, isBefore, startOfDay } from 'date-fns';
+import { format, addDays, isSunday, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // UI Components
@@ -51,9 +51,15 @@ import {
 // ✅ IMPORTS CORREGIDOS - usando tipos unificados
 import type { 
   NewPatientFormProps, 
-  DiagnosisType,
   AdmissionPayload
 } from './admision-types';
+import { 
+  DIAGNOSIS_DISPLAY_VALUES,
+  type DiagnosisDisplay,
+  DiagnosisDisplayToDbMap,
+  DiagnosisDbToDisplayMap,
+  type DbDiagnosis
+} from '@/lib/validation/enums';
 
 // ✅ Schema importado como valor para zodResolver
 import { NewPatientSchema } from './admision-types';
@@ -61,34 +67,32 @@ import { NewPatientSchema } from './admision-types';
 // ✅ Hook corregido para admisión
 import { useAdmitPatient } from './actions';
 import { cn, formatPhoneNumber } from '@/lib/utils';
+import { useAppointmentsByDate } from '@/hooks/use-appointments';
+import { useLeads } from '@/hooks/use-leads';
+import { useUnifiedPatientData } from '@/hooks/use-unified-patient-data';
+import { useDebounce } from '@/hooks/use-debounce';
+import type { Patient, Lead } from '@/lib/types';
 
 // ==================== CONFIGURACIÓN ====================
 
-// ✅ Opciones de diagnóstico exactamente como en la BD
-const diagnosisOptions = [
-  { value: 'HERNIA INGUINAL' as DiagnosisType, label: 'Hernia Inguinal' },
-  { value: 'HERNIA UMBILICAL' as DiagnosisType, label: 'Hernia Umbilical' },
-  { value: 'COLECISTITIS' as DiagnosisType, label: 'Colecistitis' },
-  { value: 'COLEDOCOLITIASIS' as DiagnosisType, label: 'Coledocolitiasis' },
-  { value: 'COLANGITIS' as DiagnosisType, label: 'Colangitis' },
-  { value: 'APENDICITIS' as DiagnosisType, label: 'Apendicitis' },
-  { value: 'HERNIA HIATAL' as DiagnosisType, label: 'Hernia Hiatal' },
-  { value: 'LIPOMA GRANDE' as DiagnosisType, label: 'Lipoma Grande' },
-  { value: 'HERNIA INGUINAL RECIDIVANTE' as DiagnosisType, label: 'Hernia Inguinal Recidivante' },
-  { value: 'QUISTE SEBACEO INFECTADO' as DiagnosisType, label: 'Quiste Sebáceo Infectado' },
-  { value: 'EVENTRACION ABDOMINAL' as DiagnosisType, label: 'Eventración Abdominal' },
-  { value: 'VESICULA (COLECISTITIS CRONICA)' as DiagnosisType, label: 'Vesícula (Colecistitis Crónica)' },
-  { value: 'OTRO' as DiagnosisType, label: 'Otro' },
-  { value: 'HERNIA SPIGEL' as DiagnosisType, label: 'Hernia Spigel' },
-];
+// ✅ Opciones de diagnóstico centralizadas desde enums (display values)
+const diagnosisOptions = DIAGNOSIS_DISPLAY_VALUES.map((value) => ({ value, label: value }));
 
-// ✅ Horarios disponibles (8:00 AM - 3:30 PM cada 30 min)
-const TIME_SLOTS = Array.from({ length: 16 }, (_, i) => {
-  const hour = 8 + Math.floor(i / 2);
-  const minute = i % 2 === 0 ? '00' : '30';
-  const time = `${hour.toString().padStart(2, '0')}:${minute}`;
-  return { value: time, label: time };
-});
+// ✅ Horarios disponibles (09:00 - 14:30 cada 30 min) — backend valida hour < 15
+const TIME_SLOTS = (() => {
+  const slots: { value: string; label: string }[] = [];
+  let hour = 9;
+  let minute = 0;
+  while (hour < 15) {
+    const hh = hour.toString().padStart(2, '0');
+    const mm = minute.toString().padStart(2, '0');
+    const time = `${hh}:${mm}`;
+    slots.push({ value: time, label: time });
+    minute += 30;
+    if (minute >= 60) { minute = 0; hour += 1; }
+  }
+  return slots;
+})();
 
 // ==================== TIPOS PARA EL FORMULARIO ====================
 // ✅ ACTUALIZADO para incluir todos los campos del nuevo esquema
@@ -96,7 +100,7 @@ type FormData = {
   // Campos básicos requeridos
   nombre: string;
   apellidos: string;
-  diagnostico_principal: DiagnosisType;
+  diagnostico_principal: DiagnosisDisplay;
   fechaConsulta: Date;
   horaConsulta: string;
   
@@ -137,7 +141,10 @@ type FormData = {
 const isValidDate = (date: Date): boolean => {
   const today = startOfDay(new Date());
   const maxDate = addDays(today, 90); // Máximo 90 días en el futuro
-  return !isBefore(date, today) && !isBefore(maxDate, date) && !isWeekend(date);
+  // ❗️Solo se bloquea domingo. Lunes-Sábado permitido.
+  const isPast = isBefore(date, today);
+  const isAfterMax = isBefore(maxDate, date);
+  return !isPast && !isAfterMax && !isSunday(date);
 };
 
 // ==================== COMPONENTE PRINCIPAL ====================
@@ -152,6 +159,85 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
 
   // ✅ HOOK DE ADMISIÓN CORREGIDO
   const admissionMutation = useAdmitPatient();
+
+  // ✅ AUTOCOMPLETE: estado y consultas
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const debouncedSearch = useDebounce(searchTerm, 300);
+
+  const leadsQuery = useLeads({
+    page: 1,
+    pageSize: 5,
+    search: debouncedSearch,
+    enabled: debouncedSearch.length >= 2,
+  });
+
+
+  // Nota: este hook no acepta `enabled`, pero es eficiente y devuelve paginados
+  const patientSearch = useUnifiedPatientData({
+    fetchEssentialData: false,
+    page: 1,
+    pageSize: 5,
+    search: debouncedSearch,
+  });
+
+  const isSearching = leadsQuery.isLoading || patientSearch.isLoading;
+
+  type SearchItem = {
+    kind: 'patient' | 'lead';
+    id: string;
+    title: string;
+    subtitle?: string;
+    data: any;
+  };
+
+  const combinedResults = useMemo<SearchItem[]>(() => {
+    if (!debouncedSearch || debouncedSearch.length < 2) return [];
+    const leads = leadsQuery.data?.data ?? [];
+    const patients = patientSearch.paginatedPatients ?? [];
+
+    const patientItems: SearchItem[] = patients.map((p: Patient) => ({
+      kind: 'patient',
+      id: p.id,
+      title: `${p.nombre ?? ''} ${p.apellidos ?? ''}`.trim() || 'Paciente sin nombre',
+      subtitle: p.telefono || p.email || undefined,
+      data: p,
+    }));
+
+    const leadItems: SearchItem[] = leads.map((l: Lead) => ({
+      kind: 'lead',
+      id: l.id,
+      title: l.full_name || 'Lead sin nombre',
+      subtitle: l.phone_number || l.email || undefined,
+      data: l,
+    }));
+
+    // Pacientes primero, luego leads
+    return [...patientItems, ...leadItems];
+  }, [debouncedSearch, leadsQuery.data, patientSearch.paginatedPatients]);
+
+  
+
+  // ✅ Citas del día seleccionado para bloquear horarios ocupados
+  const selectedDateISO = useMemo(() => (
+    selectedDate ? selectedDate.toISOString().split('T')[0] : undefined
+  ), [selectedDate]);
+
+  const { data: appointmentsForDay = [], isLoading: isLoadingSlots } = useAppointmentsByDate(selectedDateISO);
+
+  const occupiedTimes = useMemo(() => {
+    const blocked = new Set<string>();
+    const nonBlockingStatuses = new Set(['CANCELADA', 'COMPLETADA', 'NO_ASISTIO']);
+    appointmentsForDay.forEach((apt: any) => {
+      const status = apt?.estado_cita as string | undefined;
+      if (!status || nonBlockingStatuses.has(status)) return;
+      try {
+        const hhmm = format(new Date(apt.fecha_hora_cita), 'HH:mm');
+        blocked.add(hhmm);
+      } catch { /* ignore parse errors */ }
+    });
+    return blocked;
+  }, [appointmentsForDay]);
 
   // ✅ FORMULARIO CON VALIDACIÓN CORREGIDA Y CAMPOS COMPLETOS
   const form = useForm<FormData>({
@@ -208,8 +294,14 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
         // Campos básicos requeridos
         nombre: data.nombre.trim(),
         apellidos: data.apellidos.trim(),
-        diagnostico_principal: data.diagnostico_principal,
-        fecha_hora_cita: `${data.fechaConsulta.toISOString().split('T')[0]}T${data.horaConsulta}:00`,
+        diagnostico_principal: DiagnosisDisplayToDbMap[data.diagnostico_principal],
+        fecha_hora_cita: (() => {
+          // Construir Date con fecha seleccionada y HH:MM locales, luego serializar a ISO (con zona horaria)
+          const [hh, mm] = (data.horaConsulta || '09:00').split(':').map((v) => parseInt(v, 10));
+          const d = new Date(data.fechaConsulta);
+          d.setHours(hh, mm, 0, 0);
+          return d.toISOString();
+        })(),
         motivos_consulta: [`Primera consulta - ${diagnosisOptions.find(d => d.value === data.diagnostico_principal)?.label}`],
         
         // Campos básicos opcionales
@@ -267,6 +359,8 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
   const handleDateSelect = useCallback((date: Date | undefined) => {
     if (date && isValidDate(date)) {
       setSelectedDate(date);
+      // Reset horaConsulta al cambiar fecha para evitar mantener horarios inválidos
+      form.setValue('horaConsulta', undefined as any, { shouldValidate: true });
       form.setValue('fechaConsulta', date, { shouldValidate: true });
       setShowDatePicker(false);
     }
@@ -282,6 +376,56 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
     const formatted = formatPhoneNumber(value);
     form.setValue('telefono', formatted, { shouldValidate: true });
   }, [form]);
+
+  // ✅ Callbacks de Autocomplete (debajo de `form` para evitar use-before-declare)
+  const fillFromLead = useCallback((lead: Lead) => {
+    const parts = (lead.full_name || '').trim().split(/\s+/);
+    const nombre = parts[0] || '';
+    const apellidos = parts.slice(1).join(' ');
+
+    form.setValue('nombre', nombre, { shouldValidate: true });
+    form.setValue('apellidos', apellidos, { shouldValidate: true });
+    if (lead.phone_number) form.setValue('telefono', formatPhoneNumber(lead.phone_number), { shouldValidate: true });
+    if (lead.email) form.setValue('email', lead.email, { shouldValidate: true });
+    // Asociar el lead a la admisión
+    form.setValue('lead_id', lead.id, { shouldValidate: true });
+    // Opcional: traer notas del lead
+    if ((lead as any).notes) {
+      form.setValue('comentarios_registro', (lead as any).notes as string, { shouldValidate: false });
+    }
+  }, [form]);
+
+  const fillFromPatient = useCallback((patient: Patient) => {
+    form.setValue('nombre', patient.nombre ?? '', { shouldValidate: true });
+    form.setValue('apellidos', patient.apellidos ?? '', { shouldValidate: true });
+    if (patient.telefono) form.setValue('telefono', formatPhoneNumber(patient.telefono), { shouldValidate: true });
+    if (patient.email) form.setValue('email', patient.email, { shouldValidate: true });
+    if (typeof patient.edad === 'number') form.setValue('edad', patient.edad, { shouldValidate: false });
+    if (patient.ciudad) form.setValue('ciudad', patient.ciudad, { shouldValidate: false });
+    if (patient.estado) form.setValue('estado', patient.estado, { shouldValidate: false });
+    if (patient.contacto_emergencia_nombre) form.setValue('contacto_emergencia_nombre', patient.contacto_emergencia_nombre, { shouldValidate: false });
+    if (patient.contacto_emergencia_telefono) form.setValue('contacto_emergencia_telefono', formatPhoneNumber(patient.contacto_emergencia_telefono), { shouldValidate: false });
+    if (patient.antecedentes_medicos) form.setValue('antecedentes_medicos', patient.antecedentes_medicos, { shouldValidate: false });
+    if (patient.seguro_medico) form.setValue('seguro_medico', patient.seguro_medico, { shouldValidate: false });
+    if (patient.numero_expediente) form.setValue('numero_expediente', patient.numero_expediente, { shouldValidate: false });
+    if (patient.genero as any) form.setValue('genero', patient.genero as any, { shouldValidate: false });
+    if (patient.fecha_nacimiento as any) form.setValue('fecha_nacimiento', patient.fecha_nacimiento as any, { shouldValidate: false });
+    if (patient.diagnostico_principal as any) {
+      const display = DiagnosisDbToDisplayMap[patient.diagnostico_principal as DbDiagnosis];
+      if (display) form.setValue('diagnostico_principal', display as DiagnosisDisplay, { shouldValidate: false });
+    }
+  }, [form]);
+
+  const handleSelectResult = useCallback((item: SearchItem) => {
+    try {
+      if (item.kind === 'lead') fillFromLead(item.data as Lead);
+      if (item.kind === 'patient') fillFromPatient(item.data as Patient);
+      setSearchTerm(item.title);
+      setShowSearch(false);
+    } catch (e) {
+      console.error('Error al aplicar selección de autocomplete', e);
+    }
+  }, [fillFromLead, fillFromPatient]);
 
   // ✅ VALORES COMPUTADOS
   const isLoading = admissionMutation.isPending;
@@ -302,6 +446,60 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* 🔎 BÚSQUEDA RÁPIDA PACIENTE/LEAD */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-medium">Buscar paciente o lead</h3>
+                <Badge variant="secondary">Autocomplete</Badge>
+              </div>
+              <div className="relative">
+                <Input
+                  placeholder="Nombre, teléfono o email"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onFocus={() => setShowSearch(true)}
+                  onBlur={() => setTimeout(() => setShowSearch(false), 150)}
+                />
+                {showSearch && debouncedSearch.length >= 2 && (
+                  <div className="absolute z-50 mt-2 w-full rounded-md border bg-popover text-popover-foreground shadow">
+                    {isSearching ? (
+                      <div className="p-3 flex items-center gap-2 text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Buscando...
+                      </div>
+                    ) : combinedResults.length > 0 ? (
+                      <ul className="max-h-64 overflow-auto divide-y">
+                        {combinedResults.map((item) => (
+                          <li
+                            key={`${item.kind}:${item.id}`}
+                            className="p-3 hover:bg-accent cursor-pointer"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleSelectResult(item);
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="font-medium">{item.title}</div>
+                                {item.subtitle && (
+                                  <div className="text-xs text-muted-foreground">{item.subtitle}</div>
+                                )}
+                              </div>
+                              <Badge variant={item.kind === 'patient' ? 'default' : 'outline'}>
+                                {item.kind === 'patient' ? 'Paciente' : 'Lead'}
+                              </Badge>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="p-3 text-sm text-muted-foreground">Sin resultados</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Escribe al menos 2 caracteres para buscar en pacientes y leads.</p>
+            </div>
+
             
             {/* ✅ INFORMACIÓN PERSONAL */}
             <div className="space-y-4">
@@ -796,14 +994,17 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {TIME_SLOTS.map((slot) => (
-                            <SelectItem key={slot.value} value={slot.value}>
-                              <div className="flex items-center gap-2">
-                                <Clock className="h-3 w-3" />
-                                {slot.label}
-                              </div>
-                            </SelectItem>
-                          ))}
+                          {TIME_SLOTS.map((slot) => {
+                            const disabled = occupiedTimes.has(slot.value);
+                            return (
+                              <SelectItem key={slot.value} value={slot.value} disabled={disabled}>
+                                <div className={cn('flex items-center gap-2', disabled && 'opacity-50') }>
+                                  <Clock className="h-3 w-3" />
+                                  {slot.label}{disabled ? ' (Ocupado)' : ''}
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       <FormMessage />
