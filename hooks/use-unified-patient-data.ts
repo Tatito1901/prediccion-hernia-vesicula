@@ -1,6 +1,7 @@
 // hooks/use-unified-patient-data.ts - HOOK UNIFICADO PARA DATOS DE PACIENTES Y CITAS
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useCallback } from 'react';
+import { queryKeys } from '@/lib/query-keys';
 import type { Patient, Appointment, EnrichedPatient } from '@/lib/types';
 import { toast } from 'sonner';
 
@@ -81,12 +82,12 @@ interface UnifiedPatientDataResponse {
 
 // ==================== FUNCIONES DE FETCH ====================
 /**
- * Obtiene todas las citas para organizar por fechas en admisión
+ * Obtiene citas por defecto (OPTIMIZADO: solo HOY) para organizar por fechas en admisión
  */
 const fetchAllAppointments = async (): Promise<EnrichedAppointmentsResponse> => {
   try {
-    // Trae todas las citas para organizar por fechas (hoy, futuras, historial)
-    const response = await fetch('/api/appointments?pageSize=100');
+    // ✅ Trae SOLO las citas de HOY por defecto para eficiencia real
+    const response = await fetch('/api/appointments?dateFilter=today&pageSize=50');
     
     if (!response.ok) {
       throw new Error('Failed to fetch appointments');
@@ -219,15 +220,16 @@ export const useUnifiedPatientData = (params: UnifiedPatientDataParams = {}): Un
     error: essentialError,
     refetch: refetchEssential,
   } = useQuery({
-    queryKey: ['clinicData', 'essential'],
+    // ✅ Unificación de query keys: usamos el sistema centralizado
+    queryKey: queryKeys.clinic.data,
     queryFn: async () => {
       if (!fetchEssentialData) return null;
-      
+
       const [patientsResponse, appointmentsResponse] = await Promise.all([
         fetchActivePatients(),
         fetchAllAppointments()
       ]);
-      
+
       return {
         patients: patientsResponse.data,
         appointments: appointmentsResponse.data,
@@ -245,7 +247,8 @@ export const useUnifiedPatientData = (params: UnifiedPatientDataParams = {}): Un
     error: paginatedError,
     refetch: refetchPaginated
   } = useQuery({
-    queryKey: ['unifiedPatientData', 'paginated', { page, pageSize, search, status, startDate, endDate }],
+    // ✅ Query key centralizada y estable para paginación/filters
+    queryKey: queryKeys.patients.paginated({ page, pageSize, search, status, startDate, endDate }),
     queryFn: () => fetchPaginatedPatients({ page, pageSize, search, status, startDate, endDate }),
     staleTime: 2 * 60 * 1000, // 2 minutos
   });

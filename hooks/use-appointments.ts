@@ -1,49 +1,13 @@
 // hooks/use-appointments.ts - Hooks optimizados para manejo de citas
 import { useMutation, useQuery, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
-import { parseISO, isValid, format } from 'date-fns';
 import { toast } from 'sonner';
-import { 
-  Appointment,
-  ExtendedAppointment, 
-  AppointmentStatusEnum,
-  TimeString,
-  NewAppointment
-} from '@/lib/types';
-import { 
-  useSmartAppointmentInvalidation,
-  CACHE_KEYS 
-} from '@/lib/cache-invalidation';
+ 
 
 // Importar tipos actualizados
 import { AppointmentStatus, AppointmentWithPatient, PatientStatus, DiagnosisType } from '@/components/patient-admision/admision-types'
+import { queryKeys } from '@/lib/query-keys';
 
-// ==================== QUERY KEYS GRANULARES ====================
-export const appointmentKeys = {
-  all: ['appointments'] as const,
-  lists: () => [...appointmentKeys.all, 'list'] as const,
-  list: (filters: { page?: number; pageSize?: number }) => 
-    [...appointmentKeys.lists(), { filters }] as const,
-  details: () => [...appointmentKeys.all, 'detail'] as const,
-  detail: (id: string) => [...appointmentKeys.details(), id] as const,
-  today: () => [...appointmentKeys.all, 'today'] as const,
-  byStatus: (status: string) => [...appointmentKeys.all, 'status', status] as const,
-  byPatient: (patientId: string) => [...appointmentKeys.all, 'patient', patientId] as const,
-  summary: () => [...appointmentKeys.all, 'summary'] as const,
-  byDate: (date: string) => [...appointmentKeys.all, 'date', date] as const,
-  upcoming: () => [...appointmentKeys.all, 'upcoming'] as const,
-  past: () => [...appointmentKeys.all, 'past'] as const,
-};
-
-export const patientKeys = {
-  all: ['patients'] as const,
-  lists: () => [...patientKeys.all, 'list'] as const,
-  list: (filters: any) => [...patientKeys.lists(), { filters }] as const,
-  details: () => [...patientKeys.all, 'detail'] as const,
-  detail: (id: string) => [...patientKeys.details(), id] as const,
-  stats: () => [...patientKeys.all, 'stats'] as const,
-  active: () => [...patientKeys.all, 'active'] as const,
-  withAppointments: (patientId: string) => [...patientKeys.detail(patientId), 'appointments'] as const,
-};
+// ==================== QUERY KEYS: usar lib/query-keys.ts ====================
 
 // ==================== UTILIDADES DE TRANSFORMACIÓN ====================
 const normalizeId = (id: string | number | null | undefined): string => {
@@ -157,7 +121,7 @@ export const useAppointment = (
   options?: Omit<UseQueryOptions<AppointmentWithPatient, Error>, 'queryKey' | 'queryFn'>
 ) => {
   return useQuery<AppointmentWithPatient, Error>({
-    queryKey: appointmentKeys.detail(id || ''),
+    queryKey: queryKeys.appointments.detail(id || ''),
     queryFn: async () => {
       if (!id) throw new Error('ID de cita requerido');
       
@@ -180,7 +144,7 @@ export const useTodayAppointments = (
   options?: Omit<UseQueryOptions<AppointmentWithPatient[], Error>, 'queryKey' | 'queryFn'>
 ) => {
   return useQuery<AppointmentWithPatient[], Error>({
-    queryKey: appointmentKeys.today(),
+    queryKey: queryKeys.appointments.today,
     queryFn: async () => {
       const response = await fetch('/api/appointments?dateFilter=today');
       if (!response.ok) {
@@ -203,7 +167,7 @@ export const useAppointmentsByDate = (
   options?: Omit<UseQueryOptions<AppointmentWithPatient[], Error>, 'queryKey' | 'queryFn'>
 ) => {
   return useQuery<AppointmentWithPatient[], Error>({
-    queryKey: appointmentKeys.byDate(dateISO || ''),
+    queryKey: queryKeys.appointments.byDate(dateISO || ''),
     queryFn: async () => {
       if (!dateISO) return [];
       const response = await fetch(`/api/appointments?onDate=${encodeURIComponent(dateISO)}`);
@@ -244,27 +208,10 @@ export const useCreateAppointment = (
       return transformAppointment(await response.json());
     },
     onSuccess: (newAppointment) => {
-      // Invalidación granular inteligente
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.today() });
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.summary() });
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.byStatus(newAppointment.estado_cita) });
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.byPatient(newAppointment.patient_id) });
-      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
-      
-      // Actualización optimista del caché
-      queryClient.setQueryData<AppointmentWithPatient[]>(
-        appointmentKeys.today(), 
-        (oldData) => {
-          if (!oldData) return [newAppointment];
-          if (isToday(newAppointment.fecha_hora_cita)) {
-            return [...oldData, newAppointment].sort((a, b) => 
-              new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime()
-            );
-          }
-          return oldData;
-        }
-      );
-      
+      // Invalidación simplificada y robusta basada en queryKeys centralizadas
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
+
       toast.success('Cita agendada exitosamente');
     },
     onError: (error) => {
@@ -297,14 +244,12 @@ export const useUpdateAppointment = (
       return transformAppointment(await response.json());
     },
     onSuccess: (updatedAppointment) => {
-      // Invalidación granular específica
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.detail(updatedAppointment.id) });
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.today() });
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.byPatient(updatedAppointment.patient_id) });
-      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
+      // Invalidación simplificada y robusta
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
       
       // Actualización directa del caché
-      queryClient.setQueryData(appointmentKeys.detail(updatedAppointment.id), updatedAppointment);
+      queryClient.setQueryData(queryKeys.appointments.detail(updatedAppointment.id), updatedAppointment);
       
       toast.success('Cita actualizada exitosamente');
     },
@@ -321,7 +266,6 @@ export const useUpdateAppointmentStatus = (
   options?: Omit<UseMutationOptions<AppointmentWithPatient, Error, UpdateStatusParams, UpdateStatusContext>, 'mutationFn'>
 ) => {
   const queryClient = useQueryClient();
-  const smartInvalidation = useSmartAppointmentInvalidation(queryClient);
   
   return useMutation<AppointmentWithPatient, Error, UpdateStatusParams, UpdateStatusContext>({
     mutationFn: async ({ appointmentId, newStatus, motivo, nuevaFechaHora }) => {
@@ -344,37 +288,23 @@ export const useUpdateAppointmentStatus = (
       
       return transformAppointment(await response.json());
     },
-    onMutate: async ({ appointmentId, newStatus }) => {
-      // Obtener estado anterior para el contexto
+    onMutate: async ({ appointmentId }) => {
+      // Snapshot previo para posibles rollbacks; sin actualizaciones optimistas multi-key
       const previousAppointment = queryClient.getQueryData<AppointmentWithPatient>(
-        appointmentKeys.detail(appointmentId)
+        queryKeys.appointments.detail(appointmentId)
       );
-      
-      const oldStatus = previousAppointment?.estado_cita;
-      const patientId = previousAppointment?.patient_id;
-      const appointmentDate = previousAppointment?.fecha_hora_cita?.split('T')[0];
-      
-      // Ejecutar invalidación quirúrgica
-      await smartInvalidation.onStatusUpdate({
-        appointmentId,
-        oldStatus,
-        newStatus,
-        patientId,
-        appointmentDate
-      });
-      
       return { previousAppointment, appointmentId };
     },
     onSuccess: (updatedAppointment) => {
       // Actualizar caché local
       queryClient.setQueryData(
-        appointmentKeys.detail(updatedAppointment.id), 
+        queryKeys.appointments.detail(updatedAppointment.id), 
         updatedAppointment
       );
       
       // Invalidar queries relacionadas
-      queryClient.invalidateQueries({ queryKey: appointmentKeys.all });
-      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
       
       const statusMessages: Record<AppointmentStatus, string> = {
         'PROGRAMADA': 'Cita programada',
@@ -393,7 +323,7 @@ export const useUpdateAppointmentStatus = (
       // Rollback en caso de error
       if (context?.previousAppointment) {
         queryClient.setQueryData(
-          appointmentKeys.detail(context.appointmentId), 
+          queryKeys.appointments.detail(context.appointmentId), 
           context.previousAppointment
         );
       }
@@ -430,38 +360,13 @@ export const useAdmitPatient = (
       return response.json();
     },
     onSuccess: async (result) => {
-      // Invalidación universal optimizada
-      const keysToInvalidate = [
-        patientKeys.all,
-        patientKeys.active(),
-        appointmentKeys.all,
-        appointmentKeys.today(),
-        appointmentKeys.upcoming(),
-        ['clinicData'],
-        ['dashboard'],
-        ['trends'],
-      ];
-      
-      // Invalidar todas las keys en paralelo
-      await Promise.all(
-        keysToInvalidate.map(key => 
-          queryClient.invalidateQueries({ queryKey: key })
-        )
-      );
-      
-      // Invalidación con predicado para queries dinámicas
-      queryClient.invalidateQueries({ 
-        predicate: (query) => {
-          const keyString = JSON.stringify(query.queryKey).toLowerCase();
-          return (
-            keyString.includes('patient') ||
-            keyString.includes('appointment') ||
-            keyString.includes('clinic') ||
-            keyString.includes('dashboard')
-          );
-        }
-      });
-      
+      // Invalidación simplificada y suficiente
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.patients.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data }),
+      ]);
+
       toast.success('Paciente admitido exitosamente');
     },
     onError: (error: Error) => {
@@ -497,9 +402,9 @@ export const useUpdatePatient = (
     },
     onSuccess: (updatedPatient, variables) => {
       // Invalidación específica
-      queryClient.invalidateQueries({ queryKey: patientKeys.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: patientKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
       
       toast.success('Paciente actualizado exitosamente');
     },
@@ -529,6 +434,3 @@ const isFuture = (dateString: string): boolean => {
     return false;
   }
 };
-
-// ==================== EXPORTS ADICIONALES ====================
-export { appointmentKeys as queryKeys };

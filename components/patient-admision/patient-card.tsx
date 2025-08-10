@@ -1,4 +1,4 @@
-// components/patient-admision/patient-card.tsx
+// components/patient-admission/patient-card.tsx
 import React, { memo, useMemo, useCallback, useState } from "react";
 import dynamic from 'next/dynamic';
 import { format, isValid, parseISO } from 'date-fns';
@@ -36,134 +36,59 @@ import {
   PlayCircle,
   AlertTriangle,
   Loader2,
+  CalendarDays,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ✅ IMPORTS CORREGIDOS - usando tipos unificados
-import type { 
-  AppointmentWithPatient, 
-  AdmissionAction, 
-  PatientCardProps
-} from './admision-types';
-
-// Import values (constants and functions)
-import { 
-  APPOINTMENT_STATUS_CONFIG,
-  getPatientFullName,
-  getStatusConfig
-} from './admision-types';
-
-// ✅ Import del hook de acciones corregido
+// Types e imports
+import type { AppointmentWithPatient, AdmissionAction, PatientCardProps } from './admision-types';
+import { getPatientFullName, getStatusConfig, getPatientData } from './admision-types';
 import { useAppointmentActions } from './actions';
+import { canCheckIn, canStartConsult, canCompleteAppointment, canCancelAppointment, canMarkNoShow, canRescheduleAppointment } from '@/lib/admission-business-rules';
 
-// ✅ Import de validaciones de reglas de negocio
-import { 
-  canCheckIn, 
-  canStartConsult, 
-  canCompleteAppointment, 
-  canCancelAppointment, 
-  canMarkNoShow, 
-  canRescheduleAppointment 
-} from '@/lib/admission-business-rules';
+// Componentes dinámicos
+const RescheduleDatePicker = dynamic(() => import('./patient-admission-reschedule').then(m => m.RescheduleDatePicker), { ssr: false });
+const PatientHistoryModal = dynamic(() => import('./patient-history-modal'), { ssr: false });
 
-// ✅ Imports de componentes secundarios
-const RescheduleDatePicker = dynamic(
-  () => import('./patient-admission-reschedule').then(m => m.RescheduleDatePicker),
-  { ssr: false, loading: () => <div className="h-24 rounded-md bg-muted animate-pulse" /> }
-);
-const PatientHistoryModal = dynamic(
-  () => import('./patient-history-modal'),
-  { ssr: false, loading: () => <div className="h-24 rounded-md bg-muted animate-pulse" /> }
-);
-
-// ==================== INTERFACES LOCALES ====================
-interface ConfirmationState {
+// Tipado para variantes de acción
+type ActionVariant = 'default' | 'destructive';
+type ConfirmationState = {
   isOpen: boolean;
   action: AdmissionAction | null;
   title: string;
   description: string;
   confirmText: string;
-  variant: 'default' | 'destructive';
-}
-
-// ==================== CONFIGURACIÓN DE ACCIONES ====================
-const ACTION_CONFIG = {
-  checkIn: { 
-    icon: CheckCircle, 
-    label: 'Marcar Presente',
-    title: 'Marcar como Presente',
-    description: 'El paciente será marcado como presente y podrá ser llamado para consulta.',
-    confirmText: 'Marcar Presente',
-    variant: 'default' as const,
-  },
-  startConsult: { 
-    icon: PlayCircle, 
-    label: 'Iniciar Consulta',
-    title: 'Iniciar Consulta',
-    description: 'Se iniciará la consulta médica para este paciente.',
-    confirmText: 'Iniciar Consulta',
-    variant: 'default' as const,
-  },
-  complete: { 
-    icon: CheckCircle, 
-    label: 'Completar Cita',
-    title: 'Completar Consulta',
-    description: 'La consulta será marcada como completada.',
-    confirmText: 'Completar',
-    variant: 'default' as const,
-  },
-  cancel: { 
-    icon: XCircle, 
-    label: 'Cancelar Cita',
-    title: 'Cancelar Cita',
-    description: 'Esta acción cancelará la cita médica. Esta acción no se puede deshacer.',
-    confirmText: 'Cancelar Cita',
-    variant: 'destructive' as const,
-  },
-  noShow: { 
-    icon: AlertTriangle, 
-    label: 'No Asistió',
-    title: 'Marcar como No Asistió',
-    description: 'El paciente será marcado como no asistió a la cita.',
-    confirmText: 'Marcar No Asistió',
-    variant: 'destructive' as const,
-  },
-  reschedule: { 
-    icon: Calendar, 
-    label: 'Reagendar Cita',
-    title: 'Reagendar Cita',
-    description: 'Se abrirá el diálogo para reagendar esta cita.',
-    confirmText: 'Reagendar',
-    variant: 'default' as const,
-  },
-  viewHistory: { 
-    icon: History, 
-    label: 'Ver Historial',
-    title: 'Ver Historial',
-    description: 'Ver el historial completo de consultas del paciente.',
-    confirmText: 'Ver Historial',
-    variant: 'default' as const,
-  },
+  variant: ActionVariant;
 };
 
-// ==================== COMPONENTE PRINCIPAL ====================
+// Configuración de acciones
+const ACTION_CONFIG: Record<AdmissionAction, {
+  icon: LucideIcon;
+  label: string;
+  title: string;
+  description: string;
+  confirmText: string;
+  variant: ActionVariant;
+}> = {
+  checkIn: { icon: CheckCircle, label: 'Presente', title: 'Marcar como Presente', description: 'El paciente será marcado como presente.', confirmText: 'Marcar Presente', variant: 'default' },
+  startConsult: { icon: PlayCircle, label: 'Iniciar', title: 'Iniciar Consulta', description: 'Se iniciará la consulta médica.', confirmText: 'Iniciar Consulta', variant: 'default' },
+  complete: { icon: CheckCircle, label: 'Completar', title: 'Completar Consulta', description: 'La consulta será marcada como completada.', confirmText: 'Completar', variant: 'default' },
+  cancel: { icon: XCircle, label: 'Cancelar', title: 'Cancelar Cita', description: 'Esta acción cancelará la cita médica.', confirmText: 'Cancelar Cita', variant: 'destructive' },
+  noShow: { icon: AlertTriangle, label: 'No Asistió', title: 'Marcar como No Asistió', description: 'El paciente será marcado como no asistió.', confirmText: 'Marcar No Asistió', variant: 'destructive' },
+  reschedule: { icon: Calendar, label: 'Reagendar', title: 'Reagendar Cita', description: 'Se abrirá el diálogo para reagendar esta cita.', confirmText: 'Reagendar', variant: 'default' },
+  viewHistory: { icon: History, label: 'Historial', title: 'Ver Historial', description: 'Ver el historial completo del paciente.', confirmText: 'Ver Historial', variant: 'default' },
+};
+
+// Componente principal
 export const PatientCard = memo<PatientCardProps>(({ 
   appointment, 
   onAction, 
   disableActions = false, 
   className 
 }) => {
-  // ✅ HOOKS CORREGIDOS con tipos unificados
-  const {
-    checkIn,
-    complete,
-    cancel,
-    markNoShow,
-    reschedule,
-    isLoading,
-  } = useAppointmentActions();
-
-  // ✅ ESTADOS LOCALES
+  // Hooks y estados
+  const { checkIn, complete, cancel, markNoShow, reschedule, isLoading } = useAppointmentActions();
   const [confirmation, setConfirmation] = useState<ConfirmationState>({
     isOpen: false,
     action: null,
@@ -175,17 +100,10 @@ export const PatientCard = memo<PatientCardProps>(({
   const [showReschedule, setShowReschedule] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  // ✅ DATOS COMPUTADOS usando helpers de types
-  const patientData = appointment.patients;
-  const statusConfig = useMemo(() => {
-    return APPOINTMENT_STATUS_CONFIG[appointment.estado_cita] || APPOINTMENT_STATUS_CONFIG.PROGRAMADA;
-  }, [appointment.estado_cita]);
-  
-  const fullName = useMemo(() => 
-    getPatientFullName(patientData),
-    [patientData]
-  );
-
+  // Datos computados
+  const patientData = getPatientData(appointment);
+  const statusConfig = useMemo(() => getStatusConfig(appointment.estado_cita), [appointment.estado_cita]);
+  const fullName = useMemo(() => getPatientFullName(patientData), [patientData]);
   const initials = useMemo(() => {
     if (!patientData?.nombre && !patientData?.apellidos) return 'P';
     return `${patientData?.nombre?.[0] || ''}${patientData?.apellidos?.[0] || ''}`.toUpperCase();
@@ -195,7 +113,6 @@ export const PatientCard = memo<PatientCardProps>(({
     try {
       const date = parseISO(appointment.fecha_hora_cita);
       if (!isValid(date)) return { date: 'Fecha inválida', time: '', isToday: false };
-      
       return {
         date: format(date, "dd 'de' MMMM", { locale: es }),
         time: format(date, 'HH:mm'),
@@ -206,47 +123,31 @@ export const PatientCard = memo<PatientCardProps>(({
     }
   }, [appointment.fecha_hora_cita]);
 
-  // ✅ VALIDACIONES usando reglas de negocio reales
+  // Validaciones de acciones
   const canPerformAction = useCallback((action: AdmissionAction) => {
     switch (action) {
-      case 'checkIn':
-        return canCheckIn(appointment);
-      case 'startConsult':
-        return canStartConsult(appointment);
-      case 'complete':
-        return canCompleteAppointment(appointment);
-      case 'cancel':
-        return canCancelAppointment(appointment);
-      case 'noShow':
-        return canMarkNoShow(appointment);
-      case 'reschedule':
-        return canRescheduleAppointment(appointment);
-      case 'viewHistory':
-        return { valid: true };
-      default:
-        return { valid: false, reason: 'Acción no reconocida' };
+      case 'checkIn': return canCheckIn(appointment);
+      case 'startConsult': return canStartConsult(appointment);
+      case 'complete': return canCompleteAppointment(appointment);
+      case 'cancel': return canCancelAppointment(appointment);
+      case 'noShow': return canMarkNoShow(appointment);
+      case 'reschedule': return canRescheduleAppointment(appointment);
+      case 'viewHistory': return { valid: true };
+      default: return { valid: false };
     }
   }, [appointment]);
 
-  // ✅ ACCIONES DISPONIBLES basadas en validaciones reales
+  // Acciones disponibles
   const availableActions = useMemo(() => {
     const actions: AdmissionAction[] = [];
-    
-    // Verificar cada acción usando las reglas de negocio
-    if (canPerformAction('checkIn').valid) actions.push('checkIn');
-    if (canPerformAction('startConsult').valid) actions.push('startConsult');
-    if (canPerformAction('complete').valid) actions.push('complete');
-    if (canPerformAction('cancel').valid) actions.push('cancel');
-    if (canPerformAction('noShow').valid) actions.push('noShow');
-    if (canPerformAction('reschedule').valid) actions.push('reschedule');
-    
-    // Ver historial siempre disponible
+    ['checkIn', 'startConsult', 'complete', 'cancel', 'noShow', 'reschedule'].forEach(action => {
+      if (canPerformAction(action as AdmissionAction).valid) actions.push(action as AdmissionAction);
+    });
     actions.push('viewHistory');
-    
     return actions;
   }, [canPerformAction]);
 
-  // ✅ ACCIÓN PRINCIPAL (más relevante según estado)
+  // Acción principal
   const primaryAction = useMemo((): AdmissionAction | null => {
     if (availableActions.includes('checkIn')) return 'checkIn';
     if (availableActions.includes('startConsult')) return 'startConsult';
@@ -254,22 +155,13 @@ export const PatientCard = memo<PatientCardProps>(({
     return null;
   }, [availableActions]);
 
-  // ✅ HANDLERS CORREGIDOS
+  // Handlers
   const handleActionClick = useCallback((action: AdmissionAction) => {
-    // Verificar si está habilitado
     if (disableActions) return;
     
-    if (action === 'reschedule') {
-      setShowReschedule(true);
-      return;
-    }
-    
-    if (action === 'viewHistory') {
-      setShowHistory(true);
-      return;
-    }
+    if (action === 'reschedule') return setShowReschedule(true);
+    if (action === 'viewHistory') return setShowHistory(true);
 
-    // Para otras acciones, mostrar confirmación
     const config = ACTION_CONFIG[action];
     setConfirmation({
       isOpen: true,
@@ -286,27 +178,13 @@ export const PatientCard = memo<PatientCardProps>(({
 
     try {
       switch (confirmation.action) {
-        case 'checkIn':
-          await checkIn(appointment.id);
-          break;
-        case 'startConsult':
-          // Para iniciar consulta, primero debe estar presente
-          await checkIn(appointment.id);
-          break;
-        case 'complete':
-          await complete(appointment.id);
-          break;
-        case 'cancel':
-          await cancel(appointment.id, 'Cancelado por usuario');
-          break;
-        case 'noShow':
-          await markNoShow(appointment.id);
-          break;
+        case 'checkIn': await checkIn(appointment.id); break;
+        case 'startConsult': await checkIn(appointment.id); break;
+        case 'complete': await complete(appointment.id); break;
+        case 'cancel': await cancel(appointment.id, 'Cancelado por usuario'); break;
+        case 'noShow': await markNoShow(appointment.id); break;
       }
-      
-      // Llamar callback externo si existe
       onAction?.(confirmation.action, appointment.id);
-      
     } finally {
       setConfirmation(prev => ({ ...prev, isOpen: false }));
     }
@@ -322,28 +200,32 @@ export const PatientCard = memo<PatientCardProps>(({
   return (
     <>
       <Card className={cn(
-        "transition-all duration-200 hover:shadow-lg border-l-4",
-        `border-l-${statusConfig.colorName}-500`,
-        dateTime.isToday && "ring-2 ring-blue-500/50",
+        "border-l-4 hover:shadow-md transition-shadow",
+        statusConfig.borderClass,
+        dateTime.isToday && "ring-2 ring-blue-500/20",
         className
       )}>
-        <CardContent className="p-4 grid gap-4">
-          {/* ========= HEADER: Paciente y Estado ========= */}
-          <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
+        <CardContent className="p-4">
+          {/* Header: Paciente y estado */}
+          <div className="flex items-start justify-between gap-3 pb-3 border-b">
             <div className="flex items-center gap-3">
-              <Avatar className="h-12 w-12 text-lg">
-                <AvatarFallback className={cn(
-                  "font-medium",
-                  `bg-${statusConfig.colorName}-500 text-white`
-                )}>
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <Avatar className={cn("h-12 w-12 ring-2 ring-offset-2", statusConfig.ringClass)}>
+                  <AvatarFallback className={cn("font-medium text-white", statusConfig.bgClass)}>
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                {dateTime.isToday && (
+                  <div className="absolute -top-1 -right-1 bg-blue-500 rounded-full p-1 border-2 border-background">
+                    <CalendarDays className="h-2 w-2 text-white" />
+                  </div>
+                )}
+              </div>
               <div>
-                <h3 className="font-bold text-lg">{fullName}</h3>
+                <h3 className="font-semibold text-base">{fullName}</h3>
                 <div className="flex items-center gap-2 mt-1">
                   {appointment.es_primera_vez && (
-                    <Badge variant="outline" className="text-xs">Primera vez</Badge>
+                    <Badge variant="secondary" className="text-xs">Primera vez</Badge>
                   )}
                   {patientData?.edad && (
                     <span className="text-xs text-muted-foreground">{patientData.edad} años</span>
@@ -351,91 +233,78 @@ export const PatientCard = memo<PatientCardProps>(({
                 </div>
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <Badge className={statusConfig.bgClass}>
-                {statusConfig.label}
-              </Badge>
-            </div>
+            <Badge className={cn("text-xs font-medium whitespace-nowrap", statusConfig.bgClass, statusConfig.textClass)}>
+              {statusConfig.label}
+            </Badge>
           </div>
 
-          {/* ========= INFORMACIÓN DE LA CITA ========= */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          {/* Detalles de la cita */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-3 text-sm">
             <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               <span>{dateTime.date} a las {dateTime.time}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <span className="truncate">
+            <div className="flex items-start gap-2">
+              <User className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <span className="line-clamp-2">
                 {Array.isArray(appointment.motivos_consulta) 
                   ? appointment.motivos_consulta.join(', ') 
-                  : "Sin motivos especificados"}
+                  : "Sin motivos"}
               </span>
             </div>
             {patientData?.telefono && (
               <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground" />
+                <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <span>{patientData.telefono}</span>
               </div>
             )}
             {patientData?.email && (
               <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate">{patientData.email}</span>
+                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="truncate text-xs">{patientData.email}</span>
               </div>
             )}
           </div>
 
-          {/* ========= ACCIONES ========= */}
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
-            {/* Acción principal */}
+          {/* Acciones */}
+          <div className="flex items-center gap-2 pt-3 border-t">
             {primaryAction && !disableActions && (
               <Button
                 onClick={() => handleActionClick(primaryAction)}
                 disabled={isLoading}
-                className="flex-1 min-w-[120px]"
+                className="flex-1 h-8 text-sm"
+                size="sm"
               >
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
-                  React.createElement(ACTION_CONFIG[primaryAction].icon, { 
-                    className: "h-4 w-4 mr-2" 
-                  })
+                  React.createElement(ACTION_CONFIG[primaryAction].icon, { className: "h-4 w-4 mr-2" })
                 )}
                 {ACTION_CONFIG[primaryAction].label}
               </Button>
             )}
 
-            {/* Menú de acciones secundarias */}
             {availableActions.length > 1 && !disableActions && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" disabled={isLoading}>
+                  <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="w-40">
                   {availableActions
                     .filter(action => action !== primaryAction)
                     .map((action) => {
                       const config = ACTION_CONFIG[action];
-                      const validation = canPerformAction(action);
-                      
                       return (
                         <DropdownMenuItem
                           key={action}
                           onClick={() => handleActionClick(action)}
-                          disabled={!validation.valid}
-                          className="flex items-center gap-2"
+                          disabled={isLoading}
+                          className="flex items-center gap-2 py-1.5"
                         >
                           <config.icon className="h-4 w-4" />
-                          {config.label}
-                          {!validation.valid && validation.reason && (
-                            <span className="text-xs text-muted-foreground ml-auto">
-                              ({validation.reason})
-                            </span>
-                          )}
+                          <span>{config.label}</span>
                         </DropdownMenuItem>
                       );
                     })}
@@ -446,18 +315,17 @@ export const PatientCard = memo<PatientCardProps>(({
         </CardContent>
       </Card>
 
-      {/* ========= MODALES ========= */}
-      {/* Confirmación de acciones */}
-      <AlertDialog open={confirmation.isOpen} onOpenChange={(open) => 
-        setConfirmation(prev => ({ ...prev, isOpen: open }))
-      }>
+      {/* Modal de confirmación */}
+      <AlertDialog open={confirmation.isOpen} onOpenChange={(open) => setConfirmation(prev => ({ ...prev, isOpen: open }))}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{confirmation.title}</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2">
+              {confirmation.action && React.createElement(ACTION_CONFIG[confirmation.action].icon, { className: "h-5 w-5" })}
+              {confirmation.title}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>{fullName}</strong>
-              <br />
-              {confirmation.description}
+              <p className="font-medium">{fullName}</p>
+              <p className="mt-1">{confirmation.description}</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -465,7 +333,7 @@ export const PatientCard = memo<PatientCardProps>(({
             <AlertDialogAction
               onClick={handleConfirmAction}
               disabled={isLoading}
-              className={confirmation.variant === 'destructive' ? 'bg-red-600 hover:bg-red-700' : ''}
+              className={confirmation.variant === 'destructive' ? 'bg-destructive hover:bg-destructive/90' : ''}
             >
               {isLoading ? (
                 <>
@@ -502,5 +370,4 @@ export const PatientCard = memo<PatientCardProps>(({
 });
 
 PatientCard.displayName = "PatientCard";
-
 export default PatientCard;

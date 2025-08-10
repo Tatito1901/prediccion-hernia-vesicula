@@ -3,6 +3,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { queryKeys } from '@/lib/query-keys';
 
 import type {
   AppointmentWithPatient,
@@ -219,13 +220,13 @@ export const useAppointmentActions = () => {
         duration: 3000,
       });
 
-      // Invalidar cache de manera inteligente
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      queryClient.invalidateQueries({ queryKey: ['patients'] });
-      queryClient.invalidateQueries({ queryKey: ['appointment', variables.appointmentId] });
-      queryClient.invalidateQueries({ queryKey: ['patient-history'] });
-      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
-      queryClient.invalidateQueries({ queryKey: ['admission-appointments'] });
+      // Invalidaciones centralizadas
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.detail(variables.appointmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.historyAll });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
+      // Listas de admisión dependen de appointments, por lo que no es necesario invalidar una clave separada
       
       console.log(`[Hook] ✅ Estado actualizado exitosamente: ${variables.newStatus}`);
     },
@@ -322,7 +323,7 @@ export const usePatientHistory = (
   options?: PatientHistoryOptions
 ): ReturnType<typeof useQuery<PatientHistoryData, Error>> => {
   return useQuery({
-    queryKey: ['patient-history', patientId, options],
+    queryKey: queryKeys.patients.historyWithOptions(patientId, options),
     queryFn: () => api.getPatientHistory(patientId, options),
     enabled: !!patientId && (options?.enabled !== false),
     staleTime: 2 * 60 * 1000, // 2 minutos
@@ -336,7 +337,7 @@ export const useSurveyStatus = (
   enabled: boolean = true
 ): ReturnType<typeof useQuery<SurveyStatus, Error>> => {
   return useQuery({
-    queryKey: ['survey-status', appointmentId],
+    queryKey: queryKeys.surveys.status(appointmentId),
     queryFn: () => api.getSurveyStatus(appointmentId),
     enabled: !!appointmentId && enabled,
     staleTime: 30 * 1000, // 30 segundos
@@ -354,7 +355,9 @@ export const useStartSurvey = () => {
         duration: 3000,
       });
 
-      queryClient.invalidateQueries({ queryKey: ['survey-status', appointmentId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.surveys.status(appointmentId) });
+      
+      // También podrían refrescarse métricas si aplica
       
       console.log(`[Hook] ✅ Encuesta iniciada exitosamente para cita: ${appointmentId}`);
     },
@@ -380,9 +383,9 @@ export const useCompleteSurvey = () => {
         duration: 4000,
       });
 
-      queryClient.invalidateQueries({ queryKey: ['survey-status', variables.appointmentId] });
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      queryClient.invalidateQueries({ queryKey: ['patient-history'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.surveys.status(variables.appointmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.historyAll });
       
       console.log(`[Hook] ✅ Encuesta completada exitosamente`);
     },
@@ -409,13 +412,11 @@ export const useAdmitPatient = () => {
         duration: 4000,
       });
 
-      // Invalidación inteligente del cache
-      queryClient.invalidateQueries({ queryKey: ['patients'] });
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
-      queryClient.invalidateQueries({ queryKey: ['trends'] });
-      queryClient.invalidateQueries({ queryKey: ['admission-appointments'] });
+      // Invalidación centralizada del cache
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
       
       console.log('[Hook] ✅ Cache invalidado exitosamente');
     },
@@ -448,7 +449,7 @@ export const useAppointmentHistory = (
   enabled: boolean = true
 ): ReturnType<typeof useQuery<AppointmentWithPatient[], Error>> => {
   return useQuery({
-    queryKey: ['appointment-history', appointmentId],
+    queryKey: queryKeys.appointments.history(appointmentId),
     queryFn: () => api.getAppointmentHistory(appointmentId),
     enabled: !!appointmentId && enabled,
     staleTime: 1 * 60 * 1000, // 1 minuto
@@ -459,19 +460,19 @@ export const useInvalidateCache = () => {
   const queryClient = useQueryClient();
   
   return {
-    invalidateAppointments: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
-    invalidatePatients: () => queryClient.invalidateQueries({ queryKey: ['patients'] }),
+    invalidateAppointments: () => queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all }),
+    invalidatePatients: () => queryClient.invalidateQueries({ queryKey: queryKeys.patients.all }),
     invalidatePatientHistory: (patientId?: string) => 
       queryClient.invalidateQueries({ 
-        queryKey: patientId ? ['patient-history', patientId] : ['patient-history'] 
+        queryKey: patientId ? queryKeys.patients.history(patientId) : queryKeys.patients.historyAll
       }),
     invalidateSurveys: (appointmentId?: string) =>
       queryClient.invalidateQueries({ 
-        queryKey: appointmentId ? ['survey-status', appointmentId] : ['survey-status'] 
+        queryKey: appointmentId ? queryKeys.surveys.status(appointmentId) : queryKeys.surveys.all 
       }),
-    invalidateDashboard: () => queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-    invalidateClinicData: () => queryClient.invalidateQueries({ queryKey: ['clinicData'] }),
-    invalidateAdmissionData: () => queryClient.invalidateQueries({ queryKey: ['admission-appointments'] }),
+    invalidateDashboard: () => queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all }),
+    invalidateClinicData: () => queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data }),
+    invalidateAdmissionData: () => queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all }),
     invalidateAll: () => queryClient.invalidateQueries()
   };
 };

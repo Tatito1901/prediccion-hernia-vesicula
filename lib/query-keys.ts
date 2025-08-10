@@ -24,13 +24,29 @@ export const queryKeys = {
     // Estadísticas globales de pacientes
     stats: ['patients', 'stats'] as const,
     
+    // Resúmenes/Métricas (compatibilidad con invalidadores)
+    summary: ['patients', 'summary'] as const,
+    metrics: ['patients', 'metrics'] as const,
+    
+    // Pacientes por estado (útil para invalidaciones específicas)
+    byStatus: (status: string) => ['patients', 'byStatus', status] as const,
+    
     // Paciente individual por ID
     detail: (id: string) => ['patients', 'detail', id] as const,
+
+    // Historial de paciente
+    history: (id: string) => ['patients', 'history', id] as const,
+    historyWithOptions: (id: string, options?: unknown) => ['patients', 'history', id, options] as const,
+    historyAll: ['patients', 'history'] as const,
   },
 
   // ==================== CITAS ====================
   appointments: {
     all: ['appointments'] as const,
+    
+    // Detalle de cita(s)
+    details: ['appointments', 'detail'] as const,
+    detail: (id: string) => ['appointments', 'detail', id] as const,
     
     // Citas con filtros específicos
     filtered: (params: {
@@ -43,8 +59,23 @@ export const queryKeys = {
     // Citas de hoy (para admisión)
     today: ['appointments', 'today'] as const,
     
+    // Próximas y pasadas (compatibilidad con estrategias)
+    upcoming: ['appointments', 'upcoming'] as const,
+    past: ['appointments', 'past'] as const,
+    
+    // Citas por fecha y por estado
+    byDate: (date: string) => ['appointments', 'date', date] as const,
+    byStatus: (status: string) => ['appointments', 'status', status] as const,
+    
     // Citas por paciente
     byPatient: (patientId: string) => ['appointments', 'byPatient', patientId] as const,
+
+    // Historial de estados de una cita
+    history: (appointmentId: string) => ['appointments', 'history', appointmentId] as const,
+    
+    // Resúmenes/Métricas de citas
+    summary: ['appointments', 'summary'] as const,
+    metrics: ['appointments', 'metrics'] as const,
   },
 
   // ==================== DASHBOARD ====================
@@ -75,6 +106,28 @@ export const queryKeys = {
     activePatients: ['clinic', 'activePatients'] as const,
   },
 
+  // ==================== PROSPECTOS (LEADS) ====================
+  leads: {
+    // Lista de leads (paginada/filtrada)
+    all: ['leads'] as const,
+    paginated: (params: {
+      page?: number;
+      pageSize?: number;
+      status?: string;
+      channel?: string;
+      motive?: string;
+      search?: string;
+      priority?: number;
+      overdue?: boolean;
+    }) => ['leads', 'paginated', params] as const,
+
+    // Lead individual (detalle)
+    detail: (id: string) => ['leads', 'detail', id] as const,
+
+    // Estadísticas de leads (dashboard)
+    stats: ['leads', 'stats'] as const,
+  },
+
   // ==================== ENCUESTAS ====================
   surveys: {
     all: ['surveys'] as const,
@@ -84,44 +137,11 @@ export const queryKeys = {
     
     // Resultados de encuestas
     results: (surveyId: string) => ['surveys', 'results', surveyId] as const,
+
+    // Estado de encuesta por cita
+    status: (appointmentId: string) => ['surveys', 'status', appointmentId] as const,
   },
 } as const;
 
-// ==================== UTILIDADES ====================
-
-/**
- * Función para invalidar todas las queries relacionadas con pacientes
- * Garantiza sincronización completa en toda la plataforma
- */
-export const getPatientInvalidationKeys = () => [
-  queryKeys.patients.all,
-  queryKeys.clinic.all,
-  queryKeys.dashboard.all,
-  queryKeys.appointments.all,
-];
-
-/**
- * Función para invalidar queries específicas tras crear/actualizar paciente
- */
-export const getPatientMutationInvalidationKeys = (patientId?: string) => [
-  queryKeys.patients.all,
-  queryKeys.patients.stats,
-  queryKeys.clinic.activePatients,
-  queryKeys.clinic.todayAppointments,
-  queryKeys.dashboard.summary,
-  queryKeys.dashboard.metrics,
-  queryKeys.dashboard.trends(),
-  ...(patientId ? [queryKeys.patients.detail(patientId)] : []),
-];
-
-/**
- * Función para invalidar queries tras crear/actualizar cita
- */
-export const getAppointmentMutationInvalidationKeys = (patientId?: string) => [
-  queryKeys.appointments.all,
-  queryKeys.appointments.today,
-  queryKeys.clinic.todayAppointments,
-  queryKeys.dashboard.summary,
-  queryKeys.dashboard.metrics,
-  ...(patientId ? [queryKeys.appointments.byPatient(patientId)] : []),
-];
+// Utilities removed: prefer direct usage of centralized queryKeys with
+// queryClient.invalidateQueries({ queryKey: ... }) inside mutations.

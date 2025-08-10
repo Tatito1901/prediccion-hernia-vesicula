@@ -479,6 +479,9 @@ export const APPOINTMENT_STATUS_CONFIG = {
     color: 'blue',
     colorName: 'blue',
     bgClass: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900 dark:text-blue-100',
+    textClass: 'text-blue-800 dark:text-blue-100',
+    borderClass: 'border-blue-500',
+    ringClass: 'ring-blue-500/20',
     description: 'Cita programada, esperando confirmación',
   },
   CONFIRMADA: {
@@ -486,6 +489,9 @@ export const APPOINTMENT_STATUS_CONFIG = {
     color: 'green',
     colorName: 'green',
     bgClass: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900 dark:text-green-100',
+    textClass: 'text-green-800 dark:text-green-100',
+    borderClass: 'border-green-500',
+    ringClass: 'ring-green-500/20',
     description: 'Cita confirmada por el paciente',
   },
   PRESENTE: {
@@ -493,6 +499,9 @@ export const APPOINTMENT_STATUS_CONFIG = {
     color: 'emerald',
     colorName: 'emerald',
     bgClass: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900 dark:text-emerald-100',
+    textClass: 'text-emerald-800 dark:text-emerald-100',
+    borderClass: 'border-emerald-500',
+    ringClass: 'ring-emerald-500/20',
     description: 'Paciente presente, esperando consulta',
   },
   EN_CONSULTA: {
@@ -500,6 +509,9 @@ export const APPOINTMENT_STATUS_CONFIG = {
     color: 'purple',
     colorName: 'purple',
     bgClass: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900 dark:text-purple-100',
+    textClass: 'text-purple-800 dark:text-purple-100',
+    borderClass: 'border-purple-500',
+    ringClass: 'ring-purple-500/20',
     description: 'Consulta médica en progreso',
   },
   COMPLETADA: {
@@ -507,6 +519,9 @@ export const APPOINTMENT_STATUS_CONFIG = {
     color: 'green',
     colorName: 'green',
     bgClass: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900 dark:text-green-100',
+    textClass: 'text-green-800 dark:text-green-100',
+    borderClass: 'border-green-500',
+    ringClass: 'ring-green-500/20',
     description: 'Consulta completada exitosamente',
   },
   CANCELADA: {
@@ -514,6 +529,9 @@ export const APPOINTMENT_STATUS_CONFIG = {
     color: 'red',
     colorName: 'red',
     bgClass: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900 dark:text-red-100',
+    textClass: 'text-red-800 dark:text-red-100',
+    borderClass: 'border-red-500',
+    ringClass: 'ring-red-500/20',
     description: 'Cita cancelada',
   },
   NO_ASISTIO: {
@@ -521,6 +539,9 @@ export const APPOINTMENT_STATUS_CONFIG = {
     color: 'orange',
     colorName: 'orange',
     bgClass: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900 dark:text-orange-100',
+    textClass: 'text-orange-800 dark:text-orange-100',
+    borderClass: 'border-orange-500',
+    ringClass: 'ring-orange-500/20',
     description: 'Paciente no se presentó a la cita',
   },
   REAGENDADA: {
@@ -528,6 +549,9 @@ export const APPOINTMENT_STATUS_CONFIG = {
     color: 'yellow',
     colorName: 'yellow',
     bgClass: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900 dark:text-yellow-100',
+    textClass: 'text-yellow-800 dark:text-yellow-100',
+    borderClass: 'border-yellow-500',
+    ringClass: 'ring-yellow-500/20',
     description: 'Cita reagendada para nueva fecha',
   },
 } as const;

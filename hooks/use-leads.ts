@@ -10,6 +10,7 @@ import type {
   Motive,
   PaginatedResponse 
 } from '@/lib/types';
+import { queryKeys } from '@/lib/query-keys';
 
 // Interfaces for hook parameters
 interface UseLeadsParams {
@@ -43,10 +44,8 @@ export function useLeads(params: UseLeadsParams = {}) {
     enabled = true,
   } = params;
 
-  const queryKey = ['leads', { page, pageSize, status, channel, motive, search, priority, overdue }];
-
   return useQuery({
-    queryKey,
+    queryKey: queryKeys.leads.paginated({ page, pageSize, status, channel, motive, search, priority, overdue }),
     queryFn: async (): Promise<PaginatedResponse<Lead>> => {
       const searchParams = new URLSearchParams();
       
@@ -78,7 +77,7 @@ export function useLeads(params: UseLeadsParams = {}) {
 // Hook for fetching single lead
 export function useLead({ id, enabled = true }: UseLeadParams) {
   return useQuery({
-    queryKey: ['lead', id],
+    queryKey: queryKeys.leads.detail(id),
     queryFn: async (): Promise<ExtendedLead> => {
       const response = await fetch(`/api/leads/${id}`);
       
@@ -173,13 +172,13 @@ export function useCreateLead() {
       console.log('🎉 Hook onSuccess ejecutado:', newLead);
       
       // Invalidar queries para refrescar la lista
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
       // Invalidar estadísticas para mantener resumen sincronizado
-      queryClient.invalidateQueries({ queryKey: ['leadStats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.stats });
       
       // Actualizar el cache con el nuevo lead
       if (newLead?.id) {
-        queryClient.setQueryData(['lead', newLead.id], newLead);
+        queryClient.setQueryData(queryKeys.leads.detail(newLead.id), newLead);
       }
       
       toast.success(`Lead "${newLead.full_name}" creado exitosamente`);
@@ -231,12 +230,12 @@ export function useUpdateLead() {
     },
     onSuccess: (updatedLead, { id }) => {
       // Update the specific lead in cache
-      queryClient.setQueryData(['lead', id], updatedLead);
+      queryClient.setQueryData(queryKeys.leads.detail(id), updatedLead);
       
       // Invalidate leads queries to refresh the list
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
       // Invalidate stats to refresh summary
-      queryClient.invalidateQueries({ queryKey: ['leadStats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.stats });
       
       toast.success('Lead actualizado exitosamente');
     },
@@ -264,10 +263,10 @@ export function useDeleteLead() {
     },
     onSuccess: (_, id) => {
       // Remove the lead from cache
-      queryClient.removeQueries({ queryKey: ['lead', id] });
+      queryClient.removeQueries({ queryKey: queryKeys.leads.detail(id) });
       
       // Invalidate leads queries to refresh the list
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
       
       toast.success('Lead eliminado exitosamente');
     },
@@ -293,11 +292,11 @@ export function useConvertLead() {
     },
     onSuccess: (result, { leadId }) => {
       // Update lead cache
-      queryClient.setQueryData(['lead', leadId], result.lead);
+      queryClient.setQueryData(queryKeys.leads.detail(leadId), result.lead);
       
       // Invalidate both leads and patients queries
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      queryClient.invalidateQueries({ queryKey: ['clinicData'] }); // For patients
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data }); // For patients
       
       toast.success('Lead convertido a paciente exitosamente');
     },
@@ -311,7 +310,7 @@ export function useConvertLead() {
 // Hook for lead statistics (for dashboard)
 export function useLeadStats(options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: ['leadStats'],
+    queryKey: queryKeys.leads.stats,
     queryFn: async (): Promise<LeadStats> => {
       // For now, we'll calculate stats client-side
       // Later this can be moved to a dedicated API endpoint

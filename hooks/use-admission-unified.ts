@@ -5,6 +5,7 @@ import { useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-q
 import { toast } from 'sonner';
 import { useCallback, useMemo } from 'react';
 import { startOfDay, endOfDay, addDays, isToday, isFuture, isPast } from 'date-fns';
+import { queryKeys } from '@/lib/query-keys';
 
 // ==================== TIPOS UNIFICADOS ====================
 import type { AppointmentStatus, LeadMotive, LeadChannel, LeadStatus, DiagnosisType, UserRole, AdmissionAction, TabType, Patient, AppointmentWithPatient } from '../components/patient-admision/admision-types';
@@ -45,11 +46,7 @@ interface AppointmentsResponse {
   };
 }
 
-// ==================== CACHE KEYS ====================
-export const CACHE_KEYS = {
-  APPOINTMENTS: 'admission-appointments-unified',
-  COUNTS: 'admission-counts-unified',
-} as const;
+// (Sin CACHE_KEYS locales) — usamos queryKeys centralizados
 
 // ==================== API FUNCTIONS UNIFICADAS ====================
 
@@ -124,12 +121,9 @@ export function usePatientAdmissionUnified() {
         description: `${data.patient?.nombre} ${data.patient?.apellidos} ha sido registrado`,
       });
 
-      // Invalidar cache de appointments para refrescar listas
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.APPOINTMENTS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.COUNTS] });
-      
-      // Invalidar también el cache del contexto central si existe
-      queryClient.invalidateQueries({ queryKey: ['clinicData'] });
+      // Invalidaciones centralizadas y robustas
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
     },
     onError: (error: Error) => {
       console.error('❌ [Unified Admission Hook] Error:', error);
@@ -146,8 +140,15 @@ export function usePatientAdmissionUnified() {
  * Optimizado para diferentes tabs (hoy, futuro, historial)
  */
 export const useAdmissionUnified = (activeTab: TabType) => {
+  // Determinar clave centralizada según tab
+  const appointmentsKey = (
+    activeTab === 'today' || activeTab === 'future' || activeTab === 'past'
+  )
+    ? queryKeys.appointments.filtered({ dateFilter: activeTab })
+    : queryKeys.appointments.all;
+
   const query = useInfiniteQuery({
-    queryKey: [CACHE_KEYS.APPOINTMENTS, activeTab],
+    queryKey: appointmentsKey,
     queryFn: ({ pageParam = 1 }) => fetchAppointmentsByTab(activeTab, pageParam),
     getNextPageParam: (lastPage) => {
       return lastPage.hasMore ? lastPage.page + 1 : undefined;
@@ -203,8 +204,8 @@ export function useAppointmentActionsUnified() {
   const queryClient = useQueryClient();
 
   const refreshData = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.APPOINTMENTS] });
-    queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.COUNTS] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+    queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
   }, [queryClient]);
 
   const handleAppointmentAction = useCallback(async (action: AdmissionAction, appointmentId: string) => {
@@ -262,8 +263,8 @@ export function useRefreshAdmissionDataUnified() {
   const queryClient = useQueryClient();
   
   return useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.APPOINTMENTS] });
-    queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.COUNTS] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+    queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
     
     toast.success('Datos actualizados');
   }, [queryClient]);

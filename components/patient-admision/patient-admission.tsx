@@ -21,7 +21,8 @@ import {
   Plus
 } from 'lucide-react';
 import { isToday, isFuture, isPast } from 'date-fns';
-import { useAdmissionUnified, useAppointmentActionsUnified } from '@/hooks/use-admission-unified';
+import { useClinic } from '@/contexts/clinic-data-provider';
+import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
 import type { TabType, AppointmentWithPatient, AdmissionAction } from './admision-types';
 
 // Carga diferida de componentes pesados
@@ -273,40 +274,116 @@ AppointmentsSection.displayName = 'AppointmentsSection';
 // ==================== COMPONENTE PRINCIPAL ====================
 const PatientAdmission: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('today');
-  
-  const { 
-    isLoading, 
-    refetch: refresh, 
-    fetchNextPage, 
-    hasNextPage,
-    appointments,
+
+  // Datos centralizados desde el contexto
+  const {
+    isLoading,
+    refetch: refresh,
+    appointmentsWithPatientData,
+    allAppointments,
+    allPatients,
     error: queryError,
-    isError: queryIsError
-  } = useAdmissionUnified(activeTab);
-  
-  const { handleAppointmentAction } = useAppointmentActionsUnified();
+  } = useClinic();
+
+  // Mutación centralizada para actualizar estado de citas
+  const { mutateAsync: updateStatus } = useUpdateAppointmentStatus();
+
+  const handleAppointmentAction = useCallback(async (action: AdmissionAction, appointmentId: string) => {
+    try {
+      switch (action) {
+        case 'checkIn':
+          await updateStatus({ appointmentId, newStatus: 'PRESENTE' });
+          break;
+        case 'startConsult':
+          await updateStatus({ appointmentId, newStatus: 'EN_CONSULTA' });
+          break;
+        case 'complete':
+          await updateStatus({ appointmentId, newStatus: 'COMPLETADA' });
+          break;
+        case 'cancel':
+          await updateStatus({ appointmentId, newStatus: 'CANCELADA' });
+          break;
+        case 'noShow':
+          await updateStatus({ appointmentId, newStatus: 'NO_ASISTIO' });
+          break;
+        case 'reschedule':
+          toast.info('Reagendamiento no implementado aún');
+          break;
+        case 'viewHistory':
+          toast.info('Vista de historial no implementada aún');
+          break;
+        default:
+          toast.error('Acción no reconocida');
+      }
+    } catch (error: any) {
+      toast.error('Error al procesar la acción', { description: error?.message });
+    }
+  }, [updateStatus]);
 
   // Filtrado optimizado de citas
+  const normalizedAppointments = useMemo<AppointmentWithPatient[]>(() => {
+    const source = (appointmentsWithPatientData && (appointmentsWithPatientData as any[]).length > 0)
+      ? (appointmentsWithPatientData as any[])
+      : ((allAppointments as any[]) || []);
+
+    return source.map((a: any) => {
+      const linkedPatient: any = a.patients || a.patient || (allPatients || []).find((p: any) => p.id === a.patient_id);
+      return {
+        id: a.id,
+        patient_id: a.patient_id,
+        doctor_id: a.doctor_id,
+        fecha_hora_cita: a.fecha_hora_cita,
+        motivos_consulta: a.motivos_consulta || [],
+        estado_cita: a.estado_cita,
+        es_primera_vez: a.es_primera_vez ?? false,
+        notas_breves: a.notas_breves,
+        created_at: a.created_at,
+        updated_at: a.updated_at,
+        agendado_por: a.agendado_por,
+        fecha_agendamiento: a.fecha_agendamiento,
+        patients: linkedPatient ? {
+          id: linkedPatient.id,
+          nombre: linkedPatient.nombre || '',
+          apellidos: linkedPatient.apellidos || '',
+          telefono: linkedPatient.telefono,
+          email: linkedPatient.email,
+          edad: typeof linkedPatient.edad === 'number' ? linkedPatient.edad : undefined,
+          estado_paciente: linkedPatient.estado_paciente,
+          diagnostico_principal: linkedPatient.diagnostico_principal,
+        } : {
+          id: a.patient_id,
+          nombre: '',
+          apellidos: '',
+          telefono: undefined,
+          email: undefined,
+          edad: undefined,
+          estado_paciente: undefined,
+          diagnostico_principal: undefined,
+        }
+      } as AppointmentWithPatient;
+    });
+  }, [appointmentsWithPatientData, allAppointments, allPatients]);
+
   const { todayAppointments, futureAppointments, pastAppointments } = useMemo(() => {
-    const allApps = appointments || [];
-    
+    const baseApps = normalizedAppointments;
+
     return {
-      todayAppointments: allApps.filter(app => 
-        app?.estado_cita === 'PROGRAMADA' && 
-        app.fecha_hora_cita && 
+      todayAppointments: baseApps.filter(app =>
+        app?.estado_cita === 'PROGRAMADA' &&
+        app.fecha_hora_cita &&
         isToday(new Date(app.fecha_hora_cita))
       ),
-      futureAppointments: allApps.filter(app => 
-        app?.estado_cita === 'PROGRAMADA' && 
-        app.fecha_hora_cita && 
+      futureAppointments: baseApps.filter(app =>
+        app?.estado_cita === 'PROGRAMADA' &&
+        app.fecha_hora_cita &&
         isFuture(new Date(app.fecha_hora_cita))
       ),
-      pastAppointments: allApps.filter(app => 
-        app?.fecha_hora_cita && 
+      pastAppointments: baseApps.filter(app =>
+        app?.fecha_hora_cita &&
         (app.estado_cita !== 'PROGRAMADA' || isPast(new Date(app.fecha_hora_cita)))
       )
     };
-  }, [appointments]);
+  }, [normalizedAppointments]);
 
   // Contadores memoizados
   const counts = useMemo(() => ({
@@ -325,10 +402,8 @@ const PatientAdmission: React.FC = () => {
   }, [refresh]);
 
   const handleLoadMore = useCallback(() => {
-    if (hasNextPage && !isLoading) {
-      fetchNextPage();
-    }
-  }, [hasNextPage, isLoading, fetchNextPage]);
+    // No-op: sin paginación infinita con datos centralizados
+  }, []);
 
   const renderTabContent = () => {
     const emptyStates = {
@@ -358,7 +433,7 @@ const PatientAdmission: React.FC = () => {
         appointments={currentAppointments}
         isLoading={isLoading}
         isLoadingMore={isLoading}
-        hasMore={hasNextPage}
+        hasMore={false}
         loadMore={handleLoadMore}
         refresh={handleRefresh}
         emptyMessage={emptyStates[activeTab]}
@@ -374,7 +449,7 @@ const PatientAdmission: React.FC = () => {
         onRefresh={handleRefresh}
       />
       
-      {queryIsError && queryError && (
+      {queryError && (
         <Alert variant="destructive" className="rounded-xl">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-3">

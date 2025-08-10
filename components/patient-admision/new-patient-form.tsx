@@ -1,11 +1,9 @@
-// components/patient-admision/new-patient-form.tsx
-
+// components/patient-admission/new-patient-form.tsx
 import React, { useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format, addDays, isSunday, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-
 // UI Components
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,7 +32,7 @@ import {
 } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-
+import { ScrollArea } from '@/components/ui/scroll-area';
 // Icons
 import {
   CalendarIcon,
@@ -46,9 +44,9 @@ import {
   Loader2,
   AlertCircle,
   FileText,
+  Search,
 } from 'lucide-react';
-
-// ✅ IMPORTS CORREGIDOS - usando tipos unificados
+// Imports
 import type { 
   NewPatientFormProps, 
   AdmissionPayload
@@ -57,14 +55,8 @@ import {
   DIAGNOSIS_DISPLAY_VALUES,
   type DiagnosisDisplay,
   DiagnosisDisplayToDbMap,
-  DiagnosisDbToDisplayMap,
-  type DbDiagnosis
 } from '@/lib/validation/enums';
-
-// ✅ Schema importado como valor para zodResolver
 import { NewPatientSchema } from './admision-types';
-
-// ✅ Hook corregido para admisión
 import { useAdmitPatient } from './actions';
 import { cn, formatPhoneNumber } from '@/lib/utils';
 import { useAppointmentsByDate } from '@/hooks/use-appointments';
@@ -73,161 +65,181 @@ import { useUnifiedPatientData } from '@/hooks/use-unified-patient-data';
 import { useDebounce } from '@/hooks/use-debounce';
 import type { Patient, Lead } from '@/lib/types';
 
-// ==================== CONFIGURACIÓN ====================
-
-// ✅ Opciones de diagnóstico centralizadas desde enums (display values)
+// Configuration
 const diagnosisOptions = DIAGNOSIS_DISPLAY_VALUES.map((value) => ({ value, label: value }));
 
-// ✅ Horarios disponibles (09:00 - 14:30 cada 30 min) — backend valida hour < 15
-const TIME_SLOTS = (() => {
-  const slots: { value: string; label: string }[] = [];
-  let hour = 9;
-  let minute = 0;
-  while (hour < 15) {
-    const hh = hour.toString().padStart(2, '0');
-    const mm = minute.toString().padStart(2, '0');
-    const time = `${hh}:${mm}`;
-    slots.push({ value: time, label: time });
-    minute += 30;
-    if (minute >= 60) { minute = 0; hour += 1; }
-  }
-  return slots;
-})();
+const TIME_SLOTS = [
+  { value: '09:00', label: '09:00' },
+  { value: '09:30', label: '09:30' },
+  { value: '10:00', label: '10:00' },
+  { value: '10:30', label: '10:30' },
+  { value: '11:00', label: '11:00' },
+  { value: '11:30', label: '11:30' },
+  { value: '12:00', label: '12:00' },
+  { value: '12:30', label: '12:30' },
+  { value: '13:00', label: '13:00' },
+  { value: '13:30', label: '13:30' },
+  { value: '14:00', label: '14:00' },
+  { value: '14:30', label: '14:30' },
+];
 
-// ==================== TIPOS PARA EL FORMULARIO ====================
-// ✅ ACTUALIZADO para incluir todos los campos del nuevo esquema
 type FormData = {
-  // Campos básicos requeridos
+  // Required fields
   nombre: string;
   apellidos: string;
   diagnostico_principal: DiagnosisDisplay;
   fechaConsulta: Date;
   horaConsulta: string;
-  
-  // Campos básicos opcionales
+  // Optional fields
   telefono?: string;
   email?: string;
   edad?: number;
-  
-  // ✅ NUEVOS CAMPOS DEMOGRÁFICOS
+  // Demographics
   fecha_nacimiento?: string;
   genero?: 'Masculino' | 'Femenino' | 'Otro';
-  
-  // ✅ NUEVOS CAMPOS DE UBICACIÓN
+  // Location
   ciudad?: string;
   estado?: string;
-  
-  // ✅ NUEVOS CAMPOS DE CONTACTO DE EMERGENCIA
+  // Emergency contact
   contacto_emergencia_nombre?: string;
   contacto_emergencia_telefono?: string;
-  
-  // ✅ NUEVOS CAMPOS MÉDICOS Y ADMINISTRATIVOS
+  // Medical/Admin
   antecedentes_medicos?: string;
   numero_expediente?: string;
   seguro_medico?: string;
-  
-  // ✅ NUEVOS CAMPOS DE ORIGEN Y MARKETING
+  // Marketing/Origin
   marketing_source?: string;
   creation_source?: string;
   lead_id?: string;
-  
-  // Campos médicos
+  // Medical fields
   comentarios_registro?: string;
   probabilidad_cirugia?: number;
   doctor_id?: string;
 };
 
-// ==================== UTILIDADES ====================
+// Utilities
 const isValidDate = (date: Date): boolean => {
   const today = startOfDay(new Date());
-  const maxDate = addDays(today, 90); // Máximo 90 días en el futuro
-  // ❗️Solo se bloquea domingo. Lunes-Sábado permitido.
+  const maxDate = addDays(today, 90);
   const isPast = isBefore(date, today);
   const isAfterMax = isBefore(maxDate, date);
   return !isPast && !isAfterMax && !isSunday(date);
 };
 
-// ==================== COMPONENTE PRINCIPAL ====================
+// Section Header Component
+const SectionHeader = ({ icon: Icon, title, badge }: { 
+  icon: React.ElementType; 
+  title: string; 
+  badge?: React.ReactNode;
+}) => (
+  <div className="flex items-center gap-2 py-2">
+    <Icon className="h-4 w-4" />
+    <h3 className="text-lg font-medium">{title}</h3>
+    {badge}
+  </div>
+);
+
+// Search Result Item
+const SearchResultItem = ({ 
+  item, 
+  onSelect 
+}: { 
+  item: { 
+    kind: 'patient' | 'lead'; 
+    id: string; 
+    title: string; 
+    subtitle?: string 
+  }; 
+  onSelect: () => void;
+}) => (
+  <div
+    className="p-3 hover:bg-accent cursor-pointer rounded-sm"
+    onMouseDown={(e) => {
+      e.preventDefault();
+      onSelect();
+    }}
+  >
+    <div className="flex items-center justify-between">
+      <div>
+        <div className="font-medium text-sm">{item.title}</div>
+        {item.subtitle && (
+          <div className="text-xs text-muted-foreground truncate">{item.subtitle}</div>
+        )}
+      </div>
+      <Badge variant={item.kind === 'patient' ? 'default' : 'outline'} className="text-xs">
+        {item.kind === 'patient' ? 'Paciente' : 'Lead'}
+      </Badge>
+    </div>
+  </div>
+);
+
 const NewPatientForm: React.FC<NewPatientFormProps> = ({ 
   onSuccess, 
   onCancel, 
   className 
 }) => {
-  // ✅ ESTADOS LOCALES
+  // Local states
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
-
-  // ✅ HOOK DE ADMISIÓN CORREGIDO
   const admissionMutation = useAdmitPatient();
-
-  // ✅ AUTOCOMPLETE: estado y consultas
+  
+  // Autocomplete states and queries
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const debouncedSearch = useDebounce(searchTerm, 300);
-
+  
   const leadsQuery = useLeads({
     page: 1,
     pageSize: 5,
     search: debouncedSearch,
     enabled: debouncedSearch.length >= 2,
   });
-
-
-  // Nota: este hook no acepta `enabled`, pero es eficiente y devuelve paginados
+  
   const patientSearch = useUnifiedPatientData({
     fetchEssentialData: false,
     page: 1,
     pageSize: 5,
     search: debouncedSearch,
   });
-
+  
   const isSearching = leadsQuery.isLoading || patientSearch.isLoading;
-
-  type SearchItem = {
-    kind: 'patient' | 'lead';
-    id: string;
-    title: string;
-    subtitle?: string;
-    data: any;
-  };
-
-  const combinedResults = useMemo<SearchItem[]>(() => {
+  
+  const combinedResults = useMemo(() => {
     if (!debouncedSearch || debouncedSearch.length < 2) return [];
+    
     const leads = leadsQuery.data?.data ?? [];
     const patients = patientSearch.paginatedPatients ?? [];
-
-    const patientItems: SearchItem[] = patients.map((p: Patient) => ({
-      kind: 'patient',
+    
+    const patientItems = patients.map((p: Patient) => ({
+      kind: 'patient' as const,
       id: p.id,
       title: `${p.nombre ?? ''} ${p.apellidos ?? ''}`.trim() || 'Paciente sin nombre',
       subtitle: p.telefono || p.email || undefined,
       data: p,
     }));
-
-    const leadItems: SearchItem[] = leads.map((l: Lead) => ({
-      kind: 'lead',
+    
+    const leadItems = leads.map((l: Lead) => ({
+      kind: 'lead' as const,
       id: l.id,
       title: l.full_name || 'Lead sin nombre',
       subtitle: l.phone_number || l.email || undefined,
       data: l,
     }));
-
-    // Pacientes primero, luego leads
+    
     return [...patientItems, ...leadItems];
   }, [debouncedSearch, leadsQuery.data, patientSearch.paginatedPatients]);
-
   
-
-  // ✅ Citas del día seleccionado para bloquear horarios ocupados
+  // Appointments for selected date
   const selectedDateISO = useMemo(() => (
     selectedDate ? selectedDate.toISOString().split('T')[0] : undefined
   ), [selectedDate]);
-
-  const { data: appointmentsForDay = [], isLoading: isLoadingSlots } = useAppointmentsByDate(selectedDateISO);
-
+  
+  const { data: appointmentsForDay = [] } = useAppointmentsByDate(selectedDateISO);
+  
   const occupiedTimes = useMemo(() => {
     const blocked = new Set<string>();
     const nonBlockingStatuses = new Set(['CANCELADA', 'COMPLETADA', 'NO_ASISTIO']);
+    
     appointmentsForDay.forEach((apt: any) => {
       const status = apt?.estado_cita as string | undefined;
       if (!status || nonBlockingStatuses.has(status)) return;
@@ -236,366 +248,302 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
         blocked.add(hhmm);
       } catch { /* ignore parse errors */ }
     });
+    
     return blocked;
   }, [appointmentsForDay]);
-
-  // ✅ FORMULARIO CON VALIDACIÓN CORREGIDA Y CAMPOS COMPLETOS
+  
+  // Form setup
   const form = useForm<FormData>({
     resolver: zodResolver(NewPatientSchema),
     defaultValues: {
-      // Campos básicos requeridos
       nombre: '',
       apellidos: '',
       diagnostico_principal: 'HERNIA INGUINAL',
       fechaConsulta: undefined,
       horaConsulta: '09:00',
-      
-      // Campos básicos opcionales
       telefono: '',
       email: '',
       edad: undefined,
-      
-      // ✅ NUEVOS CAMPOS DEMOGRÁFICOS
       fecha_nacimiento: '',
       genero: undefined,
-      
-      // ✅ NUEVOS CAMPOS DE UBICACIÓN
       ciudad: '',
       estado: '',
-      
-      // ✅ NUEVOS CAMPOS DE CONTACTO DE EMERGENCIA
       contacto_emergencia_nombre: '',
       contacto_emergencia_telefono: '',
-      
-      // ✅ NUEVOS CAMPOS MÉDICOS Y ADMINISTRATIVOS
       antecedentes_medicos: '',
       numero_expediente: '',
       seguro_medico: '',
-      
-      // ✅ NUEVOS CAMPOS DE ORIGEN Y MARKETING
       marketing_source: '',
-      creation_source: 'admision_form', // Valor por defecto
+      creation_source: 'admision_form',
       lead_id: undefined,
-      
-      // Campos médicos
       comentarios_registro: '',
       probabilidad_cirugia: 0.5,
       doctor_id: undefined,
     },
   });
-
-  // ✅ SUBMIT HANDLER CORREGIDO
+  
+  // Submit handler
   const onSubmit = useCallback(async (data: FormData) => {
     try {
-      console.log('📝 [NewPatientForm] Submitting form data:', data);
-
-      // ✅ Transformar datos al formato esperado por la API (COMPLETO con nuevos campos)
       const payload: AdmissionPayload = {
-        // Campos básicos requeridos
         nombre: data.nombre.trim(),
         apellidos: data.apellidos.trim(),
         diagnostico_principal: DiagnosisDisplayToDbMap[data.diagnostico_principal],
         fecha_hora_cita: (() => {
-          // Construir Date con fecha seleccionada y HH:MM locales, luego serializar a ISO (con zona horaria)
-          const [hh, mm] = (data.horaConsulta || '09:00').split(':').map((v) => parseInt(v, 10));
+          const [hh, mm] = (data.horaConsulta || '09:00').split(':').map(Number);
           const d = new Date(data.fechaConsulta);
           d.setHours(hh, mm, 0, 0);
           return d.toISOString();
         })(),
         motivos_consulta: [`Primera consulta - ${diagnosisOptions.find(d => d.value === data.diagnostico_principal)?.label}`],
-        
-        // Campos básicos opcionales
         telefono: data.telefono?.trim() || undefined,
         email: data.email?.trim() || undefined,
         edad: data.edad,
-        
-        // ✅ NUEVOS CAMPOS DEMOGRÁFICOS
         fecha_nacimiento: data.fecha_nacimiento?.trim() || undefined,
         genero: data.genero || undefined,
-        
-        // ✅ NUEVOS CAMPOS DE UBICACIÓN
         ciudad: data.ciudad?.trim() || undefined,
         estado: data.estado?.trim() || undefined,
-        
-        // ✅ NUEVOS CAMPOS DE CONTACTO DE EMERGENCIA
         contacto_emergencia_nombre: data.contacto_emergencia_nombre?.trim() || undefined,
         contacto_emergencia_telefono: data.contacto_emergencia_telefono?.trim() || undefined,
-        
-        // ✅ NUEVOS CAMPOS MÉDICOS Y ADMINISTRATIVOS
         antecedentes_medicos: data.antecedentes_medicos?.trim() || undefined,
         numero_expediente: data.numero_expediente?.trim() || undefined,
         seguro_medico: data.seguro_medico?.trim() || undefined,
-        
-        // ✅ NUEVOS CAMPOS DE ORIGEN Y MARKETING
         marketing_source: data.marketing_source?.trim() || undefined,
         creation_source: data.creation_source?.trim() || 'admision_form',
         lead_id: data.lead_id || undefined,
-        
-        // Campos médicos y de gestión
         comentarios_registro: data.comentarios_registro?.trim() || undefined,
         probabilidad_cirugia: data.probabilidad_cirugia,
         doctor_id: data.doctor_id,
       };
-
-      console.log('🚀 [NewPatientForm] API payload:', payload);
-
-      // ✅ Enviar datos usando el hook corregido
-      const result = await admissionMutation.mutateAsync(payload);
       
-      console.log('✅ [NewPatientForm] Admission successful:', result);
-
-      // ✅ Resetear formulario y llamar callback
+      const result = await admissionMutation.mutateAsync(payload);
       form.reset();
       setSelectedDate(undefined);
       onSuccess?.(result);
-      
     } catch (error) {
-      console.error('❌ [NewPatientForm] Submit error:', error);
-      // El error ya se maneja en el hook
+      console.error('Submit error:', error);
     }
   }, [admissionMutation, form, onSuccess]);
-
-  // ✅ HANDLERS OPTIMIZADOS
+  
+  // Handlers
   const handleDateSelect = useCallback((date: Date | undefined) => {
     if (date && isValidDate(date)) {
       setSelectedDate(date);
-      // Reset horaConsulta al cambiar fecha para evitar mantener horarios inválidos
       form.setValue('horaConsulta', undefined as any, { shouldValidate: true });
       form.setValue('fechaConsulta', date, { shouldValidate: true });
       setShowDatePicker(false);
     }
   }, [form]);
-
+  
   const handleCancel = useCallback(() => {
     form.reset();
     setSelectedDate(undefined);
     onCancel?.();
   }, [form, onCancel]);
-
-  const handlePhoneChange = useCallback((value: string) => {
+  
+  const handlePhoneChange = useCallback((field: any, value: string) => {
     const formatted = formatPhoneNumber(value);
-    form.setValue('telefono', formatted, { shouldValidate: true });
-  }, [form]);
-
-  // ✅ Callbacks de Autocomplete (debajo de `form` para evitar use-before-declare)
+    field.onChange(formatted);
+  }, []);
+  
   const fillFromLead = useCallback((lead: Lead) => {
     const parts = (lead.full_name || '').trim().split(/\s+/);
     const nombre = parts[0] || '';
     const apellidos = parts.slice(1).join(' ');
-
+    
     form.setValue('nombre', nombre, { shouldValidate: true });
     form.setValue('apellidos', apellidos, { shouldValidate: true });
-    if (lead.phone_number) form.setValue('telefono', formatPhoneNumber(lead.phone_number), { shouldValidate: true });
-    if (lead.email) form.setValue('email', lead.email, { shouldValidate: true });
-    // Asociar el lead a la admisión
+    if (lead.phone_number) 
+      form.setValue('telefono', formatPhoneNumber(lead.phone_number), { shouldValidate: true });
+    if (lead.email) 
+      form.setValue('email', lead.email, { shouldValidate: true });
     form.setValue('lead_id', lead.id, { shouldValidate: true });
-    // Opcional: traer notas del lead
     if ((lead as any).notes) {
       form.setValue('comentarios_registro', (lead as any).notes as string, { shouldValidate: false });
     }
   }, [form]);
-
+  
   const fillFromPatient = useCallback((patient: Patient) => {
     form.setValue('nombre', patient.nombre ?? '', { shouldValidate: true });
     form.setValue('apellidos', patient.apellidos ?? '', { shouldValidate: true });
-    if (patient.telefono) form.setValue('telefono', formatPhoneNumber(patient.telefono), { shouldValidate: true });
-    if (patient.email) form.setValue('email', patient.email, { shouldValidate: true });
-    if (typeof patient.edad === 'number') form.setValue('edad', patient.edad, { shouldValidate: false });
-    if (patient.ciudad) form.setValue('ciudad', patient.ciudad, { shouldValidate: false });
-    if (patient.estado) form.setValue('estado', patient.estado, { shouldValidate: false });
-    if (patient.contacto_emergencia_nombre) form.setValue('contacto_emergencia_nombre', patient.contacto_emergencia_nombre, { shouldValidate: false });
-    if (patient.contacto_emergencia_telefono) form.setValue('contacto_emergencia_telefono', formatPhoneNumber(patient.contacto_emergencia_telefono), { shouldValidate: false });
-    if (patient.antecedentes_medicos) form.setValue('antecedentes_medicos', patient.antecedentes_medicos, { shouldValidate: false });
-    if (patient.seguro_medico) form.setValue('seguro_medico', patient.seguro_medico, { shouldValidate: false });
-    if (patient.numero_expediente) form.setValue('numero_expediente', patient.numero_expediente, { shouldValidate: false });
-    if (patient.genero as any) form.setValue('genero', patient.genero as any, { shouldValidate: false });
-    if (patient.fecha_nacimiento as any) form.setValue('fecha_nacimiento', patient.fecha_nacimiento as any, { shouldValidate: false });
-    if (patient.diagnostico_principal as any) {
-      const display = DiagnosisDbToDisplayMap[patient.diagnostico_principal as DbDiagnosis];
-      if (display) form.setValue('diagnostico_principal', display as DiagnosisDisplay, { shouldValidate: false });
-    }
+    if (patient.telefono) 
+      form.setValue('telefono', formatPhoneNumber(patient.telefono), { shouldValidate: true });
+    if (patient.email) 
+      form.setValue('email', patient.email, { shouldValidate: true });
+    if (typeof patient.edad === 'number') 
+      form.setValue('edad', patient.edad, { shouldValidate: false });
+    if (patient.ciudad) 
+      form.setValue('ciudad', patient.ciudad, { shouldValidate: false });
+    if (patient.estado) 
+      form.setValue('estado', patient.estado, { shouldValidate: false });
+    if (patient.contacto_emergencia_nombre) 
+      form.setValue('contacto_emergencia_nombre', patient.contacto_emergencia_nombre, { shouldValidate: false });
+    if (patient.contacto_emergencia_telefono) 
+      form.setValue('contacto_emergencia_telefono', formatPhoneNumber(patient.contacto_emergencia_telefono), { shouldValidate: false });
+    if (patient.antecedentes_medicos) 
+      form.setValue('antecedentes_medicos', patient.antecedentes_medicos, { shouldValidate: false });
+    if (patient.seguro_medico) 
+      form.setValue('seguro_medico', patient.seguro_medico, { shouldValidate: false });
+    if (patient.numero_expediente) 
+      form.setValue('numero_expediente', patient.numero_expediente, { shouldValidate: false });
+    if (patient.genero) 
+      form.setValue('genero', patient.genero as any, { shouldValidate: false });
+    if (patient.fecha_nacimiento) 
+      form.setValue('fecha_nacimiento', patient.fecha_nacimiento as any, { shouldValidate: false });
   }, [form]);
-
-  const handleSelectResult = useCallback((item: SearchItem) => {
+  
+  const handleSelectResult = useCallback((item: any) => {
     try {
       if (item.kind === 'lead') fillFromLead(item.data as Lead);
       if (item.kind === 'patient') fillFromPatient(item.data as Patient);
       setSearchTerm(item.title);
       setShowSearch(false);
     } catch (e) {
-      console.error('Error al aplicar selección de autocomplete', e);
+      console.error('Error applying selection', e);
     }
   }, [fillFromLead, fillFromPatient]);
-
-  // ✅ VALORES COMPUTADOS
+  
+  // Computed values
   const isLoading = admissionMutation.isPending;
   const hasErrors = Object.keys(form.formState.errors).length > 0;
-
+  
   return (
     <Card className={cn("w-full max-w-4xl mx-auto", className)}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <User className="h-5 w-5" />
+          <User className="h-5 w-5 text-blue-600" />
           Registro de Nuevo Paciente
         </CardTitle>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Complete la información del paciente y programe su primera consulta
         </p>
       </CardHeader>
-      
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* 🔎 BÚSQUEDA RÁPIDA PACIENTE/LEAD */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-medium">Buscar paciente o lead</h3>
-                <Badge variant="secondary">Autocomplete</Badge>
-              </div>
+            {/* Search Section */}
+            <div className="space-y-3">
+              <SectionHeader 
+                icon={Search} 
+                title="Buscar paciente o lead" 
+                badge={<Badge variant="secondary" className="text-xs">Autocomplete</Badge>} 
+              />
               <div className="relative">
-                <Input
-                  placeholder="Nombre, teléfono o email"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  onFocus={() => setShowSearch(true)}
-                  onBlur={() => setTimeout(() => setShowSearch(false), 150)}
-                />
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Nombre, teléfono o email"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onFocus={() => setShowSearch(true)}
+                    onBlur={() => setTimeout(() => setShowSearch(false), 150)}
+                    className="pl-10"
+                  />
+                </div>
                 {showSearch && debouncedSearch.length >= 2 && (
-                  <div className="absolute z-50 mt-2 w-full rounded-md border bg-popover text-popover-foreground shadow">
+                  <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
                     {isSearching ? (
-                      <div className="p-3 flex items-center gap-2 text-sm">
-                        <Loader2 className="h-4 w-4 animate-spin" /> Buscando...
+                      <div className="p-4 flex items-center gap-2 text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin" /> 
+                        <span>Buscando...</span>
                       </div>
                     ) : combinedResults.length > 0 ? (
-                      <ul className="max-h-64 overflow-auto divide-y">
-                        {combinedResults.map((item) => (
-                          <li
-                            key={`${item.kind}:${item.id}`}
-                            className="p-3 hover:bg-accent cursor-pointer"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              handleSelectResult(item);
-                            }}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="font-medium">{item.title}</div>
-                                {item.subtitle && (
-                                  <div className="text-xs text-muted-foreground">{item.subtitle}</div>
-                                )}
-                              </div>
-                              <Badge variant={item.kind === 'patient' ? 'default' : 'outline'}>
-                                {item.kind === 'patient' ? 'Paciente' : 'Lead'}
-                              </Badge>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
+                      <ScrollArea className="h-64">
+                        <div className="p-1">
+                          {combinedResults.map((item) => (
+                            <SearchResultItem 
+                              key={`${item.kind}:${item.id}`} 
+                              item={item} 
+                              onSelect={() => handleSelectResult(item)} 
+                            />
+                          ))}
+                        </div>
+                      </ScrollArea>
                     ) : (
-                      <div className="p-3 text-sm text-muted-foreground">Sin resultados</div>
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        Sin resultados
+                      </div>
                     )}
                   </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">Escribe al menos 2 caracteres para buscar en pacientes y leads.</p>
+              <p className="text-xs text-muted-foreground">
+                Escribe al menos 2 caracteres para buscar
+              </p>
             </div>
 
-            
-            {/* ✅ INFORMACIÓN PERSONAL */}
+            {/* Personal Information */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-blue-600" />
-                <h3 className="text-lg font-medium">Información Personal</h3>
-              </div>
-              
+              <SectionHeader icon={User} title="Información Personal" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="nombre"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Nombre *</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Juan" 
-                          {...field}
-                          className={fieldState.error ? 'border-red-500' : ''}
-                        />
+                        <Input placeholder="Nombre" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="apellidos"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Apellidos *</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Pérez González" 
-                          {...field}
-                          className={fieldState.error ? 'border-red-500' : ''}
-                        />
+                        <Input placeholder="Apellidos" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="telefono"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Teléfono</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="(555) 123-4567" 
+                          placeholder="Teléfono"
                           {...field}
-                          onChange={(e) => handlePhoneChange(e.target.value)}
-                          className={fieldState.error ? 'border-red-500' : ''}
+                          onChange={(e) => handlePhoneChange(field, e.target.value)}
                         />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="email"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="email"
-                          placeholder="juan@email.com" 
-                          {...field}
-                          className={fieldState.error ? 'border-red-500' : ''}
-                        />
+                        <Input type="email" placeholder="Email" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="edad"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Edad</FormLabel>
                       <FormControl>
                         <Input 
                           type="number"
-                          placeholder="35" 
+                          placeholder="Edad"
                           {...field}
                           onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                          className={fieldState.error ? 'border-red-500' : ''}
                         />
                       </FormControl>
                       <FormMessage />
@@ -605,42 +553,33 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               </div>
             </div>
 
-            {/* ✅ INFORMACIÓN DEMOGRÁFICA */}
+            {/* Demographics */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-purple-600" />
-                <h3 className="text-lg font-medium">Información Demográfica</h3>
-              </div>
-              
+              <SectionHeader icon={User} title="Información Demográfica" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="fecha_nacimiento"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Fecha de Nacimiento</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="date"
-                          {...field}
-                          className={fieldState.error ? 'border-red-500' : ''}
-                        />
+                        <Input type="date" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="genero"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Género</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className={fieldState.error ? 'border-red-500' : ''}>
-                            <SelectValue placeholder="Seleccione género" />
+                          <SelectTrigger>
+                            <SelectValue placeholder="Género" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -656,44 +595,31 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               </div>
             </div>
 
-            {/* ✅ INFORMACIÓN DE UBICACIÓN */}
+            {/* Location */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-orange-600" />
-                <h3 className="text-lg font-medium">Información de Ubicación</h3>
-              </div>
-              
+              <SectionHeader icon={Mail} title="Información de Ubicación" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="ciudad"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Ciudad</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Ciudad de residencia" 
-                          {...field}
-                          className={fieldState.error ? 'border-red-500' : ''}
-                        />
+                        <Input placeholder="Ciudad" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="estado"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Estado/Provincia</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Estado o provincia" 
-                          {...field}
-                          className={fieldState.error ? 'border-red-500' : ''}
-                        />
+                        <Input placeholder="Estado" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -702,47 +628,34 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               </div>
             </div>
 
-            {/* ✅ CONTACTO DE EMERGENCIA */}
+            {/* Emergency Contact */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-red-600" />
-                <h3 className="text-lg font-medium">Contacto de Emergencia</h3>
-              </div>
-              
+              <SectionHeader icon={Phone} title="Contacto de Emergencia" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="contacto_emergencia_nombre"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Nombre del Contacto</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Nombre completo del contacto" 
-                          {...field}
-                          className={fieldState.error ? 'border-red-500' : ''}
-                        />
+                        <Input placeholder="Nombre del contacto" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="contacto_emergencia_telefono"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Teléfono de Contacto</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="(555) 123-4567" 
+                          placeholder="Teléfono del contacto"
                           {...field}
-                          onChange={(e) => {
-                            const formatted = formatPhoneNumber(e.target.value);
-                            field.onChange(formatted);
-                          }}
-                          className={fieldState.error ? 'border-red-500' : ''}
+                          onChange={(e) => handlePhoneChange(field, e.target.value)}
                         />
                       </FormControl>
                       <FormMessage />
@@ -752,24 +665,20 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               </div>
             </div>
 
-            {/* ✅ INFORMACIÓN MÉDICA */}
+            {/* Medical Information */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-green-600" />
-                <h3 className="text-lg font-medium">Información Médica</h3>
-              </div>
-
+              <SectionHeader icon={FileText} title="Información Médica" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="diagnostico_principal"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Diagnóstico Principal *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className={fieldState.error ? 'border-red-500' : ''}>
-                            <SelectValue placeholder="Seleccione diagnóstico" />
+                          <SelectTrigger>
+                            <SelectValue placeholder="Diagnóstico" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -784,11 +693,10 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="probabilidad_cirugia"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Probabilidad de Cirugía (%)</FormLabel>
                       <FormControl>
@@ -796,11 +704,10 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
                           type="number"
                           min="0"
                           max="100"
-                          placeholder="50" 
+                          placeholder="50"
                           {...field}
                           onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) / 100 : undefined)}
                           value={field.value ? Math.round(field.value * 100) : ''}
-                          className={fieldState.error ? 'border-red-500' : ''}
                         />
                       </FormControl>
                       <FormMessage />
@@ -808,75 +715,63 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
                   )}
                 />
               </div>
-
               <FormField
                 control={form.control}
                 name="comentarios_registro"
-                render={({ field, fieldState }) => (
+                render={({ field }) => (
                   <FormItem>
                     <FormLabel>Comentarios Adicionales</FormLabel>
                     <FormControl>
                       <Textarea 
-                        placeholder="Notas adicionales sobre el paciente o la condición..." 
+                        placeholder="Comentarios..."
                         {...field}
-                        className={cn("min-h-[80px]", fieldState.error && 'border-red-500')}
+                        className="min-h-[80px]"
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="antecedentes_medicos"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Antecedentes Médicos</FormLabel>
                       <FormControl>
                         <Textarea 
-                          placeholder="Historial médico relevante..." 
+                          placeholder="Antecedentes..."
                           {...field}
-                          className={cn("min-h-[60px]", fieldState.error && 'border-red-500')}
+                          className="min-h-[60px]"
                         />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="seguro_medico"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Seguro Médico</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Nombre del seguro médico" 
-                          {...field}
-                          className={fieldState.error ? 'border-red-500' : ''}
-                        />
+                        <Input placeholder="Seguro médico" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-              
               <FormField
                 control={form.control}
                 name="numero_expediente"
-                render={({ field, fieldState }) => (
+                render={({ field }) => (
                   <FormItem>
                     <FormLabel>Número de Expediente</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="Número de expediente médico" 
-                        {...field}
-                        className={fieldState.error ? 'border-red-500' : ''}
-                      />
+                      <Input placeholder="Número de expediente" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -884,44 +779,35 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               />
             </div>
 
-            {/* ✅ INFORMACIÓN DE ORIGEN Y MARKETING */}
+            {/* Marketing/Origin */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-blue-600" />
-                <h3 className="text-lg font-medium">Información de Origen y Marketing</h3>
-              </div>
-              
+              <SectionHeader icon={AlertCircle} title="Información de Origen" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="marketing_source"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Fuente de Marketing</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Cómo conoció sobre nosotros" 
-                          {...field}
-                          className={fieldState.error ? 'border-red-500' : ''}
-                        />
+                        <Input placeholder="Fuente de marketing" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="creation_source"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Fuente de Creación</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="Sistema de origen" 
+                          placeholder="Fuente de creación"
                           {...field}
                           disabled
-                          className={cn("bg-muted", fieldState.error && 'border-red-500')}
+                          className="bg-muted"
                         />
                       </FormControl>
                       <FormMessage />
@@ -931,18 +817,14 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               </div>
             </div>
 
-            {/* ✅ PROGRAMACIÓN DE CITA */}
+            {/* Appointment Scheduling */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-purple-600" />
-                <h3 className="text-lg font-medium">Programar Primera Consulta</h3>
-              </div>
-
+              <SectionHeader icon={CalendarIcon} title="Programar Primera Consulta" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="fechaConsulta"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Fecha de Consulta *</FormLabel>
                       <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
@@ -951,9 +833,8 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
                             <Button
                               variant="outline"
                               className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground",
-                                fieldState.error && "border-red-500"
+                                "pl-3 text-left font-normal w-full",
+                                !field.value && "text-muted-foreground"
                               )}
                             >
                               {field.value ? (
@@ -980,27 +861,38 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="horaConsulta"
-                  render={({ field, fieldState }) => (
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel>Hora de Consulta *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value}
+                        disabled={!selectedDate}
+                      >
                         <FormControl>
-                          <SelectTrigger className={fieldState.error ? 'border-red-500' : ''}>
-                            <SelectValue placeholder="Seleccionar hora" />
+                          <SelectTrigger>
+                            <SelectValue placeholder={selectedDate ? "Seleccionar hora" : "Fecha primero"} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {TIME_SLOTS.map((slot) => {
                             const disabled = occupiedTimes.has(slot.value);
                             return (
-                              <SelectItem key={slot.value} value={slot.value} disabled={disabled}>
-                                <div className={cn('flex items-center gap-2', disabled && 'opacity-50') }>
+                              <SelectItem 
+                                key={slot.value} 
+                                value={slot.value} 
+                                disabled={disabled}
+                                className="py-2"
+                              >
+                                <div className="flex items-center gap-2">
                                   <Clock className="h-3 w-3" />
-                                  {slot.label}{disabled ? ' (Ocupado)' : ''}
+                                  <span>{slot.label}</span>
+                                  {disabled && (
+                                    <span className="text-xs text-muted-foreground">(Ocupado)</span>
+                                  )}
                                 </div>
                               </SelectItem>
                             );
@@ -1014,7 +906,7 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               </div>
             </div>
 
-            {/* ✅ ERRORES Y ACCIONES */}
+            {/* Errors and Actions */}
             {hasErrors && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
@@ -1023,7 +915,7 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
                 </AlertDescription>
               </Alert>
             )}
-
+            
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <Button 
                 type="button" 
@@ -1037,16 +929,16 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               <Button 
                 type="submit" 
                 disabled={isLoading || hasErrors}
-                className="sm:flex-1"
+                className="sm:flex-1 gap-2"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Guardando...
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="h-4 w-4 mr-2" />
+                    <CheckCircle className="h-4 w-4" />
                     Registrar Paciente
                   </>
                 )}

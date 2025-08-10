@@ -4,7 +4,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { useUnifiedPatientData } from '@/hooks/use-unified-patient-data';
 // Importar sistema unificado para futuras migraciones
-import { queryKeys } from '@/lib/query-keys';
+
 
 // ==================== TIPOS Y CONTRATOS ====================
 

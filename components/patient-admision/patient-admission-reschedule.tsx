@@ -1,4 +1,4 @@
-// components/patient-admision/patient-admission-reschedule.tsx
+// components/patient-admission/patient-admission-reschedule.tsx
 import React, { memo, useCallback, useMemo, useState } from "react";
 import { format, addDays, isWeekend, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -28,36 +28,28 @@ import {
   Info
 } from "lucide-react";
 
-// ✅ IMPORTS CORREGIDOS - usando tipos unificados
-import type { 
-  AppointmentWithPatient, 
-  RescheduleProps
-} from './admision-types';
+// Types e imports
+import type { AppointmentWithPatient, RescheduleProps } from './admision-types';
 import { getPatientFullName } from './admision-types';
-
-// ✅ Hook corregido para datos de clínica
 import { useClinic } from "@/contexts/clinic-data-provider";
+import { LoadingSpinner } from '@/components/ui/unified-skeletons';
 
-// ==================== CONFIGURACIÓN ====================
+// Configuración de clínica
 const CLINIC_CONFIG = {
   SLOT_CONFIG: {
     DURATION_MINUTES: 30,
-    START_HOUR: 8, // 8:00 AM
-    END_HOUR: 15,  // 3:00 PM (última cita a las 15:30)
-    LUNCH_START: 12, // 12:00 PM
-    LUNCH_END: 13,   // 1:00 PM
-    MAX_ADVANCE_DAYS: 60, // Máximo 60 días en el futuro
-    MIN_ADVANCE_HOURS: 2,  // Mínimo 2 horas de anticipación
+    START_HOUR: 8,
+    END_HOUR: 15,
+    LUNCH_START: 12,
+    LUNCH_END: 13,
+    MAX_ADVANCE_DAYS: 60,
+    MIN_ADVANCE_HOURS: 2,
   }
 };
 
-// ==================== UTILIDADES ====================
+// Utilidades
 const formatAppointmentDate = (date: Date): string => {
   return format(date, "dd 'de' MMMM 'de' yyyy", { locale: es });
-};
-
-const formatAppointmentTime = (time: string): string => {
-  return time;
 };
 
 const isValidAppointmentDate = (date: Date): boolean => {
@@ -69,8 +61,9 @@ const isValidAppointmentDate = (date: Date): boolean => {
 const canRescheduleAppointment = (fechaHoraCita: string): boolean => {
   const appointmentTime = new Date(fechaHoraCita);
   const now = new Date();
-  const minRescheduleTime = new Date(appointmentTime.getTime() - (CLINIC_CONFIG.SLOT_CONFIG.MIN_ADVANCE_HOURS * 60 * 60 * 1000));
-  
+  const minRescheduleTime = new Date(
+    appointmentTime.getTime() - (CLINIC_CONFIG.SLOT_CONFIG.MIN_ADVANCE_HOURS * 60 * 60 * 1000)
+  );
   return now < minRescheduleTime;
 };
 
@@ -78,130 +71,81 @@ const getAvailableTimeSlots = (date: Date, existingAppointments: AppointmentWith
   const slots: string[] = [];
   const { START_HOUR, END_HOUR, LUNCH_START, LUNCH_END, DURATION_MINUTES } = CLINIC_CONFIG.SLOT_CONFIG;
   
-  // Generar todos los slots posibles
+  // Generar slots disponibles
   for (let hour = START_HOUR; hour < END_HOUR; hour++) {
     for (let minute = 0; minute < 60; minute += DURATION_MINUTES) {
-      // Saltar hora de almuerzo
       if (hour >= LUNCH_START && hour < LUNCH_END) continue;
-      
-      const timeSlot = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-      slots.push(timeSlot);
+      slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
     }
   }
   
   // Filtrar slots ocupados
   const occupiedSlots = new Set(
     existingAppointments
-      .filter(apt => {
-        const aptDate = new Date(apt.fecha_hora_cita);
-        return format(aptDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd');
-      })
+      .filter(apt => format(new Date(apt.fecha_hora_cita), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
       .map(apt => format(new Date(apt.fecha_hora_cita), 'HH:mm'))
   );
   
   return slots.filter(slot => !occupiedSlots.has(slot));
 };
 
-// ==================== COMPONENTES INTERNOS ====================
-
-// ✅ Importamos LoadingSpinner unificado desde unified-skeletons
-import { LoadingSpinner } from '@/components/ui/unified-skeletons';
-
-// ✅ Slot de tiempo optimizado
+// Componente de slot de tiempo
 const TimeSlot = memo<{ 
   time: string; 
-  isAvailable: boolean;
   isSelected: boolean;
-}>(({ time, isAvailable, isSelected }) => (
+}>(({ time, isSelected }) => (
   <SelectItem 
     value={time} 
     className={cn(
-      "text-sm cursor-pointer transition-colors py-2.5 px-4",
-      isAvailable 
-        ? "text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800" 
-        : "text-slate-400 dark:text-slate-500 opacity-50 cursor-not-allowed",
+      "text-sm cursor-pointer transition-colors py-2 px-3",
       isSelected && "bg-blue-50 dark:bg-blue-900/20"
     )}
-    disabled={!isAvailable}
   >
-    <div className="flex items-center justify-between w-full">
-      <span className="flex items-center gap-2">
-        <Clock className="h-3.5 w-3.5 flex-shrink-0" />
-        {time}
-      </span>
-      <span className="ml-2 flex-shrink-0">
-        {isAvailable ? (
-          <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-        ) : (
-          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-        )}
-      </span>
+    <div className="flex items-center gap-2">
+      <Clock className="h-4 w-4" />
+      {time}
     </div>
   </SelectItem>
 ));
 TimeSlot.displayName = 'TimeSlot';
 
-// ✅ Estado sin slots disponibles
-const NoSlotsAvailable = memo(() => (
-  <div className="p-6 text-center">
-    <div className="mb-4">
-      <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto" />
-    </div>
-    <div className="space-y-2">
-      <h4 className="font-medium text-slate-900 dark:text-slate-100">
-        No hay horarios disponibles
-      </h4>
-      <p className="text-sm text-slate-600 dark:text-slate-400">
-        Todos los horarios para esta fecha están ocupados.
-      </p>
-      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-        Intente seleccionar otra fecha o contacte al personal médico.
-      </p>
-    </div>
-  </div>
-));
-NoSlotsAvailable.displayName = "NoSlotsAvailable";
-
-// ==================== COMPONENTE PRINCIPAL ====================
+// Componente principal
 export const RescheduleDatePicker = memo<RescheduleProps>(({ 
   appointment, 
   onClose,
   onReschedule
 }) => {
-  // ✅ ESTADOS LOCALES
+  // Estados
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   
-  // ✅ HOOK CORREGIDO para datos de clínica
+  // Datos de clínica
   const { allAppointments, isLoading: isLoadingAppointments } = useClinic();
   
-  // ✅ VERIFICAR SI LA CITA PUEDE SER REAGENDADA
-  const canReschedule = useMemo(() => {
-    return canRescheduleAppointment(appointment.fecha_hora_cita);
-  }, [appointment.fecha_hora_cita]);
+  // Validaciones
+  const canReschedule = useMemo(() => 
+    canRescheduleAppointment(appointment.fecha_hora_cita), 
+    [appointment.fecha_hora_cita]
+  );
 
-  // ✅ CALCULAR SLOTS DISPONIBLES
+  // Slots disponibles
   const availableTimeSlots = useMemo(() => {
     if (!selectedDate || !isValidAppointmentDate(selectedDate)) return [];
     
     const appointments = allAppointments || [];
-    // Excluir la cita actual de la verificación de disponibilidad
     const otherAppointments = appointments.filter(apt => apt.id !== appointment.id);
     
     return getAvailableTimeSlots(selectedDate, otherAppointments as any);
   }, [selectedDate, allAppointments, appointment.id]);
 
-  // ✅ HANDLERS OPTIMIZADOS
-  const handleClose = useCallback(() => {
-    onClose();
-  }, [onClose]);
+  // Handlers
+  const handleClose = useCallback(() => onClose(), [onClose]);
   
   const handleConfirm = useCallback(() => {
     if (selectedDate && selectedTime) {
       setIsProcessing(true);
-      // Pequeño delay para feedback visual
       setTimeout(() => {
         onReschedule(selectedDate, selectedTime);
         handleClose();
@@ -211,7 +155,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
 
   const handleDateChange = useCallback((date: Date | undefined) => {
     setSelectedDate(date || null);
-    setSelectedTime(null); // Reset time when date changes
+    setSelectedTime(null);
     setShowDatePicker(false);
   }, []);
 
@@ -219,12 +163,11 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
     setSelectedTime(time);
   }, []);
 
-  // ✅ ESTADOS COMPUTADOS MEMOIZADOS
-  const dateButtonText = useMemo(() => {
-    return selectedDate 
-      ? formatAppointmentDate(selectedDate)
-      : "Seleccionar fecha";
-  }, [selectedDate]);
+  // Datos computados
+  const dateButtonText = useMemo(() => 
+    selectedDate ? formatAppointmentDate(selectedDate) : "Seleccionar fecha",
+    [selectedDate]
+  );
 
   const timePlaceholder = useMemo(() => {
     if (!selectedDate) return "Seleccione fecha primero";
@@ -234,10 +177,9 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
   }, [selectedDate, isLoadingAppointments, availableTimeSlots.length]);
 
   const showConfirmation = !!(selectedDate && selectedTime);
-  const availableSlotsCount = availableTimeSlots.length;
   const patientName = getPatientFullName(appointment.patients);
 
-  // ✅ LÍMITES DE FECHAS
+  // Límites de fechas
   const today = useMemo(() => new Date(), []);
   const maxDate = useMemo(() => {
     const max = new Date();
@@ -245,18 +187,18 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
     return max;
   }, []);
 
-  // ✅ VALIDACIÓN: Si no se puede reagendar
+  // Validación de reagendamiento
   if (!canReschedule) {
     return (
       <Dialog open onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
               No se puede reagendar
             </DialogTitle>
             <DialogDescription>
-              Esta cita no puede ser reagendada porque faltan menos de {CLINIC_CONFIG.SLOT_CONFIG.MIN_ADVANCE_HOURS} horas para la fecha programada.
+              Esta cita no puede ser reagendada porque faltan menos de {CLINIC_CONFIG.SLOT_CONFIG.MIN_ADVANCE_HOURS} horas.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -274,32 +216,29 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <span>Reagendar Cita</span>
+            <Clock className="h-5 w-5 text-blue-600" />
+            Reagendar Cita
           </DialogTitle>
           <DialogDescription>
-            Seleccione una nueva fecha y hora para la consulta de{' '}
-            <strong>{patientName}</strong>.
+            Seleccione una nueva fecha y hora para <strong>{patientName}</strong>
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6 py-4">
-          {/* ✅ INFORMACIÓN DE LA CITA ACTUAL */}
-          <Alert>
+        <div className="grid gap-5 py-2">
+          {/* Cita actual */}
+          <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20">
             <Info className="h-4 w-4" />
             <AlertDescription>
-              <strong>Cita actual:</strong> {formatAppointmentDate(new Date(appointment.fecha_hora_cita))} 
-              a las {format(new Date(appointment.fecha_hora_cita), 'HH:mm')}
+              <strong>Actual:</strong> {format(new Date(appointment.fecha_hora_cita), "dd/MM/yyyy 'a las' HH:mm")}
             </AlertDescription>
           </Alert>
 
-          {/* ✅ SELECTOR DE FECHA */}
-          <div className="grid gap-2">
-            <Label htmlFor="date-picker">Nueva Fecha</Label>
+          {/* Selector de fecha */}
+          <div className="space-y-2">
+            <Label>Fecha</Label>
             <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
               <PopoverTrigger asChild>
                 <Button
-                  id="date-picker"
                   variant="outline"
                   className={cn(
                     "w-full justify-start text-left font-normal",
@@ -325,26 +264,30 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
             </Popover>
           </div>
 
-          {/* ✅ SELECTOR DE HORA */}
-          <div className="grid gap-2">
-            <Label htmlFor="time-picker">Nueva Hora</Label>
+          {/* Selector de hora */}
+          <div className="space-y-2">
+            <Label>Hora</Label>
             {isLoadingAppointments ? (
               <LoadingSpinner size="sm" message="Verificando disponibilidad..." />
             ) : (
               <Select onValueChange={handleTimeChange} disabled={!selectedDate}>
-                <SelectTrigger id="time-picker">
+                <SelectTrigger>
                   <SelectValue placeholder={timePlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
-                  <ScrollArea className="h-[200px]">
+                  <ScrollArea className="h-64">
                     {availableTimeSlots.length === 0 ? (
-                      selectedDate && <NoSlotsAvailable />
+                      <div className="p-6 text-center">
+                        <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          No hay horarios disponibles para esta fecha
+                        </p>
+                      </div>
                     ) : (
                       availableTimeSlots.map((time) => (
                         <TimeSlot
                           key={time}
                           time={time}
-                          isAvailable={true}
                           isSelected={selectedTime === time}
                         />
                       ))
@@ -354,30 +297,26 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
               </Select>
             )}
             
-            {/* Información de disponibilidad */}
-            {selectedDate && (
+            {selectedDate && availableTimeSlots.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                {availableSlotsCount > 0 
-                  ? `${availableSlotsCount} horarios disponibles para esta fecha`
-                  : "No hay horarios disponibles para esta fecha"
-                }
+                {availableTimeSlots.length} horarios disponibles
               </p>
             )}
           </div>
 
-          {/* ✅ CONFIRMACIÓN DE NUEVA CITA */}
+          {/* Confirmación */}
           {showConfirmation && (
-            <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/50">
-              <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <AlertDescription className="text-green-800 dark:text-green-200">
+            <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/20">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription>
                 <strong>Nueva cita:</strong> {formatAppointmentDate(selectedDate)} 
-                a las {formatAppointmentTime(selectedTime)}
+                {' '}a las {selectedTime}
               </AlertDescription>
             </Alert>
           )}
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={handleClose} disabled={isProcessing}>
             Cancelar
           </Button>
@@ -389,12 +328,12 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
             {isProcessing ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Reagendando...
+                Procesando...
               </>
             ) : (
               <>
                 <CheckCircle className="h-4 w-4" />
-                Confirmar Reagendamiento
+                Confirmar
               </>
             )}
           </Button>
@@ -405,5 +344,4 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
 });
 
 RescheduleDatePicker.displayName = "RescheduleDatePicker";
-
 export default RescheduleDatePicker;

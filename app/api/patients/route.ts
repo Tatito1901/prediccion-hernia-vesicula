@@ -14,6 +14,11 @@ const cacheConfig = {
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
+// Type guard para validar estados de paciente
+function isPatientStatus(value: string): value is PatientStatus {
+  return (Object.values(PatientStatusEnum) as string[]).includes(value);
+}
+
 // --- GET: OBTENER LISTA PAGINADA DE PACIENTES CON BÚSQUEDA Y ESTADÍSTICAS ---
 export async function GET(request: Request) {
   try {
@@ -47,21 +52,21 @@ export async function GET(request: Request) {
     // Aplicar filtros
     if (estado && estado !== 'all') {
       // Normalizar y validar estado contra PatientStatusEnum
-      const allowedValues = new Set(Object.values(PatientStatusEnum));
+      const allowedValues = Object.values(PatientStatusEnum) as string[];
       // Permitir que vengan llaves del enum ("ACTIVO") o valores ("activo")
       const byKey = (PatientStatusEnum as Record<string, string>)[estado as keyof typeof PatientStatusEnum];
-      const normalized = byKey || estado.toLowerCase();
+      const norm = byKey || estado.toLowerCase();
 
-      if (!allowedValues.has(normalized)) {
+      if (!allowedValues.includes(norm)) {
         console.warn('[patients][GET] Invalid estado received:', estado);
         return NextResponse.json({
           message: 'Parámetro estado inválido',
           received: estado,
-          allowed: Array.from(allowedValues),
+          allowed: allowedValues,
         }, { status: 400 });
       }
 
-      query = query.eq('estado_paciente', normalized as PatientStatus);
+      query = query.eq('estado_paciente', norm as PatientStatus);
     }
 
     if (searchTerm) {
