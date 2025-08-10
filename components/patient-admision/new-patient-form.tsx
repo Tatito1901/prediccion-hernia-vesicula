@@ -51,10 +51,10 @@ import type {
   NewPatientFormProps, 
   AdmissionPayload
 } from './admision-types';
-import { 
-  DIAGNOSIS_DISPLAY_VALUES,
-  type DiagnosisDisplay,
-  DiagnosisDisplayToDbMap,
+import {
+  DIAGNOSIS_DB_VALUES,
+  type DbDiagnosis,
+  dbDiagnosisToDisplay,
 } from '@/lib/validation/enums';
 import { NewPatientSchema } from './admision-types';
 import { useAdmitPatient } from './actions';
@@ -66,7 +66,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import type { Patient, Lead } from '@/lib/types';
 
 // Configuration
-const diagnosisOptions = DIAGNOSIS_DISPLAY_VALUES.map((value) => ({ value, label: value }));
+const diagnosisOptions = DIAGNOSIS_DB_VALUES.map((value) => ({ value, label: dbDiagnosisToDisplay(value) }));
 
 const TIME_SLOTS = [
   { value: '09:00', label: '09:00' },
@@ -87,7 +87,7 @@ type FormData = {
   // Required fields
   nombre: string;
   apellidos: string;
-  diagnostico_principal: DiagnosisDisplay;
+  diagnostico_principal: DbDiagnosis;
   fechaConsulta: Date;
   horaConsulta: string;
   // Optional fields
@@ -258,7 +258,7 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
     defaultValues: {
       nombre: '',
       apellidos: '',
-      diagnostico_principal: 'HERNIA INGUINAL',
+      diagnostico_principal: 'HERNIA_INGUINAL',
       fechaConsulta: undefined,
       horaConsulta: '09:00',
       telefono: '',
@@ -288,7 +288,7 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
       const payload: AdmissionPayload = {
         nombre: data.nombre.trim(),
         apellidos: data.apellidos.trim(),
-        diagnostico_principal: DiagnosisDisplayToDbMap[data.diagnostico_principal],
+        diagnostico_principal: data.diagnostico_principal,
         fecha_hora_cita: (() => {
           const [hh, mm] = (data.horaConsulta || '09:00').split(':').map(Number);
           const d = new Date(data.fechaConsulta);

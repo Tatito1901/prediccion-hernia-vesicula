@@ -32,12 +32,19 @@ export async function GET(request: Request) {
   const dateFilter = searchParams.get('dateFilter'); // 'today', 'future', 'past', o null para todos
   const patientId = searchParams.get('patientId');
   const onDate = searchParams.get('onDate'); // YYYY-MM-DD para filtrar por un día específico
+  const startDateParam = searchParams.get('startDate'); // YYYY-MM-DD para rango (inicio)
+  const endDateParam = searchParams.get('endDate');   // YYYY-MM-DD para rango (fin)
   const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(searchParams.get('pageSize') || '50', 10)));
 
   try {
+    // Helper para parsear fechas YYYY-MM-DD como fechas locales (evitar desplazamiento UTC)
+    const parseDateOnly = (s: string) => {
+      const [y, m, d] = s.split('-').map((v) => parseInt(v, 10));
+      return new Date(y, (m || 1) - 1, d || 1);
+    };
     // ✅ SOLUCIÓN: Usar consulta enriquecida con JOIN correctamente estructurado
-    console.log('📊 API Appointments llamado con parámetros:', { dateFilter, patientId, onDate, pageSize, page });
+    console.log('📊 API Appointments llamado con parámetros:', { dateFilter, patientId, onDate, startDateParam, endDateParam, pageSize, page });
     
     // Seleccionamos solo columnas base para evitar errores por columnas/relaciones inexistentes
     let query = supabase
@@ -54,11 +61,26 @@ export async function GET(request: Request) {
       query = query.eq('patient_id', patientId);
     }
 
-    // ✅ Filtro por día específico (onDate)
-    if (onDate) {
+    // ✅ Filtro por RANGO específico (tiene mayor precedencia)
+    if (startDateParam || endDateParam) {
       try {
-        const start = startOfDay(new Date(onDate));
-        const end = endOfDay(new Date(onDate));
+        if (startDateParam) {
+          const start = startOfDay(parseDateOnly(startDateParam));
+          query = query.gte('fecha_hora_cita', start.toISOString());
+        }
+        if (endDateParam) {
+          const end = endOfDay(parseDateOnly(endDateParam));
+          query = query.lt('fecha_hora_cita', end.toISOString());
+        }
+      } catch (e) {
+        console.warn('⚠️ Parámetros de rango inválidos:', { startDateParam, endDateParam });
+      }
+    }
+    // ✅ Filtro por día específico (onDate)
+    else if (onDate) {
+      try {
+        const start = startOfDay(parseDateOnly(onDate));
+        const end = endOfDay(parseDateOnly(onDate));
         query = query
           .gte('fecha_hora_cita', start.toISOString())
           .lt('fecha_hora_cita', end.toISOString());
@@ -68,7 +90,7 @@ export async function GET(request: Request) {
     }
 
     // ✅ Filtro general por tipo: hoy, futuras, pasadas
-    if (!onDate && dateFilter) {
+    if (!onDate && !startDateParam && !endDateParam && dateFilter) {
       const now = new Date();
       const startToday = startOfDay(now).toISOString();
       const endToday = endOfDay(now).toISOString();

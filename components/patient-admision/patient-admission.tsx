@@ -283,6 +283,7 @@ const PatientAdmission: React.FC = () => {
     allAppointments,
     allPatients,
     error: queryError,
+    fetchSpecificAppointments,
   } = useClinic();
 
   // Mutación centralizada para actualizar estado de citas
@@ -320,49 +321,79 @@ const PatientAdmission: React.FC = () => {
     }
   }, [updateStatus]);
 
+  // Helper para normalizar citas con datos de paciente
+  const mapToAppointmentWithPatient = useCallback((a: any): AppointmentWithPatient => {
+    const linkedPatient: any = a.patients || a.patient || (allPatients || []).find((p: any) => p.id === a.patient_id);
+    return {
+      id: a.id,
+      patient_id: a.patient_id,
+      doctor_id: a.doctor_id,
+      fecha_hora_cita: a.fecha_hora_cita,
+      motivos_consulta: a.motivos_consulta || [],
+      estado_cita: a.estado_cita,
+      es_primera_vez: a.es_primera_vez ?? false,
+      notas_breves: a.notas_breves,
+      created_at: a.created_at,
+      updated_at: a.updated_at,
+      agendado_por: a.agendado_por,
+      fecha_agendamiento: a.fecha_agendamiento,
+      patients: linkedPatient ? {
+        id: linkedPatient.id,
+        nombre: linkedPatient.nombre || '',
+        apellidos: linkedPatient.apellidos || '',
+        telefono: linkedPatient.telefono,
+        email: linkedPatient.email,
+        edad: typeof linkedPatient.edad === 'number' ? linkedPatient.edad : undefined,
+        estado_paciente: linkedPatient.estado_paciente,
+        diagnostico_principal: linkedPatient.diagnostico_principal,
+      } : {
+        id: a.patient_id,
+        nombre: '',
+        apellidos: '',
+        telefono: undefined,
+        email: undefined,
+        edad: undefined,
+        estado_paciente: undefined,
+        diagnostico_principal: undefined,
+      }
+    } as AppointmentWithPatient;
+  }, [allPatients]);
+
   // Filtrado optimizado de citas
   const normalizedAppointments = useMemo<AppointmentWithPatient[]>(() => {
     const source = (appointmentsWithPatientData && (appointmentsWithPatientData as any[]).length > 0)
       ? (appointmentsWithPatientData as any[])
       : ((allAppointments as any[]) || []);
 
-    return source.map((a: any) => {
-      const linkedPatient: any = a.patients || a.patient || (allPatients || []).find((p: any) => p.id === a.patient_id);
-      return {
-        id: a.id,
-        patient_id: a.patient_id,
-        doctor_id: a.doctor_id,
-        fecha_hora_cita: a.fecha_hora_cita,
-        motivos_consulta: a.motivos_consulta || [],
-        estado_cita: a.estado_cita,
-        es_primera_vez: a.es_primera_vez ?? false,
-        notas_breves: a.notas_breves,
-        created_at: a.created_at,
-        updated_at: a.updated_at,
-        agendado_por: a.agendado_por,
-        fecha_agendamiento: a.fecha_agendamiento,
-        patients: linkedPatient ? {
-          id: linkedPatient.id,
-          nombre: linkedPatient.nombre || '',
-          apellidos: linkedPatient.apellidos || '',
-          telefono: linkedPatient.telefono,
-          email: linkedPatient.email,
-          edad: typeof linkedPatient.edad === 'number' ? linkedPatient.edad : undefined,
-          estado_paciente: linkedPatient.estado_paciente,
-          diagnostico_principal: linkedPatient.diagnostico_principal,
-        } : {
-          id: a.patient_id,
-          nombre: '',
-          apellidos: '',
-          telefono: undefined,
-          email: undefined,
-          edad: undefined,
-          estado_paciente: undefined,
-          diagnostico_principal: undefined,
+    return source.map(mapToAppointmentWithPatient);
+  }, [appointmentsWithPatientData, allAppointments, mapToAppointmentWithPatient]);
+
+  // Estado y fetch bajo demanda para citas futuras
+  const [futureLoaded, setFutureLoaded] = useState(false);
+  const [isLoadingFuture, setIsLoadingFuture] = useState(false);
+  const [futureRaw, setFutureRaw] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    if (activeTab === 'future' && !futureLoaded) {
+      setIsLoadingFuture(true);
+      (async () => {
+        try {
+          const res = await fetchSpecificAppointments({ dateFilter: 'future', pageSize: 100 });
+          setFutureRaw(res?.data || []);
+          setFutureLoaded(true);
+        } catch (e: any) {
+          toast.error('Error al cargar citas futuras', { description: e?.message });
+        } finally {
+          setIsLoadingFuture(false);
         }
-      } as AppointmentWithPatient;
-    });
-  }, [appointmentsWithPatientData, allAppointments, allPatients]);
+      })();
+    }
+  }, [activeTab, futureLoaded, fetchSpecificAppointments]);
+
+  const futureAppointmentsLoaded = useMemo<AppointmentWithPatient[]>(() => {
+    if (!futureRaw) return [];
+    return futureRaw.map(mapToAppointmentWithPatient);
+  }, [futureRaw, mapToAppointmentWithPatient]);
 
   const { todayAppointments, futureAppointments, pastAppointments } = useMemo(() => {
     const baseApps = normalizedAppointments;
@@ -398,6 +429,9 @@ const PatientAdmission: React.FC = () => {
   }, []);
 
   const handleRefresh = useCallback(() => {
+    // Limpiar cache local de futuras para forzar refetch on-demand
+    setFutureLoaded(false);
+    setFutureRaw(null);
     refresh();
   }, [refresh]);
 
@@ -414,12 +448,14 @@ const PatientAdmission: React.FC = () => {
     };
 
     let currentAppointments: AppointmentWithPatient[] = [];
+    let tabIsLoading = isLoading;
     switch (activeTab) {
       case 'today':
         currentAppointments = todayAppointments;
         break;
       case 'future':
-        currentAppointments = futureAppointments;
+        currentAppointments = futureAppointmentsLoaded.length > 0 ? futureAppointmentsLoaded : futureAppointments;
+        tabIsLoading = isLoading || isLoadingFuture;
         break;
       case 'past':
         currentAppointments = pastAppointments;
@@ -431,7 +467,7 @@ const PatientAdmission: React.FC = () => {
     return (
       <AppointmentsSection
         appointments={currentAppointments}
-        isLoading={isLoading}
+        isLoading={tabIsLoading}
         isLoadingMore={isLoading}
         hasMore={false}
         loadMore={handleLoadMore}

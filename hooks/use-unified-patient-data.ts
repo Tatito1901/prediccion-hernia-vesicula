@@ -1,6 +1,7 @@
 // hooks/use-unified-patient-data.ts - HOOK UNIFICADO PARA DATOS DE PACIENTES Y CITAS
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useCallback } from 'react';
+import { addDays } from 'date-fns';
 import { queryKeys } from '@/lib/query-keys';
 import type { Patient, Appointment, EnrichedPatient } from '@/lib/types';
 import { toast } from 'sonner';
@@ -82,12 +83,16 @@ interface UnifiedPatientDataResponse {
 
 // ==================== FUNCIONES DE FETCH ====================
 /**
- * Obtiene citas por defecto (OPTIMIZADO: solo HOY) para organizar por fechas en admisión
+ * Obtiene citas por defecto (OPTIMIZADO): HOY y PRÓXIMOS 7 días
  */
 const fetchAllAppointments = async (): Promise<EnrichedAppointmentsResponse> => {
   try {
-    // ✅ Trae SOLO las citas de HOY por defecto para eficiencia real
-    const response = await fetch('/api/appointments?dateFilter=today&pageSize=50');
+    // ✅ Trae citas de HOY y los PRÓXIMOS 7 días para eficiencia real
+    const today = new Date();
+    const in7 = addDays(today, 7);
+    const startDate = today.toISOString().split('T')[0];
+    const endDate = in7.toISOString().split('T')[0];
+    const response = await fetch(`/api/appointments?startDate=${startDate}&endDate=${endDate}&pageSize=100`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch appointments');

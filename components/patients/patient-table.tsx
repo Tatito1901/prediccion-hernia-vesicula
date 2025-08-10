@@ -35,6 +35,7 @@ import { LoadingSpinner, PatientTableSkeleton } from '@/components/ui/unified-sk
 import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from "@/lib/utils"
 import { Patient, PatientStatusEnum, EnrichedPatient } from "@/lib/types"
+import { dbDiagnosisToDisplay, DIAGNOSIS_DB_VALUES, type DbDiagnosis } from "@/lib/validation/enums"
 
 // Usamos EnrichedPatient importado desde @/lib/types
 
@@ -56,6 +57,14 @@ type SortConfig = {
 // Funciones utilitarias optimizadas
 const formatText = (text: string | undefined | null): string => 
   text ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : ""
+
+// Mapea de forma segura un valor a etiqueta de diagnóstico para UI
+const toDisplayDiagnosis = (diagnostic?: string | null): string => {
+  if (!diagnostic) return "Sin diagnóstico"
+  return (DIAGNOSIS_DB_VALUES as readonly string[]).includes(diagnostic)
+    ? dbDiagnosisToDisplay(diagnostic as DbDiagnosis)
+    : formatText(diagnostic)
+}
 
 const formatDate = (date: string | Date | undefined | null): string => {
   if (!date) return "No registrada"
@@ -279,7 +288,7 @@ const PatientRow = ({
             getDiagnosticStyle(patient.diagnostico_principal)
           )}>
             <Stethoscope className="h-3.5 w-3.5 flex-shrink-0" />
-            {formatText(patient.diagnostico_principal) || "Sin diagnóstico"}
+            {toDisplayDiagnosis(patient.diagnostico_principal)}
           </span>
         </div>
       </TableCell>
@@ -402,7 +411,7 @@ const PatientTable: React.FC<PatientTableProps> = ({
                 <div className="flex-1">
                   <h4 className="font-semibold">{patient.nombre} {patient.apellidos}</h4>
                   <p className="text-sm text-muted-foreground">{patient.telefono || 'Sin teléfono'}</p>
-                  <p className="text-sm text-muted-foreground">{patient.diagnostico_principal || 'Sin diagnóstico'}</p>
+                  <p className="text-sm text-muted-foreground">{toDisplayDiagnosis(patient.diagnostico_principal)}</p>
                 </div>
                 <div className="flex gap-2">
                   {onSelectPatient && (

@@ -26,6 +26,7 @@ import { CommonDiagnosesChart } from '@/components/charts/dashboard/common-diagn
 import { PathologyDistributionChart } from '@/components/charts/dashboard/pathology-distribution-chart';
 import { TimelineChart } from '@/components/charts/timeline-chart';
 import { TimelineData } from '@/components/charts/types';
+import { dbDiagnosisToDisplay, DIAGNOSIS_DB_VALUES, type DbDiagnosis } from '@/lib/validation/enums';
 
 /* ============================================================================
  * COMPONENTES DINÁMICOS OPTIMIZADOS
@@ -156,6 +157,20 @@ StatCard.displayName = 'StatCard';
  * FUNCIÓN AUXILIAR OPTIMIZADA
  * ============================================================================ */
 
+// Helpers para diagnóstico: etiqueta amigable y normalización para checks
+const toDisplayDiagnosis = (diagnostic?: string | null): string => {
+  if (!diagnostic) return 'Sin diagnóstico';
+  return (DIAGNOSIS_DB_VALUES as readonly string[]).includes(diagnostic)
+    ? dbDiagnosisToDisplay(diagnostic as DbDiagnosis)
+    : diagnostic;
+};
+
+const normalizeKey = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
 const processPatientData = (patients: PatientData[]): { metrics: Metrics; insights: DiagnosticInsight[] } => {
   if (!patients?.length) {
     return {
@@ -184,13 +199,13 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
   let apendicitis = 0;
 
   patients.forEach(p => {
-    const diagnosis = p.diagnostico_principal || p.diagnostico || 'Sin diagnóstico';
-    diagnosisCounts.set(diagnosis, (diagnosisCounts.get(diagnosis) || 0) + 1);
-    
-    const lower = diagnosis.toLowerCase();
-    if (lower.includes('hernia')) herniaCount++;
-    if (lower.includes('vesícula') || lower.includes('colecist')) vesiculaCount++;
-    if (lower.includes('apendicitis')) apendicitis++;
+    const display = toDisplayDiagnosis(p.diagnostico_principal || p.diagnostico);
+    diagnosisCounts.set(display, (diagnosisCounts.get(display) || 0) + 1);
+
+    const key = normalizeKey(display);
+    if (key.includes('HERNIA')) herniaCount++;
+    if (key.includes('VESICULA') || key.includes('COLECIST')) vesiculaCount++;
+    if (key.includes('APENDICITIS')) apendicitis++;
   });
 
   // Cálculos optimizados
@@ -212,7 +227,7 @@ const processPatientData = (patients: PatientData[]): { metrics: Metrics; insigh
 
   // Distribución de hernias optimizada
   const distribucionHernias: ChartData[] = Array.from(diagnosisCounts.entries())
-    .filter(([tipo]) => tipo.toLowerCase().includes('hernia'))
+    .filter(([tipo]) => normalizeKey(tipo).includes('HERNIA'))
     .sort(([,a], [,b]) => b - a)
     .map(([tipo, cantidad]) => ({
       tipo,

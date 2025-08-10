@@ -2,6 +2,8 @@
 
 // Single source of truth for database types
 import type { Database } from './database.types';
+// Re-export centralized compatibility enums generated from DB constants
+export { AppointmentStatusEnum, PatientStatusEnum, UserRoleEnum } from '@/lib/validation/enums';
 
 // --- Row Types (for reading data) ---
 export type Patient = Database['public']['Tables']['patients']['Row'];
@@ -71,59 +73,13 @@ export type Motive = Database['public']['Enums']['lead_motive_enum'];
 export type SurgicalDecision = Database['public']['Enums']['surgical_decision_enum'];
 export type MarketingSource = Database['public']['Enums']['patient_source_enum'];
 
-// Mantenemos los objetos CONST para usarlos fácilmente en el código, 
-// pero ahora están validados por el tipo de arriba.
-export const PatientStatusEnum = {
-  POTENCIAL: 'potencial' as PatientStatus,
-  ACTIVO: 'activo' as PatientStatus,
-  OPERADO: 'operado' as PatientStatus,
-  NO_OPERADO: 'no_operado' as PatientStatus,
-  EN_SEGUIMIENTO: 'en_seguimiento' as PatientStatus,
-  INACTIVO: 'inactivo' as PatientStatus,
-  ALTA_MEDICA: 'alta_medica' as PatientStatus,
-};
+// PatientStatusEnum ahora se re-exporta desde '@/lib/validation/enums'
 
-export const AppointmentStatusEnum = {
-  PROGRAMADA: 'PROGRAMADA' as AppointmentStatus,
-  CONFIRMADA: 'CONFIRMADA' as AppointmentStatus,
-  CANCELADA: 'CANCELADA' as AppointmentStatus,
-  COMPLETADA: 'COMPLETADA' as AppointmentStatus,
-  NO_ASISTIO: 'NO_ASISTIO' as AppointmentStatus,
-  PRESENTE: 'PRESENTE' as AppointmentStatus,
-  EN_CONSULTA: 'EN_CONSULTA' as AppointmentStatus,
-  REAGENDADA: 'REAGENDADA' as AppointmentStatus,
-};
+// AppointmentStatusEnum ahora se re-exporta desde '@/lib/validation/enums'
 
-// CORREGIDO: Diagnósticos exactos según el esquema
-export const DiagnosisEnum = {
-  // Hernias
-  HERNIA_INGUINAL: 'HERNIA INGUINAL' as DiagnosisEnum,
-  HERNIA_UMBILICAL: 'HERNIA UMBILICAL' as DiagnosisEnum,
-  HERNIA_HIATAL: 'HERNIA HIATAL' as DiagnosisEnum,
-  HERNIA_INGUINAL_RECIDIVANTE: 'HERNIA INGUINAL RECIDIVANTE' as DiagnosisEnum,
-  HERNIA_SPIGEL: 'HERNIA SPIGEL' as DiagnosisEnum,
-  EVENTRACION_ABDOMINAL: 'EVENTRACION ABDOMINAL' as DiagnosisEnum,
-  
-  // Vesícula
-  COLECISTITIS: 'COLECISTITIS' as DiagnosisEnum,
-  VESICULA_COLECISTITIS_CRONICA: 'VESICULA (COLECISTITIS CRONICA)' as DiagnosisEnum,
-  COLEDOCOLITIASIS: 'COLEDOCOLITIASIS' as DiagnosisEnum,
-  COLANGITIS: 'COLANGITIS' as DiagnosisEnum,
-  
-  // Otros
-  APENDICITIS: 'APENDICITIS' as DiagnosisEnum,
-  LIPOMA_GRANDE: 'LIPOMA GRANDE' as DiagnosisEnum,
-  QUISTE_SEBACEO_INFECTADO: 'QUISTE SEBACEO INFECTADO' as DiagnosisEnum,
-  
-  // Misceláneos
-  OTRO: 'OTRO' as DiagnosisEnum
-};
+// Eliminado el objeto DiagnosisEnum manual. Use utilidades de '@/lib/validation/enums' para display y normalización.
 
-export const UserRoleEnum = {
-  DOCTOR: 'doctor' as UserRole,
-  ADMIN: 'admin' as UserRole,
-  ASISTENTE: 'asistente' as UserRole,
-};
+// UserRoleEnum ahora se re-exporta desde '@/lib/validation/enums'
 
 // --- Helper Types ---
 export type ID = string; // For Supabase UUIDs

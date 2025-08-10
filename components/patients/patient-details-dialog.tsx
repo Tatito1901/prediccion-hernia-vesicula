@@ -18,6 +18,7 @@ import { Patient, PatientStatusEnum } from "@/lib/types"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { useMediaQuery } from "@/hooks/use-breakpoint"
+import { dbDiagnosisToDisplay, DIAGNOSIS_DB_VALUES, type DbDiagnosis } from "@/lib/validation/enums"
 
 import { 
   User, 
@@ -120,6 +121,21 @@ const InfoItem = ({
     </div>
   </div>
 )
+
+// Helper: etiqueta amigable de diagnóstico con fallback seguro
+const toDisplayDiagnosis = (diagnostic?: string | null): string => {
+  if (!diagnostic) return "Sin diagnóstico"
+  return (DIAGNOSIS_DB_VALUES as readonly string[]).includes(diagnostic)
+    ? dbDiagnosisToDisplay(diagnostic as DbDiagnosis)
+    : diagnostic
+}
+
+// Normaliza texto removiendo acentos y a mayúsculas para comparaciones robustas
+const normalizeKey = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
 
 // Componente AppointmentItem optimizado
 const AppointmentItem = ({ appointment }: { appointment: AppointmentData }) => {
@@ -323,14 +339,14 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
                         </p>
                         <div className="flex items-center gap-2 mb-2">
                           <p className="text-sm font-medium">
-                            {diagnostico_principal}
+                            {toDisplayDiagnosis(diagnostico_principal)}
                           </p>
-                          {diagnostico_principal.includes("HERNIA") && (
+                          {normalizeKey(toDisplayDiagnosis(diagnostico_principal)).includes("HERNIA") && (
                             <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
                               <span className="mr-1">🔸</span> Hernia
                             </Badge>
                           )}
-                          {diagnostico_principal.includes("VESICULA") && (
+                          {normalizeKey(toDisplayDiagnosis(diagnostico_principal)).includes("VESICULA") && (
                             <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
                               <span className="mr-1">🟡</span> Vesícula
                             </Badge>
@@ -377,7 +393,7 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
                             Edad avanzada
                           </Badge>
                         )}
-                        {diagnostico_principal?.includes("RECIDIVANTE") && (
+                        {diagnostico_principal && normalizeKey(toDisplayDiagnosis(diagnostico_principal)).includes("RECIDIVANTE") && (
                           <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
                             Recidiva
                           </Badge>

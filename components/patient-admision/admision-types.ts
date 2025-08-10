@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import type { UserRole as DbUserRole } from '@/lib/types';
-import { ZAppointmentStatus, ZContactChannel, ZLeadMotive, ZLeadStatus, ZDiagnosisDisplay, type DbDiagnosis } from '@/lib/validation/enums';
+import { ZAppointmentStatus, ZContactChannel, ZLeadMotive, ZLeadStatus, ZDiagnosisDb, type DbDiagnosis } from '@/lib/validation/enums';
 
 // ==================== TIPOS BASE SEGÚN DATABASE.TYPES.TS ====================
 
@@ -330,8 +330,8 @@ export const NewPatientSchema = z.object({
     .or(z.literal("")),
   lead_id: z.string().uuid().optional(),
   
-  // Diagnóstico validado contra lista centralizada de "display" (mapeado a DB en el submit)
-  diagnostico_principal: ZDiagnosisDisplay,
+  // Diagnóstico validado contra enum de base de datos (DbDiagnosis)
+  diagnostico_principal: ZDiagnosisDb,
   
   // Cita
   fechaConsulta: z.date({ required_error: "Fecha de consulta es requerida" }),

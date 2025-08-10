@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { z } from 'zod';
-import { ZDiagnosisDb, DIAGNOSIS_DB_VALUES, type DbDiagnosis } from '@/lib/validation/enums';
+import { ZDiagnosisDb } from '@/lib/validation/enums';
 
 export const runtime = 'nodejs';
 
@@ -21,79 +21,6 @@ const safeStringify = (v: any) => {
     }
   }
 };
-
-// Definición del enum de diagnóstico (debe coincidir EXACTAMENTE con el enum en la base de datos)
-const DIAGNOSIS_ENUM = [
-  'HERNIA INGUINAL',
-  'HERNIA UMBILICAL', 
-  'COLECISTITIS',
-  'COLEDOCOLITIASIS',
-  'COLANGITIS',
-  'APENDICITIS',
-  'HERNIA HIATAL',
-  'LIPOMA GRANDE',
-  'HERNIA INGUINAL RECIDIVANTE',
-  'QUISTE SEBACEO INFECTADO',
-  'EVENTRACION ABDOMINAL',
-  'VESICULA (COLECISTITIS CRONICA)',
-  'OTRO',
-  'HERNIA SPIGEL',
-  'SIN_DIAGNOSTICO'
-] as const;
-
-// DB enum values expected by the RPC (single source of truth from centralized enums)
-const DB_DIAGNOSIS_ENUM = DIAGNOSIS_DB_VALUES;
-
-// Robust normalization: accepts UI labels with spaces and maps to DB enum with underscores
-const toSlug = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, '_');
-
-const DIAGNOSIS_MAP: Record<string, DbDiagnosis> = {
-  // Direct matches
-  HERNIA_INGUINAL: 'HERNIA_INGUINAL',
-  HERNIA_UMBILICAL: 'HERNIA_UMBILICAL',
-  HERNIA_HIATAL: 'HERNIA_HIATAL',
-  HERNIA_INCISIONAL: 'HERNIA_INCISIONAL',
-  HERNIA_EPIGASTRICA: 'HERNIA_EPIGASTRICA',
-  COLELITIASIS: 'COLELITIASIS',
-  COLECISTITIS_AGUDA: 'COLECISTITIS_AGUDA',
-  COLECISTITIS_CRONICA: 'COLECISTITIS_CRONICA',
-  COLEDOCOLITIASIS: 'COLEDOCOLITIASIS',
-  POLIPOS_VESICULA: 'POLIPOS_VESICULA',
-  OTRO_DIAGNOSTICO: 'OTRO_DIAGNOSTICO',
-  SIN_DIAGNOSTICO: 'SIN_DIAGNOSTICO',
-
-  // UI label variants -> DB
-  // Note: toSlug removes parentheses, so this key must not include them
-  VESICULA_COLECISTITIS_CRONICA: 'COLECISTITIS_CRONICA',
-  COLECISTITIS: 'COLECISTITIS_CRONICA',
-  EVENTRACION_ABDOMINAL: 'HERNIA_INCISIONAL',
-  HERNIA_INGUINAL_RECIDIVANTE: 'HERNIA_INGUINAL',
-  HERNIA_SPIGEL: 'OTRO_DIAGNOSTICO',
-  COLANGITIS: 'OTRO_DIAGNOSTICO',
-  APENDICITIS: 'OTRO_DIAGNOSTICO',
-  LIPOMA_GRANDE: 'OTRO_DIAGNOSTICO',
-  QUISTE_SEBACEO_INFECTADO: 'OTRO_DIAGNOSTICO',
-  OTRO: 'OTRO_DIAGNOSTICO',
-};
-
-function normalizeDiagnosis(input: unknown): DbDiagnosis {
-  if (typeof input !== 'string' || !input.trim()) return 'OTRO_DIAGNOSTICO';
-  const slug = toSlug(input);
-  const mapped = DIAGNOSIS_MAP[slug];
-  if (mapped) return mapped;
-  // If already a DB enum and in whitelist, accept
-  if ((DIAGNOSIS_DB_VALUES as readonly string[]).includes(slug)) return slug as DbDiagnosis;
-  // Fallback logic: if explicitly "SIN_DIAGNOSTICO" in any form
-  if (slug === 'SIN_DIAGNOSTICO') return 'SIN_DIAGNOSTICO';
-  return 'OTRO_DIAGNOSTICO';
-}
 
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const PatientAdmissionSchema = z.object({
@@ -180,16 +107,10 @@ export async function POST(request: NextRequest) {
           p_doctor_id: body?.doctor_id ?? null,
           p_creado_por_id: body?.creado_por_id ?? null,
         };
-    // Normalize diagnosis to DB enum regardless of input shape
-    const bodyForValidation = {
-      ...normalizedBody,
-      p_diagnostico_principal: normalizeDiagnosis(
-        (normalizedBody as any)?.p_diagnostico_principal ?? (body as any)?.diagnostico_principal
-      ),
-    } as Omit<PatientAdmissionData, 'p_diagnostico_principal'> & { p_diagnostico_principal: DbDiagnosis };
-    
     // ✅ 2. VALIDAR DATOS DE ENTRADA (siempre contra el esquema de la RPC)
-    const validationResult = PatientAdmissionSchema.safeParse(bodyForValidation);
+    // Ahora exigimos que el cliente envíe directamente un valor del enum DbDiagnosis.
+    // Si llega un valor inválido, se responderá 400 con errores de validación.
+    const validationResult = PatientAdmissionSchema.safeParse(normalizedBody);
     
     if (!validationResult.success) {
       console.warn('⚠️ [Patient Admission] Validation failed:', validationResult.error.errors);

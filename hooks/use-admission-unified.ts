@@ -1,28 +1,17 @@
 // hooks/use-admission-unified.ts
 // HOOK UNIFICADO DE ADMISIÓN - CONSOLIDA use-admission-data.ts + use-admission-realtime.ts
 
-import { useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useCallback, useMemo } from 'react';
-import { startOfDay, endOfDay, addDays, isToday, isFuture, isPast } from 'date-fns';
+import { isToday, isFuture, isPast } from 'date-fns';
 import { queryKeys } from '@/lib/query-keys';
+import { useClinic } from '@/contexts/clinic-data-provider';
 
 // ==================== TIPOS UNIFICADOS ====================
-import type { AppointmentStatus, LeadMotive, LeadChannel, LeadStatus, DiagnosisType, UserRole, AdmissionAction, TabType, Patient, AppointmentWithPatient } from '../components/patient-admision/admision-types';
+import type { AdmissionAction, TabType, AppointmentWithPatient, AdmissionPayload } from '@/components/patient-admision/admision-types';
 
-interface AdmissionPayload {
-  nombre: string;
-  apellidos: string;
-  telefono?: string;
-  email?: string;
-  edad?: number;
-  diagnostico_principal: string;
-  comentarios_registro?: string;
-  probabilidad_cirugia?: number;
-  fecha_hora_cita: string;
-  motivos_consulta: string[];
-  doctor_id?: string;
-}
+// Nota: Usamos el tipo centralizado AdmissionPayload (con diagnostico_principal: DbDiagnosis)
 
 interface AdmissionResponse {
   success: boolean;
@@ -31,19 +20,6 @@ interface AdmissionResponse {
   appointment_id: string;
   patient: any;
   appointment: any;
-}
-
-interface AppointmentsResponse {
-  data: AppointmentWithPatient[];
-  hasMore: boolean;
-  page: number;
-  total: number;
-  counts?: {
-    today: number;
-    future: number;
-    past: number;
-    newPatient: number;
-  };
 }
 
 // (Sin CACHE_KEYS locales) — usamos queryKeys centralizados
@@ -80,29 +56,6 @@ const submitAdmission = async (data: AdmissionPayload): Promise<AdmissionRespons
   return result;
 };
 
-/**
- * Función unificada para obtener citas por tab con paginación
- */
-const fetchAppointmentsByTab = async (
-  tab: TabType, 
-  page: number = 1, 
-  pageSize: number = 20
-): Promise<AppointmentsResponse> => {
-  const searchParams = new URLSearchParams({
-    tab,
-    page: String(page),
-    pageSize: String(pageSize),
-  });
-
-  const response = await fetch(`/api/appointments?${searchParams.toString()}`);
-  
-  if (!response.ok) {
-    throw new Error('Error al obtener las citas');
-  }
-
-  return response.json();
-};
-
 // ==================== HOOKS UNIFICADOS ====================
 
 /**
@@ -136,63 +89,138 @@ export function usePatientAdmissionUnified() {
 }
 
 /**
- * Hook unificado para datos de admisión con paginación inteligente
- * Optimizado para diferentes tabs (hoy, futuro, historial)
+ * Hook unificado para datos de admisión consumiendo el contexto de clínica.
+ * Realiza filtrado y agrupamiento en el cliente para tabs (hoy, futuras, pasadas).
  */
 export const useAdmissionUnified = (activeTab: TabType) => {
-  // Determinar clave centralizada según tab
-  const appointmentsKey = (
-    activeTab === 'today' || activeTab === 'future' || activeTab === 'past'
-  )
-    ? queryKeys.appointments.filtered({ dateFilter: activeTab })
-    : queryKeys.appointments.all;
+  const {
+    allAppointments,
+    appointmentsWithPatientData,
+    allPatients,
+    appointmentsSummary,
+    isLoading,
+    refetch,
+    fetchSpecificAppointments,
+  } = useClinic();
 
-  const query = useInfiniteQuery({
-    queryKey: appointmentsKey,
-    queryFn: ({ pageParam = 1 }) => fetchAppointmentsByTab(activeTab, pageParam),
-    getNextPageParam: (lastPage) => {
-      return lastPage.hasMore ? lastPage.page + 1 : undefined;
-    },
-    initialPageParam: 1,
-    staleTime: activeTab === 'today' ? 2 * 60 * 1000 : 5 * 60 * 1000, // 2min hoy, 5min otros
-    gcTime: 10 * 60 * 1000, // 10min
-  });
+  // Normalizar para garantizar datos del paciente presentes
+  const normalizedAppointments = useMemo<AppointmentWithPatient[]>(() => {
+    const source = (appointmentsWithPatientData && (appointmentsWithPatientData as any[]).length > 0)
+      ? (appointmentsWithPatientData as any[])
+      : ((allAppointments as any[]) || []);
 
-  // Transformaciones memoizadas de datos
-  const transformedData = useMemo(() => {
-    const allAppointments = query.data?.pages?.flatMap(page => page.data) || [];
-    const totalCounts = query.data?.pages?.[0]?.counts || {
-      today: 0,
-      future: 0,
-      past: 0,
-      newPatient: 0
-    };
+    return source.map((a: any) => {
+      const linkedPatient: any =
+        a.patients || a.patient || (allPatients || []).find((p: any) => p.id === a.patient_id);
+      return {
+        id: a.id,
+        patient_id: a.patient_id,
+        doctor_id: a.doctor_id,
+        fecha_hora_cita: a.fecha_hora_cita,
+        motivos_consulta: a.motivos_consulta || [],
+        estado_cita: a.estado_cita,
+        es_primera_vez: a.es_primera_vez ?? false,
+        notas_breves: a.notas_breves,
+        created_at: a.created_at,
+        updated_at: a.updated_at,
+        agendado_por: a.agendado_por,
+        fecha_agendamiento: a.fecha_agendamiento,
+        patients: linkedPatient ? {
+          id: linkedPatient.id,
+          nombre: linkedPatient.nombre || '',
+          apellidos: linkedPatient.apellidos || '',
+          telefono: linkedPatient.telefono,
+          email: linkedPatient.email,
+          edad: typeof linkedPatient.edad === 'number' ? linkedPatient.edad : undefined,
+          estado_paciente: linkedPatient.estado_paciente,
+          diagnostico_principal: linkedPatient.diagnostico_principal,
+        } : {
+          id: a.patient_id,
+          nombre: '',
+          apellidos: '',
+          telefono: undefined,
+          email: undefined,
+          edad: undefined,
+          estado_paciente: undefined,
+          diagnostico_principal: undefined,
+        }
+      } as AppointmentWithPatient;
+    });
+  }, [appointmentsWithPatientData, allAppointments, allPatients]);
 
-    // Normalización y agrupamiento por fecha (con validación)
-    const groupedByDate = allAppointments.reduce((acc, appointment) => {
-      // Validación defensiva para evitar errores de runtime
-      if (!appointment || !appointment.fecha_hora_cita) {
-        console.warn('Appointment without fecha_hora_cita found:', appointment);
-        return acc;
-      }
-      
+  // Filtrado por tab
+  const filteredAppointments = useMemo<AppointmentWithPatient[]>(() => {
+    if (!normalizedAppointments?.length) return [];
+    if (activeTab === 'today') {
+      return normalizedAppointments.filter(app =>
+        app?.estado_cita === 'PROGRAMADA' &&
+        app.fecha_hora_cita &&
+        isToday(new Date(app.fecha_hora_cita))
+      );
+    }
+    if (activeTab === 'future') {
+      return normalizedAppointments.filter(app =>
+        app?.estado_cita === 'PROGRAMADA' &&
+        app.fecha_hora_cita &&
+        isFuture(new Date(app.fecha_hora_cita))
+      );
+    }
+    // past
+    return normalizedAppointments.filter(app =>
+      app?.fecha_hora_cita &&
+      (app.estado_cita !== 'PROGRAMADA' || isPast(new Date(app.fecha_hora_cita)))
+    );
+  }, [normalizedAppointments, activeTab]);
+
+  // Agrupamiento por fecha
+  const groupedByDate = useMemo(() => {
+    return filteredAppointments.reduce((acc, appointment) => {
+      if (!appointment || !appointment.fecha_hora_cita) return acc;
       const dateKey = new Date(appointment.fecha_hora_cita).toDateString();
       if (!acc[dateKey]) acc[dateKey] = [];
       acc[dateKey].push(appointment);
       return acc;
     }, {} as Record<string, AppointmentWithPatient[]>);
+  }, [filteredAppointments]);
 
+  // Conteos por tab (preferir summary si está disponible)
+  const totalCounts = useMemo(() => {
+    if (appointmentsSummary) {
+      return {
+        today: appointmentsSummary.today_count || 0,
+        future: appointmentsSummary.future_count || 0,
+        past: appointmentsSummary.past_count || 0,
+        newPatient: 0,
+      };
+    }
     return {
-      appointments: allAppointments,
-      groupedByDate,
-      totalCounts,
-      hasData: allAppointments.length > 0,
+      today: normalizedAppointments.filter(app =>
+        app?.estado_cita === 'PROGRAMADA' &&
+        app.fecha_hora_cita &&
+        isToday(new Date(app.fecha_hora_cita))
+      ).length,
+      future: normalizedAppointments.filter(app =>
+        app?.estado_cita === 'PROGRAMADA' &&
+        app.fecha_hora_cita &&
+        isFuture(new Date(app.fecha_hora_cita))
+      ).length,
+      past: normalizedAppointments.filter(app =>
+        app?.fecha_hora_cita &&
+        (app.estado_cita !== 'PROGRAMADA' || isPast(new Date(app.fecha_hora_cita)))
+      ).length,
+      newPatient: 0,
     };
-  }, [query.data]);
+  }, [appointmentsSummary, normalizedAppointments]);
 
   return {
-    ...query,
-    ...transformedData,
+    appointments: filteredAppointments,
+    groupedByDate,
+    totalCounts,
+    hasData: filteredAppointments.length > 0,
+    isLoading,
+    refetch,
+    // Exponer el fetch bajo demanda del contexto para usos específicos
+    fetchSpecificAppointments,
   };
 }
 
