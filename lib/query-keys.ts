@@ -88,6 +88,9 @@ export const queryKeys = {
     // Tendencias históricas
     trends: (period?: string) => ['dashboard', 'trends', period] as const,
     
+    // Datos de gráficos del dashboard (agregados en backend)
+    charts: (params?: { startDate?: string; endDate?: string; topN?: number }) => ['dashboard', 'charts', params] as const,
+    
     // Métricas específicas
     metrics: ['dashboard', 'metrics'] as const,
   },

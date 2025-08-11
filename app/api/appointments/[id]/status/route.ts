@@ -6,7 +6,6 @@ import { ZAppointmentStatus } from '@/lib/validation/enums';
 import {
   canTransitionToStatus,
   canCheckIn,
-  canStartConsult,
   canCompleteAppointment,
   canCancelAppointment,
   canMarkNoShow,
@@ -176,11 +175,6 @@ export async function PATCH(
     switch (newStatus) {
       case 'PRESENTE': {
         const res = canCheckIn(currentAppointment as any, now);
-        actionValidation = { valid: res.valid, reason: res.reason };
-        break;
-      }
-      case 'EN_CONSULTA': {
-        const res = canStartConsult(currentAppointment as any, now);
         actionValidation = { valid: res.valid, reason: res.reason };
         break;
       }

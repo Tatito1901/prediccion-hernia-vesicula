@@ -21,7 +21,6 @@ import type {
 // ✅ Import de validaciones de reglas de negocio
 import { 
   canCheckIn, 
-  canStartConsult, 
   canCompleteAppointment, 
   canCancelAppointment, 
   canMarkNoShow, 
@@ -182,8 +181,6 @@ export const useAppointmentActions = () => {
     switch (action) {
       case 'checkIn':
         return canCheckIn(appointment);
-      case 'startConsult':
-        return canStartConsult(appointment);
       case 'complete':
         return canCompleteAppointment(appointment);
       case 'cancel':
@@ -206,7 +203,6 @@ export const useAppointmentActions = () => {
         'PROGRAMADA': 'programada',
         'CONFIRMADA': 'confirmada',
         'PRESENTE': 'marcado como presente',
-        'EN_CONSULTA': 'en consulta',
         'COMPLETADA': 'completada',
         'CANCELADA': 'cancelada',
         'NO_ASISTIO': 'marcado como no asistió',
@@ -253,15 +249,6 @@ export const useAppointmentActions = () => {
     });
   };
 
-  const startConsult = async (appointmentId: string, notas?: string) => {
-    return updateStatus.mutateAsync({ 
-      appointmentId, 
-      newStatus: 'EN_CONSULTA',
-      motivo_cambio: 'Consulta iniciada',
-      notas_adicionales: notas
-    });
-  };
-
   const complete = async (appointmentId: string, notas?: string) => {
     return updateStatus.mutateAsync({ 
       appointmentId, 
@@ -299,7 +286,6 @@ export const useAppointmentActions = () => {
   return {
     // Métodos específicos
     checkIn,
-    startConsult,
     complete,
     cancel,
     markNoShow,

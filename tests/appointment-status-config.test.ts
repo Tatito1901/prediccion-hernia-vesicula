@@ -5,7 +5,6 @@ const EXPECTED_STATUSES: AppointmentStatus[] = [
   'PROGRAMADA',
   'CONFIRMADA',
   'PRESENTE',
-  'EN_CONSULTA',
   'COMPLETADA',
   'CANCELADA',
   'NO_ASISTIO',

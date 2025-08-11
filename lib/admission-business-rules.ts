@@ -124,39 +124,6 @@ export const canCheckIn = (
   return { valid: true };
 };
 
-// ✅ Validar iniciar consulta
-export const canStartConsult = (
-  appointment: AppointmentWithPatient, 
-  currentTime: Date = new Date(),
-  context?: BusinessRuleContext
-): ValidationResult => {
-  // ✅ 1. Estado debe ser PRESENTE
-  if (appointment.estado_cita !== 'PRESENTE') {
-    return {
-      valid: false,
-      reason: `El paciente debe estar presente para iniciar consulta. Estado actual: ${appointment.estado_cita}`
-    };
-  }
-  
-  // ✅ 2. Verificar horario laboral
-  if (!isWithinWorkHours(currentTime) && !context?.allowOverride) {
-    return {
-      valid: false,
-      reason: 'Solo se pueden iniciar consultas durante horario laboral (8:00 - 18:00, L-V)'
-    };
-  }
-  
-  // ✅ 3. Verificar que no sea hora de almuerzo
-  if (isLunchTime(currentTime) && !context?.allowOverride) {
-    return {
-      valid: false,
-      reason: 'No se pueden iniciar consultas durante la hora de almuerzo (12:00 - 13:00)'
-    };
-  }
-  
-  return { valid: true };
-};
-
 // ✅ Validar completar consulta
 export const canCompleteAppointment = (
   appointment: AppointmentWithPatient, 
@@ -166,8 +133,8 @@ export const canCompleteAppointment = (
   const appointmentTime = getAppointmentDateTime(appointment);
   const completionDeadline = addMinutes(appointmentTime, BUSINESS_RULES.COMPLETION_WINDOW_AFTER_MINUTES);
   
-  // ✅ 1. Estado debe ser EN_CONSULTA o PRESENTE
-  if (!['EN_CONSULTA', 'PRESENTE'].includes(appointment.estado_cita)) {
+  // ✅ 1. Estado debe ser PRESENTE (flujo simplificado: sin EN_CONSULTA)
+  if (appointment.estado_cita !== 'PRESENTE') {
     return {
       valid: false,
       reason: `No se puede completar desde estado: ${appointment.estado_cita}`
@@ -181,13 +148,7 @@ export const canCompleteAppointment = (
       reason: 'Ha pasado demasiado tiempo desde la cita programada. Contacte administración.'
     };
   }
-  
-  // ✅ 3. Si está EN_CONSULTA, verificar tiempo mínimo
-  if (appointment.estado_cita === 'EN_CONSULTA') {
-    // En un caso real, verificaríamos cuándo empezó la consulta
-    // Por simplicidad, asumimos que está bien
-  }
-  
+
   return { valid: true };
 };
 
@@ -288,7 +249,6 @@ export const getAvailableActions = (
 ): Array<{ action: AdmissionAction; valid: boolean; reason?: string }> => {
   return [
     { action: 'checkIn', ...canCheckIn(appointment, currentTime, context) },
-    { action: 'startConsult', ...canStartConsult(appointment, currentTime, context) },
     { action: 'complete', ...canCompleteAppointment(appointment, currentTime, context) },
     { action: 'cancel', ...canCancelAppointment(appointment, currentTime, context) },
     { action: 'noShow', ...canMarkNoShow(appointment, currentTime, context) },
@@ -306,7 +266,7 @@ export const suggestNextAction = (
   const availableActions = getAvailableActions(appointment, currentTime, context);
   
   // Prioridad de acciones según estado
-  const actionPriority: AdmissionAction[] = ['checkIn', 'startConsult', 'complete'];
+  const actionPriority: AdmissionAction[] = ['checkIn', 'complete'];
   
   for (const priority of actionPriority) {
     const action = availableActions.find(a => a.action === priority && a.valid);
@@ -330,15 +290,6 @@ export const needsUrgentAttention = (
       urgent: true,
       reason: `Paciente esperando ${minutesSinceAppointment} minutos desde check-in`,
       severity: minutesSinceAppointment > 60 ? 'high' : 'medium'
-    };
-  }
-  
-  // Consulta muy larga
-  if (appointment.estado_cita === 'EN_CONSULTA' && minutesSinceAppointment > 60) {
-    return {
-      urgent: true,
-      reason: `Consulta en progreso por más de ${minutesSinceAppointment} minutos`,
-      severity: minutesSinceAppointment > 90 ? 'high' : 'medium'
     };
   }
   
@@ -415,8 +366,7 @@ export const canTransitionToStatus = (
   const validTransitions: Record<AppointmentStatus, AppointmentStatus[]> = {
     'PROGRAMADA': ['CONFIRMADA', 'PRESENTE', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'],
     'CONFIRMADA': ['PRESENTE', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'],
-    'PRESENTE': ['EN_CONSULTA', 'COMPLETADA', 'CANCELADA'],
-    'EN_CONSULTA': ['COMPLETADA', 'CANCELADA'],
+    'PRESENTE': ['COMPLETADA', 'CANCELADA'],
     'COMPLETADA': ['REAGENDADA'], // Solo si se necesita una nueva cita
     'CANCELADA': ['REAGENDADA'],
     'NO_ASISTIO': ['REAGENDADA'],
@@ -440,7 +390,6 @@ export const canTransitionToStatus = (
 export const ADMISSION_BUSINESS_RULES = {
   // Validadores principales
   canCheckIn,
-  canStartConsult,
   canCompleteAppointment,
   canCancelAppointment,
   canMarkNoShow,

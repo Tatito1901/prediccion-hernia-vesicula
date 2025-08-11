@@ -33,7 +33,6 @@ import {
   CheckCircle,
   XCircle,
   History,
-  PlayCircle,
   AlertTriangle,
   Loader2,
   CalendarDays,
@@ -45,7 +44,7 @@ import { cn } from "@/lib/utils";
 import type { AppointmentWithPatient, AdmissionAction, PatientCardProps } from './admision-types';
 import { getPatientFullName, getStatusConfig, getPatientData } from './admision-types';
 import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
-import { canCheckIn, canStartConsult, canCompleteAppointment, canCancelAppointment, canMarkNoShow, canRescheduleAppointment } from '@/lib/admission-business-rules';
+import { canCheckIn, canCompleteAppointment, canCancelAppointment, canMarkNoShow, canRescheduleAppointment } from '@/lib/admission-business-rules';
 
 // Componentes dinámicos
 const RescheduleDatePicker = dynamic(() => import('./patient-admission-reschedule').then(m => m.RescheduleDatePicker), { ssr: false });
@@ -72,7 +71,6 @@ const ACTION_CONFIG: Record<AdmissionAction, {
   variant: ActionVariant;
 }> = {
   checkIn: { icon: CheckCircle, label: 'Presente', title: 'Marcar como Presente', description: 'El paciente será marcado como presente.', confirmText: 'Marcar Presente', variant: 'default' },
-  startConsult: { icon: PlayCircle, label: 'Iniciar', title: 'Iniciar Consulta', description: 'Se iniciará la consulta médica.', confirmText: 'Iniciar Consulta', variant: 'default' },
   complete: { icon: CheckCircle, label: 'Completar', title: 'Completar Consulta', description: 'La consulta será marcada como completada.', confirmText: 'Completar', variant: 'default' },
   cancel: { icon: XCircle, label: 'Cancelar', title: 'Cancelar Cita', description: 'Esta acción cancelará la cita médica.', confirmText: 'Cancelar Cita', variant: 'destructive' },
   noShow: { icon: AlertTriangle, label: 'No Asistió', title: 'Marcar como No Asistió', description: 'El paciente será marcado como no asistió.', confirmText: 'Marcar No Asistió', variant: 'destructive' },
@@ -92,10 +90,6 @@ export const PatientCard = memo<PatientCardProps>(({
 
   const checkIn = useCallback((appointmentId: string, notas?: string) => {
     return updateStatus({ appointmentId, newStatus: 'PRESENTE', motivo: 'Paciente marcado como presente' });
-  }, [updateStatus]);
-
-  const startConsult = useCallback((appointmentId: string, notas?: string) => {
-    return updateStatus({ appointmentId, newStatus: 'EN_CONSULTA', motivo: 'Consulta iniciada' });
   }, [updateStatus]);
 
   const complete = useCallback((appointmentId: string, notas?: string) => {
@@ -151,7 +145,6 @@ export const PatientCard = memo<PatientCardProps>(({
   const canPerformAction = useCallback((action: AdmissionAction) => {
     switch (action) {
       case 'checkIn': return canCheckIn(appointment);
-      case 'startConsult': return canStartConsult(appointment);
       case 'complete': return canCompleteAppointment(appointment);
       case 'cancel': return canCancelAppointment(appointment);
       case 'noShow': return canMarkNoShow(appointment);
@@ -164,7 +157,7 @@ export const PatientCard = memo<PatientCardProps>(({
   // Acciones disponibles
   const availableActions = useMemo(() => {
     const actions: AdmissionAction[] = [];
-    ['checkIn', 'startConsult', 'complete', 'cancel', 'noShow', 'reschedule'].forEach(action => {
+    ['checkIn', 'complete', 'cancel', 'noShow', 'reschedule'].forEach(action => {
       if (canPerformAction(action as AdmissionAction).valid) actions.push(action as AdmissionAction);
     });
     actions.push('viewHistory');
@@ -174,7 +167,6 @@ export const PatientCard = memo<PatientCardProps>(({
   // Acción principal
   const primaryAction = useMemo((): AdmissionAction | null => {
     if (availableActions.includes('checkIn')) return 'checkIn';
-    if (availableActions.includes('startConsult')) return 'startConsult';
     if (availableActions.includes('complete')) return 'complete';
     return null;
   }, [availableActions]);
@@ -203,7 +195,6 @@ export const PatientCard = memo<PatientCardProps>(({
     try {
       switch (confirmation.action) {
         case 'checkIn': await checkIn(appointment.id); break;
-        case 'startConsult': await startConsult(appointment.id); break;
         case 'complete': await complete(appointment.id); break;
         case 'cancel': await cancel(appointment.id, 'Cancelado por usuario'); break;
         case 'noShow': await markNoShow(appointment.id); break;
@@ -212,7 +203,7 @@ export const PatientCard = memo<PatientCardProps>(({
     } finally {
       setConfirmation(prev => ({ ...prev, isOpen: false }));
     }
-  }, [confirmation.action, appointment.id, checkIn, startConsult, complete, cancel, markNoShow, onAction]);
+  }, [confirmation.action, appointment.id, checkIn, complete, cancel, markNoShow, onAction]);
 
   const handleReschedule = useCallback(async (date: Date, time: string) => {
     const nuevaFecha = `${date.toISOString().split('T')[0]}T${time}:00`;

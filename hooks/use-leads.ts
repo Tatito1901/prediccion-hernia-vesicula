@@ -312,44 +312,13 @@ export function useLeadStats(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.leads.stats,
     queryFn: async (): Promise<LeadStats> => {
-      // For now, we'll calculate stats client-side
-      // Later this can be moved to a dedicated API endpoint
-      const response = await fetch('/api/leads?pageSize=1000'); // Get all leads for stats
-      
+      const response = await fetch('/api/leads/stats');
       if (!response.ok) {
-        throw new Error('Failed to fetch leads for statistics');
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Failed to fetch lead statistics');
       }
-      
-      const { data: leads }: PaginatedResponse<Lead> = await response.json();
-      
-      // Calculate statistics
-      const total_leads = leads.length;
-      const new_leads = leads.filter(lead => lead.status === 'NUEVO').length;
-      const in_follow_up = leads.filter(lead => lead.status === 'SEGUIMIENTO_PENDIENTE').length;
-      const converted_leads = leads.filter(lead => lead.status === 'CONVERTIDO').length;
-      const conversion_rate = total_leads > 0 ? (converted_leads / total_leads) * 100 : 0;
-      
-      // Group by channel
-      const leads_by_channel = leads.reduce((acc, lead) => {
-        acc[lead.channel] = (acc[lead.channel] || 0) + 1;
-        return acc;
-      }, {} as Record<Channel, number>);
-      
-      // Group by status
-      const leads_by_status = leads.reduce((acc, lead) => {
-        acc[lead.status] = (acc[lead.status] || 0) + 1;
-        return acc;
-      }, {} as Record<LeadStatus, number>);
-      
-      return {
-        total_leads,
-        new_leads,
-        in_follow_up,
-        converted_leads,
-        conversion_rate,
-        leads_by_channel,
-        leads_by_status,
-      };
+      const stats: LeadStats = await response.json();
+      return stats;
     },
     enabled: options?.enabled ?? true,
     staleTime: 5 * 60 * 1000, // 5 minutes

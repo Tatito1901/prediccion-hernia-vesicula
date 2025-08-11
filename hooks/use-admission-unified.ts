@@ -243,10 +243,6 @@ export function useAppointmentActionsUnified() {
           // Implementar check-in
           toast.success('Paciente registrado como presente');
           break;
-        case 'startConsult':
-          // Implementar inicio de consulta
-          toast.success('Consulta iniciada');
-          break;
         case 'complete':
           // Implementar completar cita
           toast.success('Cita completada exitosamente');

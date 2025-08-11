@@ -42,7 +42,7 @@
 - Calendario inteligente (slots ocupados desde BD)
 
 ### Fase 4: Admisiones Refactorizadas
-- Vista kanban: PROGRAMADA → PRESENTE → EN_CONSULTA → COMPLETADA
+- Vista kanban: PROGRAMADA → PRESENTE → COMPLETADA
 - Botón "Registrar Llegada" → `POST /api/appointments/[id]/check-in`
 - Activación automática de encuestas
 

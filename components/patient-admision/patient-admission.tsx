@@ -295,9 +295,6 @@ const PatientAdmission: React.FC = () => {
         case 'checkIn':
           await updateStatus({ appointmentId, newStatus: 'PRESENTE' });
           break;
-        case 'startConsult':
-          await updateStatus({ appointmentId, newStatus: 'EN_CONSULTA' });
-          break;
         case 'complete':
           await updateStatus({ appointmentId, newStatus: 'COMPLETADA' });
           break;

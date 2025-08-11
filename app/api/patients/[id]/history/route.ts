@@ -260,7 +260,6 @@ function getStatusLabel(status: string): string {
     'PROGRAMADA': 'Programada',
     'CONFIRMADA': 'Confirmada', 
     'PRESENTE': 'Presente',
-    'EN_CONSULTA': 'En consulta',
     'COMPLETADA': 'Completada',
     'CANCELADA': 'Cancelada',
     'NO_ASISTIO': 'No asistió',

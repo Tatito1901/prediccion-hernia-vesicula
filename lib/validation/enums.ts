@@ -33,7 +33,12 @@ export const SURGICAL_DECISION_VALUES = Constants.public.Enums.surgical_decision
 export const ARRIVAL_STATUS_VALUES = Constants.public.Enums.arrival_status_enum;
 
 // Zod enums (DB-aligned)
-export const ZAppointmentStatus = z.enum(asEnumTuple(APPOINTMENT_STATUS_VALUES));
+// Business decision: EN_CONSULTA is deprecated/removed from flow; exclude it from validation.
+type BusinessAppointmentStatus = Exclude<DbAppointmentStatus, 'EN_CONSULTA'>;
+const FILTERED_APPOINTMENT_STATUS_VALUES = APPOINTMENT_STATUS_VALUES.filter(
+  (v): v is BusinessAppointmentStatus => v !== 'EN_CONSULTA'
+) as readonly BusinessAppointmentStatus[];
+export const ZAppointmentStatus = z.enum(asEnumTuple(FILTERED_APPOINTMENT_STATUS_VALUES));
 export const ZPatientStatus = z.enum(asEnumTuple(PATIENT_STATUS_VALUES));
 export const ZUserRole = z.enum(asEnumTuple(USER_ROLE_VALUES));
 export const ZDiagnosisDb = z.enum(asEnumTuple(DIAGNOSIS_DB_VALUES));
@@ -140,6 +145,6 @@ export function normalizeDiagnosis(input: unknown): DbDiagnosis {
 const makeEnumCompat = <T extends readonly string[]>(values: T) =>
   Object.fromEntries(values.map((v) => [v.toUpperCase(), v])) as Record<Uppercase<T[number]>, T[number]>;
 
-export const AppointmentStatusEnum = makeEnumCompat(APPOINTMENT_STATUS_VALUES);
+export const AppointmentStatusEnum = makeEnumCompat(FILTERED_APPOINTMENT_STATUS_VALUES);
 export const PatientStatusEnum = makeEnumCompat(PATIENT_STATUS_VALUES);
 export const UserRoleEnum = makeEnumCompat(USER_ROLE_VALUES);

@@ -3,13 +3,12 @@ import { createClient } from '@/utils/supabase/server';
 import type { 
   Lead, 
   NewLead, 
-  LeadStats, 
   LeadStatus, 
   Channel, 
   Motive,
-  // LeadIntent, // Eliminado: no existe en el esquema de la BD
   PaginatedResponse 
 } from '@/lib/types';
+import { LEAD_MOTIVE_VALUES, CONTACT_CHANNEL_VALUES } from '@/lib/validation/enums';
 
 // GET /api/leads - Obtener leads con filtros y paginación
 export async function GET(request: NextRequest) {
@@ -26,6 +25,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') as LeadStatus | null;
     const channel = searchParams.get('channel') as Channel | null;
     const motive = searchParams.get('motive') as Motive | null;
+    const priority = searchParams.get('priority');
     // lead_intent eliminado del esquema; ignoramos cualquier query param relacionado
     const search = searchParams.get('search') || '';
     const overdue = searchParams.get('overdue') === 'true';
@@ -47,6 +47,13 @@ export async function GET(request: NextRequest) {
 
     if (motive) {
       query = query.eq('motive', motive);
+    }
+
+    if (priority) {
+      const p = Number(priority);
+      if (!Number.isNaN(p)) {
+        query = query.eq('priority_level', p);
+      }
     }
 
     // Nota: no aplicar filtro por lead_intent ya que no existe en la tabla
@@ -100,21 +107,42 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const body = await request.json();
 
-    // Validar datos requeridos
-    const { full_name, phone_number, channel } = body as {
+    // Obtener usuario autenticado
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized: user not authenticated' },
+        { status: 401 }
+      );
+    }
+
+    // Validar datos requeridos y enums
+    const { full_name, phone_number, channel, motive, notes, assigned_to } = body as {
       full_name?: string;
       phone_number?: string;
       channel?: Channel;
-      motive?: Motive; // opcional en request; vamos a inferir si falta
-      call_reason?: 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'WANTS_TO_COMPARE_PRICES' | 'OTHER';
-      problem_specification?: string;
+      motive?: Motive;
       notes?: string;
       assigned_to?: string;
     };
 
-    if (!full_name || !phone_number || !channel) {
+    if (!full_name || !phone_number || !channel || !motive) {
       return NextResponse.json(
-        { error: 'Missing required fields: full_name, phone_number, channel' },
+        { error: 'Missing required fields: full_name, phone_number, channel, motive' },
+        { status: 400 }
+      );
+    }
+
+    if (!CONTACT_CHANNEL_VALUES.includes(channel)) {
+      return NextResponse.json(
+        { error: 'Invalid channel value' },
+        { status: 400 }
+      );
+    }
+
+    if (!LEAD_MOTIVE_VALUES.includes(motive)) {
+      return NextResponse.json(
+        { error: 'Invalid motive value' },
         { status: 400 }
       );
     }
@@ -136,73 +164,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Preparar datos del lead
-    // Si hay especificación del problema, la agregamos a las notas
-    let notesContent = (body.notes?.trim?.() as string) || '';
-    if ((body.problem_specification as string | undefined)?.trim()) {
-      const problemSpec = `Especificación del problema: ${(body.problem_specification as string).trim()}`;
-      notesContent = notesContent ? `${notesContent}\n\n${problemSpec}` : problemSpec;
-    }
+    // Preparar datos del lead (sin inferencias)
+    const notesContent = (notes?.trim?.() as string) || '';
 
-    // Inferencia de motive si no viene o si es inconsistente
-    const allowedMotives: Motive[] = [
-      'INFORMES',
-      'AGENDAR_CITA',
-      'URGENCIA_MEDICA',
-      'SEGUIMIENTO',
-      'CANCELACION',
-      'REAGENDAMIENTO',
-      'OTRO',
-    ];
-
-    const normalizeMotive = (m?: unknown): Motive | undefined =>
-      allowedMotives.includes(m as Motive) ? (m as Motive) : undefined;
-
-    const inferFromCallReason = (
-      cr?: 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'WANTS_TO_COMPARE_PRICES' | 'OTHER'
-    ): Motive | undefined => {
-      switch (cr) {
-        case 'WANTS_TO_SCHEDULE_APPOINTMENT':
-          return 'AGENDAR_CITA';
-        case 'ONLY_WANTS_INFORMATION':
-        case 'WANTS_TO_COMPARE_PRICES':
-          return 'INFORMES';
-        default:
-          return undefined;
-      }
-    };
-
-    const inferFromText = (text?: string): Motive | undefined => {
-      if (!text) return undefined;
-      const t = text.toLowerCase();
-      if (/(urgenc|emergenc|fiebre alta|sangr|insoportable|apendicitis|peritonitis)/i.test(t)) return 'URGENCIA_MEDICA';
-      if (/(cancel|anular)/i.test(t)) return 'CANCELACION';
-      if (/(reagend|cambiar hora|mover cita)/i.test(t)) return 'REAGENDAMIENTO';
-      if (/(seguimiento|control|resultado)/i.test(t)) return 'SEGUIMIENTO';
-      if (/(agendar|cita|programar)/i.test(t)) return 'AGENDAR_CITA';
-      if (/(inform|precio|costo|coste|promoc|paquete)/i.test(t)) return 'INFORMES';
-      return undefined;
-    };
-
-    const providedMotive = normalizeMotive((body as any).motive);
-    const inferredFromCall = inferFromCallReason((body as any).call_reason);
-    const inferredFromText = inferFromText(notesContent);
-    const finalMotive: Motive =
-      providedMotive || inferredFromCall || inferredFromText || 'INFORMES';
-
-    // Fausto Mario Medina's profile ID as default
-    const FAUSTO_PROFILE_ID = 'fbc26deb-e467-4f9d-92a9-904312229002';
-    
     const newLeadData: NewLead = {
       full_name: full_name.trim(),
       phone_number: phone_number.trim(),
-      email: null, // Campo eliminado del formulario pero mantenido en BD
+      email: null,
       channel,
-      motive: finalMotive,
+      motive,
       notes: notesContent || null,
       status: 'NUEVO',
-      registered_by: FAUSTO_PROFILE_ID,
-      assigned_to: (body as any).assigned_to || FAUSTO_PROFILE_ID
+      registered_by: user.id,
+      assigned_to: assigned_to || user.id,
     };
 
     const { data: lead, error } = await supabase

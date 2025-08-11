@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import type { UpdateLead } from '@/lib/types';
+import { LEAD_MOTIVE_VALUES, CONTACT_CHANNEL_VALUES } from '@/lib/validation/enums';
 
 // GET /api/leads/[id] - Obtener lead específico
 export async function GET(
@@ -60,6 +61,15 @@ export async function PUT(
     const { id } = await params;
     const body: UpdateLead = await request.json();
 
+    // Autenticación requerida
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized: user not authenticated' },
+        { status: 401 }
+      );
+    }
+
     // Verificar que el lead existe
     const { data: existingLead, error: fetchError } = await supabase
       .from('leads')
@@ -74,20 +84,33 @@ export async function PUT(
       );
     }
 
-    // Fausto Mario Medina's profile ID as default
-    const FAUSTO_PROFILE_ID = 'fbc26deb-e467-4f9d-92a9-904312229002';
-    
+    // Validar enums si vienen en el payload
+    if (body.channel && !CONTACT_CHANNEL_VALUES.includes(body.channel as any)) {
+      return NextResponse.json(
+        { error: 'Invalid channel value' },
+        { status: 400 }
+      );
+    }
+
+    if (body.motive && !LEAD_MOTIVE_VALUES.includes(body.motive as any)) {
+      return NextResponse.json(
+        { error: 'Invalid motive value' },
+        { status: 400 }
+      );
+    }
+
     // Preparar datos de actualización
     const updateData: UpdateLead = {
       ...body,
       updated_at: new Date().toISOString(),
-      registered_by: body.registered_by || FAUSTO_PROFILE_ID,
-      assigned_to: body.assigned_to || FAUSTO_PROFILE_ID
+      // No modificar registered_by en actualizaciones; asignar assigned_to por defecto al usuario autenticado
+      assigned_to: body.assigned_to || user.id,
     };
 
     // Remover campos que no deben actualizarse
-    delete updateData.id;
-    delete updateData.created_at;
+    delete (updateData as any).id;
+    delete (updateData as any).created_at;
+    delete (updateData as any).registered_by;
 
     const { data: updatedLead, error } = await supabase
       .from('leads')

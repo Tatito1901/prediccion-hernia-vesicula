@@ -17,8 +17,8 @@ import { es } from 'date-fns/locale';
 import { cn, formatPhoneNumber } from '@/lib/utils';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import type { AdmissionPayload, Lead } from './admision-types';
-import { useAppointmentsByDate } from '@/hooks/use-appointments';
 import { type DbDiagnosis } from '@/lib/validation/enums';
+import { useClinic } from '@/contexts/clinic-data-provider';
 
 interface PatientModalProps {
   trigger: React.ReactNode;
@@ -61,7 +61,6 @@ const BLOCKED_APPOINTMENT_STATUSES = new Set([
   'PROGRAMADA',
   'CONFIRMADA',
   'PRESENTE',
-  'EN_CONSULTA',
   'REAGENDADA',
 ]);
 
@@ -187,7 +186,32 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
     () => (selectedDate ? selectedDate.toISOString().split('T')[0] : undefined),
     [selectedDate]
   );
-  const { data: dayAppointments } = useAppointmentsByDate(selectedDateISO);
+  const { fetchSpecificAppointments } = useClinic();
+  const [dayAppointments, setDayAppointments] = useState<any[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedDateISO) {
+      setDayAppointments([]);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetchSpecificAppointments({
+          dateFilter: 'range',
+          startDate: selectedDateISO,
+          endDate: selectedDateISO,
+          pageSize: 100,
+        });
+        if (!cancelled) setDayAppointments(res.data || []);
+      } catch (e) {
+        if (!cancelled) setDayAppointments([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDateISO, fetchSpecificAppointments]);
 
   const occupiedTimes = useMemo(() => {
     if (!dayAppointments || !Array.isArray(dayAppointments)) return new Set<string>();

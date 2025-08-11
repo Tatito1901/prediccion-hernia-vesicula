@@ -1,5 +1,5 @@
 // hooks/use-appointments.ts - Hooks optimizados para manejo de citas
-import { useMutation, useQuery, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
+import { useMutation, useQueryClient, UseMutationOptions } from '@tanstack/react-query';
 import { toast } from 'sonner';
  
 
@@ -112,78 +112,6 @@ interface UpdateStatusContext {
   previousAppointment: AppointmentWithPatient | undefined;
   appointmentId: string;
 }
-
-// ==================== HOOKS OPTIMIZADOS ====================
-
-// Hook para obtener una cita específica
-export const useAppointment = (
-  id: string | null,
-  options?: Omit<UseQueryOptions<AppointmentWithPatient, Error>, 'queryKey' | 'queryFn'>
-) => {
-  return useQuery<AppointmentWithPatient, Error>({
-    queryKey: queryKeys.appointments.detail(id || ''),
-    queryFn: async () => {
-      if (!id) throw new Error('ID de cita requerido');
-      
-      const response = await fetch(`/api/appointments/${id}`);
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || 'Error al obtener la cita');
-      }
-      
-      return transformAppointment(await response.json());
-    },
-    enabled: !!id,
-    staleTime: 30 * 1000, // 30 segundos
-    ...options,
-  });
-};
-
-// Hook para obtener citas de hoy
-export const useTodayAppointments = (
-  options?: Omit<UseQueryOptions<AppointmentWithPatient[], Error>, 'queryKey' | 'queryFn'>
-) => {
-  return useQuery<AppointmentWithPatient[], Error>({
-    queryKey: queryKeys.appointments.today,
-    queryFn: async () => {
-      const response = await fetch('/api/appointments?dateFilter=today');
-      if (!response.ok) {
-        throw new Error('Error al obtener citas de hoy');
-      }
-      
-      const data = await response.json();
-      const appointments = data.data || data;
-      return appointments.map(transformAppointment);
-    },
-    staleTime: 60 * 1000, // 1 minuto
-    refetchInterval: 5 * 60 * 1000, // Refrescar cada 5 minutos
-    ...options,
-  });
-};
-
-// Hook para obtener citas por fecha específica (YYYY-MM-DD)
-export const useAppointmentsByDate = (
-  dateISO: string | undefined,
-  options?: Omit<UseQueryOptions<AppointmentWithPatient[], Error>, 'queryKey' | 'queryFn'>
-) => {
-  return useQuery<AppointmentWithPatient[], Error>({
-    queryKey: queryKeys.appointments.byDate(dateISO || ''),
-    queryFn: async () => {
-      if (!dateISO) return [];
-      const response = await fetch(`/api/appointments?onDate=${encodeURIComponent(dateISO)}`);
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.message || 'Error al obtener citas por fecha');
-      }
-      const data = await response.json();
-      const appointments = data.data || data;
-      return appointments.map(transformAppointment);
-    },
-    enabled: !!dateISO,
-    staleTime: 60 * 1000,
-    ...options,
-  });
-};
 
 // ==================== MUTACIONES OPTIMIZADAS ====================
 
@@ -310,7 +238,6 @@ export const useUpdateAppointmentStatus = (
         'PROGRAMADA': 'Cita programada',
         'CONFIRMADA': 'Cita confirmada',
         'PRESENTE': 'Check-in registrado',
-        'EN_CONSULTA': 'En consulta',
         'COMPLETADA': 'Consulta completada',
         'CANCELADA': 'Cita cancelada',
         'NO_ASISTIO': 'Marcado como no asistió',

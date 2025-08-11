@@ -1,5 +1,5 @@
 // components/patient-admission/new-patient-form.tsx
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format, addDays, isSunday, isBefore, startOfDay } from 'date-fns';
@@ -59,11 +59,10 @@ import {
 import { NewPatientSchema } from './admision-types';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import { cn, formatPhoneNumber } from '@/lib/utils';
-import { useAppointmentsByDate } from '@/hooks/use-appointments';
 import { useLeads } from '@/hooks/use-leads';
-import { useUnifiedPatientData } from '@/hooks/use-unified-patient-data';
 import { useDebounce } from '@/hooks/use-debounce';
 import type { Patient, Lead } from '@/lib/types';
+import { useClinic } from '@/contexts/clinic-data-provider';
 
 // Configuration
 const diagnosisOptions = DIAGNOSIS_DB_VALUES.map((value) => ({ value, label: dbDiagnosisToDisplay(value) }));
@@ -195,20 +194,39 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
     enabled: debouncedSearch.length >= 2,
   });
   
-  const patientSearch = useUnifiedPatientData({
-    fetchEssentialData: false,
-    page: 1,
-    pageSize: 5,
-    search: debouncedSearch,
-  });
+  const [patientResults, setPatientResults] = useState<Patient[]>([]);
+  const [searchingPatients, setSearchingPatients] = useState(false);
   
-  const isSearching = leadsQuery.isLoading || patientSearch.isLoading;
+  useEffect(() => {
+    let cancelled = false;
+    if (!debouncedSearch || debouncedSearch.length < 2) {
+      setPatientResults([]);
+      return;
+    }
+    (async () => {
+      try {
+        setSearchingPatients(true);
+        const qs = new URLSearchParams({ page: '1', pageSize: '5', search: debouncedSearch });
+        const res = await fetch(`/api/patients?${qs.toString()}`);
+        if (!res.ok) throw new Error('Error al buscar pacientes');
+        const json = await res.json();
+        if (!cancelled) setPatientResults((json?.data as Patient[]) || []);
+      } catch (e) {
+        if (!cancelled) setPatientResults([]);
+      } finally {
+        if (!cancelled) setSearchingPatients(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [debouncedSearch]);
+  
+  const isSearching = leadsQuery.isLoading || searchingPatients;
   
   const combinedResults = useMemo(() => {
     if (!debouncedSearch || debouncedSearch.length < 2) return [];
     
     const leads = leadsQuery.data?.data ?? [];
-    const patients = patientSearch.paginatedPatients ?? [];
+    const patients = patientResults ?? [];
     
     const patientItems = patients.map((p: Patient) => ({
       kind: 'patient' as const,
@@ -227,14 +245,37 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
     }));
     
     return [...patientItems, ...leadItems];
-  }, [debouncedSearch, leadsQuery.data, patientSearch.paginatedPatients]);
+  }, [debouncedSearch, leadsQuery.data, patientResults]);
   
   // Appointments for selected date
   const selectedDateISO = useMemo(() => (
     selectedDate ? selectedDate.toISOString().split('T')[0] : undefined
   ), [selectedDate]);
   
-  const { data: appointmentsForDay = [] } = useAppointmentsByDate(selectedDateISO);
+  const { fetchSpecificAppointments } = useClinic();
+  const [appointmentsForDay, setAppointmentsForDay] = useState<any[]>([]);
+  
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedDateISO) {
+      setAppointmentsForDay([]);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetchSpecificAppointments({
+          dateFilter: 'range',
+          startDate: selectedDateISO,
+          endDate: selectedDateISO,
+          pageSize: 100,
+        });
+        if (!cancelled) setAppointmentsForDay(res.data || []);
+      } catch (e) {
+        if (!cancelled) setAppointmentsForDay([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedDateISO, fetchSpecificAppointments]);
   
   const occupiedTimes = useMemo(() => {
     const blocked = new Set<string>();
