@@ -231,12 +231,31 @@ export async function POST(request: NextRequest) {
     }
     
   } catch (error: any) {
-    console.error('💥 [Patient Admission] Unexpected error:', error);
-    
+    console.error(' [Patient Admission] Unexpected error:', error);
+    const msg = String(error?.message || error || '');
+    const transient =
+      msg.includes('ECONNRESET') ||
+      msg.includes('ETIMEDOUT') ||
+      msg.includes('EPIPE') ||
+      msg.includes('broken pipe') ||
+      msg.includes('fetch failed') ||
+      msg.toLowerCase().includes('network');
+
+    if (transient) {
+      return NextResponse.json(
+        {
+          error: 'Servicio temporalmente no disponible',
+          message: process.env.NODE_ENV === 'development' ? msg : 'Servicio no disponible',
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { 
         error: 'Error interno del servidor',
-        message: process.env.NODE_ENV === 'development' ? error.message : 'Error al procesar la admisión',
+        message: process.env.NODE_ENV === 'development' ? msg : 'Error al procesar la admisión',
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       },
       { status: 500 }
