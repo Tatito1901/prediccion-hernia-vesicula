@@ -94,45 +94,51 @@ export const MetricCard = memo<MetricCardProps>(({
   const sizeClasses = {
     sm: "text-lg",
     md: "text-2xl",
-    lg: "text-3xl"
+    lg: "text-4xl font-extrabold"
   };
 
   const colorClasses = {
     default: "",
-    success: "text-green-600 dark:text-green-400",
-    warning: "text-yellow-600 dark:text-yellow-400",
-    error: "text-red-600 dark:text-red-400",
-    info: "text-blue-600 dark:text-blue-400"
+    success: "text-emerald-600 dark:text-emerald-400",
+    warning: "text-amber-600 dark:text-amber-400",
+    error: "text-rose-600 dark:text-rose-400",
+    info: "text-sky-600 dark:text-sky-400"
   };
 
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
-  const trendColor = trend === 'up' ? 'text-green-500' : trend === 'down' ? 'text-red-500' : 'text-gray-500';
+  const trendColor = trend === 'up' ? 'text-emerald-500' : trend === 'down' ? 'text-rose-500' : 'text-slate-500';
 
   return (
     <Card 
       className={cn(
-        "cursor-default transition-all duration-200",
-        onClick && "cursor-pointer hover:shadow-md",
+        "cursor-default transition-all duration-300 hover:shadow-lg border-0 bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800",
+        onClick && "cursor-pointer hover:shadow-xl hover:scale-[1.02]",
         className
       )}
       onClick={onClick}
     >
       <CardHeader className={cn(
-        "pb-2",
-        variant === 'compact' && "pb-1"
+        "pb-3",
+        variant === 'compact' && "pb-2"
       )}>
         <div className="flex items-center justify-between">
           <CardTitle className={cn(
-            "text-sm font-medium text-muted-foreground",
+            "text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide",
             variant === 'compact' && "text-xs"
           )}>
             {label}
           </CardTitle>
           {Icon && (
-            <Icon className={cn(
-              "h-4 w-4 text-muted-foreground",
-              colorClasses[color]
-            )} />
+            <div className={cn(
+              "p-2 rounded-lg bg-white/60 dark:bg-slate-800/60 shadow-sm",
+              size === 'lg' && "p-3"
+            )}>
+              <Icon className={cn(
+                "h-5 w-5",
+                size === 'lg' && "h-6 w-6",
+                colorClasses[color] || "text-slate-500"
+              )} />
+            </div>
           )}
         </div>
         {badge && <div className="mt-1">{badge}</div>}
@@ -140,9 +146,9 @@ export const MetricCard = memo<MetricCardProps>(({
       
       <CardContent className={cn(variant === 'compact' && "pt-0")}>
         <div className={cn(
-          "font-bold",
+          "font-bold tracking-tight",
           sizeClasses[size],
-          colorClasses[color]
+          colorClasses[color] || "text-slate-900 dark:text-slate-100"
         )}>
           {value}
         </div>
@@ -157,7 +163,7 @@ export const MetricCard = memo<MetricCardProps>(({
         )}
         
         {description && variant === 'detailed' && (
-          <p className="text-xs text-muted-foreground mt-2">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
             {description}
           </p>
         )}
@@ -196,12 +202,12 @@ export const MetricsGrid = memo<MetricsGridProps>(({
   };
 
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("space-y-6", className)}>
       {(title || onRefresh) && (
         <div className="flex items-center justify-between">
-          <div>
-            {title && <h3 className="text-lg font-semibold">{title}</h3>}
-            {description && <p className="text-sm text-muted-foreground">{description}</p>}
+          <div className="space-y-1">
+            {title && <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{title}</h3>}
+            {description && <p className="text-sm text-slate-600 dark:text-slate-400">{description}</p>}
           </div>
           {onRefresh && (
             <Button
@@ -217,7 +223,7 @@ export const MetricsGrid = memo<MetricsGridProps>(({
       )}
       
       <div className={cn(
-        "grid gap-4",
+        "grid gap-6",
         gridClasses[columns]
       )}>
         {metrics.map((metric, index) => (

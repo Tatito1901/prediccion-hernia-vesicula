@@ -7,8 +7,7 @@ import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 
 // Import components statically instead of using dynamic imports
 import { DashboardConsolidated } from "../../components/dashboard/dashboard-consolidated";
-import { DashboardContainer } from "../../components/charts/dashboard/dashboard-container";
-import TemporalTrendsChart from "../../components/charts/temporal-trends-chart";
+// Removed detailed charts to improve responsivity and performance per user request
 
 function DashboardContent() {
   return (
@@ -17,19 +16,6 @@ function DashboardContent() {
         <section>
           <DashboardConsolidated />
         </section>
-
-        <section>
-          {/* Gráficos y análisis detallados consumiendo datos agregados del backend */}
-          <DashboardContainer />
-        </section>
-
-        <section>
-          {/* Mantenemos el chart temporal existente */}
-          <div className="grid grid-cols-1">
-            <TemporalTrendsChart />
-          </div>
-        </section>
-
       </div>
     </main>
   );

@@ -25,7 +25,7 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
     return (
       <div className="space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-10 w-full bg-muted animate-pulse rounded" />
+          <div key={i} className="h-12 w-full bg-muted/60 dark:bg-slate-800/60 animate-pulse rounded-md" />
         ))}
       </div>
     );
@@ -41,11 +41,15 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
   }
 
   if (!recentAppointments.length) {
-    return <div className="text-muted-foreground">No hay citas para mostrar.</div>;
+    return (
+      <div className="text-sm text-muted-foreground border rounded-md p-6 text-center">
+        No hay citas para mostrar.
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="divide-y rounded-md border bg-white dark:bg-slate-900">
       {recentAppointments.map((appt: any) => {
         const dateLabel = appt?.fecha_hora_cita
           ? new Date(appt.fecha_hora_cita).toLocaleString('es-MX', {
@@ -53,7 +57,8 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
               timeStyle: 'short',
             })
           : 'Sin fecha';
-        const status = String(appt?.estado_cita ?? '').replaceAll('_', ' ');
+        const rawStatus = String(appt?.estado_cita ?? '').toUpperCase();
+        const status = rawStatus.replaceAll('_', ' ');
         const name =
           appt?.nombreCompletoPaciente ||
           appt?.nombrePaciente ||
@@ -62,14 +67,36 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
           appt?.paciente?.nombre ||
           'Paciente';
 
+        const initial = (name || 'P').trim().charAt(0).toUpperCase();
+        const statusClasses = (() => {
+          switch (rawStatus) {
+            case 'COMPLETADA':
+              return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300';
+            case 'PROGRAMADA':
+              return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300';
+            case 'CANCELADA':
+            case 'CANCELADO':
+              return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300';
+            case 'NO_ASISTIO':
+              return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+            default:
+              return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+          }
+        })();
+
         return (
-          <div key={appt?.id ?? dateLabel + Math.random()} className="flex items-center justify-between p-3 border rounded-md">
-            <div className="min-w-0">
-              <p className="font-medium truncate">{name}</p>
-              <p className="text-xs text-muted-foreground truncate">{dateLabel}</p>
+          <div key={appt?.id ?? dateLabel + Math.random()} className="flex items-center justify-between p-3 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-9 w-9 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                {initial}
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium truncate">{name}</p>
+                <p className="text-xs text-muted-foreground truncate">{dateLabel}</p>
+              </div>
             </div>
             {status && (
-              <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 truncate max-w-[40%] text-right">
+              <span className={`text-[10px] md:text-xs px-2 py-1 rounded whitespace-nowrap ${statusClasses}`}>
                 {status}
               </span>
             )}

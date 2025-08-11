@@ -59,7 +59,6 @@ import {
 import { NewPatientSchema } from './admision-types';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import { cn, formatPhoneNumber } from '@/lib/utils';
-import { useLeads } from '@/hooks/use-leads';
 import { useDebounce } from '@/hooks/use-debounce';
 import type { Patient, Lead } from '@/lib/types';
 import { useClinic } from '@/contexts/clinic-data-provider';
@@ -182,17 +181,40 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const admissionMutation = useAdmitPatient();
   
+  // Centralized clinic actions
+  const { fetchSpecificAppointments, fetchLeads } = useClinic();
+  
   // Autocomplete states and queries
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const debouncedSearch = useDebounce(searchTerm, 300);
   
-  const leadsQuery = useLeads({
-    page: 1,
-    pageSize: 5,
-    search: debouncedSearch,
-    enabled: debouncedSearch.length >= 2,
-  });
+  // Centralized leads fetch using Clinic context
+  const [leadsResults, setLeadsResults] = useState<Lead[]>([]);
+  const [searchingLeads, setSearchingLeads] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!debouncedSearch || debouncedSearch.length < 2) {
+      setLeadsResults([]);
+      return;
+    }
+    (async () => {
+      try {
+        setSearchingLeads(true);
+        const res = await fetchLeads({
+          page: 1,
+          pageSize: 5,
+          search: debouncedSearch,
+        });
+        if (!cancelled) setLeadsResults(res?.data ?? []);
+      } catch {
+        if (!cancelled) setLeadsResults([]);
+      } finally {
+        if (!cancelled) setSearchingLeads(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [debouncedSearch, fetchLeads]);
   
   const [patientResults, setPatientResults] = useState<Patient[]>([]);
   const [searchingPatients, setSearchingPatients] = useState(false);
@@ -220,12 +242,12 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
     return () => { cancelled = true; };
   }, [debouncedSearch]);
   
-  const isSearching = leadsQuery.isLoading || searchingPatients;
+  const isSearching = searchingLeads || searchingPatients;
   
   const combinedResults = useMemo(() => {
     if (!debouncedSearch || debouncedSearch.length < 2) return [];
     
-    const leads = leadsQuery.data?.data ?? [];
+    const leads = leadsResults ?? [];
     const patients = patientResults ?? [];
     
     const patientItems = patients.map((p: Patient) => ({
@@ -245,14 +267,14 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
     }));
     
     return [...patientItems, ...leadItems];
-  }, [debouncedSearch, leadsQuery.data, patientResults]);
+  }, [debouncedSearch, leadsResults, patientResults]);
   
   // Appointments for selected date
   const selectedDateISO = useMemo(() => (
     selectedDate ? selectedDate.toISOString().split('T')[0] : undefined
   ), [selectedDate]);
   
-  const { fetchSpecificAppointments } = useClinic();
+  
   const [appointmentsForDay, setAppointmentsForDay] = useState<any[]>([]);
   
   useEffect(() => {
