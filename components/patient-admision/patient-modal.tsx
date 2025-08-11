@@ -114,6 +114,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
       hora: undefined as unknown as string,
     },
   });
+  const { fetchSpecificAppointments, fetchLeads } = useClinic();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedLeadQuery(leadQuery.trim()), 300);
@@ -121,26 +122,28 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
   }, [leadQuery]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!debouncedLeadQuery) {
       setLeadResults([]);
       return;
     }
-    const controller = new AbortController();
     setSearchingLeads(true);
-    fetch(`/api/leads?search=${encodeURIComponent(debouncedLeadQuery)}&pageSize=10`, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Error al buscar leads'))))
-      .then((json) => {
-        const data = Array.isArray(json?.data) ? json.data : [];
+    (async () => {
+      try {
+        const res = await fetchLeads({ search: debouncedLeadQuery, pageSize: 10 });
+        if (cancelled) return;
+        const data = Array.isArray((res as any)?.data) ? (res as any).data : [];
         setLeadResults(data as Lead[]);
-      })
-      .catch((err) => {
-        if ((err as any)?.name !== 'AbortError') {
+      } catch (err) {
+        if (!cancelled) {
           console.error('Lead search error:', err);
         }
-      })
-      .finally(() => setSearchingLeads(false));
-    return () => controller.abort();
-  }, [debouncedLeadQuery]);
+      } finally {
+        if (!cancelled) setSearchingLeads(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [debouncedLeadQuery, fetchLeads]);
 
   const splitFullName = (full_name: string): { nombre: string; apellidos: string } => {
     const parts = (full_name || '').trim().split(/\s+/).filter(Boolean);
@@ -186,7 +189,6 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
     () => (selectedDate ? selectedDate.toISOString().split('T')[0] : undefined),
     [selectedDate]
   );
-  const { fetchSpecificAppointments } = useClinic();
   const [dayAppointments, setDayAppointments] = useState<any[]>([]);
 
   useEffect(() => {

@@ -1,16 +1,17 @@
 // lib/admission-business-rules.ts
 // REGLAS DE NEGOCIO COMPLETAS Y CORREGIDAS PARA FLUJO DE ADMISIÓN
 
-import { addMinutes, isBefore, isAfter, differenceInMinutes, isWeekend } from 'date-fns';
+import { addMinutes, isBefore, isAfter, differenceInMinutes } from 'date-fns';
 
-// ✅ IMPORTS CORREGIDOS - usando tipos unificados
-import type { 
-  AppointmentWithPatient, 
-  ValidationResult,
-  BusinessRuleContext,
-  AdmissionAction,
-  AppointmentStatus
-} from '@/components/patient-admision/admision-types';
+// ✅ Tipos locales mínimos para evitar depender de components/* (isomórfico FE/BE)
+import { z } from 'zod';
+import { ZAppointmentStatus } from '@/lib/validation/enums';
+
+export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
+export type AdmissionAction = 'checkIn' | 'complete' | 'cancel' | 'noShow' | 'reschedule' | 'viewHistory';
+export interface ValidationResult { valid: boolean; reason?: string }
+export interface BusinessRuleContext { currentTime?: Date; allowOverride?: boolean; userRole?: string }
+export type AppointmentLike = { fecha_hora_cita: string; estado_cita: AppointmentStatus; updated_at?: string };
 
 // ==================== CONFIGURACIÓN DE REGLAS ====================
 export const BUSINESS_RULES = {
@@ -43,7 +44,7 @@ export const BUSINESS_RULES = {
 } as const;
 
 // ==================== HELPERS DE TIEMPO ====================
-const getAppointmentDateTime = (appointment: AppointmentWithPatient): Date => {
+const getAppointmentDateTime = (appointment: AppointmentLike): Date => {
   return new Date(appointment.fecha_hora_cita);
 };
 
@@ -61,7 +62,7 @@ const isLunchTime = (date: Date): boolean => {
          hour < BUSINESS_RULES.LUNCH_END_HOUR;
 };
 
-const wasRecentlyUpdated = (appointment: AppointmentWithPatient, minutes: number = BUSINESS_RULES.RAPID_CHANGE_COOLDOWN_MINUTES): boolean => {
+const wasRecentlyUpdated = (appointment: AppointmentLike, minutes: number = BUSINESS_RULES.RAPID_CHANGE_COOLDOWN_MINUTES): boolean => {
   // ✅ Si tuviéramos campo updated_at, verificaríamos aquí
   // Por ahora, asumimos que no hay cambios recientes
   return false;
@@ -71,7 +72,7 @@ const wasRecentlyUpdated = (appointment: AppointmentWithPatient, minutes: number
 
 // ✅ Validar check-in (marcar presente)
 export const canCheckIn = (
-  appointment: AppointmentWithPatient, 
+  appointment: AppointmentLike, 
   currentTime: Date = new Date(),
   context?: BusinessRuleContext
 ): ValidationResult => {
@@ -126,7 +127,7 @@ export const canCheckIn = (
 
 // ✅ Validar completar consulta
 export const canCompleteAppointment = (
-  appointment: AppointmentWithPatient, 
+  appointment: AppointmentLike, 
   currentTime: Date = new Date(),
   context?: BusinessRuleContext
 ): ValidationResult => {
@@ -154,7 +155,7 @@ export const canCompleteAppointment = (
 
 // ✅ Validar cancelar cita
 export const canCancelAppointment = (
-  appointment: AppointmentWithPatient, 
+  appointment: AppointmentLike, 
   currentTime: Date = new Date(),
   context?: BusinessRuleContext
 ): ValidationResult => {
@@ -181,7 +182,7 @@ export const canCancelAppointment = (
 
 // ✅ Validar marcar como "No Asistió"
 export const canMarkNoShow = (
-  appointment: AppointmentWithPatient, 
+  appointment: AppointmentLike, 
   currentTime: Date = new Date(),
   context?: BusinessRuleContext
 ): ValidationResult => {
@@ -210,7 +211,7 @@ export const canMarkNoShow = (
 
 // ✅ Validar reagendar cita
 export const canRescheduleAppointment = (
-  appointment: AppointmentWithPatient, 
+  appointment: AppointmentLike, 
   currentTime: Date = new Date(),
   context?: BusinessRuleContext
 ): ValidationResult => {
@@ -243,7 +244,7 @@ export const canRescheduleAppointment = (
 
 // ✅ Obtener todas las acciones disponibles para una cita
 export const getAvailableActions = (
-  appointment: AppointmentWithPatient,
+  appointment: AppointmentLike,
   currentTime: Date = new Date(),
   context?: BusinessRuleContext
 ): Array<{ action: AdmissionAction; valid: boolean; reason?: string }> => {
@@ -259,7 +260,7 @@ export const getAvailableActions = (
 
 // ✅ Sugerir próxima acción más relevante
 export const suggestNextAction = (
-  appointment: AppointmentWithPatient,
+  appointment: AppointmentLike,
   currentTime: Date = new Date(),
   context?: BusinessRuleContext
 ): AdmissionAction | null => {
@@ -278,7 +279,7 @@ export const suggestNextAction = (
 
 // ✅ Verificar si una cita necesita atención urgente
 export const needsUrgentAttention = (
-  appointment: AppointmentWithPatient,
+  appointment: AppointmentLike,
   currentTime: Date = new Date()
 ): { urgent: boolean; reason?: string; severity: 'low' | 'medium' | 'high' } => {
   const appointmentTime = getAppointmentDateTime(appointment);
@@ -316,7 +317,7 @@ export const needsUrgentAttention = (
 
 // ✅ Calcular tiempo hasta que una acción esté disponible
 export const getTimeUntilActionAvailable = (
-  appointment: AppointmentWithPatient,
+  appointment: AppointmentLike,
   action: AdmissionAction,
   currentTime: Date = new Date()
 ): { available: boolean; minutesUntil?: number; message?: string } => {

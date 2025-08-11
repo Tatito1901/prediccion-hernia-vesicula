@@ -341,11 +341,29 @@ export async function PATCH(
     
   } catch (error: any) {
     console.error('💥 [Status Update] Unexpected error:', error);
-    
+    const msg = String(error?.message || error || '');
+    const transient =
+      msg.includes('ECONNRESET') ||
+      msg.includes('ETIMEDOUT') ||
+      msg.includes('EPIPE') ||
+      msg.includes('broken pipe') ||
+      msg.includes('fetch failed') ||
+      msg.toLowerCase().includes('network');
+
+    if (transient) {
+      return NextResponse.json(
+        {
+          error: 'Servicio temporalmente no disponible',
+          message: process.env.NODE_ENV === 'development' ? msg : undefined,
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { 
         error: 'Error interno del servidor',
-        message: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        message: process.env.NODE_ENV === 'development' ? msg : undefined,
       },
       { status: 500 }
     );

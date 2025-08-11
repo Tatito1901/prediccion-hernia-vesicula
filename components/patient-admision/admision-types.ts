@@ -8,14 +8,7 @@ import { ZAppointmentStatus, ZContactChannel, ZLeadMotive, ZLeadStatus, ZDiagnos
 // ==================== TIPOS BASE SEGÚN DATABASE.TYPES.TS ====================
 
 // ✅ Estados de cita exactamente como en la base de datos
-export type AppointmentStatus = 
-  | 'PROGRAMADA'
-  | 'CONFIRMADA' 
-  | 'PRESENTE'
-  | 'COMPLETADA'
-  | 'CANCELADA'
-  | 'NO_ASISTIO'
-  | 'REAGENDADA';
+export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
 
 // ✅ Estados de paciente según la base de datos (ACTUALIZADO con nuevo esquema)
 export type PatientStatus = 
@@ -27,32 +20,12 @@ export type PatientStatus =
   | 'inactivo'
   | 'alta_medica';
 
-// ✅ NUEVO: Tipos para manejo de Leads (ALINEADO CON BASE DE DATOS)
-export type LeadChannel = 
-  | 'WHATSAPP'
-  | 'PHONE_CALL'
-  | 'WALK_IN'
-  | 'REFERRAL'
-  | 'WEBSITE'
-  | 'SOCIAL_MEDIA';
+// ✅ NUEVO: Tipos para manejo de Leads (derivados de Zod enums)
+export type LeadChannel = z.infer<typeof ZContactChannel>;
 
-export type LeadMotive = 
-  | 'INFORMES'
-  | 'AGENDAR_CITA'
-  | 'URGENCIA_MEDICA'
-  | 'SEGUIMIENTO'
-  | 'CANCELACION'
-  | 'REAGENDAMIENTO'
-  | 'OTRO';
+export type LeadMotive = z.infer<typeof ZLeadMotive>;
 
-export type LeadStatus = 
-  | 'NUEVO'
-  | 'CONTACTADO'
-  | 'CITA_AGENDADA'
-  | 'CONVERTIDO'
-  | 'NO_INTERESADO'
-  | 'PERDIDO'
-  | 'SEGUIMIENTO_PENDIENTE';
+export type LeadStatus = z.infer<typeof ZLeadStatus>;
 
 export type LeadIntent = 
   | 'ONLY_WANTS_INFORMATION'
@@ -61,22 +34,7 @@ export type LeadIntent =
   | 'OTHER';
 
 // ✅ Diagnósticos exactamente como en el enum de la base de datos
-export type DiagnosisType = 
-  | 'HERNIA INGUINAL'
-  | 'HERNIA UMBILICAL'
-  | 'COLECISTITIS'
-  | 'COLEDOCOLITIASIS'
-  | 'COLANGITIS'
-  | 'APENDICITIS'
-  | 'HERNIA HIATAL'
-  | 'LIPOMA GRANDE'
-  | 'HERNIA INGUINAL RECIDIVANTE'
-  | 'QUISTE SEBACEO INFECTADO'
-  | 'EVENTRACION ABDOMINAL'
-  | 'VESICULA (COLECISTITIS CRONICA)'
-  | 'SIN_DIAGNOSTICO'
-  | 'OTRO'
-  | 'HERNIA SPIGEL';
+export type DiagnosisType = DbDiagnosis;
 
 // ✅ Roles de usuario
 // Centralized UserRole type aligned with DB ('asistente' instead of legacy 'recepcion')

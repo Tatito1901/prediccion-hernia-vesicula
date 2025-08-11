@@ -14,7 +14,9 @@ import type {
   LeadStatus,
   Channel,
   Motive,
+  LeadStats,
 } from '@/lib/types';
+import type { PatientHistoryData } from '@/components/patient-admision/admision-types';
 
 // =============== Tipos del Hook ===============
 export type ClinicFilters = {
@@ -89,6 +91,9 @@ export type ClinicDataActions = {
     priority?: number;
     overdue?: boolean;
   }) => Promise<PaginatedResponse<Lead>>;
+  fetchLeadStats: () => Promise<LeadStats>;
+  fetchPatientDetail: (id: string) => Promise<Patient>;
+  fetchPatientHistory: (patientId: string, options?: { includeHistory?: boolean; limit?: number }) => Promise<PatientHistoryData>;
 };
 
 export type UseClinicDataReturn = ClinicDataState & ClinicDataActions;
@@ -364,6 +369,51 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     [queryClient]
   );
 
+  // Estadísticas de leads
+  const fetchLeadStats = useCallback<ClinicDataActions['fetchLeadStats']>(
+    async () => {
+      const result = await queryClient.fetchQuery({
+        queryKey: queryKeys.leads.stats,
+        queryFn: () => fetchJson<LeadStats>('/api/leads/stats'),
+        staleTime: 2 * 60 * 1000,
+      });
+      return result as LeadStats;
+    },
+    [queryClient]
+  );
+
+  // Detalle de paciente por ID
+  const fetchPatientDetail = useCallback<ClinicDataActions['fetchPatientDetail']>(
+    async (id) => {
+      const key = queryKeys.patients.detail(id);
+      const result = await queryClient.fetchQuery({
+        queryKey: key,
+        queryFn: () => fetchJson<Patient>(`/api/patients/${id}`),
+        staleTime: 2 * 60 * 1000,
+      });
+      return result as Patient;
+    },
+    [queryClient]
+  );
+
+  // Historial de paciente
+  const fetchPatientHistory = useCallback<ClinicDataActions['fetchPatientHistory']>(
+    async (patientId, options) => {
+      const key = queryKeys.patients.historyWithOptions(patientId, options as unknown);
+      const params = new URLSearchParams();
+      if (options?.includeHistory) params.set('includeHistory', 'true');
+      if (options?.limit) params.set('limit', String(options.limit));
+
+      const result = await queryClient.fetchQuery({
+        queryKey: key,
+        queryFn: () => fetchJson<PatientHistoryData>(`/api/patients/${patientId}/history?${params.toString()}`),
+        staleTime: 2 * 60 * 1000,
+      });
+      return result as PatientHistoryData;
+    },
+    [queryClient]
+  );
+
   // Ensamblar estado final
   const state: ClinicDataState = {
     patients: {
@@ -397,5 +447,8 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     refetch,
     fetchSpecificAppointments,
     fetchLeads,
+    fetchLeadStats,
+    fetchPatientDetail,
+    fetchPatientHistory,
   };
 }

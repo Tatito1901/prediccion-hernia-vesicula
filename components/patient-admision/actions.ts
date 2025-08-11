@@ -27,6 +27,58 @@ import {
   canRescheduleAppointment 
 } from '@/lib/admission-business-rules';
 
+// ==================== NETWORK RESILIENCE HELPERS ====================
+const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+async function fetchWithRetry(
+  url: string,
+  init: (RequestInit & { timeoutMs?: number; retry?: number; retryDelayMs?: number }) = {},
+) {
+  const {
+    timeoutMs = 10000,
+    retry = 3,
+    retryDelayMs = 400,
+    ...rest
+  } = init;
+
+  let lastErr: any;
+  for (let attempt = 0; attempt < retry; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...rest, signal: controller.signal });
+      clearTimeout(timer);
+      // Retry on transient server errors
+      if ([502, 503, 504].includes(response.status)) {
+        lastErr = new Error(`Service unavailable (${response.status})`);
+        const backoff = retryDelayMs * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
+        await sleep(backoff);
+        continue;
+      }
+      return response;
+    } catch (err: any) {
+      clearTimeout(timer);
+      const msg = String(err?.message || err || 'network error');
+      // Transient network errors worth retrying
+      const transient =
+        msg.includes('broken pipe') ||
+        msg.includes('EPIPE') ||
+        msg.includes('ECONNRESET') ||
+        msg.includes('ETIMEDOUT') ||
+        msg.includes('ENETUNREACH') ||
+        msg.includes('fetch failed') ||
+        msg.includes('network');
+      if (!transient || attempt === retry - 1) {
+        throw err;
+      }
+      lastErr = err;
+      const backoff = retryDelayMs * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
+      await sleep(backoff);
+    }
+  }
+  throw lastErr ?? new Error('Network error');
+}
+
 // ==================== INTERFACES PARA HOOKS ====================
 interface UpdateStatusParams {
   appointmentId: string;
@@ -50,7 +102,7 @@ interface PatientHistoryOptions {
 // ==================== FUNCIONES DE API CORREGIDAS ====================
 const api = {
   updateAppointmentStatus: async (params: UpdateStatusParams): Promise<AppointmentWithPatient> => {
-    const response = await fetch(`/api/appointments/${params.appointmentId}/status`, {
+    const response = await fetchWithRetry(`/api/appointments/${params.appointmentId}/status`, {
       method: 'PATCH',
       headers: { 
         'Content-Type': 'application/json',
@@ -61,7 +113,10 @@ const api = {
         motivo_cambio: params.motivo_cambio,
         nuevaFechaHora: params.nuevaFechaHora,
         notas_adicionales: params.notas_adicionales
-      })
+      }),
+      timeoutMs: 12000,
+      retry: 3,
+      retryDelayMs: 500,
     });
 
     if (!response.ok) {
@@ -128,13 +183,16 @@ const api = {
   },
 
   admitPatient: async (payload: AdmissionPayload): Promise<AdmissionDBResponse> => {
-    const response = await fetch('/api/patient-admission', {
+    const response = await fetchWithRetry('/api/patient-admission', {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
       body: JSON.stringify(payload),
+      timeoutMs: 15000,
+      retry: 3,
+      retryDelayMs: 600,
     });
 
     if (!response.ok) {
@@ -147,6 +205,10 @@ const api = {
         throw new Error(`Errores de validación: ${validationMessages}`);
       }
       
+      if ([502, 503, 504].includes(response.status)) {
+        throw new Error('Servicio temporalmente no disponible. Intente nuevamente.');
+      }
+
       if (response.status === 409) {
         const conflictMessage = errorData.error || 'Conflicto de horario';
         const suggestions = errorData.suggested_times?.length > 0 
