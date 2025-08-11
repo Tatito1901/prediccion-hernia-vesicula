@@ -12,7 +12,6 @@ export type AppointmentStatus =
   | 'PROGRAMADA'
   | 'CONFIRMADA' 
   | 'PRESENTE'
-  | 'EN_CONSULTA'
   | 'COMPLETADA'
   | 'CANCELADA'
   | 'NO_ASISTIO'
@@ -86,7 +85,6 @@ export type UserRole = DbUserRole;
 // ✅ Acciones disponibles en el flujo de admisión
 export type AdmissionAction = 
   | 'checkIn'
-  | 'startConsult' 
   | 'complete'
   | 'cancel'
   | 'noShow'
@@ -504,16 +502,6 @@ export const APPOINTMENT_STATUS_CONFIG = {
     ringClass: 'ring-emerald-500/20',
     description: 'Paciente presente, esperando consulta',
   },
-  EN_CONSULTA: {
-    label: 'En Consulta',
-    color: 'purple',
-    colorName: 'purple',
-    bgClass: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900 dark:text-purple-100',
-    textClass: 'text-purple-800 dark:text-purple-100',
-    borderClass: 'border-purple-500',
-    ringClass: 'ring-purple-500/20',
-    description: 'Consulta médica en progreso',
-  },
   COMPLETADA: {
     label: 'Completada',
     color: 'green',
@@ -559,7 +547,6 @@ export const APPOINTMENT_STATUS_CONFIG = {
 // ✅ Mapeo de acciones a estados
 export const ACTION_TO_STATUS_MAP: Record<AdmissionAction, AppointmentStatus | null> = {
   checkIn: 'PRESENTE',
-  startConsult: 'EN_CONSULTA',
   complete: 'COMPLETADA',
   cancel: 'CANCELADA',
   noShow: 'NO_ASISTIO',
@@ -639,10 +626,8 @@ export const canPerformActionBasic = (
   switch (action) {
     case 'checkIn':
       return ['PROGRAMADA', 'CONFIRMADA'].includes(status);
-    case 'startConsult':
-      return status === 'PRESENTE';
     case 'complete':
-      return ['EN_CONSULTA', 'PRESENTE'].includes(status);
+      return status === 'PRESENTE';
     case 'cancel':
       return ['PROGRAMADA', 'CONFIRMADA'].includes(status);
     case 'noShow':

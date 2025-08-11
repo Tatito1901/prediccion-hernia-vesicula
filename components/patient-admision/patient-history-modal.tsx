@@ -51,7 +51,7 @@ import {
 } from './admision-types';
 
 // Hook corregido
-import { usePatientHistory } from './actions';
+import { usePatientHistory } from '@/hooks/use-patient';
 
 // ==================== INTERFACES LOCALES ====================
 interface StatCardProps {

@@ -57,7 +57,7 @@ import {
   dbDiagnosisToDisplay,
 } from '@/lib/validation/enums';
 import { NewPatientSchema } from './admision-types';
-import { useAdmitPatient } from './actions';
+import { useAdmitPatient } from '@/hooks/use-patient';
 import { cn, formatPhoneNumber } from '@/lib/utils';
 import { useAppointmentsByDate } from '@/hooks/use-appointments';
 import { useLeads } from '@/hooks/use-leads';

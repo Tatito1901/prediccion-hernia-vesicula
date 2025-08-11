@@ -15,7 +15,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { addDays, format, isBefore, isSunday, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, formatPhoneNumber } from '@/lib/utils';
-import { useAdmitPatient } from './actions';
+import { useAdmitPatient } from '@/hooks/use-patient';
 import type { AdmissionPayload, Lead } from './admision-types';
 import { useAppointmentsByDate } from '@/hooks/use-appointments';
 import { type DbDiagnosis } from '@/lib/validation/enums';

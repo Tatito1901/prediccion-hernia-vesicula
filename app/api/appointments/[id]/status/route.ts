@@ -3,6 +3,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { z } from 'zod';
 import { ZAppointmentStatus } from '@/lib/validation/enums';
+import {
+  canTransitionToStatus,
+  canCheckIn,
+  canStartConsult,
+  canCompleteAppointment,
+  canCancelAppointment,
+  canMarkNoShow,
+  canRescheduleAppointment,
+} from '@/lib/admission-business-rules';
 
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const UpdateStatusSchema = z.object({
@@ -56,33 +65,8 @@ const createAuditRecord = async (
   return { success: true };
 };
 
-const validateStatusTransition = (
-  currentStatus: string,
-  newStatus: string
-): { valid: boolean; reason?: string } => {
-  // Transiciones permitidas según tu workflow
-  const allowedTransitions: Record<string, string[]> = {
-    'PROGRAMADA': ['CONFIRMADA', 'PRESENTE', 'CANCELADA', 'REAGENDADA', 'NO_ASISTIO'],
-    'CONFIRMADA': ['PRESENTE', 'CANCELADA', 'REAGENDADA', 'NO_ASISTIO'],
-    'PRESENTE': ['EN_CONSULTA', 'CANCELADA'],
-    'EN_CONSULTA': ['COMPLETADA', 'REAGENDADA', 'CANCELADA'],
-    'COMPLETADA': [], // Estado final
-    'CANCELADA': ['REAGENDADA'],
-    'NO_ASISTIO': ['REAGENDADA'],
-    'REAGENDADA': ['PROGRAMADA'], // Reinicia el ciclo
-  };
-  
-  const allowed = allowedTransitions[currentStatus] || [];
-  
-  if (!allowed.includes(newStatus)) {
-    return {
-      valid: false,
-      reason: `No se puede cambiar de ${currentStatus} a ${newStatus}. Transiciones permitidas: ${allowed.join(', ')}`
-    };
-  }
-  
-  return { valid: true };
-};
+// Nota: La validación de transición y acciones ahora se importa desde
+// '@/lib/admission-business-rules' para evitar duplicación.
 
 // ==================== ENDPOINT PRINCIPAL ====================
 export async function PATCH(
@@ -164,8 +148,11 @@ export async function PATCH(
       );
     }
     
-    // 4. VALIDAR TRANSICIÓN DE ESTADO
-    const transitionValidation = validateStatusTransition(currentStatus, newStatus);
+    // 4. VALIDAR TRANSICIÓN DE ESTADO (FUENTE ÚNICA DE VERDAD)
+    const transitionValidation = canTransitionToStatus(
+      currentStatus as any,
+      newStatus as any
+    );
     
     if (!transitionValidation.valid) {
       console.warn('⚠️ [Status Update] Invalid transition:', transitionValidation.reason);
@@ -173,6 +160,60 @@ export async function PATCH(
         { 
           error: 'Transición de estado no permitida',
           reason: transitionValidation.reason,
+          currentStatus,
+          attemptedStatus: newStatus,
+        },
+        { status: 422 }
+      );
+    }
+
+    // 4.1 VALIDAR REGLAS ESPECÍFICAS SEGÚN LA ACCIÓN
+    // Mapeamos el nuevo estado a la acción correspondiente para reutilizar
+    // los mismos validadores de la UI en el backend.
+    const now = new Date();
+    let actionValidation: { valid: boolean; reason?: string } = { valid: true };
+
+    switch (newStatus) {
+      case 'PRESENTE': {
+        const res = canCheckIn(currentAppointment as any, now);
+        actionValidation = { valid: res.valid, reason: res.reason };
+        break;
+      }
+      case 'EN_CONSULTA': {
+        const res = canStartConsult(currentAppointment as any, now);
+        actionValidation = { valid: res.valid, reason: res.reason };
+        break;
+      }
+      case 'COMPLETADA': {
+        const res = canCompleteAppointment(currentAppointment as any, now);
+        actionValidation = { valid: res.valid, reason: res.reason };
+        break;
+      }
+      case 'CANCELADA': {
+        const res = canCancelAppointment(currentAppointment as any, now);
+        actionValidation = { valid: res.valid, reason: res.reason };
+        break;
+      }
+      case 'NO_ASISTIO': {
+        const res = canMarkNoShow(currentAppointment as any, now);
+        actionValidation = { valid: res.valid, reason: res.reason };
+        break;
+      }
+      case 'REAGENDADA': {
+        const res = canRescheduleAppointment(currentAppointment as any, now);
+        actionValidation = { valid: res.valid, reason: res.reason };
+        break;
+      }
+      default:
+        // Estados como 'CONFIRMADA' no requieren validador específico distinto
+        actionValidation = { valid: true };
+    }
+
+    if (!actionValidation.valid) {
+      return NextResponse.json(
+        {
+          error: 'Acción no permitida por reglas de negocio',
+          reason: actionValidation.reason,
           currentStatus,
           attemptedStatus: newStatus,
         },

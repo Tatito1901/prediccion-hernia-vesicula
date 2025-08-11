@@ -44,7 +44,7 @@ import { cn } from "@/lib/utils";
 // Types e imports
 import type { AppointmentWithPatient, AdmissionAction, PatientCardProps } from './admision-types';
 import { getPatientFullName, getStatusConfig, getPatientData } from './admision-types';
-import { useAppointmentActions } from './actions';
+import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
 import { canCheckIn, canStartConsult, canCompleteAppointment, canCancelAppointment, canMarkNoShow, canRescheduleAppointment } from '@/lib/admission-business-rules';
 
 // Componentes dinámicos
@@ -88,7 +88,31 @@ export const PatientCard = memo<PatientCardProps>(({
   className 
 }) => {
   // Hooks y estados
-  const { checkIn, complete, cancel, markNoShow, reschedule, isLoading } = useAppointmentActions();
+  const { mutateAsync: updateStatus, isPending: isLoading } = useUpdateAppointmentStatus();
+
+  const checkIn = useCallback((appointmentId: string, notas?: string) => {
+    return updateStatus({ appointmentId, newStatus: 'PRESENTE', motivo: 'Paciente marcado como presente' });
+  }, [updateStatus]);
+
+  const startConsult = useCallback((appointmentId: string, notas?: string) => {
+    return updateStatus({ appointmentId, newStatus: 'EN_CONSULTA', motivo: 'Consulta iniciada' });
+  }, [updateStatus]);
+
+  const complete = useCallback((appointmentId: string, notas?: string) => {
+    return updateStatus({ appointmentId, newStatus: 'COMPLETADA', motivo: 'Consulta finalizada' });
+  }, [updateStatus]);
+
+  const cancel = useCallback((appointmentId: string, motivo?: string) => {
+    return updateStatus({ appointmentId, newStatus: 'CANCELADA', motivo: motivo || 'Cita cancelada' });
+  }, [updateStatus]);
+
+  const markNoShow = useCallback((appointmentId: string) => {
+    return updateStatus({ appointmentId, newStatus: 'NO_ASISTIO', motivo: 'Paciente no asistió' });
+  }, [updateStatus]);
+
+  const reschedule = useCallback((appointmentId: string, newDateTime: string, motivo?: string) => {
+    return updateStatus({ appointmentId, newStatus: 'REAGENDADA', nuevaFechaHora: newDateTime, motivo: motivo || 'Cita reagendada por usuario' });
+  }, [updateStatus]);
   const [confirmation, setConfirmation] = useState<ConfirmationState>({
     isOpen: false,
     action: null,
@@ -179,7 +203,7 @@ export const PatientCard = memo<PatientCardProps>(({
     try {
       switch (confirmation.action) {
         case 'checkIn': await checkIn(appointment.id); break;
-        case 'startConsult': await checkIn(appointment.id); break;
+        case 'startConsult': await startConsult(appointment.id); break;
         case 'complete': await complete(appointment.id); break;
         case 'cancel': await cancel(appointment.id, 'Cancelado por usuario'); break;
         case 'noShow': await markNoShow(appointment.id); break;
@@ -188,7 +212,7 @@ export const PatientCard = memo<PatientCardProps>(({
     } finally {
       setConfirmation(prev => ({ ...prev, isOpen: false }));
     }
-  }, [confirmation.action, appointment.id, checkIn, complete, cancel, markNoShow, onAction]);
+  }, [confirmation.action, appointment.id, checkIn, startConsult, complete, cancel, markNoShow, onAction]);
 
   const handleReschedule = useCallback(async (date: Date, time: string) => {
     const nuevaFecha = `${date.toISOString().split('T')[0]}T${time}:00`;

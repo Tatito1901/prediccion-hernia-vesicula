@@ -372,15 +372,20 @@ const PatientAdmission: React.FC = () => {
   const [futureLoaded, setFutureLoaded] = useState(false);
   const [isLoadingFuture, setIsLoadingFuture] = useState(false);
   const [futureRaw, setFutureRaw] = useState<any[] | null>(null);
+  const [futurePage, setFuturePage] = useState(1);
+  const [futureHasMore, setFutureHasMore] = useState<boolean | undefined>(undefined);
+  const [isLoadingFutureMore, setIsLoadingFutureMore] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'future' && !futureLoaded) {
       setIsLoadingFuture(true);
       (async () => {
         try {
-          const res = await fetchSpecificAppointments({ dateFilter: 'future', pageSize: 100 });
+          const res = await fetchSpecificAppointments({ dateFilter: 'future', pageSize: 100, page: 1 });
           setFutureRaw(res?.data || []);
           setFutureLoaded(true);
+          setFuturePage(1);
+          setFutureHasMore(res?.pagination?.hasMore);
         } catch (e: any) {
           toast.error('Error al cargar citas futuras', { description: e?.message });
         } finally {
@@ -390,10 +395,74 @@ const PatientAdmission: React.FC = () => {
     }
   }, [activeTab, futureLoaded, fetchSpecificAppointments]);
 
+  const loadMoreFuture = useCallback(async () => {
+    if (!futureHasMore || isLoadingFutureMore) return;
+    setIsLoadingFutureMore(true);
+    try {
+      const next = futurePage + 1;
+      const res = await fetchSpecificAppointments({ dateFilter: 'future', pageSize: 100, page: next });
+      setFutureRaw((prev) => ([...(prev || []), ...(res?.data || [])]));
+      setFuturePage(next);
+      setFutureHasMore(res?.pagination?.hasMore);
+    } catch (e: any) {
+      toast.error('Error al cargar más citas futuras', { description: e?.message });
+    } finally {
+      setIsLoadingFutureMore(false);
+    }
+  }, [futureHasMore, isLoadingFutureMore, futurePage, fetchSpecificAppointments]);
+
   const futureAppointmentsLoaded = useMemo<AppointmentWithPatient[]>(() => {
     if (!futureRaw) return [];
     return futureRaw.map(mapToAppointmentWithPatient);
   }, [futureRaw, mapToAppointmentWithPatient]);
+
+  // Estado y fetch bajo demanda para citas pasadas
+  const [pastLoaded, setPastLoaded] = useState(false);
+  const [isLoadingPast, setIsLoadingPast] = useState(false);
+  const [isLoadingPastMore, setIsLoadingPastMore] = useState(false);
+  const [pastRaw, setPastRaw] = useState<any[] | null>(null);
+  const [pastPage, setPastPage] = useState(1);
+  const [pastHasMore, setPastHasMore] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    if (activeTab === 'past' && !pastLoaded) {
+      setIsLoadingPast(true);
+      (async () => {
+        try {
+          const res = await fetchSpecificAppointments({ dateFilter: 'past', pageSize: 100, page: 1 });
+          setPastRaw(res?.data || []);
+          setPastLoaded(true);
+          setPastPage(1);
+          setPastHasMore(res?.pagination?.hasMore);
+        } catch (e: any) {
+          toast.error('Error al cargar citas pasadas', { description: e?.message });
+        } finally {
+          setIsLoadingPast(false);
+        }
+      })();
+    }
+  }, [activeTab, pastLoaded, fetchSpecificAppointments]);
+
+  const loadMorePast = useCallback(async () => {
+    if (!pastHasMore || isLoadingPastMore) return;
+    setIsLoadingPastMore(true);
+    try {
+      const next = pastPage + 1;
+      const res = await fetchSpecificAppointments({ dateFilter: 'past', pageSize: 100, page: next });
+      setPastRaw((prev) => ([...(prev || []), ...(res?.data || [])]));
+      setPastPage(next);
+      setPastHasMore(res?.pagination?.hasMore);
+    } catch (e: any) {
+      toast.error('Error al cargar más citas pasadas', { description: e?.message });
+    } finally {
+      setIsLoadingPastMore(false);
+    }
+  }, [pastHasMore, isLoadingPastMore, pastPage, fetchSpecificAppointments]);
+
+  const pastAppointmentsLoaded = useMemo<AppointmentWithPatient[]>(() => {
+    if (!pastRaw) return [];
+    return pastRaw.map(mapToAppointmentWithPatient);
+  }, [pastRaw, mapToAppointmentWithPatient]);
 
   const { todayAppointments, futureAppointments, pastAppointments } = useMemo(() => {
     const baseApps = normalizedAppointments;
@@ -416,28 +485,43 @@ const PatientAdmission: React.FC = () => {
     };
   }, [normalizedAppointments]);
 
-  // Contadores memoizados
-  const counts = useMemo(() => ({
-    today: todayAppointments.length,
-    future: futureAppointments.length,
-    past: pastAppointments.length,
-    schedule: todayAppointments.length + futureAppointments.length + pastAppointments.length
-  }), [todayAppointments.length, futureAppointments.length, pastAppointments.length]);
+  // Contadores memoizados (considerando datos on-demand)
+  const counts = useMemo(() => {
+    const futureMergedLen = futureAppointmentsLoaded.length > 0
+      ? (() => { const ids = new Set(futureAppointmentsLoaded.map(a => a.id)); return futureAppointmentsLoaded.length + futureAppointments.filter(a => !ids.has(a.id)).length; })()
+      : futureAppointments.length;
+    const pastMergedLen = pastAppointmentsLoaded.length > 0
+      ? (() => { const ids = new Set(pastAppointmentsLoaded.map(a => a.id)); return pastAppointmentsLoaded.length + pastAppointments.filter(a => !ids.has(a.id)).length; })()
+      : pastAppointments.length;
+    return {
+      today: todayAppointments.length,
+      future: futureMergedLen,
+      past: pastMergedLen,
+      schedule: todayAppointments.length + futureMergedLen + pastMergedLen,
+    };
+  }, [todayAppointments.length, futureAppointmentsLoaded, futureAppointments, pastAppointmentsLoaded, pastAppointments]);
 
   const handleTabChange = useCallback((tab: TabType) => {
     setActiveTab(tab);
   }, []);
 
   const handleRefresh = useCallback(() => {
-    // Limpiar cache local de futuras para forzar refetch on-demand
+    // Limpiar caches locales para forzar refetch on-demand
     setFutureLoaded(false);
     setFutureRaw(null);
+    setFuturePage(1);
+    setFutureHasMore(undefined);
+    setPastLoaded(false);
+    setPastRaw(null);
+    setPastPage(1);
+    setPastHasMore(undefined);
     refresh();
   }, [refresh]);
 
   const handleLoadMore = useCallback(() => {
-    // No-op: sin paginación infinita con datos centralizados
-  }, []);
+    if (activeTab === 'future') return loadMoreFuture();
+    if (activeTab === 'past') return loadMorePast();
+  }, [activeTab, loadMoreFuture, loadMorePast]);
 
   const renderTabContent = () => {
     const emptyStates = {
@@ -449,16 +533,39 @@ const PatientAdmission: React.FC = () => {
 
     let currentAppointments: AppointmentWithPatient[] = [];
     let tabIsLoading = isLoading;
+    let isLoadingMoreProp = false;
+    let hasMoreProp: boolean | undefined = false;
     switch (activeTab) {
       case 'today':
         currentAppointments = todayAppointments;
         break;
       case 'future':
-        currentAppointments = futureAppointmentsLoaded.length > 0 ? futureAppointmentsLoaded : futureAppointments;
+        if (futureAppointmentsLoaded.length > 0) {
+          const ids = new Set(futureAppointmentsLoaded.map(a => a.id));
+          currentAppointments = [
+            ...futureAppointmentsLoaded,
+            ...futureAppointments.filter(a => !ids.has(a.id))
+          ];
+        } else {
+          currentAppointments = futureAppointments;
+        }
         tabIsLoading = isLoading || isLoadingFuture;
+        isLoadingMoreProp = isLoadingFutureMore;
+        hasMoreProp = futureHasMore;
         break;
       case 'past':
-        currentAppointments = pastAppointments;
+        if (pastAppointmentsLoaded.length > 0) {
+          const ids = new Set(pastAppointmentsLoaded.map(a => a.id));
+          currentAppointments = [
+            ...pastAppointmentsLoaded,
+            ...pastAppointments.filter(a => !ids.has(a.id))
+          ];
+        } else {
+          currentAppointments = pastAppointments;
+        }
+        tabIsLoading = isLoading || isLoadingPast;
+        isLoadingMoreProp = isLoadingPastMore;
+        hasMoreProp = pastHasMore;
         break;
       default:
         currentAppointments = [];
@@ -468,8 +575,8 @@ const PatientAdmission: React.FC = () => {
       <AppointmentsSection
         appointments={currentAppointments}
         isLoading={tabIsLoading}
-        isLoadingMore={isLoading}
-        hasMore={false}
+        isLoadingMore={isLoadingMoreProp}
+        hasMore={hasMoreProp}
         loadMore={handleLoadMore}
         refresh={handleRefresh}
         emptyMessage={emptyStates[activeTab]}

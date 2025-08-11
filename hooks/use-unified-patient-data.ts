@@ -78,6 +78,7 @@ interface UnifiedPatientDataResponse {
     patientId?: string;
     search?: string;
     pageSize?: number;
+    page?: number;
   }) => Promise<EnrichedAppointmentsResponse>;
 }
 
@@ -134,6 +135,7 @@ const fetchAppointmentsByFilter = async (filter: {
   patientId?: string;
   search?: string;
   pageSize?: number;
+  page?: number;
 }): Promise<EnrichedAppointmentsResponse> => {
   try {
     const searchParams = new URLSearchParams();
@@ -142,6 +144,7 @@ const fetchAppointmentsByFilter = async (filter: {
     if (filter.patientId) searchParams.append('patientId', filter.patientId);
     if (filter.search) searchParams.append('search', filter.search);
     if (filter.pageSize) searchParams.append('pageSize', String(filter.pageSize));
+    if (filter.page) searchParams.append('page', String(filter.page));
     
     const response = await fetch(`/api/appointments?${searchParams.toString()}`);
     
