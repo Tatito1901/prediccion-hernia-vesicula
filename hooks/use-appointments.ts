@@ -7,6 +7,9 @@ import { toast } from 'sonner';
 import { AppointmentStatus, AppointmentWithPatient, PatientStatus, DiagnosisType } from '@/components/patient-admision/admision-types'
 import { queryKeys } from '@/lib/query-keys';
 
+// Canonical patient hooks are centralized in hooks/use-patient
+export { useAdmitPatient, useUpdatePatient } from '@/hooks/use-patient';
+
 // ==================== QUERY KEYS: usar lib/query-keys.ts ====================
 
 // ==================== UTILIDADES DE TRANSFORMACIÓN ====================
@@ -234,6 +237,15 @@ export const useUpdateAppointmentStatus = (
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
       
+      // Invalidar vistas derivadas y historiales relevantes
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.today });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.upcoming });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.past });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.byPatient(updatedAppointment.patient_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.history(updatedAppointment.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.history(updatedAppointment.patient_id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.historyAll });
+      
       const statusMessages: Record<AppointmentStatus, string> = {
         'PROGRAMADA': 'Cita programada',
         'CONFIRMADA': 'Cita confirmada',
@@ -263,85 +275,7 @@ export const useUpdateAppointmentStatus = (
   });
 };
 
-// Hook optimizado para admitir pacientes
-export const useAdmitPatient = (
-  options?: Omit<UseMutationOptions<any, Error, any>, 'mutationFn'>
-) => {
-  const queryClient = useQueryClient();
-
-  return useMutation<any, Error, any>({
-    mutationFn: async (patientAndAppointmentData) => {
-      const response = await fetch('/api/patient-admission', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(patientAndAppointmentData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Error al admitir paciente');
-      }
-
-      return response.json();
-    },
-    onSuccess: async (result) => {
-      // Invalidación simplificada y suficiente
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.patients.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data }),
-      ]);
-
-      toast.success('Paciente admitido exitosamente');
-    },
-    onError: (error: Error) => {
-      console.error('Error admitting patient:', error);
-      toast.error(error.message || 'Error al admitir paciente');
-    },
-    ...options,
-  });
-};
-
-// Hook para actualizar datos de pacientes
-export const useUpdatePatient = (
-  options?: Omit<UseMutationOptions<any, Error, { id: string; updates: any }>, 'mutationFn'>
-) => {
-  const queryClient = useQueryClient();
-
-  return useMutation<any, Error, { id: string; updates: any }>({
-    mutationFn: async (data) => {
-      const response = await fetch(`/api/patients/${data.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data.updates),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Error al actualizar paciente');
-      }
-
-      return response.json();
-    },
-    onSuccess: (updatedPatient, variables) => {
-      // Invalidación específica
-      queryClient.invalidateQueries({ queryKey: queryKeys.patients.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.patients.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
-      
-      toast.success('Paciente actualizado exitosamente');
-    },
-    onError: (error: Error) => {
-      console.error('Error updating patient:', error);
-      toast.error(error.message || 'Error al actualizar paciente');
-    },
-    ...options,
-  });
-};
+// Note: useAdmitPatient and useUpdatePatient are re-exported from '@/hooks/use-patient'
 
 // ==================== UTILIDADES ====================
 const isToday = (dateString: string): boolean => {

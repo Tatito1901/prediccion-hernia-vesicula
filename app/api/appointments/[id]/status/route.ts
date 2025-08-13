@@ -11,6 +11,7 @@ import {
   canMarkNoShow,
   canRescheduleAppointment,
 } from '@/lib/admission-business-rules';
+import { validateRescheduleDateTime } from '@/lib/clinic-schedule';
 
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const UpdateStatusSchema = z.object({
@@ -21,6 +22,26 @@ const UpdateStatusSchema = z.object({
   // Alias para compatibilidad con payloads antiguos del frontend
   fecha_hora_cita: z.string().datetime().optional(),
   notas_adicionales: z.string().max(500).optional(),
+}).superRefine((data, ctx) => {
+  if (data.newStatus === 'REAGENDADA') {
+    if (!data.nuevaFechaHora && !data.fecha_hora_cita) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nuevaFechaHora'],
+        message: 'nuevaFechaHora es requerida cuando el estado es REAGENDADA',
+      });
+    }
+  }
+  if (data.newStatus === 'CANCELADA') {
+    const motivo = (data.motivo_cambio ?? '').trim();
+    if (!motivo) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['motivo_cambio'],
+        message: 'motivo_cambio es requerido cuando el estado es CANCELADA',
+      });
+    }
+  }
 });
 
 // ==================== HELPERS CORREGIDOS ====================
@@ -70,11 +91,11 @@ const createAuditRecord = async (
 // ==================== ENDPOINT PRINCIPAL ====================
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const supabase = await createClient();
-    const { id: appointmentId } = await params;
+    const { id: appointmentId } = params;
     const rawBody = await request.json();
     
     // Backward-compat: aceptar claves antiguas del frontend
@@ -103,6 +124,26 @@ export async function PATCH(
     
     const { newStatus, motivo_cambio, nuevaFechaHora, fecha_hora_cita, notas_adicionales } = validationResult.data;
     const effectiveNewDateTime = nuevaFechaHora ?? fecha_hora_cita;
+
+    // 1.1 Validar reglas de agenda del lado servidor para REAGENDADA
+    if (newStatus === 'REAGENDADA') {
+      if (!effectiveNewDateTime) {
+        return NextResponse.json(
+          { error: 'Fecha/hora requerida para reagendar' },
+          { status: 400 }
+        );
+      }
+      const scheduleValidation = validateRescheduleDateTime(effectiveNewDateTime);
+      if (!scheduleValidation.valid) {
+        return NextResponse.json(
+          {
+            error: 'Acción no permitida por reglas de negocio',
+            reason: scheduleValidation.reason,
+          },
+          { status: 422 }
+        );
+      }
+    }
     
     // 2. OBTENER CITA ACTUAL (según tu esquema real)
     const { data: currentAppointment, error: fetchError } = await supabase
@@ -117,6 +158,7 @@ export async function PATCH(
         es_primera_vez,
         notas_breves,
         created_at,
+        updated_at,
         patients!inner (
           id,
           nombre,
@@ -225,6 +267,30 @@ export async function PATCH(
     const realIp = request.headers.get('x-real-ip');
     const ipAddress = forwardedFor?.split(',')[0] || realIp || undefined;
     
+    // 5.1 Verificar conflicto de horario si es reagendamiento (mismo médico, fecha/hora exacta)
+    if (newStatus === 'REAGENDADA' && effectiveNewDateTime) {
+      const { data: conflicts, error: conflictError } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('doctor_id', currentAppointment.doctor_id)
+        .eq('fecha_hora_cita', effectiveNewDateTime)
+        .in('estado_cita', ['PROGRAMADA', 'CONFIRMADA', 'PRESENTE'])
+        .neq('id', appointmentId)
+        .limit(1);
+
+      if (conflictError) {
+        console.error('⚠️ [Status Update] Conflict check error:', conflictError);
+      } else if (conflicts && conflicts.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'Horario no disponible',
+            reason: 'Existe otra cita activa en ese horario para el médico seleccionado',
+          },
+          { status: 422 }
+        );
+      }
+    }
+
     // 6. PREPARAR DATOS DE ACTUALIZACIÓN
     const updateData: any = {
       estado_cita: newStatus, // TEXT en tu esquema
@@ -260,6 +326,7 @@ export async function PATCH(
         es_primera_vez,
         notas_breves,
         created_at,
+        updated_at,
         patients!inner (
           id,
           nombre,

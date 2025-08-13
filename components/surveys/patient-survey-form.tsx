@@ -36,7 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { useUpdatePatient } from "@/hooks/use-appointments"
+import { useUpdatePatient } from "@/hooks/use-patient"
 import { toast } from "sonner"
 import { PatientStatusEnum } from "@/lib/types"
 

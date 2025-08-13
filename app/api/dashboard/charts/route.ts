@@ -1,6 +1,7 @@
 // app/api/dashboard/charts/route.ts - API para datos de gráficos del dashboard (agregados en backend)
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 import { dbDiagnosisToDisplay } from '@/lib/validation/enums';
 
 // Configuración de cache (2m browser, 5m edge, SWR 15m)
@@ -54,7 +55,9 @@ export async function GET(request: NextRequest) {
     const start = startOfDayLocal(startDateParam ? parseDateOnly(startDateParam) : defaultStart);
     const end = endOfDayLocal(endDateParam ? parseDateOnly(endDateParam) : now);
 
-    const supabase = await createClient();
+    const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createAdminClient()
+      : await createClient();
 
     // Consulta base: solo columnas necesarias para agregación
     let query = supabase

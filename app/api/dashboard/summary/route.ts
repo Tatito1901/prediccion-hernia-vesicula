@@ -1,11 +1,14 @@
 // app/api/dashboard/summary/route.ts - API PARA RESUMEN DEL DASHBOARD
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 
 // ==================== HANDLER PARA RESUMEN DEL DASHBOARD ====================
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createAdminClient()
+      : await createClient();
     
     // 🎯 OBTENER MÉTRICAS ESPECÍFICAS EN PARALELO
     const [

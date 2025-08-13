@@ -51,7 +51,9 @@ export type ClinicDataState = {
     };
   };
   appointments: {
-    today: Appointment[]; // Usamos citas de HOY por defecto para eficiencia real
+    today: Appointment[]; // Citas de HOY
+    future: Appointment[]; // Citas FUTURAS
+    past: Appointment[];   // Citas PASADAS
     summary?: {
       total_appointments: number;
       today_count: number;
@@ -227,26 +229,34 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
   } = useQuery({
     queryKey: queryKeys.clinic.data,
     queryFn: async () => {
-      const [patientsRes, appointmentsRes] = await Promise.all([
+      const [patientsRes, appointmentsRes, futureRes, pastRes] = await Promise.all([
         fetchActivePatients(),
         fetchTodayAppointments(),
+        fetchAppointmentsByFilter({ dateFilter: 'future', pageSize: 100 }),
+        fetchAppointmentsByFilter({ dateFilter: 'past', pageSize: 100 }),
       ]);
 
       const todayAppointments = (appointmentsRes?.data ?? []) as Appointment[];
+      const futureAppointments = (futureRes?.data ?? []) as Appointment[];
+      const pastAppointments = (pastRes?.data ?? []) as Appointment[];
 
       // Calcular summary mínimo si no viene del backend
       const summary =
         appointmentsRes?.summary ||
         ({
-          total_appointments: todayAppointments.length,
+          total_appointments: todayAppointments.length + futureAppointments.length + pastAppointments.length,
           today_count: todayAppointments.length,
-          future_count: 0,
-          past_count: 0,
+          future_count: futureAppointments.length,
+          past_count: pastAppointments.length,
         } as ClinicDataState['appointments']['summary']);
 
       return {
         patients: patientsRes.data ?? [],
-        appointments: todayAppointments,
+        appointments: {
+          today: todayAppointments,
+          future: futureAppointments,
+          past: pastAppointments,
+        },
         summary,
       };
     },
@@ -429,7 +439,9 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
       stats: paginated?.stats,
     },
     appointments: {
-      today: essential?.appointments ?? [],
+      today: essential?.appointments?.today ?? [],
+      future: essential?.appointments?.future ?? [],
+      past: essential?.appointments?.past ?? [],
       summary: essential?.summary,
     },
     filters,

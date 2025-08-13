@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tablet, Smartphone, ArrowLeft } from "lucide-react"
 // ❌ ELIMINADO: import { usePatient } - Ya no es necesario, usamos contexto central
-import { useUpdatePatient } from "@/hooks/use-appointments";
+import { useUpdatePatient } from "@/hooks/use-patient";
 import { useClinic } from "@/contexts/clinic-data-provider";
 import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 import MedicalSurveyAnalysis from "@/components/surveys/medical-survey-analysis"

@@ -101,8 +101,11 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   }, [clinic.patients?.paginated, clinic.patients?.active]);
 
   const allAppointments = useMemo(() => {
-    return clinic.appointments?.today ?? [];
-  }, [clinic.appointments?.today]);
+    const today = clinic.appointments?.today ?? [];
+    const future = clinic.appointments?.future ?? [];
+    const past = clinic.appointments?.past ?? [];
+    return [...today, ...future, ...past];
+  }, [clinic.appointments?.today, clinic.appointments?.future, clinic.appointments?.past]);
 
   // Los pacientes ya vienen enriquecidos desde el backend
   const enrichedPatients = allPatients;

@@ -49,16 +49,21 @@ async function postAdmission(payload: AdmissionPayload): Promise<AdmissionDBResp
     // Mensajes enriquecidos en caso de conflicto/validaciones
     if (res.status === 400 && data.validation_errors) {
       const msg = data.validation_errors.map((e: any) => `${e.field}: ${e.message}`).join(', ');
-      throw new Error(`Errores de validación: ${msg}`);
+      const err = new Error(`Errores de validación: ${msg}`, { cause: { status: res.status, data } });
+      throw err;
     }
     if (res.status === 409) {
       const conflict = data.error || 'Conflicto de horario';
       const suggestions = Array.isArray(data.suggested_times) && data.suggested_times.length > 0
         ? ` Horarios sugeridos: ${data.suggested_times.map((t: any) => t.time_formatted).join(', ')}`
         : '';
-      throw new Error(conflict + suggestions);
+      const err = new Error(conflict + suggestions, { cause: { status: res.status, data } });
+      throw err;
     }
-    throw new Error(data.error || 'Error al procesar la admisión.');
+    // 422 (reglas de negocio) u otros estados
+    const msg = data.error || 'Error al procesar la admisión.';
+    const err = new Error(msg, { cause: { status: res.status, data } });
+    throw err;
   }
   return res.json();
 }
@@ -115,9 +120,20 @@ export const useAdmitPatient = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      const cause = error?.cause as any;
+      const status = cause?.status as number | undefined;
+      const data = cause?.data;
+      const msg = error?.message || data?.error || 'No se pudo completar el registro. Intente de nuevo.';
+
+      // Evitar toast duplicado si el formulario ya manejará errores de campo
+      const isValidation = status === 400 && Array.isArray(data?.validation_errors);
+      const isDuplicatePhone = status === 400 && (msg?.includes('patients_telefono_key') || /tel[eé]fono/i.test(msg));
+      const isBusinessRule = status === 422; // horario, domingo, pasado, etc.
+      if (isValidation || isDuplicatePhone || isBusinessRule) return;
+
       toast.error('Error en la Admisión', {
-        description: error.message || 'No se pudo completar el registro. Intente de nuevo.',
+        description: msg,
         duration: 6000,
       });
     },

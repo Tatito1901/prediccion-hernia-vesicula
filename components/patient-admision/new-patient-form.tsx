@@ -358,7 +358,8 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
           d.setHours(hh, mm, 0, 0);
           return d.toISOString();
         })(),
-        motivos_consulta: [`Primera consulta - ${diagnosisOptions.find(d => d.value === data.diagnostico_principal)?.label}`],
+        // Alinear con enum de BD: usar el valor del diagnóstico directamente
+        motivos_consulta: [data.diagnostico_principal],
         telefono: data.telefono?.trim() || undefined,
         email: data.email?.trim() || undefined,
         edad: data.edad,
@@ -383,7 +384,52 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
       form.reset();
       setSelectedDate(undefined);
       onSuccess?.(result);
-    } catch (error) {
+    } catch (error: any) {
+      const cause = error?.cause as any;
+      const status = cause?.status as number | undefined;
+      const resp = cause?.data;
+      const message: string = error?.message || resp?.error || 'Error en la admisión';
+
+      if (status === 400) {
+        // Duplicado de teléfono (UNIQUE)
+        if (message?.includes('patients_telefono_key') || /tel[eé]fono/i.test(message)) {
+          form.setError('telefono', {
+            type: 'manual',
+            message: 'Este teléfono ya está registrado. Selecciona al paciente existente o usa otro número.',
+          });
+          return;
+        }
+        // Errores de validación del esquema (Zod)
+        const ve = Array.isArray(resp?.validation_errors) ? resp.validation_errors : [];
+        if (ve.length) {
+          for (const e of ve) {
+            const field = String(e.field || '');
+            const msg = String(e.message || 'Dato inválido');
+            if (field.includes('p_nombre')) form.setError('nombre', { type: 'manual', message: msg });
+            else if (field.includes('p_apellidos')) form.setError('apellidos', { type: 'manual', message: msg });
+            else if (field.includes('p_email')) form.setError('email', { type: 'manual', message: msg });
+            else if (field.includes('p_telefono')) form.setError('telefono', { type: 'manual', message: msg });
+            else if (field.includes('p_diagnostico_principal')) form.setError('diagnostico_principal', { type: 'manual', message: msg });
+            else if (field.includes('p_fecha_hora_cita')) {
+              form.setError('fechaConsulta', { type: 'manual', message: msg });
+              form.setError('horaConsulta', { type: 'manual', message: msg });
+            }
+          }
+          return;
+        }
+      }
+
+      if (status === 422) {
+        // Reglas de negocio de horario/fecha
+        if (/domingo|pasado/i.test(message)) {
+          form.setError('fechaConsulta', { type: 'manual', message });
+        } else {
+          form.setError('horaConsulta', { type: 'manual', message });
+        }
+        return;
+      }
+
+      // Fallback: el toast global del hook ya informa; dejamos log para depurar.
       console.error('Submit error:', error);
     }
   }, [admissionMutation, form, onSuccess]);

@@ -17,7 +17,7 @@ import { es } from 'date-fns/locale';
 import { cn, formatPhoneNumber } from '@/lib/utils';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import type { AdmissionPayload, Lead } from './admision-types';
-import { type DbDiagnosis } from '@/lib/validation/enums';
+import { ZDiagnosisDb, DIAGNOSIS_DB_VALUES, dbDiagnosisToDisplay, type DbDiagnosis } from '@/lib/validation/enums';
 import { useClinic } from '@/contexts/clinic-data-provider';
 
 interface PatientModalProps {
@@ -33,7 +33,7 @@ const MinimalSchema = z.object({
   genero: z.enum(['Masculino', 'Femenino'], { required_error: 'Selecciona género' }),
   telefono: z.string().regex(/^[0-9+\-\s()]{10,15}$/i, 'Teléfono inválido'),
   email: z.string().email('Email inválido').optional().or(z.literal('')),
-  motivo: z.enum(['HERNIA', 'VESICULA', 'URGENCIA'], { required_error: 'Selecciona motivo' }),
+  diagnostico_principal: ZDiagnosisDb,
   fecha: z.date({ required_error: 'Fecha requerida' }),
   hora: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/i, 'Hora inválida (HH:MM)'),
 });
@@ -79,18 +79,6 @@ function combineDateTime(date: Date, hhmm: string): Date {
   return d;
 }
 
-function mapMotivoToDiagnosis(motivo: MinimalFormData['motivo']): DbDiagnosis {
-  switch (motivo) {
-    case 'HERNIA':
-      return 'HERNIA_INGUINAL';
-    case 'VESICULA':
-      return 'COLECISTITIS_CRONICA';
-    case 'URGENCIA':
-    default:
-      return 'SIN_DIAGNOSTICO';
-  }
-}
-
 export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
   const [open, setOpen] = useState(false);
 
@@ -109,7 +97,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
       genero: undefined as unknown as MinimalFormData['genero'],
       telefono: '',
       email: '',
-      motivo: undefined as unknown as MinimalFormData['motivo'],
+      diagnostico_principal: undefined as unknown as DbDiagnosis,
       fecha: undefined as unknown as Date,
       hora: undefined as unknown as string,
     },
@@ -160,24 +148,22 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
     if (lead.phone_number) form.setValue('telefono', lead.phone_number, { shouldValidate: true });
     if (lead.email) form.setValue('email', lead.email || '', { shouldValidate: false });
 
-    // Prefill clinical motivo using lead information (non-intrusive)
-    const currentMotivo = form.getValues('motivo');
-    if (!currentMotivo) {
-      let inferred: MinimalFormData['motivo'] | undefined;
-      // Strong mapping: URGENCIA_MEDICA -> URGENCIA
+    // Prefill clinical diagnosis using lead information (non-intrusive)
+    const currentDx = form.getValues('diagnostico_principal');
+    if (!currentDx) {
+      let inferred: DbDiagnosis | undefined;
       if ((lead as any).motive === 'URGENCIA_MEDICA') {
-        inferred = 'URGENCIA';
+        inferred = 'SIN_DIAGNOSTICO';
       } else {
-        // Heuristics from notes
         const notes = ((lead as any).notes || '').toString().toLowerCase();
         if (/ves[íi]cula|colecist/i.test(notes)) {
-          inferred = 'VESICULA';
+          inferred = 'COLECISTITIS_CRONICA';
         } else if (/hernia|eventraci[óo]n|eventracion/i.test(notes)) {
-          inferred = 'HERNIA';
+          inferred = 'HERNIA_INGUINAL';
         }
       }
       if (inferred) {
-        form.setValue('motivo', inferred, { shouldValidate: true });
+        form.setValue('diagnostico_principal', inferred, { shouldValidate: true });
       }
     }
   }, [form]);
@@ -240,9 +226,10 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
       telefono: values.telefono,
       email: values.email || undefined,
       genero: values.genero,
-      diagnostico_principal: mapMotivoToDiagnosis(values.motivo),
+      diagnostico_principal: values.diagnostico_principal,
       fecha_hora_cita: combineDateTime(values.fecha, values.hora).toISOString(),
-      motivos_consulta: [values.motivo],
+      // Alinear con enum de BD: usar el valor del diagnóstico directamente
+      motivos_consulta: [values.diagnostico_principal],
     };
 
     admitPatient(payload, {
@@ -250,6 +237,51 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
         form.reset();
         setOpen(false);
         onSuccess?.();
+      },
+      onError: (err: any) => {
+        const cause = err?.cause as any;
+        const status = cause?.status as number | undefined;
+        const data = cause?.data;
+        const message: string = err?.message || data?.error || 'Error en la admisión';
+
+        if (status === 400) {
+          // Duplicado de teléfono (UNIQUE)
+          if (message?.includes('patients_telefono_key') || /tel[eé]fono/i.test(message)) {
+            form.setError('telefono', {
+              type: 'manual',
+              message: 'Este teléfono ya está registrado. Selecciona al paciente existente o usa otro número.',
+            });
+            return;
+          }
+          // Errores de validación de esquema (Zod)
+          const ve = Array.isArray(data?.validation_errors) ? data.validation_errors : [];
+          if (ve.length) {
+            for (const e of ve) {
+              const field = String(e.field || '');
+              const msg = String(e.message || 'Dato inválido');
+              if (field.includes('p_nombre')) form.setError('nombre', { type: 'manual', message: msg });
+              else if (field.includes('p_apellidos')) form.setError('apellidos', { type: 'manual', message: msg });
+              else if (field.includes('p_email')) form.setError('email', { type: 'manual', message: msg });
+              else if (field.includes('p_telefono')) form.setError('telefono', { type: 'manual', message: msg });
+              else if (field.includes('p_diagnostico_principal')) form.setError('diagnostico_principal', { type: 'manual', message: msg });
+              else if (field.includes('p_fecha_hora_cita')) {
+                form.setError('fecha', { type: 'manual', message: msg });
+                form.setError('hora', { type: 'manual', message: msg });
+              }
+            }
+            return;
+          }
+        }
+        if (status === 422) {
+          // Reglas de negocio de horario/fecha
+          if (/domingo|pasado/i.test(message)) {
+            form.setError('fecha', { type: 'manual', message });
+          } else {
+            form.setError('hora', { type: 'manual', message });
+          }
+          return;
+        }
+        // Otros errores: el toast global del hook ya informa.
       },
     });
   }, [admitPatient, form, onSuccess]);
@@ -419,20 +451,22 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
               />
               <FormField
                 control={form.control}
-                name="motivo"
+                name="diagnostico_principal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Motivo de consulta *</FormLabel>
+                    <FormLabel>Motivo de consulta (Diagnóstico) *</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecciona" />
+                          <SelectValue placeholder="Selecciona diagnóstico" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="HERNIA">Hernia</SelectItem>
-                        <SelectItem value="VESICULA">Vesícula</SelectItem>
-                        <SelectItem value="URGENCIA">Urgencia</SelectItem>
+                        {DIAGNOSIS_DB_VALUES.map((val) => (
+                          <SelectItem key={val} value={val}>
+                            {dbDiagnosisToDisplay(val)}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

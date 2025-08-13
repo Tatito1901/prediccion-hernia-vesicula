@@ -1,6 +1,6 @@
 // components/patient-admission/patient-admission-reschedule.tsx
 import React, { memo, useCallback, useMemo, useState } from "react";
-import { format, addDays, isWeekend, isBefore, startOfDay } from 'date-fns';
+import { format, addDays, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -34,18 +34,9 @@ import { getPatientFullName } from './admision-types';
 import { useClinic } from "@/contexts/clinic-data-provider";
 import { LoadingSpinner } from '@/components/ui/unified-skeletons';
 
-// Configuración de clínica
-const CLINIC_CONFIG = {
-  SLOT_CONFIG: {
-    DURATION_MINUTES: 30,
-    START_HOUR: 8,
-    END_HOUR: 15,
-    LUNCH_START: 12,
-    LUNCH_END: 13,
-    MAX_ADVANCE_DAYS: 60,
-    MIN_ADVANCE_HOURS: 2,
-  }
-};
+// Configuración centralizada
+import { CLINIC_SCHEDULE } from '@/lib/clinic-schedule';
+import { isWorkDay } from '@/lib/clinic-schedule';
 
 // Utilidades
 const formatAppointmentDate = (date: Date): string => {
@@ -54,34 +45,42 @@ const formatAppointmentDate = (date: Date): string => {
 
 const isValidAppointmentDate = (date: Date): boolean => {
   const today = startOfDay(new Date());
-  const maxDate = addDays(today, CLINIC_CONFIG.SLOT_CONFIG.MAX_ADVANCE_DAYS);
-  return !isBefore(date, today) && !isBefore(maxDate, date) && !isWeekend(date);
+  const maxDate = addDays(today, CLINIC_SCHEDULE.MAX_ADVANCE_DAYS);
+  return !isBefore(date, today) && !isBefore(maxDate, date) && isWorkDay(date);
 };
 
 const canRescheduleAppointment = (fechaHoraCita: string): boolean => {
   const appointmentTime = new Date(fechaHoraCita);
   const now = new Date();
   const minRescheduleTime = new Date(
-    appointmentTime.getTime() - (CLINIC_CONFIG.SLOT_CONFIG.MIN_ADVANCE_HOURS * 60 * 60 * 1000)
+    appointmentTime.getTime() - (CLINIC_SCHEDULE.RESCHEDULE_MIN_ADVANCE_HOURS * 60 * 60 * 1000)
   );
   return now < minRescheduleTime;
 };
 
 const getAvailableTimeSlots = (date: Date, existingAppointments: AppointmentWithPatient[]): string[] => {
   const slots: string[] = [];
-  const { START_HOUR, END_HOUR, LUNCH_START, LUNCH_END, DURATION_MINUTES } = CLINIC_CONFIG.SLOT_CONFIG;
+  const { START_HOUR, END_HOUR, LUNCH_START, LUNCH_END, SLOT_DURATION_MINUTES } = {
+    START_HOUR: CLINIC_SCHEDULE.START_HOUR,
+    END_HOUR: CLINIC_SCHEDULE.END_HOUR,
+    LUNCH_START: CLINIC_SCHEDULE.LUNCH_START,
+    LUNCH_END: CLINIC_SCHEDULE.LUNCH_END,
+    SLOT_DURATION_MINUTES: CLINIC_SCHEDULE.SLOT_DURATION_MINUTES,
+  } as const;
   
   // Generar slots disponibles
   for (let hour = START_HOUR; hour < END_HOUR; hour++) {
-    for (let minute = 0; minute < 60; minute += DURATION_MINUTES) {
+    for (let minute = 0; minute < 60; minute += SLOT_DURATION_MINUTES) {
       if (hour >= LUNCH_START && hour < LUNCH_END) continue;
       slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
     }
   }
   
   // Filtrar slots ocupados
+  const ACTIVE_STATES = new Set(['PROGRAMADA', 'CONFIRMADA', 'PRESENTE']);
   const occupiedSlots = new Set(
     existingAppointments
+      .filter(apt => ACTIVE_STATES.has((apt as any).estado_cita))
       .filter(apt => format(new Date(apt.fecha_hora_cita), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
       .map(apt => format(new Date(apt.fecha_hora_cita), 'HH:mm'))
   );
@@ -183,7 +182,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
   const today = useMemo(() => new Date(), []);
   const maxDate = useMemo(() => {
     const max = new Date();
-    max.setDate(max.getDate() + CLINIC_CONFIG.SLOT_CONFIG.MAX_ADVANCE_DAYS);
+    max.setDate(max.getDate() + CLINIC_SCHEDULE.MAX_ADVANCE_DAYS);
     return max;
   }, []);
 
@@ -198,7 +197,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
               No se puede reagendar
             </DialogTitle>
             <DialogDescription>
-              Esta cita no puede ser reagendada porque faltan menos de {CLINIC_CONFIG.SLOT_CONFIG.MIN_ADVANCE_HOURS} horas.
+              Esta cita no puede ser reagendada porque faltan menos de {CLINIC_SCHEDULE.RESCHEDULE_MIN_ADVANCE_HOURS} horas.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

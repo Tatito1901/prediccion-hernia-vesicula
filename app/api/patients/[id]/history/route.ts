@@ -3,13 +3,21 @@
 
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
+    const anon = await createClient();
+    // Autenticación: asegura contexto de usuario y evita errores RLS no manejados
+    const { data: { user } } = await anon.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+    // Usa cliente admin (service role) para consultas sin restricciones de RLS
+    const supabase = createAdminClient();
     const { id: patientId } = await params;
     const { searchParams } = new URL(request.url);
     
@@ -20,7 +28,7 @@ export async function GET(
 
     console.log(`[API] 📊 Obteniendo historial del paciente: ${patientId}`);
 
-    // 1. OBTENER DATOS DEL PACIENTE (usando tu esquema exacto)
+    // 1. OBTENER DATOS DEL PACIENTE (sin embeds para evitar dependencias a FKs inexistentes)
     const { data: patient, error: patientError } = await supabase
       .from('patients')
       .select(`
@@ -33,7 +41,6 @@ export async function GET(
         fecha_registro,
         estado_paciente,
         diagnostico_principal,
-        diagnostico_principal_detalle,
         doctor_asignado_id,
         fecha_primera_consulta,
         comentarios_registro,
@@ -43,25 +50,38 @@ export async function GET(
         proximo_contacto,
         etiquetas,
         fecha_cirugia_programada,
-        created_at,
-        profiles:doctor_asignado_id (
-          id,
-          full_name,
-          username
-        )
+        created_at
       `)
       .eq('id', patientId)
       .single();
 
-    if (patientError || !patient) {
-      console.error('[API] ❌ Paciente no encontrado:', patientError);
-      return NextResponse.json(
-        { error: 'Paciente no encontrado' }, 
-        { status: 404 }
-      );
+    const patientFound = !patientError && !!patient;
+    if (!patientFound) {
+      console.warn('[API] ⚠️ Paciente no encontrado, devolviendo historial parcial. Detalle:', patientError?.message || patientError);
     }
+    // Construir safePatient temprano para usar en estadísticas y respuesta
+    const safePatient = patientFound ? patient : {
+      id: patientId,
+      nombre: 'Paciente',
+      apellidos: 'Sin registro',
+      telefono: null as string | null,
+      email: null as string | null,
+      created_at: new Date().toISOString(),
+      fecha_registro: null as string | null,
+      estado_paciente: null as string | null,
+      diagnostico_principal: null as string | null,
+      doctor_asignado_id: null as string | null,
+      fecha_primera_consulta: null as string | null,
+      comentarios_registro: null as string | null,
+      origen_paciente: null as string | null,
+      probabilidad_cirugia: null as number | null,
+      ultimo_contacto: null as string | null,
+      proximo_contacto: null as string | null,
+      etiquetas: null as any,
+      fecha_cirugia_programada: null as string | null,
+    };
 
-    // 2. OBTENER HISTORIAL DE CITAS (usando tu esquema exacto)
+    // 2. OBTENER HISTORIAL DE CITAS (sin embeds)
     const { data: appointments, error: appointmentsError } = await supabase
       .from('appointments')
       .select(`
@@ -72,12 +92,7 @@ export async function GET(
         es_primera_vez,
         notas_breves,
         created_at,
-        doctor_id,
-        profiles:doctor_id (
-          id,
-          full_name,
-          username
-        )
+        doctor_id
       `)
       .eq('patient_id', patientId)
       .order('fecha_hora_cita', { ascending: false })
@@ -91,6 +106,21 @@ export async function GET(
       );
     }
 
+    // 2.1. OBTENER PERFILES DE DOCTORES REFERENCIADOS (única consulta con IN)
+    let profilesMap: Record<string, { id: string; full_name?: string | null; username?: string | null }> = {};
+    if (appointments && appointments.length > 0) {
+      const doctorIds = Array.from(new Set(appointments.map(a => a.doctor_id).filter(Boolean))) as string[];
+      if (doctorIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, full_name, username')
+          .in('id', doctorIds);
+        if (profilesData) {
+          profilesData.forEach(p => { profilesMap[p.id] = p; });
+        }
+      }
+    }
+
     // 3. OBTENER HISTORIAL DE CAMBIOS (usando tu tabla appointment_history)
     let appointmentHistory = null;
     if (includeHistory && appointments?.length > 0) {
@@ -101,20 +131,15 @@ export async function GET(
         .select(`
           id,
           appointment_id,
-          estado_cita_anterior,
-          estado_cita_nuevo,
-          fecha_cambio,
-          fecha_cita_anterior,
-          fecha_cita_nueva,
-          notas,
-          motivo_cambio,
-          profiles:modificado_por_id (
-            full_name,
-            username
-          )
+          field_changed,
+          value_before,
+          value_after,
+          changed_at,
+          changed_by,
+          change_reason
         `)
         .in('appointment_id', appointmentIds)
-        .order('fecha_cambio', { ascending: false });
+        .order('changed_at', { ascending: false });
 
       if (!historyError) {
         appointmentHistory = historyData;
@@ -172,9 +197,9 @@ export async function GET(
       }, 0) / Math.max(1, surveys.filter(s => s.survey_responses?.length > 0).length || 1) : 0,
       
       // Estadísticas de seguimiento
-      days_since_first_contact: patient.fecha_registro ? 
-        Math.floor((new Date().getTime() - new Date(patient.fecha_registro).getTime()) / (1000 * 60 * 60 * 24)) : 0,
-      has_pending_contact: patient.proximo_contacto && new Date(patient.proximo_contacto) > new Date(),
+      days_since_first_contact: safePatient.fecha_registro ? 
+        Math.floor((new Date().getTime() - new Date(safePatient.fecha_registro).getTime()) / (1000 * 60 * 60 * 24)) : 0,
+      has_pending_contact: !!(safePatient.proximo_contacto && new Date(safePatient.proximo_contacto) > new Date()),
     };
 
     // 6. FORMATEAR CITAS CON INFORMACIÓN ENRIQUECIDA
@@ -185,7 +210,10 @@ export async function GET(
       return {
         ...appointment,
         // Información del doctor
-        doctor_name: appointment.profiles?.[0]?.full_name || appointment.profiles?.[0]?.username || 'Dr. No Asignado',
+        doctor_name:
+          (appointment.doctor_id && profilesMap[appointment.doctor_id]?.full_name) ||
+          (appointment.doctor_id && profilesMap[appointment.doctor_id]?.username) ||
+          'Dr. No Asignado',
         
         // Estado y etiquetas
         status_label: getStatusLabel(appointment.estado_cita),
@@ -201,24 +229,37 @@ export async function GET(
       };
     });
 
+    // 2.2. OBTENER PERFIL DEL DOCTOR ASIGNADO AL PACIENTE (si existe)
+    let patientDoctorProfile: { id: string; full_name?: string | null; username?: string | null } | null = null;
+    if (patientFound && patient.doctor_asignado_id) {
+      const { data: docProfile } = await supabase
+        .from('profiles')
+        .select('id, full_name, username')
+        .eq('id', patient.doctor_asignado_id)
+        .maybeSingle();
+      if (docProfile) patientDoctorProfile = docProfile;
+    }
+
     // 7. CONSTRUIR RESPUESTA COMPLETA
+    // safePatient ya declarado arriba
+
     const response = {
       patient: {
-        ...patient,
+        ...safePatient,
         // Campos calculados
-        full_name: `${patient.nombre} ${patient.apellidos}`.trim(),
-        display_diagnosis: patient.diagnostico_principal || 'Sin diagnóstico específico',
-        doctor_name: patient.profiles?.[0]?.full_name || patient.profiles?.[0]?.username || 'No asignado',
+        full_name: `${safePatient.nombre || ''} ${safePatient.apellidos || ''}`.trim() || 'Paciente',
+        display_diagnosis: safePatient.diagnostico_principal || 'Sin diagnóstico específico',
+        doctor_name: patientDoctorProfile?.full_name || patientDoctorProfile?.username || 'No asignado',
         
         // Estado del paciente
-        surgery_probability_percentage: patient.probabilidad_cirugia ? Math.round(patient.probabilidad_cirugia * 100) : null,
-        has_scheduled_surgery: !!patient.fecha_cirugia_programada,
+        surgery_probability_percentage: safePatient.probabilidad_cirugia ? Math.round(safePatient.probabilidad_cirugia * 100) : null,
+        has_scheduled_surgery: !!safePatient.fecha_cirugia_programada,
         
         // Contacto
-        days_since_last_contact: patient.ultimo_contacto ? 
-          Math.floor((new Date().getTime() - new Date(patient.ultimo_contacto).getTime()) / (1000 * 60 * 60 * 24)) : null,
-        days_until_next_contact: patient.proximo_contacto ? 
-          Math.ceil((new Date(patient.proximo_contacto).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null,
+        days_since_last_contact: safePatient.ultimo_contacto ? 
+          Math.floor((new Date().getTime() - new Date(safePatient.ultimo_contacto).getTime()) / (1000 * 60 * 60 * 24)) : null,
+        days_until_next_contact: safePatient.proximo_contacto ? 
+          Math.ceil((new Date(safePatient.proximo_contacto).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null,
       },
       
       appointments: formattedAppointments,

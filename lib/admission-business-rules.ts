@@ -2,6 +2,7 @@
 // REGLAS DE NEGOCIO COMPLETAS Y CORREGIDAS PARA FLUJO DE ADMISIÓN
 
 import { addMinutes, isBefore, isAfter, differenceInMinutes } from 'date-fns';
+import { CLINIC_SCHEDULE } from '@/lib/clinic-schedule';
 
 // ✅ Tipos locales mínimos para evitar depender de components/* (isomórfico FE/BE)
 import { z } from 'zod';
@@ -43,6 +44,20 @@ export const BUSINESS_RULES = {
   WORK_DAYS: [1, 2, 3, 4, 5], // Lunes a viernes
 } as const;
 
+// ==================== MOTOR DE REGLAS DECLARATIVO ====================
+type Rule = (input: { appointment: AppointmentLike; now: Date; ctx?: BusinessRuleContext }) => ValidationResult;
+
+const evaluateRules = (
+  rules: Rule[],
+  input: { appointment: AppointmentLike; now: Date; ctx?: BusinessRuleContext }
+): ValidationResult => {
+  for (const rule of rules) {
+    const res = rule(input);
+    if (!res.valid) return res;
+  }
+  return { valid: true };
+};
+
 // ==================== HELPERS DE TIEMPO ====================
 const getAppointmentDateTime = (appointment: AppointmentLike): Date => {
   return new Date(appointment.fecha_hora_cita);
@@ -51,21 +66,21 @@ const getAppointmentDateTime = (appointment: AppointmentLike): Date => {
 const isWithinWorkHours = (date: Date): boolean => {
   const hour = date.getHours();
   const day = date.getDay();
-  return hour >= BUSINESS_RULES.WORK_START_HOUR && 
-         hour < BUSINESS_RULES.WORK_END_HOUR && 
-         BUSINESS_RULES.WORK_DAYS.includes(day as 1 | 2 | 3 | 4 | 5);
+  return hour >= CLINIC_SCHEDULE.START_HOUR && 
+         hour < CLINIC_SCHEDULE.END_HOUR && 
+         (CLINIC_SCHEDULE.WORK_DAYS as readonly number[]).includes(day as any);
 };
 
 const isLunchTime = (date: Date): boolean => {
   const hour = date.getHours();
-  return hour >= BUSINESS_RULES.LUNCH_START_HOUR && 
-         hour < BUSINESS_RULES.LUNCH_END_HOUR;
+  return hour >= CLINIC_SCHEDULE.LUNCH_START && 
+         hour < CLINIC_SCHEDULE.LUNCH_END;
 };
 
 const wasRecentlyUpdated = (appointment: AppointmentLike, minutes: number = BUSINESS_RULES.RAPID_CHANGE_COOLDOWN_MINUTES): boolean => {
-  // ✅ Si tuviéramos campo updated_at, verificaríamos aquí
-  // Por ahora, asumimos que no hay cambios recientes
-  return false;
+  const ts = appointment.updated_at ? new Date(appointment.updated_at) : null;
+  if (!ts || isNaN(ts.getTime())) return false;
+  return differenceInMinutes(new Date(), ts) < minutes;
 };
 
 // ==================== VALIDADORES ESPECÍFICOS POR ACCIÓN ====================
@@ -79,50 +94,47 @@ export const canCheckIn = (
   const appointmentTime = getAppointmentDateTime(appointment);
   const checkInWindowStart = addMinutes(appointmentTime, -BUSINESS_RULES.CHECK_IN_WINDOW_BEFORE_MINUTES);
   const checkInWindowEnd = addMinutes(appointmentTime, BUSINESS_RULES.CHECK_IN_WINDOW_AFTER_MINUTES);
-  
-  // ✅ 1. Estado debe ser correcto
-  if (!['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita)) {
-    return {
-      valid: false,
-      reason: `No se puede marcar presente desde estado: ${appointment.estado_cita}`
-    };
-  }
-  
-  // ✅ 2. Verificar ventana de tiempo (con override administrativo)
-  if (!context?.allowOverride) {
-    if (isBefore(currentTime, checkInWindowStart)) {
-      const minutesUntil = differenceInMinutes(checkInWindowStart, currentTime);
-      return {
-        valid: false,
-        reason: `Check-in disponible en ${minutesUntil} minutos (30 min antes de la cita)`
-      };
-    }
-    
-    if (isAfter(currentTime, checkInWindowEnd)) {
-      return {
-        valid: false,
-        reason: 'Ventana de check-in expirada. Considere reagendar o marcar como "No Asistió".'
-      };
-    }
-  }
-  
-  // ✅ 3. Verificar horario laboral
-  if (!isWithinWorkHours(currentTime) && !context?.allowOverride) {
-    return {
-      valid: false,
-      reason: 'Check-in solo disponible durante horario laboral (8:00 - 18:00, L-V)'
-    };
-  }
-  
-  // ✅ 4. Verificar cambios recientes
-  if (wasRecentlyUpdated(appointment)) {
-    return {
-      valid: false,
-      reason: 'Espere unos momentos antes de realizar otra acción'
-    };
-  }
-  
-  return { valid: true };
+
+  const rules: Rule[] = [
+    // Estado válido
+    ({ appointment }) => {
+      if (!['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita)) {
+        return { valid: false, reason: `No se puede marcar presente desde estado: ${appointment.estado_cita}` };
+      }
+      return { valid: true };
+    },
+    // Ventana de tiempo: demasiado temprano
+    ({ now, ctx }) => {
+      if (!ctx?.allowOverride && isBefore(now, checkInWindowStart)) {
+        const minutesUntil = differenceInMinutes(checkInWindowStart, now);
+        return { valid: false, reason: `Check-in disponible en ${minutesUntil} minutos (30 min antes de la cita)` };
+      }
+      return { valid: true };
+    },
+    // Ventana de tiempo: demasiado tarde
+    ({ now, ctx }) => {
+      if (!ctx?.allowOverride && isAfter(now, checkInWindowEnd)) {
+        return { valid: false, reason: 'Ventana de check-in expirada. Considere reagendar o marcar como "No Asistió".' };
+      }
+      return { valid: true };
+    },
+    // Horario laboral
+    ({ now, ctx }) => {
+      if (!ctx?.allowOverride && !isWithinWorkHours(now)) {
+        return { valid: false, reason: `Check-in solo disponible durante horario laboral (${CLINIC_SCHEDULE.START_HOUR}:00 - ${CLINIC_SCHEDULE.END_HOUR}:00, L-V)` };
+      }
+      return { valid: true };
+    },
+    // Cambios recientes
+    ({ appointment }) => {
+      if (wasRecentlyUpdated(appointment)) {
+        return { valid: false, reason: 'Espere unos momentos antes de realizar otra acción' };
+      }
+      return { valid: true };
+    },
+  ];
+
+  return evaluateRules(rules, { appointment, now: currentTime, ctx: context });
 };
 
 // ✅ Validar completar consulta
@@ -133,24 +145,23 @@ export const canCompleteAppointment = (
 ): ValidationResult => {
   const appointmentTime = getAppointmentDateTime(appointment);
   const completionDeadline = addMinutes(appointmentTime, BUSINESS_RULES.COMPLETION_WINDOW_AFTER_MINUTES);
-  
-  // ✅ 1. Estado debe ser PRESENTE (flujo simplificado: sin EN_CONSULTA)
-  if (appointment.estado_cita !== 'PRESENTE') {
-    return {
-      valid: false,
-      reason: `No se puede completar desde estado: ${appointment.estado_cita}`
-    };
-  }
-  
-  // ✅ 2. Verificar que no haya pasado mucho tiempo (con override)
-  if (!context?.allowOverride && isAfter(currentTime, completionDeadline)) {
-    return {
-      valid: false,
-      reason: 'Ha pasado demasiado tiempo desde la cita programada. Contacte administración.'
-    };
-  }
 
-  return { valid: true };
+  const rules: Rule[] = [
+    ({ appointment }) => {
+      if (appointment.estado_cita !== 'PRESENTE') {
+        return { valid: false, reason: `No se puede completar desde estado: ${appointment.estado_cita}` };
+      }
+      return { valid: true };
+    },
+    ({ now, ctx }) => {
+      if (!ctx?.allowOverride && isAfter(now, completionDeadline)) {
+        return { valid: false, reason: 'Ha pasado demasiado tiempo desde la cita programada. Contacte administración.' };
+      }
+      return { valid: true };
+    },
+  ];
+
+  return evaluateRules(rules, { appointment, now: currentTime, ctx: context });
 };
 
 // ✅ Validar cancelar cita
@@ -160,24 +171,23 @@ export const canCancelAppointment = (
   context?: BusinessRuleContext
 ): ValidationResult => {
   const appointmentTime = getAppointmentDateTime(appointment);
-  
-  // ✅ 1. Estados válidos para cancelar
-  if (!['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita)) {
-    return {
-      valid: false,
-      reason: `No se puede cancelar una cita en estado: ${appointment.estado_cita}`
-    };
-  }
-  
-  // ✅ 2. No se puede cancelar citas del pasado (con override administrativo)
-  if (!context?.allowOverride && isBefore(appointmentTime, currentTime)) {
-    return {
-      valid: false,
-      reason: 'No se pueden cancelar citas que ya pasaron.'
-    };
-  }
-  
-  return { valid: true };
+
+  const rules: Rule[] = [
+    ({ appointment }) => {
+      if (!['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita)) {
+        return { valid: false, reason: `No se puede cancelar una cita en estado: ${appointment.estado_cita}` };
+      }
+      return { valid: true };
+    },
+    ({ now, ctx }) => {
+      if (!ctx?.allowOverride && isBefore(appointmentTime, now)) {
+        return { valid: false, reason: 'No se pueden cancelar citas que ya pasaron.' };
+      }
+      return { valid: true };
+    },
+  ];
+
+  return evaluateRules(rules, { appointment, now: currentTime, ctx: context });
 };
 
 // ✅ Validar marcar como "No Asistió"
@@ -188,25 +198,24 @@ export const canMarkNoShow = (
 ): ValidationResult => {
   const appointmentTime = getAppointmentDateTime(appointment);
   const noShowThreshold = addMinutes(appointmentTime, BUSINESS_RULES.NO_SHOW_WINDOW_AFTER_MINUTES);
-  
-  // ✅ 1. Estados válidos
-  if (!['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita)) {
-    return {
-      valid: false,
-      reason: `No se puede marcar "No Asistió" desde estado: ${appointment.estado_cita}`
-    };
-  }
-  
-  // ✅ 2. Debe haber pasado el tiempo de gracia (con override)
-  if (!context?.allowOverride && isBefore(currentTime, noShowThreshold)) {
-    const minutesRemaining = Math.ceil(differenceInMinutes(noShowThreshold, currentTime));
-    return {
-      valid: false,
-      reason: `Espere ${minutesRemaining} minutos más antes de marcar como "No Asistió".`
-    };
-  }
-  
-  return { valid: true };
+
+  const rules: Rule[] = [
+    ({ appointment }) => {
+      if (!['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita)) {
+        return { valid: false, reason: `No se puede marcar "No Asistió" desde estado: ${appointment.estado_cita}` };
+      }
+      return { valid: true };
+    },
+    ({ now, ctx }) => {
+      if (!ctx?.allowOverride && isBefore(now, noShowThreshold)) {
+        const minutesRemaining = Math.ceil(differenceInMinutes(noShowThreshold, now));
+        return { valid: false, reason: `Espere ${minutesRemaining} minutos más antes de marcar como "No Asistió".` };
+      }
+      return { valid: true };
+    },
+  ];
+
+  return evaluateRules(rules, { appointment, now: currentTime, ctx: context });
 };
 
 // ✅ Validar reagendar cita
@@ -217,27 +226,25 @@ export const canRescheduleAppointment = (
 ): ValidationResult => {
   const appointmentTime = getAppointmentDateTime(appointment);
   const rescheduleDeadline = addMinutes(appointmentTime, -BUSINESS_RULES.RESCHEDULE_DEADLINE_HOURS * 60);
-  
-  // ✅ 1. Estados válidos para reagendar
-  if (!['PROGRAMADA', 'CONFIRMADA', 'CANCELADA', 'NO_ASISTIO'].includes(appointment.estado_cita)) {
-    return {
-      valid: false,
-      reason: `No se puede reagendar una cita en estado: ${appointment.estado_cita}`
-    };
-  }
-  
-  // ✅ 2. Para citas futuras, verificar deadline (con override)
-  if (['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita) && !context?.allowOverride) {
-    if (isAfter(currentTime, rescheduleDeadline)) {
-      return {
-        valid: false,
-        reason: `No se puede reagendar con menos de ${BUSINESS_RULES.RESCHEDULE_DEADLINE_HOURS} horas de anticipación.`
-      };
-    }
-  }
-  
-  // ✅ 3. Para citas canceladas/no asistió, siempre se puede reagendar
-  return { valid: true };
+
+  const rules: Rule[] = [
+    ({ appointment }) => {
+      if (!['PROGRAMADA', 'CONFIRMADA', 'CANCELADA', 'NO_ASISTIO'].includes(appointment.estado_cita)) {
+        return { valid: false, reason: `No se puede reagendar una cita en estado: ${appointment.estado_cita}` };
+      }
+      return { valid: true };
+    },
+    ({ now, ctx, appointment }) => {
+      if (['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita) && !ctx?.allowOverride) {
+        if (isAfter(now, rescheduleDeadline)) {
+          return { valid: false, reason: `No se puede reagendar con menos de ${BUSINESS_RULES.RESCHEDULE_DEADLINE_HOURS} horas de anticipación.` };
+        }
+      }
+      return { valid: true };
+    },
+  ];
+
+  return evaluateRules(rules, { appointment, now: currentTime, ctx: context });
 };
 
 // ==================== FUNCIONES AUXILIARES AVANZADAS ====================

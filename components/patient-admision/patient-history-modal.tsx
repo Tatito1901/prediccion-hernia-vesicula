@@ -309,8 +309,20 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
     }
     
     // Ordenar listas
-    upcoming.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
-    past.sort((a, b) => new Date(b.fecha_hora_cita).getTime() - new Date(a.fecha_hora_cita).getTime());
+    upcoming.sort((a, b) => {
+      const dateA = new Date(a.fecha_hora_cita);
+      const dateB = new Date(b.fecha_hora_cita);
+      const normalizedA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate(), dateA.getHours(), dateA.getMinutes());
+      const normalizedB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate(), dateB.getHours(), dateB.getMinutes());
+      return normalizedA.getTime() - normalizedB.getTime();
+    });
+    past.sort((a, b) => {
+      const dateA = new Date(a.fecha_hora_cita);
+      const dateB = new Date(b.fecha_hora_cita);
+      const normalizedA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate(), dateA.getHours(), dateA.getMinutes());
+      const normalizedB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate(), dateB.getHours(), dateB.getMinutes());
+      return normalizedB.getTime() - normalizedA.getTime();
+    });
     
     return { upcoming, history: past };
   }, [historyData]);
