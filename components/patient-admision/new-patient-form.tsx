@@ -1,12 +1,14 @@
 // components/patient-admission/new-patient-form.tsx
+'use client';
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format, addDays, isSunday, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
+
 // UI Components
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -23,6 +25,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from '@/components/ui/form';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -33,29 +36,37 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+
 // Icons
 import {
   CalendarIcon,
   Clock,
-  User,
+  User2,
   Phone,
   Mail,
-  CheckCircle,
+  CheckCircle2,
   Loader2,
   AlertCircle,
   FileText,
   Search,
+  MapPin,
+  Heart,
+  Shield,
+  Stethoscope,
+  Building2,
+  UserPlus,
+  ChevronRight,
+  Info,
+  Sparkles,
+  X
 } from 'lucide-react';
-// Imports
-import type { 
-  NewPatientFormProps, 
-  AdmissionPayload
-} from './admision-types';
-import {
-  DIAGNOSIS_DB_VALUES,
-  type DbDiagnosis,
-  dbDiagnosisToDisplay,
-} from '@/lib/validation/enums';
+
+// Types & Imports
+import type { NewPatientFormProps, AdmissionPayload } from './admision-types';
+import { DIAGNOSIS_DB_VALUES, type DbDiagnosis, dbDiagnosisToDisplay } from '@/lib/validation/enums';
 import { NewPatientSchema } from './admision-types';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import { cn, formatPhoneNumber } from '@/lib/utils';
@@ -64,264 +75,103 @@ import type { Patient, Lead } from '@/lib/types';
 import { useClinic } from '@/contexts/clinic-data-provider';
 
 // Configuration
-const diagnosisOptions = DIAGNOSIS_DB_VALUES.map((value) => ({ value, label: dbDiagnosisToDisplay(value) }));
+const TIME_SLOTS = Array.from({ length: 12 }, (_, i) => {
+  const hour = Math.floor(i / 2) + 9;
+  const minute = (i % 2) * 30;
+  const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  return { value: time, label: time };
+});
 
-const TIME_SLOTS = [
-  { value: '09:00', label: '09:00' },
-  { value: '09:30', label: '09:30' },
-  { value: '10:00', label: '10:00' },
-  { value: '10:30', label: '10:30' },
-  { value: '11:00', label: '11:00' },
-  { value: '11:30', label: '11:30' },
-  { value: '12:00', label: '12:00' },
-  { value: '12:30', label: '12:30' },
-  { value: '13:00', label: '13:00' },
-  { value: '13:30', label: '13:30' },
-  { value: '14:00', label: '14:00' },
-  { value: '14:30', label: '14:30' },
-];
-
-type FormData = {
-  // Required fields
-  nombre: string;
-  apellidos: string;
-  diagnostico_principal: DbDiagnosis;
-  fechaConsulta: Date;
-  horaConsulta: string;
-  // Optional fields
-  telefono?: string;
-  email?: string;
-  edad?: number;
-  // Demographics
-  fecha_nacimiento?: string;
-  genero?: 'Masculino' | 'Femenino' | 'Otro';
-  // Location
-  ciudad?: string;
-  estado?: string;
-  // Emergency contact
-  contacto_emergencia_nombre?: string;
-  contacto_emergencia_telefono?: string;
-  // Medical/Admin
-  antecedentes_medicos?: string;
-  numero_expediente?: string;
-  seguro_medico?: string;
-  // Marketing/Origin
-  marketing_source?: string;
-  creation_source?: string;
-  lead_id?: string;
-  // Medical fields
-  comentarios_registro?: string;
-  probabilidad_cirugia?: number;
-  doctor_id?: string;
-};
-
-// Utilities
 const isValidDate = (date: Date): boolean => {
   const today = startOfDay(new Date());
   const maxDate = addDays(today, 90);
-  const isPast = isBefore(date, today);
-  const isAfterMax = isBefore(maxDate, date);
-  return !isPast && !isAfterMax && !isSunday(date);
+  return !isBefore(date, today) && !isBefore(maxDate, date) && !isSunday(date);
 };
 
-// Section Header Component
-const SectionHeader = ({ icon: Icon, title, badge }: { 
-  icon: React.ElementType; 
-  title: string; 
-  badge?: React.ReactNode;
-}) => (
-  <div className="flex items-center gap-2 py-2">
-    <Icon className="h-4 w-4" />
-    <h3 className="text-lg font-medium">{title}</h3>
-    {badge}
-  </div>
-);
-
-// Search Result Item
-const SearchResultItem = ({ 
-  item, 
-  onSelect 
-}: { 
-  item: { 
-    kind: 'patient' | 'lead'; 
-    id: string; 
-    title: string; 
-    subtitle?: string 
-  }; 
-  onSelect: () => void;
-}) => (
-  <div
-    className="p-3 hover:bg-accent cursor-pointer rounded-sm"
-    onMouseDown={(e) => {
-      e.preventDefault();
-      onSelect();
-    }}
-  >
-    <div className="flex items-center justify-between">
-      <div>
-        <div className="font-medium text-sm">{item.title}</div>
-        {item.subtitle && (
-          <div className="text-xs text-muted-foreground truncate">{item.subtitle}</div>
-        )}
+// Progress indicator component
+const FormProgress = memo<{ currentStep: number; totalSteps: number }>(
+  ({ currentStep, totalSteps }) => {
+    const percentage = (currentStep / totalSteps) * 100;
+    
+    return (
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium">Paso {currentStep} de {totalSteps}</span>
+          <span className="text-sm text-gray-500">{Math.round(percentage)}% completado</span>
+        </div>
+        <Progress value={percentage} className="h-2" />
       </div>
-      <Badge variant={item.kind === 'patient' ? 'default' : 'outline'} className="text-xs">
-        {item.kind === 'patient' ? 'Paciente' : 'Lead'}
-      </Badge>
-    </div>
-  </div>
+    );
+  }
 );
+FormProgress.displayName = 'FormProgress';
+
+// Search result card component
+const SearchResultCard = memo<{
+  item: { type: 'patient' | 'lead'; data: Patient | Lead };
+  onSelect: () => void;
+}>(({ item, onSelect }) => {
+  const isPatient = item.type === 'patient';
+  const data = item.data as any;
+  const name = isPatient 
+    ? `${data.nombre || ''} ${data.apellidos || ''}`.trim()
+    : data.full_name;
+  
+  return (
+    <button
+      onClick={onSelect}
+      className="w-full text-left p-3 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-colors rounded-lg border border-transparent hover:border-sky-200 dark:hover:border-sky-800"
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="font-medium text-sm">{name || 'Sin nombre'}</div>
+          <div className="flex items-center gap-3 mt-1 text-xs text-gray-600 dark:text-gray-400">
+            {data.telefono || data.phone_number ? (
+              <span className="flex items-center gap-1">
+                <Phone className="h-3 w-3" />
+                {data.telefono || data.phone_number}
+              </span>
+            ) : null}
+            {data.email && (
+              <span className="flex items-center gap-1">
+                <Mail className="h-3 w-3" />
+                {data.email}
+              </span>
+            )}
+          </div>
+        </div>
+        <Badge variant={isPatient ? "default" : "secondary"} className="text-xs">
+          {isPatient ? 'Paciente' : 'Lead'}
+        </Badge>
+      </div>
+    </button>
+  );
+});
+SearchResultCard.displayName = 'SearchResultCard';
 
 const NewPatientForm: React.FC<NewPatientFormProps> = ({ 
   onSuccess, 
   onCancel, 
   className 
 }) => {
-  // Local states
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const admissionMutation = useAdmitPatient();
-  
-  // Centralized clinic actions
-  const { fetchSpecificAppointments, fetchLeads } = useClinic();
-  
-  // Autocomplete states and queries
+  // State
+  const [activeTab, setActiveTab] = useState<'personal' | 'medical' | 'appointment'>('personal');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [showSearch, setShowSearch] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<{ type: 'patient' | 'lead'; data: any } | null>(null);
+  
   const debouncedSearch = useDebounce(searchTerm, 300);
-  
-  // Centralized leads fetch using Clinic context
-  const [leadsResults, setLeadsResults] = useState<Lead[]>([]);
-  const [searchingLeads, setSearchingLeads] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    if (!debouncedSearch || debouncedSearch.length < 2) {
-      setLeadsResults([]);
-      return;
-    }
-    (async () => {
-      try {
-        setSearchingLeads(true);
-        const res = await fetchLeads({
-          page: 1,
-          pageSize: 5,
-          search: debouncedSearch,
-        });
-        if (!cancelled) setLeadsResults(res?.data ?? []);
-      } catch {
-        if (!cancelled) setLeadsResults([]);
-      } finally {
-        if (!cancelled) setSearchingLeads(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [debouncedSearch, fetchLeads]);
-  
-  const [patientResults, setPatientResults] = useState<Patient[]>([]);
-  const [searchingPatients, setSearchingPatients] = useState(false);
-  
-  useEffect(() => {
-    let cancelled = false;
-    if (!debouncedSearch || debouncedSearch.length < 2) {
-      setPatientResults([]);
-      return;
-    }
-    (async () => {
-      try {
-        setSearchingPatients(true);
-        const qs = new URLSearchParams({ page: '1', pageSize: '5', search: debouncedSearch });
-        const res = await fetch(`/api/patients?${qs.toString()}`);
-        if (!res.ok) throw new Error('Error al buscar pacientes');
-        const json = await res.json();
-        if (!cancelled) setPatientResults((json?.data as Patient[]) || []);
-      } catch (e) {
-        if (!cancelled) setPatientResults([]);
-      } finally {
-        if (!cancelled) setSearchingPatients(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [debouncedSearch]);
-  
-  const isSearching = searchingLeads || searchingPatients;
-  
-  const combinedResults = useMemo(() => {
-    if (!debouncedSearch || debouncedSearch.length < 2) return [];
-    
-    const leads = leadsResults ?? [];
-    const patients = patientResults ?? [];
-    
-    const patientItems = patients.map((p: Patient) => ({
-      kind: 'patient' as const,
-      id: p.id,
-      title: `${p.nombre ?? ''} ${p.apellidos ?? ''}`.trim() || 'Paciente sin nombre',
-      subtitle: p.telefono || p.email || undefined,
-      data: p,
-    }));
-    
-    const leadItems = leads.map((l: Lead) => ({
-      kind: 'lead' as const,
-      id: l.id,
-      title: l.full_name || 'Lead sin nombre',
-      subtitle: l.phone_number || l.email || undefined,
-      data: l,
-    }));
-    
-    return [...patientItems, ...leadItems];
-  }, [debouncedSearch, leadsResults, patientResults]);
-  
-  // Appointments for selected date
-  const selectedDateISO = useMemo(() => (
-    selectedDate ? selectedDate.toISOString().split('T')[0] : undefined
-  ), [selectedDate]);
-  
-  
-  const [appointmentsForDay, setAppointmentsForDay] = useState<any[]>([]);
-  
-  useEffect(() => {
-    let cancelled = false;
-    if (!selectedDateISO) {
-      setAppointmentsForDay([]);
-      return;
-    }
-    (async () => {
-      try {
-        const res = await fetchSpecificAppointments({
-          dateFilter: 'range',
-          startDate: selectedDateISO,
-          endDate: selectedDateISO,
-          pageSize: 100,
-        });
-        if (!cancelled) setAppointmentsForDay(res.data || []);
-      } catch (e) {
-        if (!cancelled) setAppointmentsForDay([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedDateISO, fetchSpecificAppointments]);
-  
-  const occupiedTimes = useMemo(() => {
-    const blocked = new Set<string>();
-    const nonBlockingStatuses = new Set(['CANCELADA', 'COMPLETADA', 'NO_ASISTIO']);
-    
-    appointmentsForDay.forEach((apt: any) => {
-      const status = apt?.estado_cita as string | undefined;
-      if (!status || nonBlockingStatuses.has(status)) return;
-      try {
-        const hhmm = format(new Date(apt.fecha_hora_cita), 'HH:mm');
-        blocked.add(hhmm);
-      } catch { /* ignore parse errors */ }
-    });
-    
-    return blocked;
-  }, [appointmentsForDay]);
-  
+  const admissionMutation = useAdmitPatient();
+  const { fetchSpecificAppointments, fetchLeads } = useClinic();
+
   // Form setup
-  const form = useForm<FormData>({
+  const form = useForm({
     resolver: zodResolver(NewPatientSchema),
     defaultValues: {
       nombre: '',
       apellidos: '',
-      diagnostico_principal: 'HERNIA_INGUINAL',
+      diagnostico_principal: 'HERNIA_INGUINAL' as DbDiagnosis,
       fechaConsulta: undefined,
       horaConsulta: '09:00',
       telefono: '',
@@ -336,696 +186,776 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
       antecedentes_medicos: '',
       numero_expediente: '',
       seguro_medico: '',
-      marketing_source: '',
-      creation_source: 'admision_form',
-      lead_id: undefined,
       comentarios_registro: '',
       probabilidad_cirugia: 0.5,
-      doctor_id: undefined,
     },
   });
+
+  // Search functionality
+  const [searchResults, setSearchResults] = useState<{ patients: Patient[], leads: Lead[] }>({ 
+    patients: [], 
+    leads: [] 
+  });
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    if (!debouncedSearch || debouncedSearch.length < 2) {
+      setSearchResults({ patients: [], leads: [] });
+      return;
+    }
+
+    const searchData = async () => {
+      setIsSearching(true);
+      try {
+        // Search patients
+        const patientsRes = await fetch(`/api/patients?search=${debouncedSearch}&pageSize=3`);
+        const patientsData = await patientsRes.json();
+        
+        // Search leads
+        const leadsRes = await fetchLeads({ search: debouncedSearch, pageSize: 3 });
+        
+        setSearchResults({
+          patients: patientsData?.data || [],
+          leads: (leadsRes as any)?.data || []
+        });
+      } catch (error) {
+        console.error('Search error:', error);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    searchData();
+  }, [debouncedSearch, fetchLeads]);
+
+  // Available time slots
+  const [occupiedTimes, setOccupiedTimes] = useState<Set<string>>(new Set());
   
-  // Submit handler
-  const onSubmit = useCallback(async (data: FormData) => {
+  useEffect(() => {
+    if (!selectedDate) return;
+    
+    const loadAppointments = async () => {
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      try {
+        const res = await fetchSpecificAppointments({
+          dateFilter: 'range',
+          startDate: dateStr,
+          endDate: dateStr,
+          pageSize: 100,
+        });
+        
+        const occupied = new Set<string>();
+        res.data?.forEach((apt: any) => {
+          if (['PROGRAMADA', 'CONFIRMADA', 'PRESENTE'].includes(apt.estado_cita)) {
+            const time = format(new Date(apt.fecha_hora_cita), 'HH:mm');
+            occupied.add(time);
+          }
+        });
+        
+        setOccupiedTimes(occupied);
+      } catch (err) {
+        console.error('Error loading appointments:', err);
+      }
+    };
+
+    loadAppointments();
+  }, [selectedDate, fetchSpecificAppointments]);
+
+  // Handlers
+  const handleSelectRecord = useCallback((type: 'patient' | 'lead', data: any) => {
+    setSelectedRecord({ type, data });
+    
+    if (type === 'patient') {
+      const patient = data as Patient;
+      form.setValue('nombre', patient.nombre || '');
+      form.setValue('apellidos', patient.apellidos || '');
+      form.setValue('telefono', patient.telefono || '');
+      form.setValue('email', patient.email || '');
+      form.setValue('edad', patient.edad);
+      form.setValue('ciudad', patient.ciudad || '');
+      form.setValue('estado', patient.estado || '');
+      form.setValue('genero', patient.genero as any);
+      form.setValue('fecha_nacimiento', patient.fecha_nacimiento || '');
+      form.setValue('contacto_emergencia_nombre', patient.contacto_emergencia_nombre || '');
+      form.setValue('contacto_emergencia_telefono', patient.contacto_emergencia_telefono || '');
+      form.setValue('antecedentes_medicos', patient.antecedentes_medicos || '');
+      form.setValue('seguro_medico', patient.seguro_medico || '');
+      form.setValue('numero_expediente', patient.numero_expediente || '');
+    } else {
+      const lead = data as Lead;
+      const [nombre, ...apellidosParts] = (lead.full_name || '').split(' ');
+      form.setValue('nombre', nombre || '');
+      form.setValue('apellidos', apellidosParts.join(' ') || '');
+      form.setValue('telefono', lead.phone_number || '');
+      form.setValue('email', lead.email || '');
+      if (lead.notes) {
+        form.setValue('comentarios_registro', lead.notes);
+      }
+    }
+    
+    setSearchTerm('');
+    setShowSearch(false);
+  }, [form]);
+
+  const onSubmit = useCallback(async (data: any) => {
     try {
       const payload: AdmissionPayload = {
         nombre: data.nombre.trim(),
         apellidos: data.apellidos.trim(),
         diagnostico_principal: data.diagnostico_principal,
         fecha_hora_cita: (() => {
-          const [hh, mm] = (data.horaConsulta || '09:00').split(':').map(Number);
+          const [hh, mm] = data.horaConsulta.split(':').map(Number);
           const d = new Date(data.fechaConsulta);
           d.setHours(hh, mm, 0, 0);
           return d.toISOString();
         })(),
-        // Alinear con enum de BD: usar el valor del diagnóstico directamente
         motivos_consulta: [data.diagnostico_principal],
-        telefono: data.telefono?.trim() || undefined,
-        email: data.email?.trim() || undefined,
+        telefono: data.telefono?.trim(),
+        email: data.email?.trim(),
         edad: data.edad,
-        fecha_nacimiento: data.fecha_nacimiento?.trim() || undefined,
-        genero: data.genero || undefined,
-        ciudad: data.ciudad?.trim() || undefined,
-        estado: data.estado?.trim() || undefined,
-        contacto_emergencia_nombre: data.contacto_emergencia_nombre?.trim() || undefined,
-        contacto_emergencia_telefono: data.contacto_emergencia_telefono?.trim() || undefined,
-        antecedentes_medicos: data.antecedentes_medicos?.trim() || undefined,
-        numero_expediente: data.numero_expediente?.trim() || undefined,
-        seguro_medico: data.seguro_medico?.trim() || undefined,
-        marketing_source: data.marketing_source?.trim() || undefined,
-        creation_source: data.creation_source?.trim() || 'admision_form',
-        lead_id: data.lead_id || undefined,
-        comentarios_registro: data.comentarios_registro?.trim() || undefined,
+        fecha_nacimiento: data.fecha_nacimiento,
+        genero: data.genero,
+        ciudad: data.ciudad?.trim(),
+        estado: data.estado?.trim(),
+        contacto_emergencia_nombre: data.contacto_emergencia_nombre?.trim(),
+        contacto_emergencia_telefono: data.contacto_emergencia_telefono?.trim(),
+        antecedentes_medicos: data.antecedentes_medicos?.trim(),
+        numero_expediente: data.numero_expediente?.trim(),
+        seguro_medico: data.seguro_medico?.trim(),
+        comentarios_registro: data.comentarios_registro?.trim(),
         probabilidad_cirugia: data.probabilidad_cirugia,
-        doctor_id: data.doctor_id,
+        creation_source: 'admission_form_complete',
       };
       
       const result = await admissionMutation.mutateAsync(payload);
       form.reset();
       setSelectedDate(undefined);
+      setSelectedRecord(null);
       onSuccess?.(result);
     } catch (error: any) {
-      const cause = error?.cause as any;
-      const status = cause?.status as number | undefined;
-      const resp = cause?.data;
-      const message: string = error?.message || resp?.error || 'Error en la admisión';
-
-      if (status === 400) {
-        // Duplicado de teléfono (UNIQUE)
-        if (message?.includes('patients_telefono_key') || /tel[eé]fono/i.test(message)) {
-          form.setError('telefono', {
-            type: 'manual',
-            message: 'Este teléfono ya está registrado. Selecciona al paciente existente o usa otro número.',
-          });
-          return;
-        }
-        // Errores de validación del esquema (Zod)
-        const ve = Array.isArray(resp?.validation_errors) ? resp.validation_errors : [];
-        if (ve.length) {
-          for (const e of ve) {
-            const field = String(e.field || '');
-            const msg = String(e.message || 'Dato inválido');
-            if (field.includes('p_nombre')) form.setError('nombre', { type: 'manual', message: msg });
-            else if (field.includes('p_apellidos')) form.setError('apellidos', { type: 'manual', message: msg });
-            else if (field.includes('p_email')) form.setError('email', { type: 'manual', message: msg });
-            else if (field.includes('p_telefono')) form.setError('telefono', { type: 'manual', message: msg });
-            else if (field.includes('p_diagnostico_principal')) form.setError('diagnostico_principal', { type: 'manual', message: msg });
-            else if (field.includes('p_fecha_hora_cita')) {
-              form.setError('fechaConsulta', { type: 'manual', message: msg });
-              form.setError('horaConsulta', { type: 'manual', message: msg });
-            }
-          }
-          return;
-        }
-      }
-
-      if (status === 422) {
-        // Reglas de negocio de horario/fecha
-        if (/domingo|pasado/i.test(message)) {
-          form.setError('fechaConsulta', { type: 'manual', message });
-        } else {
-          form.setError('horaConsulta', { type: 'manual', message });
-        }
-        return;
-      }
-
-      // Fallback: el toast global del hook ya informa; dejamos log para depurar.
       console.error('Submit error:', error);
     }
   }, [admissionMutation, form, onSuccess]);
-  
-  // Handlers
-  const handleDateSelect = useCallback((date: Date | undefined) => {
-    if (date && isValidDate(date)) {
-      setSelectedDate(date);
-      form.setValue('horaConsulta', undefined as any, { shouldValidate: true });
-      form.setValue('fechaConsulta', date, { shouldValidate: true });
-      setShowDatePicker(false);
-    }
-  }, [form]);
-  
+
   const handleCancel = useCallback(() => {
     form.reset();
     setSelectedDate(undefined);
+    setSelectedRecord(null);
     onCancel?.();
   }, [form, onCancel]);
-  
-  const handlePhoneChange = useCallback((field: any, value: string) => {
-    const formatted = formatPhoneNumber(value);
-    field.onChange(formatted);
-  }, []);
-  
-  const fillFromLead = useCallback((lead: Lead) => {
-    const parts = (lead.full_name || '').trim().split(/\s+/);
-    const nombre = parts[0] || '';
-    const apellidos = parts.slice(1).join(' ');
-    
-    form.setValue('nombre', nombre, { shouldValidate: true });
-    form.setValue('apellidos', apellidos, { shouldValidate: true });
-    if (lead.phone_number) 
-      form.setValue('telefono', formatPhoneNumber(lead.phone_number), { shouldValidate: true });
-    if (lead.email) 
-      form.setValue('email', lead.email, { shouldValidate: true });
-    form.setValue('lead_id', lead.id, { shouldValidate: true });
-    if ((lead as any).notes) {
-      form.setValue('comentarios_registro', (lead as any).notes as string, { shouldValidate: false });
-    }
-  }, [form]);
-  
-  const fillFromPatient = useCallback((patient: Patient) => {
-    form.setValue('nombre', patient.nombre ?? '', { shouldValidate: true });
-    form.setValue('apellidos', patient.apellidos ?? '', { shouldValidate: true });
-    if (patient.telefono) 
-      form.setValue('telefono', formatPhoneNumber(patient.telefono), { shouldValidate: true });
-    if (patient.email) 
-      form.setValue('email', patient.email, { shouldValidate: true });
-    if (typeof patient.edad === 'number') 
-      form.setValue('edad', patient.edad, { shouldValidate: false });
-    if (patient.ciudad) 
-      form.setValue('ciudad', patient.ciudad, { shouldValidate: false });
-    if (patient.estado) 
-      form.setValue('estado', patient.estado, { shouldValidate: false });
-    if (patient.contacto_emergencia_nombre) 
-      form.setValue('contacto_emergencia_nombre', patient.contacto_emergencia_nombre, { shouldValidate: false });
-    if (patient.contacto_emergencia_telefono) 
-      form.setValue('contacto_emergencia_telefono', formatPhoneNumber(patient.contacto_emergencia_telefono), { shouldValidate: false });
-    if (patient.antecedentes_medicos) 
-      form.setValue('antecedentes_medicos', patient.antecedentes_medicos, { shouldValidate: false });
-    if (patient.seguro_medico) 
-      form.setValue('seguro_medico', patient.seguro_medico, { shouldValidate: false });
-    if (patient.numero_expediente) 
-      form.setValue('numero_expediente', patient.numero_expediente, { shouldValidate: false });
-    if (patient.genero) 
-      form.setValue('genero', patient.genero as any, { shouldValidate: false });
-    if (patient.fecha_nacimiento) 
-      form.setValue('fecha_nacimiento', patient.fecha_nacimiento as any, { shouldValidate: false });
-  }, [form]);
-  
-  const handleSelectResult = useCallback((item: any) => {
-    try {
-      if (item.kind === 'lead') fillFromLead(item.data as Lead);
-      if (item.kind === 'patient') fillFromPatient(item.data as Patient);
-      setSearchTerm(item.title);
-      setShowSearch(false);
-    } catch (e) {
-      console.error('Error applying selection', e);
-    }
-  }, [fillFromLead, fillFromPatient]);
-  
+
   // Computed values
   const isLoading = admissionMutation.isPending;
   const hasErrors = Object.keys(form.formState.errors).length > 0;
-  
+  const formProgress = useMemo(() => {
+    const fields = form.getValues();
+    const requiredFields = ['nombre', 'apellidos', 'diagnostico_principal', 'fechaConsulta', 'horaConsulta'];
+    const filledRequired = requiredFields.filter(field => fields[field as keyof typeof fields]).length;
+    const totalFields = Object.keys(fields).filter(key => fields[key as keyof typeof fields]).length;
+    return { required: filledRequired, total: totalFields };
+  }, [form]);
+
   return (
-    <Card className={cn("w-full max-w-4xl mx-auto", className)}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <User className="h-5 w-5 text-blue-600" />
-          Registro de Nuevo Paciente
-        </CardTitle>
-        <p className="text-muted-foreground text-sm">
-          Complete la información del paciente y programe su primera consulta
-        </p>
+    <Card className={cn("w-full max-w-5xl mx-auto shadow-xl", className)}>
+      <CardHeader className="bg-gradient-to-r from-sky-50 to-teal-50 dark:from-sky-950/20 dark:to-teal-950/20 border-b">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
+              <UserPlus className="h-6 w-6 text-sky-600 dark:text-sky-400" />
+            </div>
+            <div>
+              <CardTitle className="text-2xl">Registro Completo de Paciente</CardTitle>
+              <CardDescription className="mt-1">
+                Clínica Hernia y Vesícula - Dr. Luis Ángel Medina
+              </CardDescription>
+            </div>
+          </div>
+          {onCancel && (
+            <Button variant="ghost" size="icon" onClick={onCancel}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </CardHeader>
-      <CardContent>
+      
+      <CardContent className="p-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Progress Indicator */}
+            <FormProgress currentStep={formProgress.required} totalSteps={5} />
+
             {/* Search Section */}
-            <div className="space-y-3">
-              <SectionHeader 
-                icon={Search} 
-                title="Buscar paciente o lead" 
-                badge={<Badge variant="secondary" className="text-xs">Autocomplete</Badge>} 
-              />
+            <div className="space-y-4 p-4 bg-sky-50 dark:bg-sky-950/20 rounded-lg border border-sky-200 dark:border-sky-800">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-sky-600" />
+                <h3 className="font-semibold text-sky-900 dark:text-sky-100">
+                  Búsqueda Rápida
+                </h3>
+                <Badge variant="secondary" className="text-xs">Opcional</Badge>
+              </div>
+              
               <div className="relative">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Nombre, teléfono o email"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onFocus={() => setShowSearch(true)}
-                    onBlur={() => setTimeout(() => setShowSearch(false), 150)}
-                    className="pl-10"
-                  />
-                </div>
-                {showSearch && debouncedSearch.length >= 2 && (
-                  <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                    {isSearching ? (
-                      <div className="p-4 flex items-center gap-2 text-sm">
-                        <Loader2 className="h-4 w-4 animate-spin" /> 
-                        <span>Buscando...</span>
-                      </div>
-                    ) : combinedResults.length > 0 ? (
-                      <ScrollArea className="h-64">
-                        <div className="p-1">
-                          {combinedResults.map((item) => (
-                            <SearchResultItem 
-                              key={`${item.kind}:${item.id}`} 
-                              item={item} 
-                              onSelect={() => handleSelectResult(item)} 
+                <Input
+                  placeholder="Buscar paciente o lead existente..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setShowSearch(true);
+                  }}
+                  onFocus={() => setShowSearch(true)}
+                  className="pr-10"
+                />
+                {isSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                )}
+              </div>
+
+              {showSearch && debouncedSearch.length >= 2 && (
+                <Card className="border-sky-200 dark:border-sky-800">
+                  <ScrollArea className="max-h-64">
+                    <div className="p-2 space-y-1">
+                      {searchResults.patients.length === 0 && searchResults.leads.length === 0 && !isSearching ? (
+                        <p className="text-sm text-gray-500 text-center py-4">
+                          No se encontraron resultados
+                        </p>
+                      ) : (
+                        <>
+                          {searchResults.patients.map((patient) => (
+                            <SearchResultCard
+                              key={patient.id}
+                              item={{ type: 'patient', data: patient }}
+                              onSelect={() => handleSelectRecord('patient', patient)}
                             />
                           ))}
-                        </div>
-                      </ScrollArea>
-                    ) : (
-                      <div className="p-4 text-center text-sm text-muted-foreground">
-                        Sin resultados
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Escribe al menos 2 caracteres para buscar
-              </p>
-            </div>
-
-            {/* Personal Information */}
-            <div className="space-y-4">
-              <SectionHeader icon={User} title="Información Personal" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="nombre"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Nombre" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="apellidos"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Apellidos *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Apellidos" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="telefono"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Teléfono</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Teléfono"
-                          {...field}
-                          onChange={(e) => handlePhoneChange(field, e.target.value)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="Email" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="edad"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Edad</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number"
-                          placeholder="Edad"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Demographics */}
-            <div className="space-y-4">
-              <SectionHeader icon={User} title="Información Demográfica" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="fecha_nacimiento"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha de Nacimiento</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="genero"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Género</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Género" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Masculino">Masculino</SelectItem>
-                          <SelectItem value="Femenino">Femenino</SelectItem>
-                          <SelectItem value="Otro">Otro</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Location */}
-            <div className="space-y-4">
-              <SectionHeader icon={Mail} title="Información de Ubicación" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="ciudad"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Ciudad</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ciudad" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="estado"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Estado/Provincia</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Estado" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Emergency Contact */}
-            <div className="space-y-4">
-              <SectionHeader icon={Phone} title="Contacto de Emergencia" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="contacto_emergencia_nombre"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre del Contacto</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Nombre del contacto" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="contacto_emergencia_telefono"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Teléfono de Contacto</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Teléfono del contacto"
-                          {...field}
-                          onChange={(e) => handlePhoneChange(field, e.target.value)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Medical Information */}
-            <div className="space-y-4">
-              <SectionHeader icon={FileText} title="Información Médica" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="diagnostico_principal"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Diagnóstico Principal *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Diagnóstico" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {diagnosisOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
+                          {searchResults.leads.map((lead) => (
+                            <SearchResultCard
+                              key={lead.id}
+                              item={{ type: 'lead', data: lead }}
+                              onSelect={() => handleSelectRecord('lead', lead)}
+                            />
                           ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="probabilidad_cirugia"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Probabilidad de Cirugía (%)</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number"
-                          min="0"
-                          max="100"
-                          placeholder="50"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) / 100 : undefined)}
-                          value={field.value ? Math.round(field.value * 100) : ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="comentarios_registro"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Comentarios Adicionales</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Comentarios..."
-                        {...field}
-                        className="min-h-[80px]"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="antecedentes_medicos"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Antecedentes Médicos</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Antecedentes..."
-                          {...field}
-                          className="min-h-[60px]"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="seguro_medico"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Seguro Médico</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Seguro médico" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="numero_expediente"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Número de Expediente</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Número de expediente" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                        </>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </Card>
+              )}
+
+              {selectedRecord && (
+                <Alert className="border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <AlertDescription>
+                    Datos cargados de {selectedRecord.type === 'patient' ? 'paciente' : 'lead'} existente
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
-            {/* Marketing/Origin */}
-            <div className="space-y-4">
-              <SectionHeader icon={AlertCircle} title="Información de Origen" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="marketing_source"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fuente de Marketing</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Fuente de marketing" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="creation_source"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fuente de Creación</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Fuente de creación"
-                          {...field}
-                          disabled
-                          className="bg-muted"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
+            {/* Tabs for form sections */}
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="personal" className="gap-2">
+                  <User2 className="h-4 w-4" />
+                  Personal
+                </TabsTrigger>
+                <TabsTrigger value="medical" className="gap-2">
+                  <Stethoscope className="h-4 w-4" />
+                  Médico
+                </TabsTrigger>
+                <TabsTrigger value="appointment" className="gap-2">
+                  <CalendarIcon className="h-4 w-4" />
+                  Cita
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Appointment Scheduling */}
-            <div className="space-y-4">
-              <SectionHeader icon={CalendarIcon} title="Programar Primera Consulta" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="fechaConsulta"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Fecha de Consulta *</FormLabel>
-                      <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
-                        <PopoverTrigger asChild>
+              <TabsContent value="personal" className="space-y-6 mt-6">
+                {/* Información Personal */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <User2 className="h-5 w-5 text-gray-600" />
+                    Información Personal
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="nombre"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nombre *</FormLabel>
                           <FormControl>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "pl-3 text-left font-normal w-full",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP", { locale: es })
-                              ) : (
-                                <span>Seleccionar fecha</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
+                            <Input placeholder="Nombre del paciente" {...field} />
                           </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={handleDateSelect}
-                            disabled={(date) => !isValidDate(date)}
-                            initialFocus
-                            locale={es}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="horaConsulta"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Hora de Consulta *</FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
-                        value={field.value}
-                        disabled={!selectedDate}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={selectedDate ? "Seleccionar hora" : "Fecha primero"} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {TIME_SLOTS.map((slot) => {
-                            const disabled = occupiedTimes.has(slot.value);
-                            return (
-                              <SelectItem 
-                                key={slot.value} 
-                                value={slot.value} 
-                                disabled={disabled}
-                                className="py-2"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <Clock className="h-3 w-3" />
-                                  <span>{slot.label}</span>
-                                  {disabled && (
-                                    <span className="text-xs text-muted-foreground">(Ocupado)</span>
-                                  )}
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="apellidos"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Apellidos *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Apellidos del paciente" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="edad"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Edad</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="Edad"
+                              {...field}
+                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="genero"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Género</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar género" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="Masculino">Masculino</SelectItem>
+                              <SelectItem value="Femenino">Femenino</SelectItem>
+                              <SelectItem value="Otro">Otro</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="telefono"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Teléfono</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <Input 
+                                placeholder="555-123-4567"
+                                className="pl-10"
+                                {...field}
+                                onChange={(e) => field.onChange(formatPhoneNumber(e.target.value))}
+                              />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <Input 
+                                type="email" 
+                                placeholder="correo@ejemplo.com"
+                                className="pl-10"
+                                {...field}
+                              />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
 
-            {/* Errors and Actions */}
+                <Separator />
+
+                {/* Ubicación */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-gray-600" />
+                    Ubicación
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="ciudad"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Ciudad</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Ciudad de residencia" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="estado"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Estado/Provincia</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Estado o provincia" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Contacto de Emergencia */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Heart className="h-5 w-5 text-gray-600" />
+                    Contacto de Emergencia
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="contacto_emergencia_nombre"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nombre del Contacto</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nombre completo" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="contacto_emergencia_telefono"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Teléfono del Contacto</FormLabel>
+                          <FormControl>
+                            <Input 
+                              placeholder="555-123-4567"
+                              {...field}
+                              onChange={(e) => field.onChange(formatPhoneNumber(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="medical" className="space-y-6 mt-6">
+                {/* Información Médica */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Stethoscope className="h-5 w-5 text-gray-600" />
+                    Información Clínica
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="diagnostico_principal"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Diagnóstico Principal *</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar diagnóstico" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {DIAGNOSIS_DB_VALUES.map((diagnosis) => (
+                                <SelectItem key={diagnosis} value={diagnosis}>
+                                  {dbDiagnosisToDisplay(diagnosis)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            Diagnóstico principal del paciente
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="probabilidad_cirugia"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Probabilidad de Cirugía</FormLabel>
+                          <FormControl>
+                            <div className="space-y-2">
+                              <Input 
+                                type="number"
+                                min="0"
+                                max="100"
+                                placeholder="50"
+                                value={field.value ? Math.round(field.value * 100) : ''}
+                                onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) / 100 : undefined)}
+                              />
+                              <Progress value={(field.value || 0) * 100} className="h-2" />
+                            </div>
+                          </FormControl>
+                          <FormDescription>
+                            Porcentaje estimado (0-100%)
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <FormField
+                    control={form.control}
+                    name="antecedentes_medicos"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Antecedentes Médicos</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Describa los antecedentes médicos relevantes..."
+                            className="min-h-[100px] resize-none"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={form.control}
+                    name="comentarios_registro"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Observaciones</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Observaciones adicionales..."
+                            className="min-h-[80px] resize-none"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <Separator />
+
+                {/* Información Administrativa */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-gray-600" />
+                    Información Administrativa
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="numero_expediente"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número de Expediente</FormLabel>
+                          <FormControl>
+                            <Input placeholder="EXP-00000" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="seguro_medico"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Seguro Médico</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nombre del seguro" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="appointment" className="space-y-6 mt-6">
+                {/* Programar Cita */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <CalendarIcon className="h-5 w-5 text-gray-600" />
+                    Programar Primera Consulta
+                  </h3>
+                  
+                  <Alert className="border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/30">
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      Seleccione la fecha y hora para la primera consulta del paciente
+                    </AlertDescription>
+                  </Alert>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="fechaConsulta"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel>Fecha de Consulta *</FormLabel>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant="outline"
+                                  className={cn(
+                                    "w-full pl-3 text-left font-normal",
+                                    !field.value && "text-muted-foreground"
+                                  )}
+                                >
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {field.value ? (
+                                    format(field.value, "PPP", { locale: es })
+                                  ) : (
+                                    <span>Seleccionar fecha</span>
+                                  )}
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value}
+                                onSelect={(date) => {
+                                  field.onChange(date);
+                                  setSelectedDate(date);
+                                }}
+                                disabled={(date) => !isValidDate(date)}
+                                initialFocus
+                                locale={es}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <FormDescription>
+                            Días laborales, hasta 90 días en adelante
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="horaConsulta"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Hora de Consulta *</FormLabel>
+                          <Select 
+                            onValueChange={field.onChange} 
+                            value={field.value}
+                            disabled={!selectedDate}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder={selectedDate ? "Seleccionar hora" : "Seleccione fecha primero"} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {TIME_SLOTS.map((slot) => {
+                                const isOccupied = occupiedTimes.has(slot.value);
+                                return (
+                                  <SelectItem 
+                                    key={slot.value} 
+                                    value={slot.value} 
+                                    disabled={isOccupied}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <Clock className="h-3.5 w-3.5" />
+                                      <span>{slot.label}</span>
+                                      {isOccupied && (
+                                        <Badge variant="secondary" className="text-xs ml-2">
+                                          Ocupado
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            Horarios disponibles de 9:00 a 14:30
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  {selectedDate && form.watch('horaConsulta') && (
+                    <Alert className="border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <AlertDescription>
+                        <strong>Cita programada:</strong> {format(selectedDate, "EEEE d 'de' MMMM", { locale: es })} a las {form.watch('horaConsulta')}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            {/* Error Summary */}
             {hasErrors && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Por favor, corrija los errores antes de continuar.
+                  Por favor, corrija los errores marcados en el formulario antes de continuar.
                 </AlertDescription>
               </Alert>
             )}
-            
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t">
               <Button 
                 type="button" 
                 variant="outline" 
@@ -1035,23 +965,56 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
               >
                 Cancelar
               </Button>
-              <Button 
-                type="submit" 
-                disabled={isLoading || hasErrors}
-                className="sm:flex-1 gap-2"
+              <div className="flex-1" />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const tabs = ['personal', 'medical', 'appointment'] as const;
+                  const currentIndex = tabs.indexOf(activeTab);
+                  if (currentIndex > 0) {
+                    setActiveTab(tabs[currentIndex - 1]);
+                  }
+                }}
+                disabled={activeTab === 'personal' || isLoading}
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="h-4 w-4" />
-                    Registrar Paciente
-                  </>
-                )}
+                Anterior
               </Button>
+              {activeTab !== 'appointment' ? (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const tabs = ['personal', 'medical', 'appointment'] as const;
+                    const currentIndex = tabs.indexOf(activeTab);
+                    if (currentIndex < tabs.length - 1) {
+                      setActiveTab(tabs[currentIndex + 1]);
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button 
+                  type="submit" 
+                  disabled={isLoading || hasErrors}
+                  className="gap-2 bg-sky-600 hover:bg-sky-700"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Registrando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      Registrar Paciente
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </form>
         </Form>
@@ -1060,4 +1023,5 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
   );
 };
 
-export default NewPatientForm;
+const memo = React.memo;
+export default memo(NewPatientForm);

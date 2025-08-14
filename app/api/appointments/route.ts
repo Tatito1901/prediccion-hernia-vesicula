@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { startOfDay, endOfDay } from 'date-fns';
+import { ZNewAppointmentSchema, normalizeNewAppointment } from '@/lib/validation/appointments';
 
 // Ensure Node.js runtime for access to process.env and server-only libs
 export const runtime = 'nodejs';
@@ -159,32 +160,58 @@ export async function POST(request: Request) {
     hasService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
   });
   try {
-    const body = await request.json();
-    // Validar body
-    const {
-      patient_id, // Este ID debe existir en la tabla patients
-      doctor_id,
-      fecha_hora_cita, // Asegúrate que llegue como un string ISO 8601 o un objeto Date
-      motivos_consulta,
-      estado_cita,
-      es_primera_vez,
-      notas_breves,
-    } = body;
+    const raw = await request.json();
+    // Validación estricta de payload
+    const parsed = ZNewAppointmentSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { message: 'Validation failed', issues: parsed.error.issues },
+        { status: 422 }
+      );
+    }
+    const input = parsed.data;
+    const payload = normalizeNewAppointment(input);
 
-    // Aquí deberías verificar que patient_id existe en la tabla 'patients'
-    // antes de insertar la cita, o manejar el caso de crear paciente si no existe.
-    // Por simplicidad, asumimos que patient_id ya es válido.
+    // Verificar que el paciente exista
+    const { data: existingPatient, error: patientErr } = await supabase
+      .from('patients')
+      .select('id')
+      .eq('id', payload.patient_id)
+      .single();
+    if (patientErr || !existingPatient) {
+      return NextResponse.json(
+        { message: 'Paciente no existe', details: patientErr?.message },
+        { status: 422 }
+      );
+    }
+
+    // Prevenir conflictos básicos de agenda por doctor y slot exacto
+    if (payload.doctor_id) {
+      const { data: conflict } = await supabase
+        .from('appointments')
+        .select('id, estado_cita')
+        .eq('doctor_id', payload.doctor_id)
+        .eq('fecha_hora_cita', payload.fecha_hora_cita)
+        .neq('estado_cita', 'CANCELADA')
+        .maybeSingle();
+      if (conflict) {
+        return NextResponse.json(
+          { message: 'Conflicto de agenda: el doctor ya tiene una cita en ese horario' },
+          { status: 409 }
+        );
+      }
+    }
 
     const { data: newAppointment, error } = await supabase
       .from('appointments')
       .insert([{
-        patient_id,
-        doctor_id,
-        fecha_hora_cita,
-        motivos_consulta,
-        estado_cita: estado_cita || 'PROGRAMADA',
-        es_primera_vez: es_primera_vez !== undefined ? es_primera_vez : true,
-        notas_breves,
+        patient_id: payload.patient_id,
+        doctor_id: payload.doctor_id,
+        fecha_hora_cita: payload.fecha_hora_cita,
+        motivos_consulta: payload.motivos_consulta,
+        estado_cita: payload.estado_cita,
+        es_primera_vez: payload.es_primera_vez,
+        notas_breves: payload.notas_breves,
       }])
       .select()
       .single();
@@ -192,11 +219,11 @@ export async function POST(request: Request) {
     if (error) throw error;
 
     // Si es la primera cita, actualiza patients.fecha_primera_consulta
-    if (es_primera_vez || es_primera_vez === undefined) { // Si es_primera_vez es true o no se proporcionó (default true)
+    if (payload.es_primera_vez || payload.es_primera_vez === undefined) { // Si es_primera_vez es true o no se proporcionó (default true)
         const { error: patientUpdateError } = await supabase
             .from('patients')
-            .update({ fecha_primera_consulta: new Date(fecha_hora_cita).toISOString().split('T')[0] })
-            .eq('id', patient_id)
+            .update({ fecha_primera_consulta: new Date(payload.fecha_hora_cita).toISOString().split('T')[0] })
+            .eq('id', payload.patient_id)
             .is('fecha_primera_consulta', null); // Solo actualizar si aún no tiene una
         
         if (patientUpdateError) {

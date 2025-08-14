@@ -2,13 +2,19 @@
 // 🎯 ADAPTADA A TU SISTEMA DE ENCUESTAS COMPLETO - survey_templates + questions + assigned_surveys + survey_responses
 
 import { NextResponse, NextRequest } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
 
 // POST - Completar encuesta con respuestas detalladas
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Deprecated: This appointment-scoped survey endpoint is no longer used.
+  // Prefer patient/template assignment via `/api/assign-survey` and current flows.
+  return NextResponse.json(
+    { error: 'Endpoint deprecado. Use /api/assign-survey y flujos actuales' },
+    { status: 410 }
+  );
+  /*
   try {
     const supabase = await createClient();
     const { id: appointmentId } = await params;
@@ -234,6 +240,7 @@ export async function POST(
       { status: 500 }
     );
   }
+*/
 }
 
 // PATCH - Iniciar encuesta (marcar como iniciada)
@@ -241,6 +248,13 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Deprecated: This appointment-scoped survey endpoint is no longer used.
+  // Prefer patient/template assignment via `/api/assign-survey` and current flows.
+  return NextResponse.json(
+    { error: 'Endpoint deprecado. Use /api/assign-survey y flujos actuales' },
+    { status: 410 }
+  );
+  /*
   try {
     const supabase = await createClient();
     const { id: appointmentId } = await params;
@@ -367,6 +381,7 @@ export async function PATCH(
       { status: 500 }
     );
   }
+*/
 }
 
 // GET - Obtener estado de encuesta y preguntas
@@ -374,6 +389,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Deprecated: This appointment-scoped survey endpoint is no longer used.
+  // Prefer patient/template assignment via `/api/assign-survey` and current flows.
+  return NextResponse.json(
+    { error: 'Endpoint deprecado. Use /api/assign-survey y flujos actuales' },
+    { status: 410 }
+  );
+  /*
   try {
     const supabase = await createClient();
     const { id: appointmentId } = await params;
@@ -493,4 +515,5 @@ export async function GET(
       { status: 500 }
     );
   }
+  */
 }

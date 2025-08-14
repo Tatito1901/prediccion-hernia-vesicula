@@ -1,12 +1,12 @@
 // components/patient-admission/patient-admission-reschedule.tsx
+'use client';
 import React, { memo, useCallback, useMemo, useState } from "react";
 import { format, addDays, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -21,26 +21,21 @@ import { cn } from "@/lib/utils";
 import {
   CalendarIcon, 
   Clock, 
-  CheckCircle, 
+  CheckCircle2, 
   AlertCircle, 
   Loader2,
-  AlertTriangle,
-  Info
+  Calendar as CalendarDays,
+  ArrowRight
 } from "lucide-react";
 
-// Types e imports
 import type { AppointmentWithPatient, RescheduleProps } from './admision-types';
 import { getPatientFullName } from './admision-types';
 import { useClinic } from "@/contexts/clinic-data-provider";
-import { LoadingSpinner } from '@/components/ui/unified-skeletons';
-
-// Configuración centralizada
-import { CLINIC_SCHEDULE } from '@/lib/clinic-schedule';
-import { isWorkDay } from '@/lib/clinic-schedule';
+import { CLINIC_SCHEDULE, isWorkDay } from '@/lib/clinic-schedule';
 
 // Utilidades
 const formatAppointmentDate = (date: Date): string => {
-  return format(date, "dd 'de' MMMM 'de' yyyy", { locale: es });
+  return format(date, "EEEE d 'de' MMMM", { locale: es });
 };
 
 const isValidAppointmentDate = (date: Date): boolean => {
@@ -58,138 +53,108 @@ const canRescheduleAppointment = (fechaHoraCita: string): boolean => {
   return now < minRescheduleTime;
 };
 
-const getAvailableTimeSlots = (date: Date, existingAppointments: AppointmentWithPatient[]): string[] => {
-  const slots: string[] = [];
-  const { START_HOUR, END_HOUR, LUNCH_START, LUNCH_END, SLOT_DURATION_MINUTES } = {
-    START_HOUR: CLINIC_SCHEDULE.START_HOUR,
-    END_HOUR: CLINIC_SCHEDULE.END_HOUR,
-    LUNCH_START: CLINIC_SCHEDULE.LUNCH_START,
-    LUNCH_END: CLINIC_SCHEDULE.LUNCH_END,
-    SLOT_DURATION_MINUTES: CLINIC_SCHEDULE.SLOT_DURATION_MINUTES,
-  } as const;
-  
-  // Generar slots disponibles
-  for (let hour = START_HOUR; hour < END_HOUR; hour++) {
-    for (let minute = 0; minute < 60; minute += SLOT_DURATION_MINUTES) {
-      if (hour >= LUNCH_START && hour < LUNCH_END) continue;
-      slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
-    }
-  }
-  
-  // Filtrar slots ocupados
-  const ACTIVE_STATES = new Set(['PROGRAMADA', 'CONFIRMADA', 'PRESENTE']);
-  const occupiedSlots = new Set(
-    existingAppointments
-      .filter(apt => ACTIVE_STATES.has((apt as any).estado_cita))
-      .filter(apt => format(new Date(apt.fecha_hora_cita), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
-      .map(apt => format(new Date(apt.fecha_hora_cita), 'HH:mm'))
-  );
-  
-  return slots.filter(slot => !occupiedSlots.has(slot));
-};
-
-// Componente de slot de tiempo
+// Componente de slot de tiempo mejorado
 const TimeSlot = memo<{ 
   time: string; 
   isSelected: boolean;
-}>(({ time, isSelected }) => (
-  <SelectItem 
-    value={time} 
+  onClick: () => void;
+  disabled?: boolean;
+}>(({ time, isSelected, onClick, disabled }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
     className={cn(
-      "text-sm cursor-pointer transition-colors py-2 px-3",
-      isSelected && "bg-blue-50 dark:bg-blue-900/20"
+      "relative w-full p-3 text-left rounded-lg transition-all",
+      "hover:bg-sky-50 dark:hover:bg-sky-950/30",
+      "focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-1",
+      isSelected && "bg-sky-100 dark:bg-sky-900/50 border-sky-500 border",
+      disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
     )}
   >
-    <div className="flex items-center gap-2">
-      <Clock className="h-4 w-4" />
-      {time}
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Clock className="h-4 w-4 text-gray-500" />
+        <span className={cn(
+          "font-medium",
+          isSelected && "text-sky-700 dark:text-sky-300"
+        )}>
+          {time}
+        </span>
+      </div>
+      {isSelected && (
+        <CheckCircle2 className="h-4 w-4 text-sky-600" />
+      )}
     </div>
-  </SelectItem>
+  </button>
 ));
 TimeSlot.displayName = 'TimeSlot';
 
-// Componente principal
 export const RescheduleDatePicker = memo<RescheduleProps>(({ 
   appointment, 
   onClose,
   onReschedule
 }) => {
-  // Estados
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
   
-  // Datos de clínica
-  const { allAppointments, isLoading: isLoadingAppointments } = useClinic();
+  const { allAppointments, isLoading } = useClinic();
   
-  // Validaciones
+  // Validación de reagendamiento
   const canReschedule = useMemo(() => 
     canRescheduleAppointment(appointment.fecha_hora_cita), 
     [appointment.fecha_hora_cita]
   );
 
-  // Slots disponibles
+  // Horarios disponibles
   const availableTimeSlots = useMemo(() => {
     if (!selectedDate || !isValidAppointmentDate(selectedDate)) return [];
     
-    const appointments = allAppointments || [];
-    const otherAppointments = appointments.filter(apt => apt.id !== appointment.id);
+    const slots: string[] = [];
+    const { START_HOUR, END_HOUR, LUNCH_START, LUNCH_END, SLOT_DURATION_MINUTES } = CLINIC_SCHEDULE;
     
-    return getAvailableTimeSlots(selectedDate, otherAppointments as any);
+    // Generar slots
+    for (let hour = START_HOUR; hour < END_HOUR; hour++) {
+      for (let minute = 0; minute < 60; minute += SLOT_DURATION_MINUTES) {
+        if (hour >= LUNCH_START && hour < LUNCH_END) continue;
+        slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
+      }
+    }
+    
+    // Filtrar ocupados
+    const occupiedSlots = new Set<string>();
+    const activeStates = ['PROGRAMADA', 'CONFIRMADA', 'PRESENTE'];
+    
+    allAppointments
+      ?.filter(apt => 
+        apt.id !== appointment.id && 
+        activeStates.includes(apt.estado_cita) &&
+        format(new Date(apt.fecha_hora_cita), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
+      )
+      .forEach(apt => {
+        occupiedSlots.add(format(new Date(apt.fecha_hora_cita), 'HH:mm'));
+      });
+    
+    return slots.filter(slot => !occupiedSlots.has(slot));
   }, [selectedDate, allAppointments, appointment.id]);
 
   // Handlers
-  const handleClose = useCallback(() => onClose(), [onClose]);
-  
   const handleConfirm = useCallback(() => {
     if (selectedDate && selectedTime) {
       setIsProcessing(true);
       setTimeout(() => {
         onReschedule(selectedDate, selectedTime);
-        handleClose();
-      }, 300);
+        onClose();
+      }, 500);
     }
-  }, [selectedDate, selectedTime, onReschedule, handleClose]);
+  }, [selectedDate, selectedTime, onReschedule, onClose]);
 
-  const handleDateChange = useCallback((date: Date | undefined) => {
-    setSelectedDate(date || null);
-    setSelectedTime(null);
-    setShowDatePicker(false);
-  }, []);
-
-  const handleTimeChange = useCallback((time: string) => {
-    setSelectedTime(time);
-  }, []);
-
-  // Datos computados
-  const dateButtonText = useMemo(() => 
-    selectedDate ? formatAppointmentDate(selectedDate) : "Seleccionar fecha",
-    [selectedDate]
-  );
-
-  const timePlaceholder = useMemo(() => {
-    if (!selectedDate) return "Seleccione fecha primero";
-    if (isLoadingAppointments) return "Verificando disponibilidad...";
-    if (availableTimeSlots.length === 0) return "No hay horarios disponibles";
-    return "Seleccionar hora";
-  }, [selectedDate, isLoadingAppointments, availableTimeSlots.length]);
-
-  const showConfirmation = !!(selectedDate && selectedTime);
   const patientName = getPatientFullName(appointment.patients);
 
-  // Límites de fechas
-  const today = useMemo(() => new Date(), []);
-  const maxDate = useMemo(() => {
-    const max = new Date();
-    max.setDate(max.getDate() + CLINIC_SCHEDULE.MAX_ADVANCE_DAYS);
-    return max;
-  }, []);
-
-  // Validación de reagendamiento
+  // Si no se puede reagendar
   if (!canReschedule) {
     return (
-      <Dialog open onOpenChange={handleClose}>
+      <Dialog open onOpenChange={onClose}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
@@ -201,8 +166,8 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={handleClose} variant="outline">
-              Cerrar
+            <Button onClick={onClose} variant="outline">
+              Entendido
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -211,118 +176,122 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
   }
 
   return (
-    <Dialog open onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] p-0 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20">
           <DialogTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-blue-600" />
+            <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+              <CalendarDays className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+            </div>
             Reagendar Cita
           </DialogTitle>
           <DialogDescription>
-            Seleccione una nueva fecha y hora para <strong>{patientName}</strong>
+            Seleccione nueva fecha y hora para <strong>{patientName}</strong>
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-5 py-2">
-          {/* Cita actual */}
-          <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20">
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              <strong>Actual:</strong> {format(new Date(appointment.fecha_hora_cita), "dd/MM/yyyy 'a las' HH:mm")}
-            </AlertDescription>
-          </Alert>
+        <div className="flex flex-col lg:flex-row h-[500px]">
+          {/* Panel izquierdo - Calendario */}
+          <div className="flex-1 p-6 border-r">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                Fecha Actual
+              </h3>
+              <Alert className="border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/30">
+                <CalendarIcon className="h-4 w-4" />
+                <AlertDescription className="font-medium">
+                  {format(new Date(appointment.fecha_hora_cita), "EEEE d 'de' MMMM 'a las' HH:mm", { locale: es })}
+                </AlertDescription>
+              </Alert>
+            </div>
 
-          {/* Selector de fecha */}
-          <div className="space-y-2">
-            <Label>Fecha</Label>
-            <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !selectedDate && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateButtonText}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate || undefined}
-                  onSelect={handleDateChange}
-                  disabled={(date) => !isValidAppointmentDate(date)}
-                  initialFocus
-                  locale={es}
-                  fromDate={today}
-                  toDate={maxDate}
-                />
-              </PopoverContent>
-            </Popover>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                Seleccionar Nueva Fecha
+              </h3>
+              <Calendar
+                mode="single"
+                selected={selectedDate || undefined}
+                onSelect={(date) => {
+                  setSelectedDate(date || null);
+                  setSelectedTime(null);
+                }}
+                disabled={(date) => !isValidAppointmentDate(date)}
+                locale={es}
+                className="rounded-lg border"
+              />
+            </div>
           </div>
 
-          {/* Selector de hora */}
-          <div className="space-y-2">
-            <Label>Hora</Label>
-            {isLoadingAppointments ? (
-              <LoadingSpinner size="sm" message="Verificando disponibilidad..." />
-            ) : (
-              <Select onValueChange={handleTimeChange} disabled={!selectedDate}>
-                <SelectTrigger>
-                  <SelectValue placeholder={timePlaceholder} />
-                </SelectTrigger>
-                <SelectContent>
-                  <ScrollArea className="h-64">
-                    {availableTimeSlots.length === 0 ? (
-                      <div className="p-6 text-center">
-                        <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto mb-2" />
-                        <p className="text-sm text-muted-foreground">
-                          No hay horarios disponibles para esta fecha
-                        </p>
-                      </div>
-                    ) : (
-                      availableTimeSlots.map((time) => (
-                        <TimeSlot
-                          key={time}
-                          time={time}
-                          isSelected={selectedTime === time}
-                        />
-                      ))
-                    )}
-                  </ScrollArea>
-                </SelectContent>
-              </Select>
-            )}
+          {/* Panel derecho - Horarios */}
+          <div className="flex-1 p-6 bg-gray-50 dark:bg-gray-900/50">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+              Horarios Disponibles
+            </h3>
             
-            {selectedDate && availableTimeSlots.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {availableTimeSlots.length} horarios disponibles
-              </p>
+            {!selectedDate ? (
+              <div className="flex items-center justify-center h-64 text-gray-500">
+                <div className="text-center">
+                  <CalendarIcon className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                  <p className="text-sm">Seleccione una fecha primero</p>
+                </div>
+              </div>
+            ) : isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              </div>
+            ) : availableTimeSlots.length === 0 ? (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  No hay horarios disponibles para esta fecha
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <ScrollArea className="h-80">
+                <div className="grid grid-cols-2 gap-2">
+                  {availableTimeSlots.map((time) => (
+                    <TimeSlot
+                      key={time}
+                      time={time}
+                      isSelected={selectedTime === time}
+                      onClick={() => setSelectedTime(time)}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+
+            {selectedDate && selectedTime && (
+              <Card className="mt-4 p-4 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-emerald-900 dark:text-emerald-100">
+                      Nueva cita programada
+                    </p>
+                    <p className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">
+                      {formatAppointmentDate(selectedDate)} a las {selectedTime}
+                    </p>
+                  </div>
+                </div>
+              </Card>
             )}
           </div>
-
-          {/* Confirmación */}
-          {showConfirmation && (
-            <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/20">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription>
-                <strong>Nueva cita:</strong> {formatAppointmentDate(selectedDate)} 
-                {' '}a las {selectedTime}
-              </AlertDescription>
-            </Alert>
-          )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={handleClose} disabled={isProcessing}>
+        <DialogFooter className="px-6 py-4 border-t bg-gray-50 dark:bg-gray-900/50">
+          <Button 
+            variant="outline" 
+            onClick={onClose} 
+            disabled={isProcessing}
+          >
             Cancelar
           </Button>
           <Button 
             onClick={handleConfirm} 
-            disabled={!showConfirmation || isProcessing}
-            className="gap-2"
+            disabled={!selectedDate || !selectedTime || isProcessing}
+            className="gap-2 bg-violet-600 hover:bg-violet-700"
           >
             {isProcessing ? (
               <>
@@ -331,8 +300,8 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
               </>
             ) : (
               <>
-                <CheckCircle className="h-4 w-4" />
-                Confirmar
+                Confirmar Cambio
+                <ArrowRight className="h-4 w-4" />
               </>
             )}
           </Button>

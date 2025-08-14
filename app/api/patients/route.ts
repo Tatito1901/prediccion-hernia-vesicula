@@ -99,15 +99,54 @@ export async function GET(request: Request) {
     }
 
     // 3. Enriquecer datos en el backend
-    const enrichedPatients = patients?.map((patient: any) => ({
-      ...patient,
-      nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
-      displayDiagnostico: patient.diagnostico_principal || 'Sin diagnóstico',
-      // Campos dependientes de joins desactivados de momento
-      encuesta_completada: false,
-      encuesta: null,
-      fecha_proxima_cita_iso: null
-    })) || [];
+    // Intentar recuperar la última encuesta asignada por paciente (sin romper en entornos donde la tabla no exista)
+    let surveysByPatient: Record<string, any> = {};
+    try {
+      const patientIds: string[] = (patients || [])
+        .map((p: any) => p?.id)
+        .filter((id: any) => typeof id === 'string' && id);
+
+      if (patientIds.length > 0) {
+        const { data: assigned, error: assignedError } = await supabase
+          .from('assigned_surveys')
+          .select('id, status, completed_at, created_at, template_id, patient_id')
+          .in('patient_id', patientIds)
+          .order('created_at', { ascending: false });
+
+        if (assignedError) {
+          console.warn('[/api/patients] No se pudo obtener assigned_surveys:', assignedError.message);
+        } else if (assigned) {
+          for (const s of assigned) {
+            // Conservar solo la más reciente por paciente (ya vienen ordenadas desc)
+            if (!surveysByPatient[s.patient_id]) {
+              surveysByPatient[s.patient_id] = s;
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('[/api/patients] Error no crítico al enriquecer encuestas:', e?.message || e);
+    }
+
+    const enrichedPatients = patients?.map((patient: any) => {
+      const lastSurvey = surveysByPatient[patient.id];
+      const encuestaCompletada = !!(lastSurvey && (lastSurvey.status === 'completed' || lastSurvey.completed_at));
+
+      return {
+        ...patient,
+        nombreCompleto: `${patient.nombre || ''} ${patient.apellidos || ''}`.trim(),
+        displayDiagnostico: patient.diagnostico_principal || 'Sin diagnóstico',
+        // Enriquecimiento de encuesta para UI
+        encuesta_completada: encuestaCompletada,
+        encuesta: lastSurvey
+          ? {
+              // Estructura mínima compatible con el frontend
+              assigned_survey: lastSurvey,
+            }
+          : null,
+        fecha_proxima_cita_iso: null,
+      };
+    }) || [];
 
     // 4. Calcular estadísticas en el backend (solo si es la primera página)
     let stats = null;

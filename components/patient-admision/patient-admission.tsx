@@ -1,39 +1,40 @@
 // components/patient-admission/patient-admission-optimized.tsx
 'use client';
-import React, { useState, useEffect, useCallback, useMemo, useRef, useReducer, memo, FC } from 'react';
+import React, { useState, useCallback, useMemo, memo } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { startOfDay, endOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useClinic, Patient } from '@/contexts/clinic-data-provider';
+import { useClinic } from '@/contexts/clinic-data-provider';
+import type { Patient } from '@/lib/types';
 
 // UI Components
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-// Icons (list cleaned and verified)
+// Icons
 import { 
-  RefreshCw, Clock, Calendar, CalendarClock, CalendarCheck,
-  AlertCircle, Plus, Search, Filter, Grid3x3, List, Sparkles,
-  TrendingUp, Activity, ChevronDown, XCircle
+  RefreshCw, Calendar, CalendarDays, CalendarCheck,
+  AlertCircle, Plus, Search, SlidersHorizontal,
+  User2, Activity, Clock, TrendingUp,
+  Stethoscope, X
 } from 'lucide-react';
 
 // Types
 import type { TabType, AppointmentWithPatient, AdmissionAction } from './admision-types';
 
-// ==================== LAZY LOADED COMPONENTS ====================
+// Lazy loaded components
 const PatientCard = dynamic(() => import('./patient-card'), { 
   ssr: false,
   loading: () => <CardSkeleton />
@@ -43,339 +44,374 @@ const PatientModal = dynamic(() => import('./patient-modal').then(m => ({ defaul
   ssr: false
 });
 
-// ==================== SKELETON & LOADING COMPONENTS ====================
+// ==================== SKELETON ====================
 const CardSkeleton = () => (
-  <div className="p-4 space-y-3 border rounded-lg">
-    <div className="flex items-center gap-3">
-      <Skeleton className="w-12 h-12 rounded-full" />
-      <div className="flex-1 space-y-2">
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-3 w-1/2" />
+  <div className="animate-pulse">
+    <Card className="border-l-4 border-gray-200">
+      <div className="p-5 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-full bg-gray-200 dark:bg-gray-700" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+          </div>
+        </div>
+        <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded" />
       </div>
-    </div>
-    <Skeleton className="h-8 w-full" />
+    </Card>
   </div>
 );
 
-const LoadingGrid = ({ count = 4 }) => (
-  <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
-    {Array.from({ length: count }).map((_, i) => <CardSkeleton key={i} />)}
-  </div>
-);
-
-// ==================== TABS CONFIGURATION ====================
-const TABS_CONFIG = [
-  { key: 'today', label: 'Hoy', icon: Calendar, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-500/10' },
-  { key: 'future', label: 'Próximas', icon: CalendarClock, color: 'from-emerald-500 to-emerald-600', bgColor: 'bg-emerald-500/10' },
-  { key: 'past', label: 'Historial', icon: Clock, color: 'from-gray-500 to-gray-600', bgColor: 'bg-gray-500/10' }
-] as const;
-
-// ==================== FILTER STATE REDUCER ====================
-type FilterState = {
-  search: string;
-  status: string | null;
-  viewMode: 'grid' | 'list';
-};
-
-type FilterAction = 
-  | { type: 'SET_SEARCH'; payload: string }
-  | { type: 'SET_STATUS'; payload: string | null }
-  | { type: 'SET_VIEW_MODE'; payload: 'grid' | 'list' };
-
-const filterReducer = (state: FilterState, action: FilterAction): FilterState => {
-  switch (action.type) {
-    case 'SET_SEARCH': return { ...state, search: action.payload };
-    case 'SET_STATUS': return { ...state, status: action.payload };
-    case 'SET_VIEW_MODE': return { ...state, viewMode: action.payload };
-    default: return state;
-  }
-};
-
-// ==================== MEMOIZED UI COMPONENTS ====================
-
+// ==================== HEADER COMPONENT ====================
 const AdmissionHeader = memo<{
   isRefreshing: boolean;
   onRefresh: () => void;
   onSuccess: () => void;
-  stats?: { total: number; today: number; pending: number };
+  stats: { today: number; pending: number; completed: number };
 }>(({ isRefreshing, onRefresh, onSuccess, stats }) => (
-  <Card className="relative mb-6 overflow-hidden border-0 shadow-lg bg-card">
-    <CardHeader className="relative pb-4">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-gradient-to-br from-primary to-primary/80 rounded-xl shadow-lg">
-            <CalendarCheck className="w-6 h-6 text-primary-foreground" />
+  <div className="space-y-6 mb-8">
+    {/* Header Principal */}
+    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
+          <div className="p-2 bg-sky-100 dark:bg-sky-900/30 rounded-lg">
+            <Stethoscope className="h-6 w-6 text-sky-600 dark:text-sky-400" />
           </div>
-          <div>
-            <CardTitle className="text-2xl font-bold">Admisión de Pacientes</CardTitle>
-            <p className="text-sm text-muted-foreground">Gestión de citas y pacientes.</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <PatientModal
-            trigger={
-              <Button className="gap-2 transition-all rounded-xl shadow-md hover:shadow-lg">
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Nuevo Paciente</span>
-              </Button>
-            }
-            onSuccess={onSuccess}
-          />
-          <Button variant="outline" onClick={onRefresh} disabled={isRefreshing} className="gap-2 transition-all rounded-xl hover:shadow-md">
-            <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-          </Button>
-        </div>
+          Admisión de Pacientes
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-1">
+          Clínica Hernia y Vesícula - Dr. Luis Ángel Medina
+        </p>
       </div>
-    </CardHeader>
-  </Card>
+      
+      <div className="flex items-center gap-3">
+        <PatientModal
+          trigger={
+            <Button className="gap-2 bg-sky-600 hover:bg-sky-700 text-white shadow-md">
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Nuevo Paciente</span>
+              <span className="sm:hidden">Nuevo</span>
+            </Button>
+          }
+          onSuccess={onSuccess}
+        />
+        <Button 
+          variant="outline" 
+          size="icon"
+          onClick={onRefresh} 
+          disabled={isRefreshing}
+          className="shadow-sm"
+        >
+          <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+        </Button>
+      </div>
+    </div>
+
+    {/* Stats Cards */}
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <Card className="border-0 shadow-sm bg-gradient-to-br from-sky-50 to-sky-100/50 dark:from-sky-950/30 dark:to-sky-900/20">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardDescription className="text-sky-700 dark:text-sky-300">
+                Citas Hoy
+              </CardDescription>
+              <CardTitle className="text-2xl text-sky-900 dark:text-sky-100">
+                {stats.today}
+              </CardTitle>
+            </div>
+            <Calendar className="h-8 w-8 text-sky-500/30" />
+          </div>
+        </CardHeader>
+      </Card>
+
+      <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardDescription className="text-amber-700 dark:text-amber-300">
+                Pendientes
+              </CardDescription>
+              <CardTitle className="text-2xl text-amber-900 dark:text-amber-100">
+                {stats.pending}
+              </CardTitle>
+            </div>
+            <Clock className="h-8 w-8 text-amber-500/30" />
+          </div>
+        </CardHeader>
+      </Card>
+
+      <Card className="border-0 shadow-sm bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardDescription className="text-emerald-700 dark:text-emerald-300">
+                Completadas
+              </CardDescription>
+              <CardTitle className="text-2xl text-emerald-900 dark:text-emerald-100">
+                {stats.completed}
+              </CardTitle>
+            </div>
+            <CalendarCheck className="h-8 w-8 text-emerald-500/30" />
+          </div>
+        </CardHeader>
+      </Card>
+    </div>
+  </div>
 ));
 AdmissionHeader.displayName = 'AdmissionHeader';
 
-const TabNavigation = memo<{
-  activeTab: TabType;
-  onTabChange: (tab: TabType) => void;
-  counts: Record<TabType, number>;
-  isLoading: boolean;
-}>(({ activeTab, onTabChange, counts, isLoading }) => (
-  <div className="flex flex-wrap gap-2 p-1 bg-muted/30 rounded-xl">
-    {TABS_CONFIG.map((tab) => {
-      const isActive = activeTab === tab.key;
-      const count = counts[tab.key] || 0;
-      const Icon = tab.icon;
-      return (
-        <Button
-          key={tab.key}
-          variant={isActive ? "default" : "ghost"}
-          className={cn(
-            "relative flex-1 min-w-[100px] h-auto py-2 px-3 flex items-center justify-center gap-2 transition-all duration-300 rounded-lg",
-            isActive && `shadow-lg scale-[1.02] bg-gradient-to-r ${tab.color}`
-          )}
-          onClick={() => onTabChange(tab.key)}
-          disabled={isLoading}
-        >
-          <Icon className={cn("h-5 w-5", isActive && "text-white")} />
-          <span className={cn("font-medium text-sm", isActive && "text-white")}>{tab.label}</span>
-          {count > 0 && (
-            <Badge variant={isActive ? "secondary" : "default"} className="h-5 px-1.5 text-xs">{count}</Badge>
-          )}
-        </Button>
-      );
-    })}
-  </div>
-));
-TabNavigation.displayName = 'TabNavigation';
-
+// ==================== SEARCH & FILTERS ====================
 const SearchAndFilters = memo<{
-  filters: FilterState;
-  dispatch: React.Dispatch<FilterAction>;
+  search: string;
+  onSearchChange: (value: string) => void;
+  statusFilter: string;
+  onStatusChange: (value: string) => void;
   isLoading: boolean;
-}>(({ filters, dispatch, isLoading }) => {
-  const [searchValue, setSearchValue] = useState(filters.search);
-  const searchTimeout = useRef<NodeJS.Timeout>();
+}>(({ search, onSearchChange, statusFilter, onStatusChange, isLoading }) => {
+  const [localSearch, setLocalSearch] = useState(search);
 
-  useEffect(() => {
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => {
-      dispatch({ type: 'SET_SEARCH', payload: searchValue });
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      onSearchChange(localSearch);
     }, 300);
-    return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
-  }, [searchValue, dispatch]);
+    return () => clearTimeout(timer);
+  }, [localSearch, onSearchChange]);
 
   return (
-    <div className="flex flex-col sm:flex-row gap-3 mb-4">
+    <div className="flex flex-col sm:flex-row gap-3 mb-6">
       <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input
-          type="search"
           placeholder="Buscar paciente..."
-          value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
-          className="pl-10 pr-4 h-10 rounded-xl"
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
+          className="pl-10 pr-10 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
           disabled={isLoading}
         />
-        {searchValue && (
-          <Button variant="ghost" size="icon" onClick={() => setSearchValue('')} className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8">
-            <XCircle className="w-4 h-4" />
-          </Button>
+        {localSearch && (
+          <button
+            onClick={() => setLocalSearch('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
         )}
       </div>
-      <div className="flex items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="gap-2 rounded-xl">
-              <Filter className="h-4 w-4" /> Filtros
-              {filters.status && <Badge variant="secondary" className="ml-1">1</Badge>}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Filtrar por estado</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {['Todos', 'PROGRAMADA', 'CONFIRMADA', 'PRESENTE', 'COMPLETADA', 'CANCELADA', 'REAGENDADA', 'NO_ASISTIO'].map(status => (
-              <DropdownMenuItem key={status} onSelect={() => dispatch({ type: 'SET_STATUS', payload: status === 'Todos' ? null : status })}>
-                {status.charAt(0) + status.slice(1).toLowerCase().replace('_', ' ')}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <div className="flex gap-1 p-1 bg-muted/30 rounded-xl">
-          <Button variant={filters.viewMode === 'grid' ? 'secondary' : 'ghost'} size="icon" onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: 'grid' })} className="h-8 w-8 rounded-lg">
-            <Grid3x3 className="h-4 w-4" />
-          </Button>
-          <Button variant={filters.viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: 'list' })} className="h-8 w-8 rounded-lg">
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      
+      <Select value={statusFilter} onValueChange={onStatusChange}>
+        <SelectTrigger className="w-full sm:w-[180px] bg-white dark:bg-gray-800">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4" />
+            <SelectValue placeholder="Filtrar estado" />
+          </div>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todos los estados</SelectItem>
+          <SelectItem value="PROGRAMADA">Programadas</SelectItem>
+          <SelectItem value="CONFIRMADA">Confirmadas</SelectItem>
+          <SelectItem value="PRESENTE">En Consulta</SelectItem>
+          <SelectItem value="COMPLETADA">Completadas</SelectItem>
+          <SelectItem value="CANCELADA">Canceladas</SelectItem>
+          <SelectItem value="NO_ASISTIO">No Asistió</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   );
 });
 SearchAndFilters.displayName = 'SearchAndFilters';
 
-const AppointmentsSection = memo<{
+// ==================== APPOINTMENTS GRID ====================
+const AppointmentsGrid = memo<{
   appointments: AppointmentWithPatient[];
   isLoading: boolean;
   emptyMessage: string;
   onAction: (action: AdmissionAction, appointmentId: string) => void;
-  viewMode: 'grid' | 'list';
-}>(({ appointments, isLoading, emptyMessage, onAction, viewMode }) => {
-  if (isLoading) return <LoadingGrid />;
-  if (!appointments.length) {
+}>(({ appointments, isLoading, emptyMessage, onAction }) => {
+  if (isLoading) {
     return (
-      <div className="py-16 text-center">
-        <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-        <h3 className="text-lg font-medium">{emptyMessage}</h3>
-        <p className="text-sm text-muted-foreground">Las nuevas citas aparecerán aquí.</p>
+      <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
+        {[1, 2, 3, 4].map(i => <CardSkeleton key={i} />)}
       </div>
     );
   }
+
+  if (!appointments.length) {
+    return (
+      <Card className="border-dashed">
+        <CardHeader className="text-center py-12">
+          <CalendarDays className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+          <CardTitle className="text-lg font-normal text-gray-600 dark:text-gray-400">
+            {emptyMessage}
+          </CardTitle>
+          <CardDescription>
+            Las citas aparecerán aquí cuando estén disponibles
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
   return (
-    <div className={cn(viewMode === 'grid' ? "grid gap-4 sm:grid-cols-1 lg:grid-cols-2" : "space-y-3")}>
+    <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
       {appointments.map((appointment) => (
-        <PatientCard key={appointment.id} appointment={appointment} onAction={onAction} />
+        <PatientCard 
+          key={appointment.id} 
+          appointment={appointment} 
+          onAction={onAction} 
+        />
       ))}
     </div>
   );
 });
-AppointmentsSection.displayName = 'AppointmentsSection';
+AppointmentsGrid.displayName = 'AppointmentsGrid';
 
-// ==================== CUSTOM DATA HOOK ====================
-const useAppointmentData = (filters: FilterState) => {
+// ==================== CUSTOM HOOK ====================
+const useAppointmentData = (search: string, statusFilter: string) => {
   const { allAppointments, allPatients, isLoading, refetch, error } = useClinic();
 
   const classifiedAppointments = useMemo(() => {
-    const result: { today: AppointmentWithPatient[], future: AppointmentWithPatient[], past: AppointmentWithPatient[] } = { today: [], future: [], past: [] };
+    const result = { today: [], future: [], past: [] } as Record<TabType, AppointmentWithPatient[]>;
+    
     if (!allAppointments || !allPatients) return result;
 
-    // OPTIMIZATION: Create a patient map for O(1) lookup instead of O(N) .find()
-    const patientMap = new Map<string, Patient>(allPatients.map(p => [p.id, p]));
-    const searchLower = filters.search.toLowerCase();
+    const patientMap = new Map(allPatients.map(p => [p.id, p]));
+    const searchLower = search.toLowerCase();
+    const now = new Date();
 
     for (const apt of allAppointments) {
       const patient = patientMap.get(apt.patient_id);
       if (!patient) continue;
 
-      // Apply search and status filters
-      if (filters.status && apt.estado_cita !== filters.status) continue;
-      if (filters.search && !(
-          patient.nombre?.toLowerCase().includes(searchLower) ||
-          patient.apellidos?.toLowerCase().includes(searchLower) ||
-          patient.telefono?.includes(filters.search) ||
-          patient.email?.toLowerCase().includes(searchLower)
+      // Apply filters
+      if (statusFilter !== 'all' && apt.estado_cita !== statusFilter) continue;
+      if (search && !(
+        patient.nombre?.toLowerCase().includes(searchLower) ||
+        patient.apellidos?.toLowerCase().includes(searchLower) ||
+        patient.telefono?.includes(search)
       )) continue;
       
       const fullAppointment = { ...apt, patients: patient } as AppointmentWithPatient;
       const aptDate = new Date(apt.fecha_hora_cita);
-      const now = new Date();
 
-      // Normalize dates to handle timezone correctly
-      const aptDateNormalized = new Date(aptDate.getFullYear(), aptDate.getMonth(), aptDate.getDate(), aptDate.getHours(), aptDate.getMinutes());
-      const nowNormalized = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
-
-      if (aptDateNormalized >= startOfDay(nowNormalized) && aptDateNormalized <= endOfDay(nowNormalized)) {
+      // Classify by time
+      if (aptDate >= startOfDay(now) && aptDate <= endOfDay(now)) {
         result.today.push(fullAppointment);
-      } else if (aptDateNormalized > endOfDay(nowNormalized)) {
+      } else if (aptDate > endOfDay(now)) {
         result.future.push(fullAppointment);
       } else {
         result.past.push(fullAppointment);
       }
     }
 
-    // Sort results using normalized dates to handle timezone correctly
-    result.today.sort((a, b) => {
-      const dateA = new Date(a.fecha_hora_cita);
-      const dateB = new Date(b.fecha_hora_cita);
-      const normalizedA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate(), dateA.getHours(), dateA.getMinutes());
-      const normalizedB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate(), dateB.getHours(), dateB.getMinutes());
-      return normalizedA.getTime() - normalizedB.getTime();
-    });
-    result.future.sort((a, b) => {
-      const dateA = new Date(a.fecha_hora_cita);
-      const dateB = new Date(b.fecha_hora_cita);
-      const normalizedA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate(), dateA.getHours(), dateA.getMinutes());
-      const normalizedB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate(), dateB.getHours(), dateB.getMinutes());
-      return normalizedA.getTime() - normalizedB.getTime();
-    });
-    result.past.sort((a, b) => {
-      const dateA = new Date(a.fecha_hora_cita);
-      const dateB = new Date(b.fecha_hora_cita);
-      const normalizedA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate(), dateA.getHours(), dateA.getMinutes());
-      const normalizedB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate(), dateB.getHours(), dateB.getMinutes());
-      return normalizedB.getTime() - normalizedA.getTime();
-    });
+    // Sort
+    result.today.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
+    result.future.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
+    result.past.sort((a, b) => new Date(b.fecha_hora_cita).getTime() - new Date(a.fecha_hora_cita).getTime());
 
     return result;
-  }, [allAppointments, allPatients, filters]);
+  }, [allAppointments, allPatients, search, statusFilter]);
 
-  return { appointments: classifiedAppointments, isLoading, error, refetch };
+  const stats = useMemo(() => ({
+    today: classifiedAppointments.today.length,
+    pending: classifiedAppointments.today.filter(a => 
+      ['PROGRAMADA', 'CONFIRMADA'].includes(a.estado_cita)
+    ).length,
+    completed: classifiedAppointments.today.filter(a => 
+      a.estado_cita === 'COMPLETADA'
+    ).length,
+  }), [classifiedAppointments]);
+
+  return { appointments: classifiedAppointments, stats, isLoading, error, refetch };
 };
 
 // ==================== MAIN COMPONENT ====================
-const PatientAdmission: FC = () => {
+const PatientAdmission = () => {
   const [activeTab, setActiveTab] = useState<TabType>('today');
-  const [filters, dispatch] = useReducer(filterReducer, { search: '', status: null, viewMode: 'grid' });
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  const { appointments, isLoading, error, refetch } = useAppointmentData(filters);
+  const { appointments, stats, isLoading, error, refetch } = useAppointmentData(search, statusFilter);
 
-  const handleAppointmentAction = useCallback(async (action: AdmissionAction, appointmentId: string) => {
-    // La mutación ya fue realizada en `PatientCard`. Aquí solo refrescamos datos y notificamos.
-    toast.success('Acción aplicada correctamente.');
+  const handleAction = useCallback(async (action: AdmissionAction, appointmentId: string) => {
+    toast.success('Acción completada correctamente');
     refetch();
   }, [refetch]);
 
-  const handleRefreshAndToast = useCallback(() => {
+  const handleRefresh = useCallback(() => {
     refetch();
-    toast.success('Datos actualizados', { description: 'Se ha recargado la lista de citas.' });
+    toast.success('Datos actualizados');
   }, [refetch]);
-
-  const counts = useMemo(() => ({
-    today: appointments.today.length,
-    future: appointments.future.length,
-    past: appointments.past.length,
-  }), [appointments]);
 
   return (
-    <div className="container mx-auto px-2 sm:px-4 py-4 space-y-4">
-      <AdmissionHeader isRefreshing={isLoading} onRefresh={handleRefreshAndToast} onSuccess={refetch} />
+    <div className="container mx-auto px-4 py-6 max-w-7xl">
+      <AdmissionHeader 
+        isRefreshing={isLoading} 
+        onRefresh={handleRefresh} 
+        onSuccess={refetch}
+        stats={stats}
+      />
       
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mb-6">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Error al cargar datos: {error.message}</AlertDescription>
+          <AlertDescription>
+            Error al cargar los datos. Por favor, intente nuevamente.
+          </AlertDescription>
         </Alert>
       )}
       
-      <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} counts={counts} isLoading={isLoading} />
-      <SearchAndFilters filters={filters} dispatch={dispatch} isLoading={isLoading} />
+      <SearchAndFilters
+        search={search}
+        onSearchChange={setSearch}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        isLoading={isLoading}
+      />
       
-      <div className="min-h-[400px]">
-        <AppointmentsSection
-          appointments={appointments[activeTab]}
-          isLoading={isLoading}
-          emptyMessage={`No hay citas para ${activeTab === 'today' ? 'hoy' : activeTab === 'future' ? 'próximas' : 'el historial'}`}
-          onAction={handleAppointmentAction}
-          viewMode={filters.viewMode}
-        />
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabType)}>
+        <TabsList className="w-full sm:w-auto mb-6">
+          <TabsTrigger value="today" className="flex-1 sm:flex-initial gap-2">
+            <Calendar className="h-4 w-4" />
+            Hoy ({appointments.today.length})
+          </TabsTrigger>
+          <TabsTrigger value="future" className="flex-1 sm:flex-initial gap-2">
+            <CalendarDays className="h-4 w-4" />
+            Próximas ({appointments.future.length})
+          </TabsTrigger>
+          <TabsTrigger value="past" className="flex-1 sm:flex-initial gap-2">
+            <Clock className="h-4 w-4" />
+            Anteriores ({appointments.past.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="today" className="mt-0">
+          <AppointmentsGrid
+            appointments={appointments.today}
+            isLoading={isLoading}
+            emptyMessage="No hay citas programadas para hoy"
+            onAction={handleAction}
+          />
+        </TabsContent>
+
+        <TabsContent value="future" className="mt-0">
+          <AppointmentsGrid
+            appointments={appointments.future}
+            isLoading={isLoading}
+            emptyMessage="No hay citas futuras programadas"
+            onAction={handleAction}
+          />
+        </TabsContent>
+
+        <TabsContent value="past" className="mt-0">
+          <AppointmentsGrid
+            appointments={appointments.past}
+            isLoading={isLoading}
+            emptyMessage="No hay citas anteriores registradas"
+            onAction={handleAction}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

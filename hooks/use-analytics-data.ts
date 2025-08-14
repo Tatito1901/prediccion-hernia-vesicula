@@ -1,0 +1,95 @@
+// hooks/use-analytics-data.ts - unified statistics data manager
+'use client';
+
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
+import { ZStatisticsResponse, type StatisticsResponse, type LabelCount } from '@/lib/validation/statistics';
+
+async function fetchStatistics(): Promise<StatisticsResponse> {
+  const res = await fetch('/api/statistics');
+  if (!res.ok) {
+    let message = 'Failed to load statistics';
+    try {
+      const j = await res.json();
+      message = j?.message || j?.error || message;
+    } catch {}
+    throw new Error(message);
+  }
+  const json = await res.json();
+  const parsed = ZStatisticsResponse.safeParse(json);
+  if (!parsed.success) {
+    throw new Error('Statistics schema validation failed');
+  }
+  return parsed.data;
+}
+
+export function useAnalyticsData() {
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
+    queryKey: queryKeys.statistics.unified,
+    queryFn: fetchStatistics,
+    staleTime: 60 * 1000,
+  });
+
+  // Normalizations and derived values
+  const normalized = useMemo(() => {
+    if (!data) return null;
+
+    const demographic = data.demographicProfile || undefined;
+    const genderArray: LabelCount[] | undefined = (() => {
+      const g = demographic?.gender_distribution as any;
+      if (!g) return undefined;
+      if (Array.isArray(g)) return g as LabelCount[];
+      // object form -> array form
+      const male = typeof g.male === 'number' ? g.male : 0;
+      const female = typeof g.female === 'number' ? g.female : 0;
+      const other = typeof g.other === 'number' ? g.other : 0;
+      return [
+        { label: 'Male', count: male },
+        { label: 'Female', count: female },
+        { label: 'Other', count: other },
+      ] as LabelCount[];
+    })();
+
+    const operational = data.operationalMetrics || undefined;
+    const totalAppointments = (operational?.appointments_by_status || []).reduce((acc, s) => acc + (s.count || 0), 0);
+    const findStatus = (name: string) => (operational?.appointments_by_status || []).find((s) => s.status?.toUpperCase?.() === name)?.count || 0;
+    const completed = findStatus('COMPLETADA');
+    const scheduled = findStatus('PROGRAMADA');
+    const canceled = findStatus('CANCELADA');
+
+    const noShowRate = operational?.no_show_rate ?? null;
+    const punctualityRate = operational?.punctuality_rate ?? null;
+
+    return {
+      ...data,
+      demographicProfile: demographic ? { ...demographic, gender_distribution: genderArray } : null,
+      derived: {
+        totalAppointments,
+        completed,
+        scheduled,
+        canceled,
+        noShowRate,
+        punctualityRate,
+      },
+    } as StatisticsResponse & {
+      derived: {
+        totalAppointments: number;
+        completed: number;
+        scheduled: number;
+        canceled: number;
+        noShowRate: number | null;
+        punctualityRate: number | null;
+      };
+    };
+  }, [data]);
+
+  return {
+    data: normalized,
+    isLoading,
+    isError,
+    error: error as Error | null,
+    refetch,
+    isFetching,
+  } as const;
+}

@@ -25,13 +25,9 @@ interface ChartData {
   categories: string[];
 }
 
-interface UseChartDataProps {
+interface UseChartDataProps extends AppointmentFilters {
   patients: Patient[];
   appointments: Appointment[];
-  dateRange?: string;
-  patientId?: string;
-  doctorId?: string;
-  estado?: string;
 }
 
 /**

@@ -8,7 +8,7 @@ import type {
   Motive,
   PaginatedResponse 
 } from '@/lib/types';
-import { LEAD_MOTIVE_VALUES, CONTACT_CHANNEL_VALUES } from '@/lib/validation/enums';
+import { ZNewLeadSchema, normalizeNewLead } from '@/lib/validation/leads';
 
 // GET /api/leads - Obtener leads con filtros y paginación
 export async function GET(request: NextRequest) {
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const body = await request.json();
+    const raw = await request.json();
 
     // Obtener usuario autenticado
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -116,42 +116,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validar datos requeridos y enums
-    const { full_name, phone_number, channel, motive, notes, assigned_to } = body as {
-      full_name?: string;
-      phone_number?: string;
-      channel?: Channel;
-      motive?: Motive;
-      notes?: string;
-      assigned_to?: string;
-    };
-
-    if (!full_name || !phone_number || !channel || !motive) {
+    // Validación estricta con Zod
+    const parsed = ZNewLeadSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Missing required fields: full_name, phone_number, channel, motive' },
-        { status: 400 }
+        { error: 'Validation failed', issues: parsed.error.issues },
+        { status: 422 }
       );
     }
-
-    if (!CONTACT_CHANNEL_VALUES.includes(channel)) {
-      return NextResponse.json(
-        { error: 'Invalid channel value' },
-        { status: 400 }
-      );
-    }
-
-    if (!LEAD_MOTIVE_VALUES.includes(motive)) {
-      return NextResponse.json(
-        { error: 'Invalid motive value' },
-        { status: 400 }
-      );
-    }
+    const input = parsed.data;
+    const payload = normalizeNewLead(input);
 
     // Verificar si ya existe un lead con el mismo teléfono
     const { data: existingLead } = await supabase
       .from('leads')
       .select('id, full_name, status')
-      .eq('phone_number', phone_number)
+      .eq('phone_number', payload.phone_number)
       .single();
 
     if (existingLead) {
@@ -164,19 +144,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Preparar datos del lead (sin inferencias)
-    const notesContent = (notes?.trim?.() as string) || '';
-
+    // Preparar datos del lead con normalización
     const newLeadData: NewLead = {
-      full_name: full_name.trim(),
-      phone_number: phone_number.trim(),
-      email: null,
-      channel,
-      motive,
-      notes: notesContent || null,
+      ...payload,
       status: 'NUEVO',
       registered_by: user.id,
-      assigned_to: assigned_to || user.id,
+      assigned_to: payload.assigned_to || user.id,
     };
 
     const { data: lead, error } = await supabase

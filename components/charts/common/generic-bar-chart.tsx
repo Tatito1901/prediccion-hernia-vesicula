@@ -16,6 +16,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   const { tooltipStyle, isDark } = useChartConfig();
   
   if (active && payload && payload.length) {
+    const val = Number(payload?.[0]?.value ?? 0);
     return (
       <div style={tooltipStyle}>
         <div className="flex items-center gap-2 mb-2">
@@ -25,9 +26,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           />
           <span className="font-semibold text-sm">{label}</span>
         </div>
-        <div className="text-lg font-bold">
-          {payload[0].value.toLocaleString()}
-        </div>
+        <div className="text-lg font-bold">{val.toLocaleString()}</div>
       </div>
     );
   }

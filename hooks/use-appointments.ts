@@ -213,8 +213,17 @@ export const useUpdateAppointmentStatus = (
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Error al actualizar el estado de la cita');
+        let payload: any = null;
+        try {
+          payload = await response.json();
+        } catch {
+          // ignore JSON parse errors
+        }
+        const details = Array.isArray(payload?.details)
+          ? payload.details.map((d: any) => d?.message || d?.path?.join?.('.') || '').filter(Boolean).join('; ')
+          : undefined;
+        const msg = payload?.reason || payload?.error || payload?.message || details || `Error ${response.status}`;
+        throw new Error(msg || 'Error al actualizar el estado de la cita');
       }
       
       return transformAppointment(await response.json());

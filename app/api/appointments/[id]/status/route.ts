@@ -1,6 +1,7 @@
 // app/api/appointments/[id]/status/route.ts - API CORREGIDA PARA TU ESQUEMA REAL
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 import { z } from 'zod';
 import { ZAppointmentStatus } from '@/lib/validation/enums';
 import {
@@ -12,6 +13,8 @@ import {
   canRescheduleAppointment,
 } from '@/lib/admission-business-rules';
 import { validateRescheduleDateTime } from '@/lib/clinic-schedule';
+
+export const runtime = 'nodejs';
 
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const UpdateStatusSchema = z.object({
@@ -57,25 +60,36 @@ const createAuditRecord = async (
   userAgent?: string,
   ipAddress?: string
 ) => {
-  // Datos de auditoría según tu esquema real
-  const auditData = {
-    appointment_id: appointmentId,
-    estado_cita_anterior: oldStatus, // USER-DEFINED en tu esquema
-    estado_cita_nuevo: newStatus,    // USER-DEFINED en tu esquema
-    fecha_cambio: new Date().toISOString(),
-    modificado_por_id: userId,
-    motivo_cambio: motivo || `Cambio de estado: ${oldStatus} → ${newStatus}`,
-    notas: `Actualización realizada desde sistema de admisión`,
-    ip_address: ipAddress || null,
-    user_agent: userAgent || null,
-    created_at: new Date().toISOString(),
-  };
-  
-  // Nota: fechas de reagendamiento se manejan en la tabla appointments, no en appointment_history
-  
+  // Construir filas conforme al esquema real de appointment_history
+  const changedAt = new Date().toISOString();
+  const rows: any[] = [
+    {
+      appointment_id: appointmentId,
+      field_changed: 'estado_cita',
+      value_before: oldStatus,
+      value_after: newStatus,
+      change_reason: (motivo || `Cambio de estado: ${oldStatus} → ${newStatus}`),
+      changed_by: userId,
+      changed_at: changedAt,
+    },
+  ];
+
+  // Si hubo cambio de fecha/hora (reagendamiento), registrar también ese cambio
+  if (oldDateTime && newDateTime && oldDateTime !== newDateTime) {
+    rows.push({
+      appointment_id: appointmentId,
+      field_changed: 'fecha_hora_cita',
+      value_before: oldDateTime,
+      value_after: newDateTime,
+      change_reason: 'Reagendamiento de cita',
+      changed_by: userId,
+      changed_at: changedAt,
+    });
+  }
+
   const { error } = await supabase
     .from('appointment_history')
-    .insert(auditData);
+    .insert(rows);
   
   if (error) {
     console.error('⚠️ [Status Update] Audit trail error:', error);
@@ -91,11 +105,12 @@ const createAuditRecord = async (
 // ==================== ENDPOINT PRINCIPAL ====================
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const { id: appointmentId } = params;
+    const isAdmin = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = isAdmin ? createAdminClient() : await createClient();
+    const { id: appointmentId } = await params;
     const rawBody = await request.json();
     
     // Backward-compat: aceptar claves antiguas del frontend
@@ -258,8 +273,15 @@ export async function PATCH(
     }
     
     // 5. OBTENER INFORMACIÓN DEL USUARIO PARA AUDITORÍA
-    const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id || null;
+    let userId: string | null = null;
+    if (!isAdmin) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        userId = user?.id || null;
+      } catch {
+        userId = null;
+      }
+    }
     
     // Obtener información adicional de la request
     const userAgent = request.headers.get('user-agent') || undefined;

@@ -143,6 +143,17 @@ export const queryKeys = {
 
     // Estado de encuesta por cita
     status: (appointmentId: string) => ['surveys', 'status', appointmentId] as const,
+
+    // Estadísticas/analíticas agregadas de encuestas
+    stats: ['surveys', 'stats'] as const,
+    statsWithParams: (params: { startDate?: string; endDate?: string; groupBy?: 'day' | 'week' | 'month'; templateId?: number | 'all' }) =>
+      ['surveys', 'stats', params] as const,
+  },
+
+  // ==================== ESTADÍSTICAS UNIFICADAS ====================
+  statistics: {
+    all: ['statistics'] as const,
+    unified: ['statistics', 'unified'] as const,
   },
 } as const;
 

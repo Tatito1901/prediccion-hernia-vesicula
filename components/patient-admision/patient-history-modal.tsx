@@ -1,249 +1,210 @@
-// components/patient-admision/patient-history-modal.tsx
-
-import React, { memo, useMemo, useState, Suspense } from "react";
+// components/patient-admission/patient-history-modal.tsx
+'use client';
+import React, { memo, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { StatsCard } from "@/components/ui/stats-card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { cn, formatAppointmentDate, formatAppointmentTime } from '@/lib/utils';
-import { EmptyState } from '@/components/ui/empty-state';
-import { format, isValid, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   Calendar,
   Clock,
-  User,
+  User2,
   FileText,
   Activity,
   Phone,
   Mail,
   AlertCircle,
-  CheckCircle,
+  CheckCircle2,
   XCircle,
-  CalendarX,
-  Star,
-  MessageSquare,
-  ClipboardList,
-  Loader2,
+  TrendingUp,
+  Stethoscope,
+  ChartBar,
+  CalendarDays,
+  Target,
+  Award
 } from "lucide-react";
 
-// Tipos unificados
 import type { 
   AppointmentWithPatient, 
-  PatientHistoryData,
   PatientHistoryModalProps,
 } from './admision-types';
-
-// Funciones auxiliares de tipos
 import { 
   getPatientFullName,
   getStatusConfig
 } from './admision-types';
-
-// Hook corregido
 import { usePatientHistory } from '@/hooks/use-patient';
 
-// ==================== INTERFACES LOCALES ====================
-interface StatCardProps {
+// ==================== COMPONENTES INTERNOS ====================
+
+// Tarjeta de estadística mejorada
+const StatCard = memo<{
+  icon: React.ElementType;
   label: string;
   value: string | number;
-  icon: React.ReactNode;
-  color?: 'blue' | 'green' | 'red' | 'purple';
-}
-
-interface AppointmentHistoryCardProps {
-  appointment: AppointmentWithPatient;
-  isLast?: boolean;
-}
-
-interface PatientInfoSectionProps {
-  patient: {
-    id: string;
-    nombre: string;
-    apellidos: string;
-    telefono?: string;
-    email?: string;
-    created_at: string;
+  color: 'sky' | 'emerald' | 'amber' | 'purple';
+  trend?: number;
+}>(({ icon: Icon, label, value, color, trend }) => {
+  const colorClasses = {
+    sky: 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300',
+    emerald: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
+    amber: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
+    purple: 'bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300',
   };
-}
 
-// ==================== UTILIDADES ====================
-// ✅ ELIMINADO: formatAppointmentDate/Time redundantes - consolidados en lib/utils.ts
+  const iconBgClasses = {
+    sky: 'bg-sky-100 dark:bg-sky-900/50',
+    emerald: 'bg-emerald-100 dark:bg-emerald-900/50',
+    amber: 'bg-amber-100 dark:bg-amber-900/50',
+    purple: 'bg-purple-100 dark:bg-purple-900/50',
+  };
 
-// ==================== COMPONENTES INTERNOS MEMOIZADOS ====================
-// ✅ ELIMINADO: StatCard redundante - usando StatsCard unificado
-
-// Tarjeta de cita en historial
-const AppointmentHistoryCard = memo<AppointmentHistoryCardProps>(({ appointment, isLast = false }) => {
-  const statusConfig = useMemo(() => 
-    getStatusConfig(appointment.estado_cita), 
-    [appointment.estado_cita]
-  );
-  
-  const dateTime = useMemo(() => ({
-    date: formatAppointmentDate(appointment.fecha_hora_cita),
-    time: formatAppointmentTime(appointment.fecha_hora_cita),
-  }), [appointment.fecha_hora_cita]);
-  
-  const statusIcon = useMemo(() => {
-    switch (appointment.estado_cita) {
-      case 'COMPLETADA':
-        return <CheckCircle className="h-5 w-5 text-green-600" />;
-      case 'CANCELADA':
-        return <XCircle className="h-5 w-5 text-red-600" />;
-      case 'NO_ASISTIO':
-        return <CalendarX className="h-5 w-5 text-gray-600" />;
-      default:
-        return <Calendar className="h-5 w-5 text-blue-600" />;
-    }
-  }, [appointment.estado_cita]);
-  
-  const displayMotivos = useMemo(() => {
-    if (Array.isArray(appointment.motivos_consulta) && appointment.motivos_consulta.length > 0) {
-      return appointment.motivos_consulta.join(', ');
-    }
-    return 'Sin especificar';
-  }, [appointment.motivos_consulta]);
-  
   return (
-    <div className={cn("relative", !isLast && "pb-4")}>
-      {/* Línea conectora */}
-      {!isLast && (
-        <div className="absolute left-6 top-12 w-0.5 h-full bg-slate-200 dark:bg-slate-700" />
-      )}
-      <div className="flex items-start gap-4">
-        {/* Icono de estado */}
-        <div className="flex-shrink-0 relative">
-          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700">
-            {statusIcon}
+    <Card className={cn("border-0 shadow-sm", colorClasses[color])}>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-medium opacity-90">{label}</p>
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl font-bold">{value}</p>
+              {trend !== undefined && (
+                <Badge variant="secondary" className="text-xs">
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  {trend}%
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className={cn("p-3 rounded-lg", iconBgClasses[color])}>
+            <Icon className="h-5 w-5" />
           </div>
         </div>
-        {/* Contenido de la cita */}
-        <div className="flex-1 min-w-0">
-          <Card className="border-slate-200 dark:border-slate-700">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <Badge className={statusConfig.bgClass}>
-                      {statusConfig.label}
-                    </Badge>
-                    {appointment.es_primera_vez && (
-                      <Badge variant="outline" className="text-xs">
-                        Primera vez
-                      </Badge>
-                    )}
-                  </div>
-                  <h4 className="font-medium text-slate-900 dark:text-slate-100 mb-1">
-                    {displayMotivos}
-                  </h4>
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {dateTime.date}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {dateTime.time}
-                    </div>
-                  </div>
-                  {appointment.notas_breves && (
-                    <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-md">
-                      <div className="flex items-start gap-2">
-                        <FileText className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                        <span className="text-sm text-muted-foreground">
-                          {appointment.notas_breves}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+      </CardContent>
+    </Card>
+  );
+});
+StatCard.displayName = "StatCard";
+
+// Timeline de citas mejorado
+const AppointmentTimeline = memo<{
+  appointment: AppointmentWithPatient;
+  isLast?: boolean;
+}>(({ appointment, isLast }) => {
+  const statusConfig = getStatusConfig(appointment.estado_cita);
+  const dateTime = {
+    date: formatAppointmentDate(appointment.fecha_hora_cita),
+    time: formatAppointmentTime(appointment.fecha_hora_cita),
+  };
+
+  const statusIcon = {
+    'COMPLETADA': CheckCircle2,
+    'CANCELADA': XCircle,
+    'NO_ASISTIO': AlertCircle,
+  }[appointment.estado_cita] || Calendar;
+
+  const StatusIcon = statusIcon;
+
+  return (
+    <div className={cn("relative", !isLast && "pb-8")}>
+      {!isLast && (
+        <div className="absolute left-5 top-10 w-0.5 h-full bg-gray-200 dark:bg-gray-700" />
+      )}
+      
+      <div className="flex gap-4">
+        <div className={cn(
+          "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center",
+          "ring-4 ring-white dark:ring-gray-800",
+          statusConfig.bgClass
+        )}>
+          <StatusIcon className="h-5 w-5" />
+        </div>
+        
+        <Card className="flex-1 border shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <Badge className={cn("text-xs", statusConfig.bgClass)}>
+                  {statusConfig.label}
+                </Badge>
+                {appointment.es_primera_vez && (
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    Primera consulta
+                  </Badge>
+                )}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5" />
+                    {dateTime.date}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    {dateTime.time}
+                  </span>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+            
+            {appointment.motivos_consulta?.length > 0 && (
+              <div className="flex items-start gap-2 mb-3">
+                <Stethoscope className="h-4 w-4 text-gray-400 mt-0.5" />
+                <p className="text-sm text-gray-700 dark:text-gray-300">
+                  {appointment.motivos_consulta.join(', ')}
+                </p>
+              </div>
+            )}
+            
+            {appointment.notas_breves && (
+              <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {appointment.notas_breves}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 });
-AppointmentHistoryCard.displayName = "AppointmentHistoryCard";
+AppointmentTimeline.displayName = "AppointmentTimeline";
 
-// Información del paciente
-const PatientInfoSection = memo<PatientInfoSectionProps>(({ patient }) => (
-  <Card className="border-slate-200 dark:border-slate-700">
-    <CardHeader>
-      <CardTitle className="flex items-center gap-2 text-lg">
-        <User className="h-5 w-5" />
-        Información del Paciente
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {patient.telefono && (
-          <div className="flex items-center gap-3">
-            <Phone className="h-4 w-4 text-slate-500" />
-            <div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Teléfono</p>
-              <p className="font-medium text-slate-900 dark:text-slate-100">{patient.telefono}</p>
-            </div>
-          </div>
-        )}
-        {patient.email && (
-          <div className="flex items-center gap-3">
-            <Mail className="h-4 w-4 text-slate-500" />
-            <div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Email</p>
-              <p className="font-medium text-slate-900 dark:text-slate-100">{patient.email}</p>
-            </div>
-          </div>
-        )}
-      </div>
-    </CardContent>
-  </Card>
-));
-PatientInfoSection.displayName = "PatientInfoSection";
-
-// Skeleton de carga
-import { LoadingSpinner, PatientTableSkeleton, AppointmentListSkeleton } from '@/components/ui/unified-skeletons';
-
-const LoadingSkeleton = memo(() => (
-  <div className="space-y-6">
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {[...Array(3)].map((_, i) => (
+// Loading skeleton optimizado
+const LoadingSkeleton = () => (
+  <div className="space-y-6 p-6">
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {[1, 2, 3, 4].map(i => (
         <Card key={i} className="p-4">
-          <Skeleton className="h-6 w-24 mb-2" />
+          <Skeleton className="h-6 w-20 mb-2" />
           <Skeleton className="h-8 w-16" />
         </Card>
       ))}
     </div>
-    <AppointmentListSkeleton count={2} />
+    <div className="space-y-4">
+      {[1, 2].map(i => (
+        <div key={i} className="flex gap-4">
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <Card className="flex-1 p-4">
+            <Skeleton className="h-4 w-32 mb-2" />
+            <Skeleton className="h-3 w-full" />
+          </Card>
+        </div>
+      ))}
+    </div>
   </div>
-));
-LoadingSkeleton.displayName = "LoadingSkeleton";
-
-// Display de error
-const ErrorDisplay = memo<{ message: string }>(({ message }) => (
-  <div className="text-center py-12">
-    <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-    <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-2">
-      Error al cargar datos
-    </h3>
-    <p className="text-slate-500 dark:text-slate-400 mb-4">
-      {message}
-    </p>
-  </div>
-));
-ErrorDisplay.displayName = "ErrorDisplay";
+);
 
 // ==================== COMPONENTE PRINCIPAL ====================
 const PatientHistoryModal = memo<PatientHistoryModalProps>(({ 
@@ -251,10 +212,8 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
   onClose, 
   patientId 
 }) => {
-  // Estados locales
-  const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'details'>('overview');
+  const [activeTab, setActiveTab] = useState('overview');
   
-  // Hook corregido para obtener historial
   const { 
     data: historyData, 
     isLoading, 
@@ -267,16 +226,16 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
   // Estadísticas computadas
   const stats = useMemo(() => {
     if (!historyData?.appointments) {
-      return { total: 0, completed: 0, cancelled: 0, noShow: 0, attendanceRate: 0 };
+      return { total: 0, completed: 0, cancelled: 0, noShow: 0, rate: 0 };
     }
     
-    const appointments = historyData.appointments;
-    const total = appointments.length;
-    const completed = appointments.filter(apt => apt.estado_cita === 'COMPLETADA').length;
-    const cancelled = appointments.filter(apt => apt.estado_cita === 'CANCELADA').length;
-    const noShow = appointments.filter(apt => apt.estado_cita === 'NO_ASISTIO').length;
-    const scheduledTotal = appointments.filter(apt => 
-      ['COMPLETADA', 'CANCELADA', 'NO_ASISTIO'].includes(apt.estado_cita)
+    const apps = historyData.appointments;
+    const total = apps.length;
+    const completed = apps.filter(a => a.estado_cita === 'COMPLETADA').length;
+    const cancelled = apps.filter(a => a.estado_cita === 'CANCELADA').length;
+    const noShow = apps.filter(a => a.estado_cita === 'NO_ASISTIO').length;
+    const scheduled = apps.filter(a => 
+      ['COMPLETADA', 'CANCELADA', 'NO_ASISTIO'].includes(a.estado_cita)
     ).length;
     
     return {
@@ -284,234 +243,268 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
       completed,
       cancelled,
       noShow,
-      attendanceRate: scheduledTotal > 0 ? Math.round((completed / scheduledTotal) * 100) : 0,
+      rate: scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0,
     };
   }, [historyData]);
   
-  // Clasificación de citas por tiempo
-  const appointmentsByStatus = useMemo(() => {
-    if (!historyData?.appointments) {
-      return { upcoming: [], history: [] };
-    }
+  // Clasificación temporal
+  const appointmentsByTime = useMemo(() => {
+    if (!historyData?.appointments) return { upcoming: [], past: [] };
     
     const now = new Date();
     const upcoming: AppointmentWithPatient[] = [];
     const past: AppointmentWithPatient[] = [];
     
-    for (const apt of historyData.appointments) {
-      if (new Date(apt.fecha_hora_cita) > now && 
-          apt.estado_cita !== "CANCELADA" && 
-          apt.estado_cita !== "NO_ASISTIO") {
+    historyData.appointments.forEach(apt => {
+      const aptDate = new Date(apt.fecha_hora_cita);
+      if (aptDate > now && !['CANCELADA', 'NO_ASISTIO'].includes(apt.estado_cita)) {
         upcoming.push(apt);
       } else {
         past.push(apt);
       }
-    }
-    
-    // Ordenar listas
-    upcoming.sort((a, b) => {
-      const dateA = new Date(a.fecha_hora_cita);
-      const dateB = new Date(b.fecha_hora_cita);
-      const normalizedA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate(), dateA.getHours(), dateA.getMinutes());
-      const normalizedB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate(), dateB.getHours(), dateB.getMinutes());
-      return normalizedA.getTime() - normalizedB.getTime();
-    });
-    past.sort((a, b) => {
-      const dateA = new Date(a.fecha_hora_cita);
-      const dateB = new Date(b.fecha_hora_cita);
-      const normalizedA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate(), dateA.getHours(), dateA.getMinutes());
-      const normalizedB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate(), dateB.getHours(), dateB.getMinutes());
-      return normalizedB.getTime() - normalizedA.getTime();
     });
     
-    return { upcoming, history: past };
+    upcoming.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
+    past.sort((a, b) => new Date(b.fecha_hora_cita).getTime() - new Date(a.fecha_hora_cita).getTime());
+    
+    return { upcoming, past };
   }, [historyData]);
-  
-  // Renderizado del contenido
-  const renderContent = () => {
-    if (isLoading) return <LoadingSkeleton />;
-    if (error) return <ErrorDisplay message={error.message} />;
-    if (!historyData || !stats) return null;
-    
-    const { patient, survey_completion_rate, appointments } = historyData;
-    
-    return (
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="h-full flex flex-col">
-        <div className="px-6 border-b border-slate-200 dark:border-slate-800">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="overview">Resumen</TabsTrigger>
-            <TabsTrigger value="appointments">Citas ({stats.total})</TabsTrigger>
-            <TabsTrigger value="details">Detalles</TabsTrigger>
-          </TabsList>
-        </div>
-        <ScrollArea className="flex-1">
-          <div className="p-6">
-            <TabsContent value="overview" className="mt-0 space-y-6">
-              {/* Estadísticas principales */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatsCard
-                  label="Total de Citas"
-                  value={stats.total.toString()}
-                  icon={<Calendar className="h-6 w-6" />}
-                  color="blue"
-                />
-                <StatsCard
-                  label="Citas Completadas"
-                  value={stats.completed.toString()}
-                  icon={<CheckCircle className="h-6 w-6" />}
-                  color="emerald"
-                />
-                <StatsCard
-                  label="Citas Canceladas/Ausente"
-                  value={(stats.cancelled + stats.noShow).toString()}
-                  icon={<XCircle className="h-6 w-6" />}
-                  color="red"
-                />
-                <StatsCard
-                  label="Tasa Asistencia"
-                  value={`${stats.attendanceRate}%`}
-                  icon={<Activity className="h-6 w-6" />}
-                  color="purple"
-                />
-              </div>
-              {/* Información del paciente */}
-              <PatientInfoSection patient={patient} />
-              {/* Satisfacción */}
-              {survey_completion_rate !== undefined && (
-                <Card className="border-slate-200 dark:border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Star className="h-5 w-5" /> 
-                      Satisfacción
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                          {Math.round(survey_completion_rate * 100)}%
-                        </p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                          Tasa de completación de encuestas
-                        </p>
-                      </div>
-                      <MessageSquare className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-                    </div>
-                  </CardContent>
-                </Card>
+
+  if (!isOpen) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] p-0 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-sky-50 to-teal-50 dark:from-sky-950/20 dark:to-teal-950/20">
+          <DialogTitle className="flex items-center gap-3">
+            <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+              <Activity className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold">Historial Clínico</h2>
+              {historyData?.patient && (
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                  {getPatientFullName(historyData.patient)}
+                </p>
               )}
-            </TabsContent>
-            <TabsContent value="appointments" className="mt-0 space-y-6">
-              {appointments.length === 0 ? (
-                <EmptyState 
-                  title="No hay citas registradas para este paciente" 
-                  description="Los datos aparecerán aquí cuando estén disponibles." 
-                  icon={<ClipboardList className="h-16 w-16 text-slate-400 dark:text-slate-500" />} 
-                />
-              ) : (
-                <>
-                  {/* Próximas citas */}
-                  {appointmentsByStatus.upcoming.length > 0 && (
-                    <section>
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-blue-500" /> 
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
+          <TabsList className="w-full rounded-none border-b px-6">
+            <TabsTrigger value="overview" className="gap-2">
+              <ChartBar className="h-4 w-4" />
+              Resumen
+            </TabsTrigger>
+            <TabsTrigger value="appointments" className="gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Citas ({stats.total})
+            </TabsTrigger>
+            <TabsTrigger value="details" className="gap-2">
+              <User2 className="h-4 w-4" />
+              Información
+            </TabsTrigger>
+          </TabsList>
+
+          <ScrollArea className="h-[calc(90vh-140px)]">
+            {isLoading ? (
+              <LoadingSkeleton />
+            ) : error ? (
+              <Alert variant="destructive" className="m-6">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Error al cargar el historial. Por favor, intente nuevamente.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <>
+                <TabsContent value="overview" className="p-6 space-y-6 mt-0">
+                  {/* Estadísticas */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatCard
+                      icon={Calendar}
+                      label="Total Citas"
+                      value={stats.total}
+                      color="sky"
+                    />
+                    <StatCard
+                      icon={CheckCircle2}
+                      label="Completadas"
+                      value={stats.completed}
+                      color="emerald"
+                    />
+                    <StatCard
+                      icon={XCircle}
+                      label="Canceladas"
+                      value={stats.cancelled + stats.noShow}
+                      color="amber"
+                    />
+                    <StatCard
+                      icon={Target}
+                      label="Asistencia"
+                      value={`${stats.rate}%`}
+                      color="purple"
+                    />
+                  </div>
+
+                  {/* Información del paciente */}
+                  {historyData?.patient && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <User2 className="h-5 w-5" />
+                          Datos del Paciente
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {historyData.patient.telefono && (
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                              <Phone className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-500">Teléfono</p>
+                              <p className="font-medium">{historyData.patient.telefono}</p>
+                            </div>
+                          </div>
+                        )}
+                        {historyData.patient.email && (
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                              <Mail className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-500">Email</p>
+                              <p className="font-medium">{historyData.patient.email}</p>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Progreso de satisfacción */}
+                  {historyData?.survey_completion_rate !== undefined && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Award className="h-5 w-5" />
+                          Satisfacción del Paciente
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                              Tasa de respuesta a encuestas
+                            </span>
+                            <span className="font-semibold">
+                              {Math.round((historyData.survey_completion_rate || 0) * 100)}%
+                            </span>
+                          </div>
+                          <Progress 
+                            value={(historyData.survey_completion_rate || 0) * 100} 
+                            className="h-2"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="appointments" className="p-6 mt-0">
+                  {appointmentsByTime.upcoming.length > 0 && (
+                    <div className="mb-8">
+                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <CalendarDays className="h-5 w-5 text-sky-600" />
                         Próximas Citas
                       </h3>
                       <div className="space-y-4">
-                        {appointmentsByStatus.upcoming.map((apt, index) => (
-                          <AppointmentHistoryCard 
+                        {appointmentsByTime.upcoming.map((apt, idx) => (
+                          <AppointmentTimeline 
                             key={apt.id} 
                             appointment={apt} 
-                            isLast={index === appointmentsByStatus.upcoming.length - 1} 
+                            isLast={idx === appointmentsByTime.upcoming.length - 1}
                           />
                         ))}
                       </div>
-                    </section>
+                    </div>
                   )}
-                  {/* Historial de citas */}
-                  {appointmentsByStatus.history.length > 0 && (
-                    <section>
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-slate-500" /> 
+
+                  {appointmentsByTime.past.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <Clock className="h-5 w-5 text-gray-600" />
                         Historial de Citas
                       </h3>
                       <div className="space-y-4">
-                        {appointmentsByStatus.history.map((apt, index) => (
-                          <AppointmentHistoryCard 
+                        {appointmentsByTime.past.map((apt, idx) => (
+                          <AppointmentTimeline 
                             key={apt.id} 
                             appointment={apt} 
-                            isLast={index === appointmentsByStatus.history.length - 1} 
+                            isLast={idx === appointmentsByTime.past.length - 1}
                           />
                         ))}
                       </div>
-                    </section>
+                    </div>
                   )}
-                </>
-              )}
-            </TabsContent>
-            <TabsContent value="details" className="mt-0">
-              <Card className="border-slate-200 dark:border-slate-700">
-                <CardHeader>
-                  <CardTitle>Información Adicional</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
-                      Paciente desde
-                    </p>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">
-                      {patient.created_at ? formatAppointmentDate(patient.created_at) : "No disponible"}
-                    </p>
-                  </div>
-                  {appointments.length > 0 && (
-                    <>
-                      <Separator />
+
+                  {appointmentsByTime.upcoming.length === 0 && appointmentsByTime.past.length === 0 && (
+                    <div className="text-center py-12">
+                      <CalendarDays className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 dark:text-gray-400">
+                        No hay citas registradas
+                      </p>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="details" className="p-6 mt-0">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Información Adicional</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
                       <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
-                          Primera consulta
-                        </p>
-                        <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatAppointmentDate(appointments[appointments.length - 1]?.fecha_hora_cita || '')}
+                        <p className="text-sm text-gray-500 mb-1">Paciente desde</p>
+                        <p className="font-semibold">
+                          {historyData?.patient?.created_at ? 
+                            format(new Date(historyData.patient.created_at), "d 'de' MMMM 'de' yyyy", { locale: es }) : 
+                            "No disponible"
+                          }
                         </p>
                       </div>
-                      <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
-                          Última consulta
-                        </p>
-                        <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatAppointmentDate(appointments[0]?.fecha_hora_cita || '')}
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </div>
-        </ScrollArea>
-      </Tabs>
-    );
-  };
-  
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-          <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            Historial del Paciente
-          </DialogTitle>
-          {historyData?.patient && (
-            <DialogDescription>
-              Resumen de {getPatientFullName(historyData.patient)}
-            </DialogDescription>
-          )}
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto">
-          {renderContent()}
-        </div>
+                      
+                      {historyData?.appointments && historyData.appointments.length > 0 && (
+                        <>
+                          <div>
+                            <p className="text-sm text-gray-500 mb-1">Primera consulta</p>
+                            <p className="font-semibold">
+                              {formatAppointmentDate(
+                                historyData.appointments[historyData.appointments.length - 1].fecha_hora_cita
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 mb-1">Última consulta</p>
+                            <p className="font-semibold">
+                              {formatAppointmentDate(historyData.appointments[0].fecha_hora_cita)}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </>
+            )}
+          </ScrollArea>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
 });
+
 PatientHistoryModal.displayName = "PatientHistoryModal";
 export default PatientHistoryModal;

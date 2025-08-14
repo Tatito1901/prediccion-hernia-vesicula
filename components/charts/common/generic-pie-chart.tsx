@@ -108,10 +108,13 @@ export const GenericPieChart: React.FC<GenericPieChartProps> = ({
     }
   }, [data, animated]);
   
-  // 🎨 Calcular el total para porcentajes
-  const dataWithTotal = data.map(item => ({
+  // 🎨 Calcular el total para porcentajes (optimizado)
+  const totalValue = Array.isArray(data)
+    ? data.reduce((sum, d) => sum + (Number(d?.[dataKey]) || 0), 0)
+    : 0;
+  const dataWithTotal = (Array.isArray(data) ? data : []).map(item => ({
     ...item,
-    total: data.reduce((sum, d) => sum + d[dataKey], 0)
+    total: totalValue
   }));
   
   return (

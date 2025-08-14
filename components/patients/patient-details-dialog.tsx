@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from "react"
+import React, { memo, useMemo, useCallback } from "react"
 import { 
   Drawer, 
   DrawerContent,
@@ -13,9 +13,10 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import { Patient, PatientStatusEnum } from "@/lib/types"
-import { format } from "date-fns"
+import { format, differenceInYears, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { useMediaQuery } from "@/hooks/use-breakpoint"
 import { dbDiagnosisToDisplay, DIAGNOSIS_DB_VALUES, type DbDiagnosis } from "@/lib/validation/enums"
@@ -24,12 +25,12 @@ import {
   User, 
   Phone, 
   Mail, 
-  Clock, 
   X,
   FileText,
   CalendarDays,
-  CheckCircle2,
-  XCircle
+  Activity,
+  Heart,
+  Stethoscope
 } from "lucide-react"
 
 interface PatientDetailsDialogProps {
@@ -38,71 +39,45 @@ interface PatientDetailsDialogProps {
   readonly onClose: () => void
 }
 
-interface AppointmentData {
-  readonly id: number
-  readonly fecha: string
-  readonly hora: string
-  readonly tipo: string
-  readonly estado: 'completada' | 'pendiente' | 'cancelada'
-  readonly medico: string
-  readonly notas: string
-}
-
 type StatusVariantType = "default" | "secondary" | "destructive" | "outline"
-type AppointmentVariantType = "default" | "secondary" | "destructive" | "outline"
 
-// Configuraciones estáticas optimizadas
+// 🎨 Configuración de colores mejorada - basada en el logo de la clínica
 const STATUS_CONFIG = {
   [PatientStatusEnum.POTENCIAL]: {
     variant: "secondary" as StatusVariantType,
-    className: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+    className: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700"
   },
   [PatientStatusEnum.ACTIVO]: {
     variant: "default" as StatusVariantType,
-    className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+    className: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-700"
   },
   [PatientStatusEnum.EN_SEGUIMIENTO]: {
     variant: "secondary" as StatusVariantType,
-    className: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+    className: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700"
   },
   [PatientStatusEnum.OPERADO]: {
     variant: "default" as StatusVariantType,
-    className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700"
   },
   [PatientStatusEnum.NO_OPERADO]: {
     variant: "destructive" as StatusVariantType,
-    className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+    className: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-700"
   },
   [PatientStatusEnum.INACTIVO]: {
     variant: "outline" as StatusVariantType,
-    className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+    className: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:border-slate-700"
   },
   [PatientStatusEnum.ALTA_MEDICA]: {
     variant: "outline" as StatusVariantType,
-    className: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+    className: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:border-slate-700"
   }
 } as const
 
-const APPOINTMENT_CONFIG = {
-  completada: {
-    icon: CheckCircle2,
-    variant: "default" as AppointmentVariantType,
-    className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
-  },
-  pendiente: {
-    icon: Clock,
-    variant: "secondary" as AppointmentVariantType,
-    className: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-  },
-  cancelada: {
-    icon: XCircle,
-    variant: "destructive" as AppointmentVariantType,
-    className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-  }
-} as const
+// ✅ Cache para formateo de fechas
+const dateCache = new Map<string, string>()
 
-// Componente InfoItem optimizado
-const InfoItem = ({
+// ✅ InfoItem optimizado con diseño profesional
+const InfoItem = memo(({
   icon: Icon,
   label,
   value,
@@ -111,18 +86,23 @@ const InfoItem = ({
   label: string
   value: string | number
 }) => (
-  <div className="flex items-start gap-3 py-2">
-    <Icon className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-500 dark:text-slate-400" />
+  <div className="flex items-start gap-3 py-3 px-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+    <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
+      <Icon className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+    </div>
     <div className="min-w-0 flex-1">
-      <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{label}</p>
-      <p className="text-sm font-semibold break-words mt-0.5 text-slate-800 dark:text-slate-200">
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+        {label}
+      </p>
+      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 mt-0.5 break-words">
         {value}
       </p>
     </div>
   </div>
-)
+))
+InfoItem.displayName = "InfoItem"
 
-// Helper: etiqueta amigable de diagnóstico con fallback seguro
+// ✅ Helpers optimizados
 const toDisplayDiagnosis = (diagnostic?: string | null): string => {
   if (!diagnostic) return "Sin diagnóstico"
   return (DIAGNOSIS_DB_VALUES as readonly string[]).includes(diagnostic)
@@ -130,125 +110,113 @@ const toDisplayDiagnosis = (diagnostic?: string | null): string => {
     : diagnostic
 }
 
-// Normaliza texto removiendo acentos y a mayúsculas para comparaciones robustas
 const normalizeKey = (s: string) =>
-  s
-    .normalize('NFD')
+  s.normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
 
-// Componente AppointmentItem optimizado
-const AppointmentItem = ({ appointment }: { appointment: AppointmentData }) => {
-  const config = APPOINTMENT_CONFIG[appointment.estado]
-  const Icon = config.icon
+const formatCachedDate = (date: Date | string | null, formatStr: string): string | null => {
+  if (!date) return null
+  const key = `${date}_${formatStr}`
+  if (dateCache.has(key)) return dateCache.get(key)!
   
-  return (
-    <div className="flex items-start gap-3 py-3">
-      <div className="flex-shrink-0 mt-1 p-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
-        <Icon className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-      </div>
-      
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-              {appointment.tipo}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {format(new Date(appointment.fecha), "d MMM yyyy", { locale: es })} • {appointment.hora}
-            </p>
-          </div>
-          <Badge 
-            variant={config.variant} 
-            className={cn("text-xs font-medium", config.className)}
-          >
-            {appointment.estado}
-          </Badge>
-        </div>
-        
-        <div className="mt-1">
-          <p className="text-xs text-slate-600 dark:text-slate-400">
-            <span className="font-medium">Médico:</span> {appointment.medico}
-          </p>
-          {appointment.notas && (
-            <p className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 p-2 rounded mt-1">
-              {appointment.notas}
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
+  try {
+    const result = format(new Date(date), formatStr, { locale: es })
+    dateCache.set(key, result)
+    return result
+  } catch {
+    return null
+  }
 }
 
-// Componente principal optimizado
+// 🚀 Componente principal optimizado
 const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient, onClose }) => {
-  const {
-    nombre,
-    apellidos,
-    estado_paciente,
-    diagnostico_principal,
-    comentarios_registro,
-    id,
-    edad,
-    telefono,
-    email,
-    fecha_registro
-  } = patient
-
-  // Valores memoizados
-  const fullName = `${nombre} ${apellidos}`
-  const status = estado_paciente ?? PatientStatusEnum.POTENCIAL
-  const statusConfig = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG[PatientStatusEnum.INACTIVO]
-  
-  // Breakpoints
   const isDesktop = useMediaQuery("(min-width: 1024px)")
+  const isMobile = useMediaQuery("(max-width: 640px)")
   
-  // Formateo de fechas
-  const formattedRegistrationDate = fecha_registro 
-    ? format(new Date(fecha_registro), "d MMM yyyy", { locale: es })
-    : null
+  // ✅ Datos memoizados
+  const patientData = useMemo(() => {
+    const fullName = `${patient.nombre} ${patient.apellidos}`
+    const status = patient.estado_paciente ?? PatientStatusEnum.POTENCIAL
+    const statusConfig = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG[PatientStatusEnum.INACTIVO]
+    
+    let computedAge: number | null = null
+    if (patient.fecha_nacimiento) {
+      try {
+        const dob = parseISO(patient.fecha_nacimiento)
+        if (isValid(dob)) {
+          computedAge = differenceInYears(new Date(), dob)
+        }
+      } catch {}
+    }
+    
+    const ageDisplay = typeof patient.edad === "number" && !isNaN(patient.edad)
+      ? `${patient.edad} años`
+      : computedAge !== null
+        ? `${computedAge} años`
+        : "No disponible"
+    
+    return {
+      fullName,
+      status,
+      statusConfig,
+      ageDisplay,
+      computedAge,
+      formattedRegistrationDate: formatCachedDate(patient.fecha_registro, "d MMM yyyy"),
+      formattedDiagnosticDate: formatCachedDate(patient.fecha_registro, "d MMMM yyyy")
+    }
+  }, [patient])
+
+  const handleClose = useCallback(() => onClose(), [onClose])
 
   return (
     <Drawer 
       open={isOpen} 
-      onOpenChange={onClose} 
+      onOpenChange={handleClose} 
       direction={isDesktop ? "right" : "bottom"}
     >
       <DrawerContent className={cn(
         "flex flex-col bg-white dark:bg-slate-950",
         isDesktop
-          ? "h-full max-w-2xl ml-auto border-l border-slate-200 dark:border-slate-800"
-          : "max-h-[90vh]"
+          ? "h-full w-full max-w-xl ml-auto border-l"
+          : "max-h-[92vh] rounded-t-2xl",
+        "border-slate-200 dark:border-slate-800"
       )}>
-        {/* Header */}
-        <DrawerHeader className="border-b border-slate-200 dark:border-slate-800 py-4">
-          <div className="flex items-start justify-between gap-3">
+        {/* Header mejorado con colores profesionales */}
+        <DrawerHeader className="relative border-b border-slate-200 dark:border-slate-800 py-4 px-4 sm:px-6 bg-slate-50/50 dark:bg-slate-900/30">
+          <div className="relative flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold flex-shrink-0">
-                  {nombre ? nombre.charAt(0).toUpperCase() : 'P'}
+                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-slate-800 dark:bg-slate-700 flex items-center justify-center text-white font-bold flex-shrink-0">
+                  {patient.nombre?.charAt(0).toUpperCase() || 'P'}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <DrawerTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
-                    {fullName}
+                  <DrawerTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
+                    {patientData.fullName}
                   </DrawerTitle>
                   <Badge 
-                    variant={statusConfig.variant} 
-                    className={cn("mt-1 text-xs font-medium", statusConfig.className)}
+                    className={cn(
+                      "mt-1 text-xs font-medium border",
+                      patientData.statusConfig.className
+                    )}
                   >
-                    {status}
+                    {patientData.status}
                   </Badge>
                 </div>
               </div>
               
-              <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500 dark:text-slate-400">
-                <div className="flex items-center gap-1">
-                  <span className="font-mono">ID: {id}</span>
+              <div className="flex flex-wrap gap-2 mt-3 text-xs">
+                <div className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800">
+                  <span className="font-mono text-slate-600 dark:text-slate-400">
+                    ID: {patient.id.slice(0, 8)}
+                  </span>
                 </div>
-                {formattedRegistrationDate && (
-                  <div className="flex items-center gap-1">
-                    <span>Registrado: {formattedRegistrationDate}</span>
+                {patientData.formattedRegistrationDate && (
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800">
+                    <CalendarDays className="h-3 w-3 text-slate-500 dark:text-slate-400" />
+                    <span className="text-slate-600 dark:text-slate-400">
+                      {patientData.formattedRegistrationDate}
+                    </span>
                   </div>
                 )}
               </div>
@@ -258,7 +226,7 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
               <Button 
                 size="icon" 
                 variant="ghost" 
-                className="flex-shrink-0 rounded-full h-8 w-8"
+                className="flex-shrink-0 rounded-xl h-8 w-8 sm:h-9 sm:w-9 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -266,135 +234,136 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
           </div>
         </DrawerHeader>
 
-        {/* Contenido */}
+        {/* Tabs mejorados */}
         <Tabs defaultValue="info" className="flex-1 flex flex-col">
-          <div className="border-b border-slate-200 dark:border-slate-800 px-4 py-2 bg-slate-50 dark:bg-slate-900">
-            <TabsList className="grid w-full grid-cols-2 bg-white dark:bg-slate-800">
-              <TabsTrigger value="info" className="text-sm py-1">
+          <div className="border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-2 bg-white dark:bg-slate-950">
+            <TabsList className="grid w-full max-w-sm mx-auto grid-cols-2 bg-slate-100 dark:bg-slate-800">
+              <TabsTrigger 
+                value="info" 
+                className="text-sm py-1.5 data-[state=active]:bg-white data-[state=active]:text-teal-600 dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-teal-400 data-[state=active]:shadow-sm"
+              >
                 Información
               </TabsTrigger>
-              <TabsTrigger value="history" className="text-sm py-1">
+              <TabsTrigger 
+                value="history" 
+                className="text-sm py-1.5 data-[state=active]:bg-white data-[state=active]:text-teal-600 dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-teal-400 data-[state=active]:shadow-sm"
+              >
                 Historial
               </TabsTrigger>
             </TabsList>
           </div>
 
-          <ScrollArea className={cn("flex-1", isDesktop ? "h-[calc(100vh-180px)]" : "max-h-[60vh]")}>
-            <div className="p-4">
-              <TabsContent value="info" className="space-y-4">
-                {/* Sección Datos Personales */}
-                <Card className="border-slate-200 dark:border-slate-800">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <User className="h-4 w-4 text-blue-500" />
+          <ScrollArea className={cn(
+            "flex-1",
+            isDesktop ? "h-[calc(100vh-200px)]" : "max-h-[60vh]"
+          )}>
+            <div className="p-4 sm:p-6 space-y-4">
+              <TabsContent value="info" className="mt-0 space-y-4">
+                {/* Datos Personales */}
+                <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                  <CardHeader className="pb-3 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                      <User className="h-4 w-4" />
                       Datos Personales
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-0 space-y-1">
+                  <CardContent className="pt-0 space-y-1 bg-white dark:bg-slate-950">
                     <InfoItem 
                       icon={User} 
                       label="Edad" 
-                      value={`${edad} años`}
+                      value={patientData.ageDisplay}
                     />
                     
-                    {telefono && (
+                    {patient.telefono && (
                       <>
-                        <Separator className="my-1" />
+                        <Separator className="my-2 bg-slate-100 dark:bg-slate-800" />
                         <InfoItem 
                           icon={Phone} 
                           label="Teléfono" 
-                          value={telefono}
+                          value={patient.telefono}
                         />
                       </>
                     )}
                     
-                    {email && (
+                    {patient.email && (
                       <>
-                        <Separator className="my-1" />
+                        <Separator className="my-2 bg-slate-100 dark:bg-slate-800" />
                         <InfoItem 
                           icon={Mail} 
                           label="Email" 
-                          value={email}
+                          value={patient.email}
                         />
                       </>
                     )}
                   </CardContent>
                 </Card>
 
-                {/* Sección Médica */}
-                {/* Sección de Información Médica - Mejorada */}
-                <Card className="border-slate-200 dark:border-slate-800">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-emerald-500" />
+                {/* Información Médica */}
+                <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                  <CardHeader className="pb-3 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                      <FileText className="h-4 w-4" />
                       Información Médica
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-0 space-y-3">
-                    {/* Diagnóstico con indicador visual */}
-                    {diagnostico_principal && (
-                      <div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
+                  <CardContent className="pt-0 space-y-3 bg-white dark:bg-slate-950">
+                    {patient.diagnostico_principal && (
+                      <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50">
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
                           Diagnóstico Principal
                         </p>
-                        <div className="flex items-center gap-2 mb-2">
-                          <p className="text-sm font-medium">
-                            {toDisplayDiagnosis(diagnostico_principal)}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {toDisplayDiagnosis(patient.diagnostico_principal)}
                           </p>
-                          {normalizeKey(toDisplayDiagnosis(diagnostico_principal)).includes("HERNIA") && (
-                            <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                              <span className="mr-1">🔸</span> Hernia
+                          {normalizeKey(toDisplayDiagnosis(patient.diagnostico_principal)).includes("HERNIA") && (
+                            <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700">
+                              Hernia
                             </Badge>
                           )}
-                          {normalizeKey(toDisplayDiagnosis(diagnostico_principal)).includes("VESICULA") && (
-                            <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                              <span className="mr-1">🟡</span> Vesícula
+                          {normalizeKey(toDisplayDiagnosis(patient.diagnostico_principal)).includes("VESICULA") && (
+                            <Badge className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700">
+                              Vesícula
                             </Badge>
                           )}
                         </div>
                       </div>
                     )}
                     
-                    {/* Fecha de diagnóstico */}
-                    <div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
-                        Fecha de diagnóstico
-                      </p>
-                      <p className="text-sm text-slate-700 dark:text-slate-300">
-                        {fecha_registro ? format(new Date(fecha_registro), "d MMMM yyyy", { locale: es }) : "No disponible"}
-                      </p>
-                    </div>
+                    {patientData.formattedDiagnosticDate && (
+                      <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50">
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">
+                          Fecha de diagnóstico
+                        </p>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {patientData.formattedDiagnosticDate}
+                        </p>
+                      </div>
+                    )}
                     
-                    <Separator className="my-2" />
+                    <Separator className="my-3 bg-slate-100 dark:bg-slate-800" />
                     
-                    {/* Notas médicas */}
+                    {/* Indicadores */}
                     <div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
-                        Notas Médicas
-                      </p>
-                      <p className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-md border border-slate-100 dark:border-slate-700">
-                        {comentarios_registro || "Sin notas médicas"}
-                      </p>
-                    </div>
-                    
-                    {/* Indicadores de riesgo */}
-                    <div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 font-medium">
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
                         Indicadores
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {estado_paciente === PatientStatusEnum.EN_SEGUIMIENTO && (
-                          <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                        {patient.estado_paciente === PatientStatusEnum.EN_SEGUIMIENTO && (
+                          <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+                            <Activity className="h-3 w-3 mr-1" />
                             Seguimiento
                           </Badge>
                         )}
-                        {edad && edad > 60 && (
-                          <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
+                        {((typeof patient.edad === 'number' && patient.edad > 60) || 
+                          (patientData.computedAge !== null && patientData.computedAge > 60)) && (
+                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                             Edad avanzada
                           </Badge>
                         )}
-                        {diagnostico_principal && normalizeKey(toDisplayDiagnosis(diagnostico_principal)).includes("RECIDIVANTE") && (
-                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                        {patient.diagnostico_principal && 
+                         normalizeKey(toDisplayDiagnosis(patient.diagnostico_principal)).includes("RECIDIVANTE") && (
+                          <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300">
                             Recidiva
                           </Badge>
                         )}
@@ -404,69 +373,39 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
                 </Card>
               </TabsContent>
 
-              <TabsContent value="history" className="pt-4">
-                <Card className="border-slate-200 dark:border-slate-800">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <CalendarDays className="h-4 w-4 text-purple-500" />
+              <TabsContent value="history" className="mt-0">
+                <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+                  <CardHeader className="pb-3 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/50">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       Historial de Citas
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="space-y-3">
-                      <AppointmentItem 
-                        appointment={{
-                          id: 1,
-                          fecha: "2024-06-15",
-                          hora: "10:30",
-                          tipo: "Consulta inicial",
-                          estado: "completada",
-                          medico: "Dr. García",
-                          notas: "Evaluación general, solicitud de estudios"
-                        }}
-                      />
-                      <AppointmentItem 
-                        appointment={{
-                          id: 2,
-                          fecha: "2024-06-22",
-                          hora: "14:00",
-                          tipo: "Seguimiento",
-                          estado: "completada",
-                          medico: "Dr. García",
-                          notas: "Revisión de resultados de laboratorio"
-                        }}
-                      />
-                      <AppointmentItem 
-                        appointment={{
-                          id: 3,
-                          fecha: "2024-07-05",
-                          hora: "09:15",
-                          tipo: "Control",
-                          estado: "pendiente",
-                          medico: "Dr. García",
-                          notas: "Control post-procedimiento"
-                        }}
-                      />
-                    </div>
+                  <CardContent className="pt-6 pb-8">
+                    <EmptyState
+                      title="Sin historial"
+                      description="Aún no hay citas registradas para este paciente."
+                      icon={<CalendarDays className="h-8 w-8 text-slate-300 dark:text-slate-600" />}
+                    />
                   </CardContent>
                 </Card>
               </TabsContent>
             </div>
           </ScrollArea>
-
-          {/* Footer */}
-          <DrawerFooter className="px-4 py-3 border-t border-slate-200 dark:border-slate-800">
-            <DrawerClose asChild>
-              <Button 
-                variant="outline" 
-                className="font-medium"
-                onClick={onClose}
-              >
-                Cerrar
-              </Button>
-            </DrawerClose>
-          </DrawerFooter>
         </Tabs>
+          
+        {/* Footer */}
+        <DrawerFooter className="px-4 sm:px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+          <DrawerClose asChild>
+            <Button 
+              variant="outline" 
+              className="font-medium hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={handleClose}
+            >
+              Cerrar
+            </Button>
+          </DrawerClose>
+        </DrawerFooter>
       </DrawerContent>
     </Drawer>
   )

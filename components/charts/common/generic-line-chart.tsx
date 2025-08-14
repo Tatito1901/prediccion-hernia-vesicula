@@ -88,7 +88,9 @@ export const GenericLineChart: React.FC<GenericLineChartProps> = ({
   }, [data, animated]);
   
   // 🎨 Calcular línea de tendencia promedio
-  const averageValue = data.reduce((sum, item) => sum + item[yAxisKey], 0) / data.length;
+  const averageValue = data.length > 0
+    ? data.reduce((sum, item) => sum + item[yAxisKey], 0) / data.length
+    : 0;
   
   return (
     <div style={{}}>
