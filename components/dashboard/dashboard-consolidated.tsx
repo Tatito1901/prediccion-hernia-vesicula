@@ -17,14 +17,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-// ==================== PALETA DE COLORES (SIN CAMBIOS) ====================
-const clinicColors = {
-  teal: { 500: '#319795', 600: '#2c7a7b' },
-  coral: { 500: '#e53e3e', 600: '#c53030' },
-  navy: { 500: '#0061e6', 600: '#004db3' },
-};
-
-// ==================== COMPONENTE DE MÉTRICA PRINCIPAL ====================
 interface MetricCardProps {
   title: string;
   value: string | number;
@@ -40,7 +32,6 @@ const MetricCard = memo<MetricCardProps>(({
   title, value, change, icon: Icon, trend = 'neutral',
   description, isLoading, priority = 'medium'
 }) => {
-  // Estilos y componentes visuales optimizados para no recalcularse en cada render
   const styles = useMemo(() => {
     const trendColors = {
       up: 'text-teal-600 dark:text-teal-400',

@@ -12,6 +12,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Card } from '@/components/ui/card';
 import { cn, formatPhoneNumber } from '@/lib/utils';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
