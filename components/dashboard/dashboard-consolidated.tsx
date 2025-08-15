@@ -395,10 +395,10 @@ export function DashboardConsolidated() {
 
       {/* ====== Métricas Principales ====== */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <MetricCard title="Consultas del Día" value={metrics.primary.todayConsultations} icon={Stethoscope} priority="high" description="Pacientes programados hoy" isLoading={isLoading} />
-        <MetricCard title="Base de Pacientes" value={metrics.primary.totalPatients.toLocaleString()} change={metrics.periodComparison.changePercent} trend={getTrend(metrics.periodComparison.changePercent)} icon={Users} priority="medium" description={`Crecimiento en ${period.replace('d', ' días')}`} isLoading={isLoading} />
-        <MetricCard title="Eficiencia Operativa" value={`${metrics.primary.occupancyRate}%`} trend={metrics.primary.occupancyRate > 70 ? 'up' : 'down'} icon={Target} priority={metrics.primary.occupancyRate > 70 ? 'medium' : 'high'} description="Tasa de ocupación" isLoading={isLoading} />
-        <MetricCard title="Cirugías Realizadas" value={metrics.clinical.operatedPatients} icon={Heart} priority="high" description={`Total de pacientes operados`} isLoading={isLoading} />
+        <MetricCard title="Consultas del Día" value={metrics.primary.todayConsultations} icon={Stethoscope} priority="high" description="Pacientes programados hoy" isLoading={loading} />
+        <MetricCard title="Base de Pacientes" value={metrics.primary.totalPatients.toLocaleString()} change={metrics.periodComparison.changePercent} trend={getTrend(metrics.periodComparison.changePercent)} icon={Users} priority="medium" description={`Crecimiento en ${period.replace('d', ' días')}`} isLoading={loading} />
+        <MetricCard title="Eficiencia Operativa" value={`${metrics.primary.occupancyRate}%`} trend={metrics.primary.occupancyRate > 70 ? 'up' : 'down'} icon={Target} priority={metrics.primary.occupancyRate > 70 ? 'medium' : 'high'} description="Tasa de ocupación" isLoading={loading} />
+        <MetricCard title="Cirugías Realizadas" value={metrics.clinical.operatedPatients} icon={Heart} priority="high" description={`Total de pacientes operados`} isLoading={loading} />
       </section>
 
       {/* ====== Gráfica y Estadísticas Secundarias ====== */}
