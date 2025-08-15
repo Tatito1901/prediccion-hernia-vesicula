@@ -1,7 +1,7 @@
 // app/api/assign-survey/route.ts
 // Asigna una encuesta (template) a un paciente.
-// Soporta: POST únicamente. Las operaciones ligadas a una cita (iniciar, completar, estado)
-// viven en `app/api/appointments/[id]/survey/route.ts`.
+// Canonical endpoint para asignar encuestas (por template) a pacientes. Soporta POST únicamente.
+// Otros métodos (GET, PATCH, etc.) no están permitidos y devolverán 405 (Method Not Allowed).
 
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
@@ -107,10 +107,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // Deprecated on this path: use /api/appointments/[id]/survey
+  // Método no permitido en este endpoint canónico (solo POST)
   return NextResponse.json(
-    { error: 'No soportado en /api/assign-survey. Use /api/appointments/[id]/survey' },
-    { status: 410 }
+    { error: 'Método no permitido. Usa POST en /api/assign-survey' },
+    { status: 405, headers: { 'Allow': 'POST' } }
   );
 }
 
@@ -119,9 +119,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // Deprecated on this path: use /api/appointments/[id]/survey
+  // Método no permitido en este endpoint canónico (solo POST)
   return NextResponse.json(
-    { error: 'No soportado en /api/assign-survey. Use /api/appointments/[id]/survey' },
-    { status: 410 }
+    { error: 'Método no permitido. Usa POST en /api/assign-survey' },
+    { status: 405, headers: { 'Allow': 'POST' } }
   );
 }
