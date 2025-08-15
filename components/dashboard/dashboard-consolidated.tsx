@@ -3,6 +3,7 @@
 
 import React, { useMemo, useState, useCallback, memo } from 'react';
 import { useClinic } from '@/contexts/clinic-data-provider';
+import { useAnalyticsData } from '@/hooks/use-analytics-data';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer
@@ -325,10 +326,20 @@ CustomTooltip.displayName = 'CustomTooltip';
 export function DashboardConsolidated() {
   const { allAppointments, allPatients, isLoading, error, refetch } = useClinic();
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+  const { data: analytics, isLoading: isStatsLoading, isFetching: isStatsFetching, error: statsError, refetch: refetchStats } = useAnalyticsData();
+  const loading = isLoading || isStatsLoading || isStatsFetching;
+  const effectiveError = error || statsError as Error | null;
   
   const metrics = useOptimizedMetrics(allAppointments, allPatients, period);
 
-  const handleRefresh = useCallback(() => refetch?.(), [refetch]);
+  // Preferir métrica consolidada del servidor cuando esté disponible
+  const pendingFromAnalytics = analytics?.derived?.scheduled ?? null;
+  const pendingAppointmentsDisplay = typeof pendingFromAnalytics === 'number' ? pendingFromAnalytics : metrics.primary.pendingAppointments;
+
+  const handleRefresh = useCallback(() => {
+    refetch?.();
+    refetchStats?.();
+  }, [refetch, refetchStats]);
 
   const getTrend = useCallback((value: number): 'up' | 'down' | 'neutral' => {
     if (value > 5) return 'up';
@@ -336,14 +347,14 @@ export function DashboardConsolidated() {
     return 'neutral';
   }, []);
 
-  if (error) {
+  if (effectiveError) {
     return (
       <div className="flex items-center justify-center min-h-[400px] p-4">
         <Card className="max-w-md w-full bg-white dark:bg-gray-900 border-coral-200 dark:border-coral-800">
           <CardContent className="p-6 text-center">
             <AlertCircle className="h-12 w-12 text-coral-500 dark:text-coral-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Error al Cargar Datos</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">{error.message || 'Ocurrió un error inesperado'}</p>
+            <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">{effectiveError.message || 'Ocurrió un error inesperado'}</p>
             <Button onClick={handleRefresh} variant="outline" className="hover:bg-teal-50 dark:hover:bg-teal-900/20 border-teal-300 dark:border-teal-700">
               <RefreshCw className="h-4 w-4 mr-2" /> Reintentar
             </Button>
@@ -375,8 +386,8 @@ export function DashboardConsolidated() {
                 </button>
               ))}
             </div>
-            <Button size="sm" variant="outline" onClick={handleRefresh} disabled={isLoading} className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-md h-9 w-full sm:w-auto" aria-label="Actualizar datos">
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <Button size="sm" variant="outline" onClick={handleRefresh} disabled={loading} className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-md h-9 w-full sm:w-auto" aria-label="Actualizar datos">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
         </div>
@@ -406,7 +417,7 @@ export function DashboardConsolidated() {
             </div>
           </CardHeader>
           <CardContent className="p-3 sm:p-6">
-            {isLoading ? (
+            {loading ? (
               <div className="h-[250px] flex items-center justify-center text-teal-400 dark:text-teal-600"><RefreshCw className="h-8 w-8 animate-spin" /></div>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
@@ -436,7 +447,7 @@ export function DashboardConsolidated() {
               <StatCard label="Nuevos Ingresos" value={metrics.clinical.newAdmissions} icon={UserPlus} color="teal" />
               <StatCard label="Tratamientos Activos" value={metrics.clinical.activeTreatments} icon={Activity} color="green" />
               <StatCard label="Procedimientos Completados" value={metrics.clinical.completedConsultations} icon={ClipboardCheck} color="navy" />
-              <StatCard label="Citas Pendientes" value={metrics.primary.pendingAppointments} icon={CalendarDays} color="coral" />
+              <StatCard label="Citas Pendientes" value={pendingAppointmentsDisplay} icon={CalendarDays} color="coral" />
             </CardContent>
           </Card>
           <Card className="bg-white dark:bg-gray-900 border-teal-100 dark:border-teal-900 hover:shadow-md transition-shadow">
@@ -447,7 +458,7 @@ export function DashboardConsolidated() {
               </div>
             </CardHeader>
             <CardContent className="p-3 sm:p-4">
-              {isLoading ? (
+              {loading ? (
                 <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-teal-50 dark:bg-teal-900/20 animate-pulse rounded-xl" />)}</div>
               ) : (
                 <PatientsList patients={allPatients || []} limit={5} />
