@@ -16,6 +16,7 @@ import type {
   Motive,
   LeadStats,
 } from '@/lib/types';
+import { PatientStatusEnum } from '@/lib/types';
 import type { PatientHistoryData } from '@/components/patient-admision/admision-types';
 
 // =============== Tipos del Hook ===============
@@ -117,7 +118,7 @@ const fetchJson = async <T,>(input: RequestInfo | URL): Promise<T> => {
 };
 
 const fetchActivePatients = () =>
-  fetchJson<{ data: Patient[] }>('/api/patients?estado=activo&pageSize=50');
+  fetchJson<{ data: Patient[] }>(`/api/patients?estado=${PatientStatusEnum.ACTIVO}&pageSize=50`);
 
 const fetchTodayAppointments = () =>
   fetchJson<{ data?: Appointment[]; summary?: ClinicDataState['appointments']['summary'] }>(

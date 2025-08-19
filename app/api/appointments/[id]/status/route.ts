@@ -4,6 +4,8 @@ import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { z } from 'zod';
 import { ZAppointmentStatus } from '@/lib/validation/enums';
+import { PatientStatusEnum } from '@/lib/types';
+import { canSetFollowUpFrom } from '@/lib/patient-state-rules';
 import {
   canTransitionToStatus,
   canCheckIn,
@@ -13,6 +15,8 @@ import {
   canRescheduleAppointment,
 } from '@/lib/admission-business-rules';
 import { validateRescheduleDateTime } from '@/lib/clinic-schedule';
+import { BUSINESS_RULES } from '@/lib/admission-business-rules';
+import { addMinutes, differenceInMinutes } from 'date-fns';
 
 export const runtime = 'nodejs';
 
@@ -233,6 +237,27 @@ export async function PATCH(
       case 'PRESENTE': {
         const res = canCheckIn(currentAppointment as any, now);
         actionValidation = { valid: res.valid, reason: res.reason };
+        if (!res.valid) {
+          // Diagnóstico adicional para entender ventanas y posibles desfases de zona horaria
+          try {
+            const apptIso = String(currentAppointment.fecha_hora_cita);
+            const appt = new Date(apptIso);
+            const windowStart = addMinutes(appt, -BUSINESS_RULES.CHECK_IN_WINDOW_BEFORE_MINUTES);
+            const windowEnd = addMinutes(appt, BUSINESS_RULES.CHECK_IN_WINDOW_AFTER_MINUTES);
+            const minsUntil = differenceInMinutes(windowStart, now);
+            console.warn('[Check-In Debug]', {
+              now: now.toISOString(),
+              appointmentIso: apptIso,
+              appointmentParsed: appt.toISOString(),
+              checkInWindowStart: windowStart.toISOString(),
+              checkInWindowEnd: windowEnd.toISOString(),
+              minutesUntilWindowStart: minsUntil,
+              reason: res.reason,
+            });
+          } catch (e) {
+            console.warn('[Check-In Debug] failed to log diagnostics:', e);
+          }
+        }
         break;
       }
       case 'COMPLETADA': {
@@ -384,16 +409,32 @@ export async function PATCH(
     
     // 9. ACTUALIZAR ESTADO DEL PACIENTE SI ES NECESARIO
     if (newStatus === 'COMPLETADA') {
-      // Actualizar estado del paciente según tu enum real
-      await supabase
-        .from('patients')
-        .update({ 
-          estado_paciente: 'en_seguimiento', // Valor válido en patient_status_enum
-          fecha_primera_consulta: currentAppointment.fecha_hora_cita.split('T')[0],
-          ultimo_contacto: new Date().toISOString().split('T')[0], // DATE field
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', currentAppointment.patient_id);
+      // Determinar si el estado actual del paciente permite mover a EN_SEGUIMIENTO
+      const patientForUpdate: any = Array.isArray(currentAppointment.patients)
+        ? currentAppointment.patients[0]
+        : currentAppointment.patients;
+      const currentPatientStatus = (patientForUpdate?.estado_paciente ?? '').toString();
+      const canSetFollowUp = canSetFollowUpFrom(currentPatientStatus);
+
+      if (canSetFollowUp) {
+        await supabase
+          .from('patients')
+          .update({
+            estado_paciente: PatientStatusEnum.EN_SEGUIMIENTO, // Mantener consistencia con enum de BD
+            fecha_ultima_consulta: currentAppointment.fecha_hora_cita.split('T')[0],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', currentAppointment.patient_id);
+      } else {
+        // No sobrescribir estados terminales; solo actualizar metadata de última consulta
+        await supabase
+          .from('patients')
+          .update({
+            fecha_ultima_consulta: currentAppointment.fecha_hora_cita.split('T')[0],
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', currentAppointment.patient_id);
+      }
     }
     
     // 10. LOG PARA MONITOREO

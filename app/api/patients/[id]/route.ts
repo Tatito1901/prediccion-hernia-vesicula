@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { PatientStatusEnum } from '@/lib/types';
+import { isTerminalPatientStatus } from '@/lib/patient-state-rules';
 
 // GET /api/patients/[id] - Obtener un paciente específico por ID
 export async function GET(
@@ -69,7 +71,7 @@ export async function PATCH(
     // Validar que el paciente existe primero
     const { data: existingPatient, error: fetchError } = await supabase
       .from('patients')
-      .select('id')
+      .select('id, estado_paciente')
       .eq('id', id)
       .single();
 
@@ -87,11 +89,43 @@ export async function PATCH(
       );
     }
 
+    // Guardas de estado de paciente: evitar degradaciones o sobrescrituras inválidas
+    const safeBody: Record<string, any> = { ...body };
+
+    if (Object.prototype.hasOwnProperty.call(safeBody, 'estado_paciente')) {
+      const desiredRaw = safeBody.estado_paciente;
+      const desired = typeof desiredRaw === 'string' ? desiredRaw.toLowerCase() : desiredRaw;
+      const validValues = Object.values(PatientStatusEnum) as string[];
+
+      if (desired != null && !validValues.includes(desired)) {
+        return NextResponse.json(
+          { message: 'Valor de estado_paciente inválido' },
+          { status: 400 }
+        );
+      }
+
+      const currentStatus = (existingPatient as any)?.estado_paciente ?? null;
+
+      // No permitir cambiar estados terminales
+      if (isTerminalPatientStatus(currentStatus) && desired !== currentStatus) {
+        delete safeBody.estado_paciente;
+      }
+
+      // No permitir degradar a POTENCIAL desde un estado ya establecido distinto a POTENCIAL
+      if (
+        desired === PatientStatusEnum.POTENCIAL &&
+        currentStatus &&
+        currentStatus !== PatientStatusEnum.POTENCIAL
+      ) {
+        delete safeBody.estado_paciente;
+      }
+    }
+
     // Actualizar el paciente
     const { data: updatedPatient, error: updateError } = await supabase
       .from('patients')
       .update({
-        ...body,
+        ...safeBody,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)

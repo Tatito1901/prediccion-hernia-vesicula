@@ -109,9 +109,9 @@ export async function GET(request: Request) {
       if (patientIds.length > 0) {
         const { data: assigned, error: assignedError } = await supabase
           .from('assigned_surveys')
-          .select('id, status, completed_at, created_at, template_id, patient_id')
+          .select('id, status, completed_at, assigned_at, template_id, patient_id')
           .in('patient_id', patientIds)
-          .order('created_at', { ascending: false });
+          .order('assigned_at', { ascending: false });
 
         if (assignedError) {
           console.warn('[/api/patients] No se pudo obtener assigned_surveys:', assignedError.message);
@@ -170,8 +170,8 @@ export async function GET(request: Request) {
       stats = {
         totalPatients,
         surveyRate,
-        pendingConsults: statusStats['potencial'] || 0,
-        operatedPatients: statusStats['operado'] || 0,
+        pendingConsults: statusStats[PatientStatusEnum.POTENCIAL] || 0,
+        operatedPatients: statusStats[PatientStatusEnum.OPERADO] || 0,
         statusStats: { ...statusStats, all: totalPatients }
       };
     }

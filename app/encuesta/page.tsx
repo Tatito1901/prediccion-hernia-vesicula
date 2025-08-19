@@ -10,13 +10,11 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tablet, Smartphone, ArrowLeft } from "lucide-react"
 // ❌ ELIMINADO: import { usePatient } - Ya no es necesario, usamos contexto central
-import { useUpdatePatient } from "@/hooks/use-patient";
 import { useClinic } from "@/contexts/clinic-data-provider";
 import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 import MedicalSurveyAnalysis from "@/components/surveys/medical-survey-analysis"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"
-import { toast } from "sonner"
-import { PatientStatusEnum } from "@/lib/types";
+ 
 
 // Componente interno que utiliza useSearchParams
 function EncuestaContent() {
@@ -44,34 +42,11 @@ function EncuestaContent() {
   const patient = enrichedPatients.find(p => p.id === String(patientId));
   const isLoading = false; // Ya no hay loading porque los datos vienen del contexto
   const isError = false; // Ya no hay error porque los datos vienen del contexto
-  // Usar la mutación de React Query para actualizar
-  const { mutate: updatePatient } = useUpdatePatient();
+  
 
     // El `useEffect` para cargar datos ya no es necesario, React Query lo maneja.
 
-  // Manejar la finalización de la encuesta
-  const handleSurveyComplete = (data: any) => {
-    console.log("Encuesta completada:", data)
-
-        // Actualizar el estado del paciente con la mutación de React Query
-    if (patientId && patient) {
-      updatePatient({ 
-        id: String(patientId), 
-        updates: {
-          // Solo actualizamos las columnas válidas del esquema
-          estado_paciente: PatientStatusEnum.POTENCIAL,
-        }
-      });
-
-      // Mostrar notificación de éxito
-      toast.success("Encuesta completada con éxito", {
-        description: "El paciente ha sido marcado como 'potencial'",
-      })
-
-      // Redirigir a la página de gracias
-      router.push(`/survey/gracias?id=${surveyId}`)
-    }
-  }
+  
 
   // Efecto para detectar si venimos de un modo específico
   useEffect(() => {
@@ -177,7 +152,6 @@ function EncuestaContent() {
                       surveyTemplateId={surveyId}
                       assignedSurveyId={surveyId}
                       initialData={patient ? { nombre: patient.nombre || undefined, apellidos: patient.apellidos || undefined, edad: patient.edad || undefined } : undefined}
-                      onComplete={handleSurveyComplete}
                     />
                   ) : (
                     <Card>

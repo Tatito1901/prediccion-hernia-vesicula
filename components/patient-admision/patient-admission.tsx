@@ -290,9 +290,14 @@ const useAppointmentData = (search: string, statusFilter: string) => {
         patient.apellidos?.toLowerCase().includes(searchLower) ||
         patient.telefono?.includes(search)
       )) continue;
-      
+
       const fullAppointment = { ...apt, patients: patient } as AppointmentWithPatient;
       const aptDate = new Date(apt.fecha_hora_cita);
+
+      // Hide rescheduled appointments from main tabs (only visible in history)
+      if (apt.estado_cita === 'REAGENDADA') {
+        continue;
+      }
 
       // Classify by time
       if (aptDate >= startOfDay(now) && aptDate <= endOfDay(now)) {

@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       .select('id, status')
       .eq('patient_id', patientId)
       .eq('template_id', templateId)
-      .order('created_at', { ascending: false })
+      .order('assigned_at', { ascending: false })
       .limit(1)
       .single();
 

@@ -6,7 +6,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 
 // Import components statically instead of using dynamic imports
-import { DashboardConsolidated } from "../../components/dashboard/dashboard-consolidated";
+import DashboardConsolidated from "../../components/dashboard/dashboard-consolidated";
 // Removed detailed charts to improve responsivity and performance per user request
 
 function DashboardContent() {

@@ -2,7 +2,12 @@
 // REGLAS DE NEGOCIO COMPLETAS Y CORREGIDAS PARA FLUJO DE ADMISIÓN
 
 import { addMinutes, isBefore, isAfter, differenceInMinutes } from 'date-fns';
-import { CLINIC_SCHEDULE } from '@/lib/clinic-schedule';
+import {
+  CLINIC_SCHEDULE,
+  withinWorkHours as scheduleWithinWorkHours,
+  isWorkDay as scheduleIsWorkDay,
+  isLunchTime as scheduleIsLunchTime,
+} from '@/lib/clinic-schedule';
 
 // ✅ Tipos locales mínimos para evitar depender de components/* (isomórfico FE/BE)
 import { z } from 'zod';
@@ -64,17 +69,13 @@ const getAppointmentDateTime = (appointment: AppointmentLike): Date => {
 };
 
 const isWithinWorkHours = (date: Date): boolean => {
-  const hour = date.getHours();
-  const day = date.getDay();
-  return hour >= CLINIC_SCHEDULE.START_HOUR && 
-         hour < CLINIC_SCHEDULE.END_HOUR && 
-         (CLINIC_SCHEDULE.WORK_DAYS as readonly number[]).includes(day as any);
+  // Usar helpers conscientes de zona horaria para evitar desalineaciones (SSR/UTC vs zona clínica)
+  return scheduleWithinWorkHours(date) && scheduleIsWorkDay(date);
 };
 
 const isLunchTime = (date: Date): boolean => {
-  const hour = date.getHours();
-  return hour >= CLINIC_SCHEDULE.LUNCH_START && 
-         hour < CLINIC_SCHEDULE.LUNCH_END;
+  // Delegar a helper centralizado (respetando CLINIC_TIMEZONE)
+  return scheduleIsLunchTime(date);
 };
 
 const wasRecentlyUpdated = (appointment: AppointmentLike, minutes: number = BUSINESS_RULES.RAPID_CHANGE_COOLDOWN_MINUTES): boolean => {

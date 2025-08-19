@@ -108,9 +108,13 @@ const AppointmentTimeline = memo<{
   };
 
   const statusIcon = {
+    'PROGRAMADA': Calendar,
+    'CONFIRMADA': CheckCircle2,
+    'PRESENTE': Activity,
     'COMPLETADA': CheckCircle2,
     'CANCELADA': XCircle,
     'NO_ASISTIO': AlertCircle,
+    'REAGENDADA': CalendarDays,
   }[appointment.estado_cita] || Calendar;
 
   const StatusIcon = statusIcon;

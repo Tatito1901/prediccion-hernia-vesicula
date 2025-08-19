@@ -119,6 +119,7 @@ export const PatientCard = memo<PatientCardProps>(({
   const [confirmDialog, setConfirmDialog] = useState<AdmissionAction | null>(null);
   const [showReschedule, setShowReschedule] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [infoDialog, setInfoDialog] = useState<null | { kind: 'tooEarly' | 'expired' }>(null);
 
   const patient = useMemo(() => appointment.patients, [appointment.patients]);
   const statusConfig = useMemo(() => getStatusConfig(appointment.estado_cita), [appointment.estado_cita]);
@@ -152,6 +153,28 @@ export const PatientCard = memo<PatientCardProps>(({
     }
   }, [appointment.fecha_hora_cita]);
 
+  // Estado de la ventana de check-in (solo para UI preventiva)
+  const checkInUi = useMemo(() => {
+    try {
+      const appt = parseISO(appointment.fecha_hora_cita);
+      if (!isValid(appt)) return { state: 'unknown' as const };
+      const start = new Date(appt.getTime() - 30 * 60 * 1000); // 30 min antes
+      const end = new Date(appt.getTime() + 15 * 60 * 1000);   // 15 min después
+      const now = new Date();
+      if (now < start) {
+        const minutes = Math.ceil((start.getTime() - now.getTime()) / 60000);
+        return { state: 'tooEarly' as const, minutes, start, end, appt };
+      }
+      if (now > end) {
+        const minutes = Math.floor((now.getTime() - end.getTime()) / 60000);
+        return { state: 'expired' as const, minutes, start, end, appt };
+      }
+      return { state: 'open' as const, start, end, appt };
+    } catch {
+      return { state: 'unknown' as const };
+    }
+  }, [appointment.fecha_hora_cita]);
+
   const availableActions = useMemo(() => {
     const actions: AdmissionAction[] = [];
     (['checkIn', 'complete', 'cancel', 'noShow', 'reschedule', 'viewHistory'] as const).forEach(action => {
@@ -176,9 +199,22 @@ export const PatientCard = memo<PatientCardProps>(({
       setShowHistory(true);
       return;
     }
+    if (action === 'checkIn') {
+      if (checkInUi.state === 'open') {
+        setConfirmDialog('checkIn');
+      } else if (checkInUi.state === 'tooEarly') {
+        setInfoDialog({ kind: 'tooEarly' });
+      } else if (checkInUi.state === 'expired') {
+        setInfoDialog({ kind: 'expired' });
+      } else {
+        // Estado desconocido: prevenir y mostrar mensaje genérico
+        setInfoDialog({ kind: 'tooEarly' });
+      }
+      return;
+    }
     
     setConfirmDialog(action);
-  }, []);
+  }, [checkInUi.state]);
 
   const handleConfirm = useCallback(async () => {
     if (!confirmDialog) return;
@@ -207,11 +243,21 @@ export const PatientCard = memo<PatientCardProps>(({
     const newDateTime = new Date(date);
     newDateTime.setHours(hh, mm, 0, 0);
     
+    // 1) Set REAGENDADA with new datetime to pass server-side validation and log audit trail
     await updateStatus({
       appointmentId: appointment.id,
       newStatus: 'REAGENDADA',
-      nuevaFechaHora: newDateTime.toISOString()
+      nuevaFechaHora: newDateTime.toISOString(),
+      motivo: 'Reagendamiento de cita'
     });
+
+    // Immediately return to PROGRAMADA so the appointment appears in main tabs by the new datetime
+    await updateStatus({
+      appointmentId: appointment.id,
+      newStatus: 'PROGRAMADA',
+      motivo: 'Cita reagendada confirmada en nueva fecha'
+    });
+
     setShowReschedule(false);
     onAction?.('reschedule', appointment.id);
   }, [appointment.id, updateStatus, onAction]);
@@ -361,8 +407,8 @@ export const PatientCard = memo<PatientCardProps>(({
             </div>
           )}
 
-          {/* Acción principal */}
-          {primaryAction && !disableActions && (
+          {/* Acción principal: siempre visible; la validación se maneja al click */}
+          {!disableActions && primaryAction && (
             <Button
               onClick={() => handleAction(primaryAction)}
               disabled={isPending}
@@ -398,8 +444,8 @@ export const PatientCard = memo<PatientCardProps>(({
               {confirmDialog && ACTION_CONFIG[confirmDialog].title}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
-              <p className="font-medium text-foreground">{fullName}</p>
-              <p>{confirmDialog && ACTION_CONFIG[confirmDialog].description}</p>
+              <span className="block font-medium text-foreground">{fullName}</span>
+              <span className="block">{confirmDialog && ACTION_CONFIG[confirmDialog].description}</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -413,6 +459,66 @@ export const PatientCard = memo<PatientCardProps>(({
             >
               {isPending ? 'Procesando...' : 'Confirmar'}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo informativo (check-in fuera de ventana) */}
+      <AlertDialog open={!!infoDialog} onOpenChange={(open) => !open && setInfoDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              {infoDialog?.kind === 'tooEarly' ? (
+                <>
+                  <Clock className="h-4 w-4 text-sky-600" />
+                  Check-in aún no disponible
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  Ventana de check-in expirada
+                </>
+              )}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block font-medium text-foreground">{fullName}</span>
+              {infoDialog?.kind === 'tooEarly' && (
+                <span className="block">
+                  El check-in se habilita 30 minutos antes de la cita
+                  {checkInUi.start && (
+                    <>
+                      {" "}(desde {format(checkInUi.start, 'HH:mm')}
+                      {typeof checkInUi.minutes === 'number' && `, faltan ${checkInUi.minutes} min`} ).
+                    </>
+                  )}
+                </span>
+              )}
+              {infoDialog?.kind === 'expired' && (
+                <span className="block">
+                  La ventana de check-in cerró{checkInUi.end && <> a las {format(checkInUi.end, 'HH:mm')}</>}.
+                  Puedes marcar <strong>No Asistió</strong> o <strong>Reagendar</strong>.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            {infoDialog?.kind === 'expired' && availableActions.includes('noShow') && (
+              <Button 
+                variant="destructive" 
+                onClick={() => { setInfoDialog(null); handleAction('noShow'); }}
+              >
+                No Asistió
+              </Button>
+            )}
+            {availableActions.includes('reschedule') && (
+              <Button 
+                variant="outline" 
+                onClick={() => { setInfoDialog(null); handleAction('reschedule'); }}
+              >
+                Reagendar
+              </Button>
+            )}
+            <AlertDialogCancel>Cerrar</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

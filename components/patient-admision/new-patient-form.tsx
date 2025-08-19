@@ -1,6 +1,6 @@
 // components/patient-admission/new-patient-form.tsx
 'use client';
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { memo, useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format, addDays, isSunday, isBefore, startOfDay } from 'date-fns';
@@ -1022,6 +1022,5 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
     </Card>
   );
 };
-
-const memo = React.memo;
+import { memo } from 'react';
 export default memo(NewPatientForm);

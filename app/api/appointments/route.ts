@@ -55,7 +55,8 @@ export async function GET(request: Request) {
         fecha_hora_cita,
         estado_cita,
         patient_id,
-        doctor_id
+        doctor_id,
+        motivos_consulta
       `, { count: 'exact' });
 
     if (patientId) {

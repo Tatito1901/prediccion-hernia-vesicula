@@ -1,6 +1,7 @@
 // app/api/trends/route.ts - API PARA CÁLCULO DE TENDENCIAS HISTÓRICAS REALES
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { PatientStatusEnum, AppointmentStatusEnum } from '@/lib/types';
 
 // ==================== TIPOS DE DATOS ====================
 interface TrendMetric {
@@ -140,42 +141,42 @@ export async function GET(request: NextRequest) {
       supabase
         .from('patients')
         .select('id', { count: 'exact', head: true })
-        .eq('estado_paciente', 'operado')
+        .eq('estado_paciente', PatientStatusEnum.OPERADO)
         .lte('created_at', current.end.toISOString()),
 
       // Pacientes operados período anterior
       supabase
         .from('patients')
         .select('id', { count: 'exact', head: true })
-        .eq('estado_paciente', 'operado')
+        .eq('estado_paciente', PatientStatusEnum.OPERADO)
         .lte('created_at', previous.end.toISOString()),
 
       // Pacientes no operados período actual
       supabase
         .from('patients')
         .select('id', { count: 'exact', head: true })
-        .eq('estado_paciente', 'no_operado')
+        .eq('estado_paciente', PatientStatusEnum.NO_OPERADO)
         .lte('created_at', current.end.toISOString()),
 
       // Pacientes no operados período anterior
       supabase
         .from('patients')
         .select('id', { count: 'exact', head: true })
-        .eq('estado_paciente', 'no_operado')
+        .eq('estado_paciente', PatientStatusEnum.NO_OPERADO)
         .lte('created_at', previous.end.toISOString()),
 
       // Pacientes en seguimiento período actual
       supabase
         .from('patients')
         .select('id', { count: 'exact', head: true })
-        .eq('estado_paciente', 'en_seguimiento')
+        .eq('estado_paciente', PatientStatusEnum.EN_SEGUIMIENTO)
         .lte('created_at', current.end.toISOString()),
 
       // Pacientes en seguimiento período anterior
       supabase
         .from('patients')
         .select('id', { count: 'exact', head: true })
-        .eq('estado_paciente', 'en_seguimiento')
+        .eq('estado_paciente', PatientStatusEnum.EN_SEGUIMIENTO)
         .lte('created_at', previous.end.toISOString()),
 
       // Citas período actual (para tiempo promedio)
@@ -184,7 +185,7 @@ export async function GET(request: NextRequest) {
         .select('fecha_hora_cita, created_at')
         .gte('fecha_hora_cita', current.start.toISOString())
         .lte('fecha_hora_cita', current.end.toISOString())
-        .eq('estado_cita', 'COMPLETADA'),
+        .eq('estado_cita', AppointmentStatusEnum.COMPLETADA),
 
       // Citas período anterior (para tiempo promedio)
       supabase
@@ -192,7 +193,7 @@ export async function GET(request: NextRequest) {
         .select('fecha_hora_cita, created_at')
         .gte('fecha_hora_cita', previous.start.toISOString())
         .lte('fecha_hora_cita', previous.end.toISOString())
-        .eq('estado_cita', 'COMPLETADA')
+        .eq('estado_cita', AppointmentStatusEnum.COMPLETADA)
     ]);
 
     // 📊 EXTRAER CONTEOS

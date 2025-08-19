@@ -1,6 +1,7 @@
 // hooks/use-chart-data.tsx - Minimal replacement for chart data processing
 import { useMemo } from 'react';
 import type { Patient, Appointment } from '@/lib/types';
+import { PatientStatusEnum } from '@/lib/types';
 
 // Basic types for chart data
 export interface AppointmentFilters {
@@ -79,7 +80,7 @@ export function useChartData({
       
       // Check if patient was operated (simplified logic)
       const patient = patients.find(p => p.id === apt.patient_id);
-      if (patient && patient.estado_paciente === 'operado') {
+      if (patient && patient.estado_paciente === PatientStatusEnum.OPERADO) {
         groupedData[key].operados += 1;
       }
     });

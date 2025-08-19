@@ -2,7 +2,7 @@
 // TIPOS OPTIMIZADOS PARA EL FLUJO DE ADMISIÓN - CLÍNICA HERNIA Y VESÍCULA
 
 import { z } from 'zod';
-import type { UserRole as DbUserRole } from '@/lib/types';
+import type { UserRole as DbUserRole, PatientStatus } from '@/lib/types';
 import { 
   ZAppointmentStatus, 
   ZContactChannel, 
@@ -14,15 +14,6 @@ import {
 
 // ==================== TIPOS BASE ====================
 export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
-
-export type PatientStatus = 
-  | 'potencial'
-  | 'activo'
-  | 'operado'
-  | 'no_operado'
-  | 'en_seguimiento'
-  | 'inactivo'
-  | 'alta_medica';
 
 export type LeadChannel = z.infer<typeof ZContactChannel>;
 export type LeadMotive = z.infer<typeof ZLeadMotive>;
@@ -100,6 +91,13 @@ export interface AppointmentWithPatient extends Appointment {
   >;
 }
 
+// Datos agregados para vistas de historial de paciente
+export interface PatientHistoryData {
+  patient?: Patient;
+  appointments: AppointmentWithPatient[];
+  survey_completion_rate?: number;
+}
+
 export interface Lead {
   id?: string;
   full_name: string;
@@ -114,58 +112,155 @@ export interface Lead {
   registered_by?: string;
 }
 
+// ==================== PROPS DE COMPONENTES ====================
+export interface PatientHistoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  patientId: string;
+}
+
+export interface NewPatientFormProps {
+  onSuccess?: () => void;
+  onCancel?: () => void;
+  className?: string;
+}
+
+export interface AdmissionPayload {
+  // Personal info
+  nombre: string;
+  apellidos: string;
+  telefono?: string;
+  email?: string;
+  edad?: number;
+  genero?: 'Masculino' | 'Femenino' | 'Otro';
+  fecha_nacimiento?: string;
+  ciudad?: string;
+  estado?: string;
+  
+  // Medical info
+  antecedentes_medicos?: string;
+  numero_expediente?: string;
+  seguro_medico?: string;
+  comentarios_registro?: string;
+  diagnostico_principal: DiagnosisType;
+  diagnostico_principal_detalle?: string;
+  probabilidad_cirugia?: number;
+  
+  // Appointment info
+  fecha_hora_cita: string; // ISO 8601
+  motivos_consulta: string[];
+  doctor_id?: string;
+  contacto_emergencia_nombre?: string;
+  contacto_emergencia_telefono?: string;
+  creado_por_id?: string;
+  creation_source?: string;
+}
+
+// Respuesta tipada de la API de admisión
+export interface AdmissionDBResponse {
+  message: string;
+  patient_id: string;
+  appointment_id: string;
+  next_steps?: string[];
+}
+
+// ==================== PROPS DE UI ====================
+export interface PatientCardProps {
+  appointment: AppointmentWithPatient;
+  onAction?: (action: AdmissionAction, appointmentId: string) => void;
+  disableActions?: boolean;
+  className?: string;
+}
+
+export interface RescheduleProps {
+  appointment: AppointmentWithPatient;
+  onClose: () => void;
+  onReschedule: (date: Date, time: string) => void | Promise<void>;
+}
+
 // ==================== CONFIGURACIÓN VISUAL ====================
 export const APPOINTMENT_STATUS_CONFIG = {
   PROGRAMADA: {
     label: 'Programada',
     color: 'sky',
     bgClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300',
+    textClass: 'text-sky-700 dark:text-sky-300',
     borderClass: 'border-sky-400 dark:border-sky-600',
+    ringClass: 'ring-sky-100 dark:ring-sky-900/30',
     iconBg: 'bg-sky-100 dark:bg-sky-900/50',
+    description: 'Cita programada',
   },
   CONFIRMADA: {
     label: 'Confirmada',
     color: 'emerald',
     bgClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
+    textClass: 'text-emerald-700 dark:text-emerald-300',
     borderClass: 'border-emerald-400 dark:border-emerald-600',
+    ringClass: 'ring-emerald-100 dark:ring-emerald-900/30',
     iconBg: 'bg-emerald-100 dark:bg-emerald-900/50',
+    description: 'Cita confirmada por paciente',
   },
   PRESENTE: {
     label: 'En Consulta',
     color: 'teal',
     bgClass: 'bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300',
+    textClass: 'text-teal-700 dark:text-teal-300',
     borderClass: 'border-teal-400 dark:border-teal-600',
+    ringClass: 'ring-teal-100 dark:ring-teal-900/30',
     iconBg: 'bg-teal-100 dark:bg-teal-900/50',
+    description: 'Paciente en consulta',
   },
   COMPLETADA: {
     label: 'Completada',
     color: 'green',
     bgClass: 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300',
+    textClass: 'text-green-700 dark:text-green-300',
     borderClass: 'border-green-400 dark:border-green-600',
+    ringClass: 'ring-green-100 dark:ring-green-900/30',
     iconBg: 'bg-green-100 dark:bg-green-900/50',
+    description: 'Consulta completada',
   },
   CANCELADA: {
     label: 'Cancelada',
     color: 'red',
     bgClass: 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300',
+    textClass: 'text-red-700 dark:text-red-300',
     borderClass: 'border-red-400 dark:border-red-600',
+    ringClass: 'ring-red-100 dark:ring-red-900/30',
     iconBg: 'bg-red-100 dark:bg-red-900/50',
+    description: 'Cita cancelada',
   },
   NO_ASISTIO: {
     label: 'No Asistió',
     color: 'amber',
     bgClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
+    textClass: 'text-amber-700 dark:text-amber-300',
     borderClass: 'border-amber-400 dark:border-amber-600',
+    ringClass: 'ring-amber-100 dark:ring-amber-900/30',
     iconBg: 'bg-amber-100 dark:bg-amber-900/50',
+    description: 'Paciente no asistió',
   },
   REAGENDADA: {
     label: 'Reagendada',
     color: 'violet',
     bgClass: 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300',
+    textClass: 'text-violet-700 dark:text-violet-300',
     borderClass: 'border-violet-400 dark:border-violet-600',
+    ringClass: 'ring-violet-100 dark:ring-violet-900/30',
     iconBg: 'bg-violet-100 dark:bg-violet-900/50',
+    description: 'Cita reagendada',
   },
 } as const;
+
+// Mapeo de acciones de UI a estados de cita
+export const ACTION_TO_STATUS_MAP: Record<AdmissionAction, AppointmentStatus | null> = {
+  checkIn: 'PRESENTE',
+  complete: 'COMPLETADA',
+  cancel: 'CANCELADA',
+  noShow: 'NO_ASISTIO',
+  reschedule: 'REAGENDADA',
+  viewHistory: null,
+};
 
 // ==================== SCHEMAS OPTIMIZADOS ====================
 export const NewPatientSchema = z.object({

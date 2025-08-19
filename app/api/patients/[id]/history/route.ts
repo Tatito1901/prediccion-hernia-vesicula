@@ -172,13 +172,18 @@ export async function GET(
       .order('assigned_at', { ascending: false });
 
     // 5. CALCULAR ESTADÍSTICAS AVANZADAS
+    // Usar el historial de cambios para contar reagendamientos reales
+    const rescheduledCount = Array.isArray(appointmentHistory)
+      ? appointmentHistory.filter(h => h.field_changed === 'fecha_hora_cita').length
+      : (appointments?.filter(a => a.estado_cita === 'REAGENDADA').length || 0);
+
     const stats = {
       // Estadísticas básicas de citas
       total_appointments: appointments?.length || 0,
       completed_appointments: appointments?.filter(a => a.estado_cita === 'COMPLETADA').length || 0,
       cancelled_appointments: appointments?.filter(a => a.estado_cita === 'CANCELADA').length || 0,
       no_show_appointments: appointments?.filter(a => a.estado_cita === 'NO_ASISTIO').length || 0,
-      rescheduled_appointments: appointments?.filter(a => a.estado_cita === 'REAGENDADA').length || 0,
+      rescheduled_appointments: rescheduledCount,
       
       // Fechas importantes
       first_appointment_date: appointments?.[appointments.length - 1]?.fecha_hora_cita || null,
