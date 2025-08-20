@@ -109,28 +109,6 @@ export const queryKeys = {
     activePatients: ['clinic', 'activePatients'] as const,
   },
 
-  // ==================== PROSPECTOS (LEADS) ====================
-  leads: {
-    // Lista de leads (paginada/filtrada)
-    all: ['leads'] as const,
-    paginated: (params: {
-      page?: number;
-      pageSize?: number;
-      status?: string;
-      channel?: string;
-      motive?: string;
-      search?: string;
-      priority?: number;
-      overdue?: boolean;
-    }) => ['leads', 'paginated', params] as const,
-
-    // Lead individual (detalle)
-    detail: (id: string) => ['leads', 'detail', id] as const,
-
-    // Estadísticas de leads (dashboard)
-    stats: ['leads', 'stats'] as const,
-  },
-
   // ==================== ENCUESTAS ====================
   surveys: {
     all: ['surveys'] as const,

@@ -5,9 +5,6 @@ import { z } from 'zod';
 import type { UserRole as DbUserRole, PatientStatus } from '@/lib/types';
 import { 
   ZAppointmentStatus, 
-  ZContactChannel, 
-  ZLeadMotive, 
-  ZLeadStatus, 
   ZDiagnosisDb, 
   type DbDiagnosis 
 } from '@/lib/validation/enums';
@@ -15,11 +12,9 @@ import {
 // ==================== TIPOS BASE ====================
 export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
 
-export type LeadChannel = z.infer<typeof ZContactChannel>;
-export type LeadMotive = z.infer<typeof ZLeadMotive>;
-export type LeadStatus = z.infer<typeof ZLeadStatus>;
 export type DiagnosisType = DbDiagnosis;
 export type UserRole = DbUserRole;
+export type { PatientStatus };
 
 export type AdmissionAction = 
   | 'checkIn'
@@ -98,19 +93,7 @@ export interface PatientHistoryData {
   survey_completion_rate?: number;
 }
 
-export interface Lead {
-  id?: string;
-  full_name: string;
-  phone_number: string;
-  email?: string | null;
-  channel: LeadChannel;
-  motive: LeadMotive;
-  notes?: string | null;
-  status?: LeadStatus;
-  lead_intent?: string;
-  created_at?: string;
-  registered_by?: string;
-}
+// Nota: tipos de Lead eliminados al migrar a CRM externo
 
 // ==================== PROPS DE COMPONENTES ====================
 export interface PatientHistoryModalProps {
@@ -274,12 +257,13 @@ export const NewPatientSchema = z.object({
   // Opcionales
   telefono: z.string().regex(/^[0-9+\-\s()]{10,15}$/, "Teléfono inválido").optional().or(z.literal("")),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
-  edad: z.number().min(0).max(120).optional(),
+  edad: z.number().int().min(0).max(120).optional(),
   genero: z.enum(['Masculino', 'Femenino', 'Otro']).optional(),
+  fecha_nacimiento: z.string().optional().or(z.literal("")),
   ciudad: z.string().max(100).optional().or(z.literal("")),
   estado: z.string().max(100).optional().or(z.literal("")),
   contacto_emergencia_nombre: z.string().max(100).optional().or(z.literal("")),
-  contacto_emergencia_telefono: z.string().regex(/^[0-9+\-\s()]{10,15}$/, "Teléfono inválido").optional().or(z.literal("")),
+  contacto_emergencia_telefono: z.string().regex(/^[0-9+\-\s()]{10,15}$/i, "Teléfono inválido").optional().or(z.literal("")),
   antecedentes_medicos: z.string().max(1000).optional().or(z.literal("")),
   numero_expediente: z.string().max(50).optional().or(z.literal("")),
   seguro_medico: z.string().max(100).optional().or(z.literal("")),

@@ -20,8 +20,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { addDays, format, isBefore, isSunday, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
-  User2, CalendarIcon, Loader2, Search, Clock, 
-  Phone, Mail, Stethoscope, Info, CheckCircle2 
+  User2, CalendarIcon, Loader2, Clock, 
+  Stethoscope, Info, CheckCircle2 
 } from 'lucide-react';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import { useClinic } from '@/contexts/clinic-data-provider';
@@ -31,7 +31,6 @@ import {
   dbDiagnosisToDisplay, 
   type DbDiagnosis 
 } from '@/lib/validation/enums';
-import type { Lead } from './admision-types';
 
 interface PatientModalProps {
   trigger: React.ReactNode;
@@ -69,13 +68,8 @@ const isValidDate = (date: Date): boolean => {
 
 export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<'search' | 'form'>('form');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [leadResults, setLeadResults] = useState<Lead[]>([]);
-  const [searchingLeads, setSearchingLeads] = useState(false);
 
-  const { fetchSpecificAppointments, fetchLeads } = useClinic();
+  const { fetchSpecificAppointments } = useClinic();
   const { mutate: admitPatient, isPending } = useAdmitPatient();
 
   const form = useForm<FormData>({
@@ -93,27 +87,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
     },
   });
 
-  // Búsqueda de leads
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (searchQuery.length < 2) {
-        setLeadResults([]);
-        return;
-      }
-      
-      setSearchingLeads(true);
-      try {
-        const res = await fetchLeads({ search: searchQuery, pageSize: 5 });
-        setLeadResults((res as any)?.data || []);
-      } catch (err) {
-        console.error('Error buscando leads:', err);
-      } finally {
-        setSearchingLeads(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, fetchLeads]);
+  // (Lead search removed)
 
   // Horarios ocupados
   const selectedDate = form.watch('fecha');
@@ -154,21 +128,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
     loadAppointments();
   }, [selectedDate, fetchSpecificAppointments]);
 
-  // Handlers
-  const handleLeadSelect = useCallback((lead: Lead) => {
-    setSelectedLead(lead);
-    const [nombre, ...apellidosParts] = (lead.full_name || '').split(' ');
-    form.setValue('nombre', nombre || '', { shouldValidate: true });
-    form.setValue('apellidos', apellidosParts.join(' ') || '', { shouldValidate: true });
-    if (lead.phone_number) {
-      form.setValue('telefono', formatPhoneNumber(lead.phone_number), { shouldValidate: true });
-    }
-    if (lead.email) {
-      form.setValue('email', lead.email, { shouldValidate: false });
-    }
-    setStep('form');
-    setSearchQuery('');
-  }, [form]);
+  // (Lead handlers removed)
 
   const onSubmit = useCallback((values: FormData) => {
     const dateTime = new Date(values.fecha);
@@ -189,7 +149,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
       onSuccess: () => {
         form.reset();
         setOpen(false);
-        setSelectedLead(null);
+        // Lead state removed
         onSuccess?.();
       },
       onError: (error: any) => {
@@ -221,66 +181,6 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
 
         <ScrollArea className="max-h-[calc(90vh-120px)]">
           <div className="p-6 space-y-6">
-            {/* Búsqueda de Leads */}
-            {step === 'form' && (
-              <div className="space-y-3">
-                <Label className="flex items-center gap-2 text-sm font-medium">
-                  <Search className="h-3.5 w-3.5" />
-                  Buscar paciente existente
-                </Label>
-                <div className="relative">
-                  <Input
-                    placeholder="Nombre o teléfono..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pr-10"
-                  />
-                  {searchingLeads && (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
-                  )}
-                </div>
-                
-                {leadResults.length > 0 && (
-                  <Card className="border-sky-200 dark:border-sky-800 overflow-hidden">
-                    <ScrollArea className="max-h-48">
-                      {leadResults.map((lead) => (
-                        <button
-                          key={lead.id}
-                          onClick={() => handleLeadSelect(lead)}
-                          className="w-full text-left p-3 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-colors border-b last:border-0"
-                        >
-                          <div className="font-medium">{lead.full_name}</div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-3">
-                            {lead.phone_number && (
-                              <span className="flex items-center gap-1">
-                                <Phone className="h-3 w-3" />
-                                {lead.phone_number}
-                              </span>
-                            )}
-                            {lead.email && (
-                              <span className="flex items-center gap-1">
-                                <Mail className="h-3 w-3" />
-                                {lead.email}
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </ScrollArea>
-                  </Card>
-                )}
-
-                {selectedLead && (
-                  <Alert className="border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <AlertDescription>
-                      Datos cargados de: <strong>{selectedLead.full_name}</strong>
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
-            )}
-
             <Separator />
 
             {/* Formulario */}
@@ -484,7 +384,6 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
                   onClick={() => {
                     setOpen(false);
                     form.reset();
-                    setSelectedLead(null);
                   }}
                   className="flex-1"
                   disabled={isPending}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
-import { renderWithQueryClient, screen, waitFor } from './utils/test-utils';
+import { renderWithQueryClient, screen, waitFor, cleanup } from './utils/test-utils';
 import userEvent from '@testing-library/user-event';
 import NewPatientForm from '@/components/patient-admision/new-patient-form';
 
@@ -15,19 +15,18 @@ vi.mock('sonner', () => {
   };
 });
 
-// Mock Clinic context used by the form
+// Mock Clinic context used by the form with stable references
 vi.mock('@/contexts/clinic-data-provider', () => {
+  const fetchSpecificAppointments = vi.fn(async () => ({ data: [] }));
   return {
     useClinic: () => ({
-      fetchSpecificAppointments: vi.fn(async () => ({ data: [] })),
-      fetchLeads: vi.fn(async () => ({ data: [] })),
+      fetchSpecificAppointments,
     }),
   };
 });
 
 // Simplify Radix Select for testing
-vi.mock('@/components/ui/select', async () => {
-  const React = await import('react');
+vi.mock('@/components/ui/select', () => {
   const Ctx = React.createContext<{ onValueChange?: (v: string) => void } | undefined>(undefined);
   const Select = ({ onValueChange, children }: any) => (
     <Ctx.Provider value={{ onValueChange }}>{children}</Ctx.Provider>
@@ -53,8 +52,7 @@ vi.mock('@/components/ui/popover', () => {
 });
 
 // Auto-select a date when Calendar mounts
-vi.mock('@/components/ui/calendar', async () => {
-  const React = await import('react');
+vi.mock('@/components/ui/calendar', () => {
   const Calendar = ({ onSelect }: { onSelect: (d: Date) => void }) => {
     const selectedRef = React.useRef(false);
     React.useEffect(() => {
@@ -78,9 +76,10 @@ function okJson(data: any, init?: Partial<ResponseInit>): Response {
 }
 
 describe('NewPatientForm (integration)', () => {
-  const user = userEvent.setup();
+  let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
+    user = userEvent.setup();
     vi.restoreAllMocks();
     // Default fetch mock
     vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
@@ -96,6 +95,7 @@ describe('NewPatientForm (integration)', () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
   });
 
@@ -105,8 +105,12 @@ describe('NewPatientForm (integration)', () => {
     renderWithQueryClient(<NewPatientForm onSuccess={onSuccess} />);
 
     // Rellena campos requeridos
-    await user.type(screen.getByPlaceholderText('Nombre'), 'Juan');
-    await user.type(screen.getByPlaceholderText('Apellidos'), 'Perez');
+    await user.type(await screen.findByPlaceholderText('Nombre del paciente'), 'Juan');
+    await user.type(screen.getByPlaceholderText('Apellidos del paciente'), 'Perez');
+
+    // Avanza a la pestaña de Cita
+    await user.click(screen.getByRole('button', { name: /Siguiente/i }));
+    await user.click(screen.getByRole('button', { name: /Siguiente/i }));
 
     // Calendar mock selecciona una fecha automáticamente
     await screen.findByTestId('calendar-mock');
@@ -138,3 +142,4 @@ describe('NewPatientForm (integration)', () => {
     expect(typeof body.fecha_hora_cita).toBe('string');
   });
 });
+

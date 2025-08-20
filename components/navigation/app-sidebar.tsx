@@ -43,7 +43,6 @@ const CLINIC_INFO = {
 const NAV_MAIN = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboardIcon },
   { title: "Pacientes", url: "/pacientes", icon: UsersIcon },
-  { title: "Leads", url: "/leads", icon: UsersIcon },
   { title: "Encuesta Digital", url: "/encuesta", icon: TabletIcon },
   { title: "Admisión", url: "/admision", icon: UserPlusIcon },
   { title: "Estadísticas", url: "/estadisticas", icon: FileBarChart },

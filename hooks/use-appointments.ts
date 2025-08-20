@@ -69,7 +69,7 @@ const transformAppointment = (apiAppointment: ApiAppointment): AppointmentWithPa
       email: apiAppointment.patients.email || undefined,
       edad: apiAppointment.patients.edad || undefined,
       diagnostico_principal: apiAppointment.patients.diagnostico_principal as DiagnosisType | undefined,
-      estado_paciente: apiAppointment.patients.estado_paciente as PatientStatus | undefined,
+      estado_paciente: (apiAppointment.patients.estado_paciente as PatientStatus | undefined) ?? 'activo',
     } : {
       id: patientId,
       nombre: '',
@@ -78,7 +78,7 @@ const transformAppointment = (apiAppointment: ApiAppointment): AppointmentWithPa
       email: undefined,
       edad: undefined,
       diagnostico_principal: undefined,
-      estado_paciente: undefined,
+      estado_paciente: 'activo',
     },
   };
 };

@@ -1,5 +1,4 @@
 // components/patient-admission/patient-history-modal.tsx
-'use client';
 import React, { memo, useMemo, useState } from "react";
 import {
   Dialog,
@@ -21,7 +20,6 @@ import {
   Calendar,
   Clock,
   User2,
-  FileText,
   Activity,
   Phone,
   Mail,

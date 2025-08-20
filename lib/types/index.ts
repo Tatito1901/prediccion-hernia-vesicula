@@ -14,7 +14,6 @@ export type SurveyResponse = Database['public']['Tables']['survey_responses']['R
 export type SurveyTemplate = Database['public']['Tables']['survey_templates']['Row'];
 
 // --- NEW TABLES FROM UPDATED SCHEMA ---
-export type Lead = Database['public']['Tables']['leads']['Row'];
 export type AiPrediction = Database['public']['Tables']['ai_predictions']['Row'];
 export type AppointmentHistory = Database['public']['Tables']['appointment_history']['Row'];
 export type DoctorFeedback = Database['public']['Tables']['doctor_feedback']['Row'];
@@ -49,7 +48,6 @@ export interface ExtendedAppointment {
 export type NewPatient = Database['public']['Tables']['patients']['Insert'];
 export type NewAppointment = Database['public']['Tables']['appointments']['Insert'];
 export type NewProfile = Database['public']['Tables']['profiles']['Insert'];
-export type NewLead = Database['public']['Tables']['leads']['Insert'];
 export type NewAiPrediction = Database['public']['Tables']['ai_predictions']['Insert'];
 export type NewSurveyResponse = Database['public']['Tables']['survey_responses']['Insert'];
 
@@ -57,7 +55,6 @@ export type NewSurveyResponse = Database['public']['Tables']['survey_responses']
 export type UpdatePatient = Database['public']['Tables']['patients']['Update'];
 export type UpdateAppointment = Database['public']['Tables']['appointments']['Update'];
 export type UpdateProfile = Database['public']['Tables']['profiles']['Update'];
-export type UpdateLead = Database['public']['Tables']['leads']['Update'];
 export type UpdateAiPrediction = Database['public']['Tables']['ai_predictions']['Update'];
 
 // --- Enums as String Literal Types ---
@@ -67,9 +64,6 @@ export type AppointmentStatus = Database['public']['Enums']['appointment_status_
 export type UserRole = Database['public']['Enums']['user_role_enum'];
 
 // --- NEW ENUMS FROM UPDATED SCHEMA ---
-export type LeadStatus = Database['public']['Enums']['lead_status_enum'];
-export type Channel = Database['public']['Enums']['contact_channel_enum'];
-export type Motive = Database['public']['Enums']['lead_motive_enum'];
 export type SurgicalDecision = Database['public']['Enums']['surgical_decision_enum'];
 export type MarketingSource = Database['public']['Enums']['patient_source_enum'];
 
@@ -174,36 +168,7 @@ export interface AppointmentFormData {
   es_primera_vez?: boolean;
 }
 
-// --- Lead Form Types ---
-export interface LeadFormData {
-  full_name: string;
-  phone_number: string;
-  channel: Channel;
-  motive: Motive;
-  lead_intent?: 'ONLY_WANTS_INFORMATION' | 'WANTS_TO_SCHEDULE_APPOINTMENT' | 'WANTS_TO_COMPARE_PRICES' | 'OTHER';
-  problem_specification?: string;
-  notes?: string;
-}
-
-// --- Extended Lead Types ---
-export interface ExtendedLead extends Lead {
-  // Computed properties for UI
-  days_since_created: number;
-  days_until_follow_up?: number;
-  is_overdue: boolean;
-  conversion_patient?: Patient;
-}
-
-// --- Lead Stats Types ---
-export interface LeadStats {
-  total_leads: number;
-  new_leads: number;
-  in_follow_up: number;
-  converted_leads: number;
-  conversion_rate: number;
-  leads_by_channel: Record<Channel, number>;
-  leads_by_status: Record<LeadStatus, number>;
-}
+// (Lead-related types removed due to CRM externalization)
 
 // --- Tipos Deprecados para Compatibilidad ---
 

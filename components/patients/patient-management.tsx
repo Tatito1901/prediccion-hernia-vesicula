@@ -4,6 +4,7 @@ import React, {
   useState, 
   useMemo, 
   useCallback, 
+  useEffect,
   memo,
   Suspense,
   startTransition 
@@ -36,11 +37,10 @@ import { EmptyState } from '@/components/ui/empty-state'
 import PatientTable from "./patient-table"
 
 // Hooks y Tipos
-import { useClinic } from "@/contexts/clinic-data-provider"
+import { usePatientStore } from "@/stores/patient-store"
 import { 
   EnrichedPatient, 
   PatientStatusEnum, 
-  PatientStats, 
   StatusStats 
 } from "@/lib/types"
 import { generateSurveyId } from "@/lib/form-utils"
@@ -388,21 +388,27 @@ const PatientManagement: React.FC = () => {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
 
-  // Contexto centralizado
-  const {
-    isLoading: isLoadingClinicData,
-    error,
-    paginatedPatients,
-    patientsPagination,
-    patientsStats,
-    patientsFilters,
-    setPatientsPage,
-    setPatientsSearch,
-    setPatientsStatus,
-    clearPatientsFilters,
-    isPatientsLoading,
-    refetchPatients,
-  } = useClinic()
+  // Zustand patient store
+  const paginatedPatients = usePatientStore(s => s.paginatedPatients)
+  const patientsPagination = usePatientStore(s => s.patientsPagination)
+  const patientsStats = usePatientStore(s => s.patientsStats)
+  const patientsFilters = usePatientStore(s => s.patientsFilters)
+  const isPatientsLoading = usePatientStore(s => s.isPatientsLoading)
+  const patientsError = usePatientStore(s => s.patientsError)
+
+  const setPatientsPage = usePatientStore(s => s.setPatientsPage)
+  const setPatientsSearch = usePatientStore(s => s.setPatientsSearch)
+  const setPatientsStatus = usePatientStore(s => s.setPatientsStatus)
+  const clearPatientsFilters = usePatientStore(s => s.clearPatientsFilters)
+  const refetchPatients = usePatientStore(s => s.refetchPatients)
+  const fetchPatients = usePatientStore(s => s.fetchPatients)
+
+  // Initial fetch on mount if needed
+  useEffect(() => {
+    if (!paginatedPatients) {
+      fetchPatients().catch(() => {})
+    }
+  }, [fetchPatients, paginatedPatients])
   
   // Datos memoizados
   const patientStatsData: PatientStatsData = useMemo(() => 
@@ -494,7 +500,7 @@ const PatientManagement: React.FC = () => {
   }, [refetchPatients])
 
   // Variables derivadas
-  const isLoading = isLoadingClinicData || isPatientsLoading
+  const isLoading = isPatientsLoading
   const isFetching = isPatientsLoading
   const hasFilters = patientsFilters.search !== "" || patientsFilters.status !== "all"
   const hasPatients = paginatedPatients && paginatedPatients.length > 0
@@ -511,7 +517,7 @@ const PatientManagement: React.FC = () => {
   }
 
   // Error state
-  if (error) {
+  if (patientsError) {
     return (
       <div className="bg-white dark:bg-slate-950 rounded-xl border shadow-sm border-slate-200 dark:border-slate-800 p-8 sm:p-12">
         <div className="text-center">
@@ -522,7 +528,7 @@ const PatientManagement: React.FC = () => {
             Error al cargar pacientes
           </h3>
           <p className="text-slate-500 dark:text-slate-400 mb-4">
-            {error.message || "Ha ocurrido un error inesperado"}
+            {patientsError.message || "Ha ocurrido un error inesperado"}
           </p>
           <Button onClick={handleRefresh} variant="outline">
             <RefreshCw className="w-4 h-4 mr-2" />

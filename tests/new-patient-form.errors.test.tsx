@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderWithQueryClient, screen, waitFor } from './utils/test-utils';
+import { renderWithQueryClient, screen, waitFor, cleanup } from './utils/test-utils';
 import userEvent from '@testing-library/user-event';
 import NewPatientForm from '@/components/patient-admision/new-patient-form';
 
@@ -14,19 +14,19 @@ vi.mock('sonner', () => {
   };
 });
 
-// Mock Clinic context used by the form
+// Mock Clinic context used by the form with stable references
 vi.mock('@/contexts/clinic-data-provider', () => {
+  const fetchSpecificAppointments = vi.fn(async () => ({ data: [] }));
   return {
     useClinic: () => ({
-      fetchSpecificAppointments: vi.fn(async () => ({ data: [] })),
-      fetchLeads: vi.fn(async () => ({ data: [] })),
+      fetchSpecificAppointments,
+      // Otros campos del contexto no usados en estos tests pueden omitirse
     }),
   };
 });
 
 // Simplify Radix Select for testing
-vi.mock('@/components/ui/select', async () => {
-  const React = await import('react');
+vi.mock('@/components/ui/select', () => {
   const Ctx = React.createContext<{ onValueChange?: (v: string) => void } | undefined>(undefined);
   const Select = ({ onValueChange, children }: any) => (
     <Ctx.Provider value={{ onValueChange }}>{children}</Ctx.Provider>
@@ -52,8 +52,7 @@ vi.mock('@/components/ui/popover', () => {
 });
 
 // Auto-select a date when Calendar mounts (once)
-vi.mock('@/components/ui/calendar', async () => {
-  const React = await import('react');
+vi.mock('@/components/ui/calendar', () => {
   const Calendar = ({ onSelect }: { onSelect: (d: Date) => void }) => {
     const selectedRef = React.useRef(false);
     React.useEffect(() => {
@@ -61,7 +60,7 @@ vi.mock('@/components/ui/calendar', async () => {
         selectedRef.current = true;
         onSelect(new Date('2025-08-20T00:00:00'));
       }
-    }, []);
+    }, [onSelect]);
     return <div data-testid="calendar-mock" />;
   };
   return { Calendar };
@@ -76,9 +75,10 @@ function json(data: any, init?: Partial<ResponseInit>): Response {
 }
 
 describe('NewPatientForm - errores', () => {
-  const user = userEvent.setup();
+  let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
+    user = userEvent.setup();
     vi.restoreAllMocks();
     vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -90,11 +90,16 @@ describe('NewPatientForm - errores', () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
   });
 
   it('no envía si faltan campos requeridos', async () => {
     renderWithQueryClient(<NewPatientForm onSuccess={vi.fn()} />);
+
+    // Avanzar hasta la última pestaña usando "Siguiente"
+    await user.click(screen.getByRole('button', { name: /Siguiente/i }));
+    await user.click(screen.getByRole('button', { name: /Siguiente/i }));
 
     const submitBtn = screen.getByRole('button', { name: /Registrar Paciente/i });
     await user.click(submitBtn);
@@ -122,14 +127,18 @@ describe('NewPatientForm - errores', () => {
     const onSuccess = vi.fn();
     renderWithQueryClient(<NewPatientForm onSuccess={onSuccess} />);
 
-    await user.type(screen.getByPlaceholderText('Nombre'), 'Ana');
-    await user.type(screen.getByPlaceholderText('Apellidos'), 'Gomez');
+    // Completar datos personales requeridos antes de ir a Cita
+    await user.type(await screen.findByPlaceholderText('Nombre del paciente'), 'Ana');
+    await user.type(screen.getByPlaceholderText('Apellidos del paciente'), 'Gomez');
 
-    await screen.findByTestId('calendar-mock');
-    const horaBtn = await screen.findByRole('button', { name: /09:30/i });
+    // Avanzar hasta la última pestaña usando "Siguiente"
+    await user.click(screen.getByRole('button', { name: /Siguiente/i }));
+    await user.click(screen.getByRole('button', { name: /Siguiente/i }));
+
+    const horaBtn = screen.getByRole('button', { name: /09:30/i });
     await user.click(horaBtn);
 
-    const submitBtn = screen.getByRole('button', { name: /Registrar Paciente/i });
+    const submitBtn = await screen.findByRole('button', { name: /Registrar Paciente/i });
     await user.click(submitBtn);
 
     const { toast } = await import('sonner');
@@ -140,3 +149,4 @@ describe('NewPatientForm - errores', () => {
     });
   });
 });
+

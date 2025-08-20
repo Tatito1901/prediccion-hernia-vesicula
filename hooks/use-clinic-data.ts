@@ -10,11 +10,6 @@ import type {
   PatientStatus,
   AppointmentStatus,
   PaginatedResponse,
-  Lead,
-  LeadStatus,
-  Channel,
-  Motive,
-  LeadStats,
 } from '@/lib/types';
 import { PatientStatusEnum } from '@/lib/types';
 import type { PatientHistoryData } from '@/components/patient-admision/admision-types';
@@ -84,17 +79,6 @@ export type ClinicDataActions = {
       totalPages?: number;
     };
   }>;
-  fetchLeads: (params: {
-    page?: number;
-    pageSize?: number;
-    status?: LeadStatus;
-    channel?: Channel;
-    motive?: Motive;
-    search?: string;
-    priority?: number;
-    overdue?: boolean;
-  }) => Promise<PaginatedResponse<Lead>>;
-  fetchLeadStats: () => Promise<LeadStats>;
   fetchPatientDetail: (id: string) => Promise<Patient>;
   fetchPatientHistory: (patientId: string, options?: { includeHistory?: boolean; limit?: number }) => Promise<PatientHistoryData>;
 };
@@ -179,29 +163,6 @@ const fetchAppointmentsByFilter = (filter: {
   return fetchJson<{ data?: Appointment[]; pagination?: any; summary?: ClinicDataState['appointments']['summary'] }>(
     `/api/appointments?${sp.toString()}`
   );
-};
-
-// Leads paginated fetcher (centralized)
-const fetchLeadsPaginated = (params: {
-  page?: number;
-  pageSize?: number;
-  status?: LeadStatus;
-  channel?: Channel;
-  motive?: Motive;
-  search?: string;
-  priority?: number;
-  overdue?: boolean;
-}) => {
-  const sp = new URLSearchParams();
-  if (params.page) sp.set('page', String(params.page));
-  if (params.pageSize) sp.set('pageSize', String(params.pageSize));
-  if (params.status) sp.set('status', String(params.status));
-  if (params.channel) sp.set('channel', String(params.channel));
-  if (params.motive) sp.set('motive', String(params.motive));
-  if (params.search) sp.set('search', params.search);
-  if (typeof params.priority === 'number') sp.set('priority', String(params.priority));
-  if (params.overdue) sp.set('overdue', 'true');
-  return fetchJson<PaginatedResponse<Lead>>(`/api/leads?${sp.toString()}`);
 };
 
 // =============== Hook Central ===============
@@ -356,43 +317,6 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     [queryClient]
   );
 
-  const fetchLeads = useCallback<ClinicDataActions['fetchLeads']>(
-    async (params) => {
-      const key = queryKeys.leads.paginated({
-        page: params?.page,
-        pageSize: params?.pageSize,
-        status: (params?.status as unknown as string) || undefined,
-        channel: (params?.channel as unknown as string) || undefined,
-        motive: (params?.motive as unknown as string) || undefined,
-        search: params?.search,
-        priority: params?.priority,
-        overdue: params?.overdue,
-      });
-
-      const result = await queryClient.fetchQuery({
-        queryKey: key,
-        queryFn: () => fetchLeadsPaginated(params || {}),
-        staleTime: 2 * 60 * 1000,
-      });
-
-      return result as PaginatedResponse<Lead>;
-    },
-    [queryClient]
-  );
-
-  // Estadísticas de leads
-  const fetchLeadStats = useCallback<ClinicDataActions['fetchLeadStats']>(
-    async () => {
-      const result = await queryClient.fetchQuery({
-        queryKey: queryKeys.leads.stats,
-        queryFn: () => fetchJson<LeadStats>('/api/leads/stats'),
-        staleTime: 2 * 60 * 1000,
-      });
-      return result as LeadStats;
-    },
-    [queryClient]
-  );
-
   // Detalle de paciente por ID
   const fetchPatientDetail = useCallback<ClinicDataActions['fetchPatientDetail']>(
     async (id) => {
@@ -459,8 +383,6 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     setPageSize,
     refetch,
     fetchSpecificAppointments,
-    fetchLeads,
-    fetchLeadStats,
     fetchPatientDetail,
     fetchPatientHistory,
   };
