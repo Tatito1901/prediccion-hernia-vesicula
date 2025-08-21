@@ -371,69 +371,7 @@ export type Database = {
           },
         ]
       }
-      leads: {
-        Row: {
-          assigned_to: string | null
-          channel: Database["public"]["Enums"]["contact_channel_enum"]
-          conversion_notes: string | null
-          converted_at: string | null
-          created_at: string | null
-          email: string | null
-          follow_up_notes: string | null
-          full_name: string
-          id: string
-          last_contact_date: string | null
-          motive: Database["public"]["Enums"]["lead_motive_enum"]
-          next_follow_up_date: string | null
-          notes: string | null
-          phone_number: string
-          priority_level: number | null
-          registered_by: string | null
-          status: Database["public"]["Enums"]["lead_status_enum"]
-          updated_at: string | null
-        }
-        Insert: {
-          assigned_to?: string | null
-          channel: Database["public"]["Enums"]["contact_channel_enum"]
-          conversion_notes?: string | null
-          converted_at?: string | null
-          created_at?: string | null
-          email?: string | null
-          follow_up_notes?: string | null
-          full_name: string
-          id?: string
-          last_contact_date?: string | null
-          motive: Database["public"]["Enums"]["lead_motive_enum"]
-          next_follow_up_date?: string | null
-          notes?: string | null
-          phone_number: string
-          priority_level?: number | null
-          registered_by?: string | null
-          status?: Database["public"]["Enums"]["lead_status_enum"]
-          updated_at?: string | null
-        }
-        Update: {
-          assigned_to?: string | null
-          channel?: Database["public"]["Enums"]["contact_channel_enum"]
-          conversion_notes?: string | null
-          converted_at?: string | null
-          created_at?: string | null
-          email?: string | null
-          follow_up_notes?: string | null
-          full_name?: string
-          id?: string
-          last_contact_date?: string | null
-          motive?: Database["public"]["Enums"]["lead_motive_enum"]
-          next_follow_up_date?: string | null
-          notes?: string | null
-          phone_number?: string
-          priority_level?: number | null
-          registered_by?: string | null
-          status?: Database["public"]["Enums"]["lead_status_enum"]
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
+      // leads table removed from schema
       patients: {
         Row: {
           antecedentes_medicos: string | null
@@ -459,7 +397,6 @@ export type Database = {
           fecha_ultima_consulta: string | null
           genero: string | null
           id: string
-          lead_id: string | null
           marketing_source:
             | Database["public"]["Enums"]["patient_source_enum"]
             | null
@@ -493,7 +430,6 @@ export type Database = {
           fecha_ultima_consulta?: string | null
           genero?: string | null
           id?: string
-          lead_id?: string | null
           marketing_source?:
             | Database["public"]["Enums"]["patient_source_enum"]
             | null
@@ -527,7 +463,6 @@ export type Database = {
           fecha_ultima_consulta?: string | null
           genero?: string | null
           id?: string
-          lead_id?: string | null
           marketing_source?:
             | Database["public"]["Enums"]["patient_source_enum"]
             | null
@@ -537,15 +472,7 @@ export type Database = {
           telefono?: string | null
           updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "patients_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: true
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -899,13 +826,6 @@ export type Database = {
         | "NO_ASISTIO"
         | "EN_CONSULTA"
       arrival_status_enum: "A_TIEMPO" | "TEMPRANO" | "TARDE"
-      contact_channel_enum:
-        | "WHATSAPP"
-        | "PHONE_CALL"
-        | "WALK_IN"
-        | "REFERRAL"
-        | "WEBSITE"
-        | "SOCIAL_MEDIA"
       diagnosis_enum:
         | "HERNIA_INGUINAL"
         | "HERNIA_UMBILICAL"
@@ -919,22 +839,6 @@ export type Database = {
         | "POLIPOS_VESICULA"
         | "OTRO_DIAGNOSTICO"
         | "SIN_DIAGNOSTICO"
-      lead_motive_enum:
-        | "INFORMES"
-        | "AGENDAR_CITA"
-        | "URGENCIA_MEDICA"
-        | "SEGUIMIENTO"
-        | "CANCELACION"
-        | "REAGENDAMIENTO"
-        | "OTRO"
-      lead_status_enum:
-        | "NUEVO"
-        | "CONTACTADO"
-        | "CITA_AGENDADA"
-        | "CONVERTIDO"
-        | "NO_INTERESADO"
-        | "PERDIDO"
-        | "SEGUIMIENTO_PENDIENTE"
       patient_source_enum:
         | "pagina_web_google"
         | "redes_sociales"
@@ -1105,14 +1009,6 @@ export const Constants = {
         "EN_CONSULTA",
       ],
       arrival_status_enum: ["A_TIEMPO", "TEMPRANO", "TARDE"],
-      contact_channel_enum: [
-        "WHATSAPP",
-        "PHONE_CALL",
-        "WALK_IN",
-        "REFERRAL",
-        "WEBSITE",
-        "SOCIAL_MEDIA",
-      ],
       diagnosis_enum: [
         "HERNIA_INGUINAL",
         "HERNIA_UMBILICAL",
@@ -1126,24 +1022,6 @@ export const Constants = {
         "POLIPOS_VESICULA",
         "OTRO_DIAGNOSTICO",
         "SIN_DIAGNOSTICO",
-      ],
-      lead_motive_enum: [
-        "INFORMES",
-        "AGENDAR_CITA",
-        "URGENCIA_MEDICA",
-        "SEGUIMIENTO",
-        "CANCELACION",
-        "REAGENDAMIENTO",
-        "OTRO",
-      ],
-      lead_status_enum: [
-        "NUEVO",
-        "CONTACTADO",
-        "CITA_AGENDADA",
-        "CONVERTIDO",
-        "NO_INTERESADO",
-        "PERDIDO",
-        "SEGUIMIENTO_PENDIENTE",
       ],
       patient_source_enum: [
         "pagina_web_google",

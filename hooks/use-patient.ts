@@ -129,8 +129,21 @@ export const useAdmitPatient = () => {
       // Evitar toast duplicado si el formulario ya manejará errores de campo
       const isValidation = status === 400 && Array.isArray(data?.validation_errors);
       const isDuplicatePhone = status === 400 && (msg?.includes('patients_telefono_key') || /tel[eé]fono/i.test(msg));
+      const isDuplicatePatient = status === 409 && (data?.code === 'duplicate_patient');
       const isBusinessRule = status === 422; // horario, domingo, pasado, etc.
-      if (isValidation || isDuplicatePhone || isBusinessRule) return;
+      if (isValidation || isDuplicatePhone || isDuplicatePatient || isBusinessRule) {
+        if (isDuplicatePatient) {
+          const existing = data?.existing_patient;
+          const name = existing ? `${existing.nombre ?? ''} ${existing.apellidos ?? ''}`.trim() : '';
+          toast.error('Paciente duplicado', {
+            description: name
+              ? `Ya existe un registro para ${name} con esa fecha de nacimiento.`
+              : 'Ya existe un registro con mismo nombre, apellidos y fecha de nacimiento.',
+            duration: 6000,
+          });
+        }
+        return;
+      }
 
       toast.error('Error en la Admisión', {
         description: msg,

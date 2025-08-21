@@ -47,7 +47,6 @@ export interface Patient {
   numero_expediente?: string;
   seguro_medico?: string;
   fecha_ultima_consulta?: string;
-  lead_id?: string;
   creation_source?: string;
   marketing_source?: string;
   estado_paciente: PatientStatus;

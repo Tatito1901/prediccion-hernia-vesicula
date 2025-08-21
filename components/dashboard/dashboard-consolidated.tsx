@@ -1,124 +1,146 @@
-// components/dashboard/dashboard-enhanced.tsx
-'use client';
-
-import React, { useMemo, useState, useCallback, memo, useEffect } from 'react';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, ResponsiveContainer, TooltipProps
-} from 'recharts';
-import { 
-  Users, Stethoscope, Target, Heart, 
-  Shield, RefreshCw, ArrowUp, ArrowDown, Minus, AlertCircle, LucideProps
-} from 'lucide-react';
-import { useClinic } from '@/contexts/clinic-data-provider';
-import { PatientStatus, PatientStatusEnum } from '@/lib/types';
+import React, { useState, useMemo, memo, useCallback, ComponentType, useEffect } from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, TooltipProps } from 'recharts';
+import { Stethoscope, Users, Target, Heart, Shield, RefreshCw, ArrowUp, ArrowDown, Minus, LucideProps, AlertCircle, Sun, Moon } from 'lucide-react';
 
 // =================================================================================
-// DEFINICIONES DE TIPOS (SIN CAMBIOS)
+// NOTA SOBRE LA ESTRUCTURA DEL ARCHIVO
+// Para evitar errores como "Module not found", todas las interfaces, tipos y enums
+// necesarios para este dashboard se definen directamente en este archivo.
+// Esto hace que el componente sea autocontenido y fácil de integrar en cualquier
+// proyecto sin preocuparse por las rutas de importación relativas o los alias.
 // =================================================================================
-type Period = '7d' | '30d' | '90d';
-type Trend = 'up' | 'down' | 'neutral';
-interface Patient { id: string; fecha_registro: string; estado_paciente: PatientStatus; }
-interface Appointment { id: string; fecha_hora_cita: string; estado_cita: 'COMPLETADA' | 'PROGRAMADA' | 'CANCELADA'; tipo_cita?: string; motivos_consulta?: string[]; }
-interface ChartData { month: string; consultas: number; cirugias: number; }
-interface Metrics {
-  primary: { todayConsultations: number; totalPatients: number; occupancyRate: number; };
-  clinical: { operatedPatients: number; };
-  chartData: ChartData[];
-  periodComparison: { changePercent: number; };
+
+
+// =================================================================================
+// 1. DEFINICIONES DE TIPOS Y ENUMS
+// =================================================================================
+
+export enum PatientStatusEnum {
+  ACTIVO = 'ACTIVO',
+  INACTIVO = 'INACTIVO',
+  OPERADO = 'OPERADO',
 }
 
-// =================================================================================
-// HOOK DE DATOS SIMULADOS (SIN CAMBIOS FUNCIONALES)
-// =================================================================================
-const useMockClinic = () => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [data, setData] = useState<{ allAppointments: Appointment[]; allPatients: Patient[] }>({ allAppointments: [], allPatients: [] });
+export interface Patient {
+  id: string;
+  estado_paciente: PatientStatusEnum;
+}
 
-  const generateMockData = useCallback(() => {
-    setIsLoading(true);
-    setTimeout(() => {
-      const today = new Date();
-      const mockPatients: Patient[] = Array.from({ length: 158 }, (_, i) => ({
-        id: `p${i + 1}`,
-        fecha_registro: new Date(today.getTime() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        estado_paciente: [
-          PatientStatusEnum.ACTIVO,
-          PatientStatusEnum.EN_SEGUIMIENTO,
-          PatientStatusEnum.OPERADO,
-        ][i % 3] as PatientStatus,
-      }));
-      const mockAppointments: Appointment[] = Array.from({ length: 500 }, (_, i) => ({
-        id: `a${i + 1}`,
-        fecha_hora_cita: new Date(today.getTime() - Math.random() * 180 * 24 * 60 * 60 * 1000).toISOString(),
-        estado_cita: ['COMPLETADA', 'PROGRAMADA', 'CANCELADA'][i % 3] as Appointment['estado_cita'],
-        tipo_cita: ['Consulta', 'Cirugía', 'Seguimiento'][i % 3],
-      }));
-      setData({ allAppointments: mockAppointments, allPatients: mockPatients });
-      setIsLoading(false);
-    }, 1000);
-  }, []);
+export interface Appointment {
+  id: string;
+  fecha_hora_cita: string | Date;
+  estado_cita: 'COMPLETADA' | 'PENDIENTE' | 'CANCELADA';
+  motivos_consulta: string[];
+}
 
-  useEffect(() => {
-    generateMockData();
-  }, [generateMockData]);
+export type Period = '7d' | '30d' | '90d';
+export type Trend = 'up' | 'down' | 'neutral';
+export type Theme = 'light' | 'dark';
 
-  return { allAppointments: data.allAppointments, allPatients: data.allPatients, isLoading, error: null, refetch: generateMockData };
-};
+export interface ChartData {
+  month: string;
+  consultas: number;
+  cirugias: number;
+}
+
+export interface Metrics {
+  primary: {
+    todayConsultations: number;
+    totalPatients: number;
+    occupancyRate: number;
+  };
+  clinical: {
+    operatedPatients: number;
+  };
+  chartData: ChartData[];
+  periodComparison: {
+    changePercent: number;
+  };
+}
+
 
 // =================================================================================
-// HOOK DE LÓGICA DE MÉTRICAS (SIN CAMBIOS FUNCIONALES, YA ESTABA OPTIMIZADO)
+// 2. HOOK DE LÓGICA: useOptimizedMetrics (Sin cambios, ya era muy eficiente)
 // =================================================================================
-const useOptimizedMetrics = (appointments: Appointment[], patients: Patient[], period: Period): Metrics => {
+
+const useOptimizedMetrics = (
+  appointments: Appointment[] | undefined,
+  patients: Patient[] | undefined,
+  period: Period
+): Metrics => {
   return useMemo(() => {
     const defaultMetrics: Metrics = {
-      primary: { todayConsultations: 0, totalPatients: patients?.length || 0, occupancyRate: 0 },
+      primary: { todayConsultations: 0, totalPatients: patients?.length ?? 0, occupancyRate: 0 },
       clinical: { operatedPatients: 0 },
       chartData: [],
-      periodComparison: { changePercent: 0 }
+      periodComparison: { changePercent: 0 },
     };
-    if (!appointments?.length || !patients?.length) return defaultMetrics;
+
+    if (!appointments?.length || !patients?.length) {
+      return defaultMetrics;
+    }
 
     const now = new Date();
-    const periodDays = period === '7d' ? 7 : period === '30d' ? 30 : 90;
+    const todayStartTimestamp = new Date(now).setHours(0, 0, 0, 0);
+    const periodDays = { '7d': 7, '30d': 30, '90d': 90 }[period];
     const periodStart = new Date(now);
     periodStart.setDate(now.getDate() - periodDays);
     const previousPeriodStart = new Date(periodStart);
     previousPeriodStart.setDate(periodStart.getDate() - periodDays);
 
-    let todayConsultations = 0, currentPeriodTotal = 0, previousPeriodTotal = 0;
+    let todayConsultations = 0;
+    let currentPeriodTotal = 0;
+    let previousPeriodTotal = 0;
+
     const monthlyData = new Map<string, { consultas: number; cirugias: number }>();
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now);
       d.setMonth(now.getMonth() - i, 1);
-      monthlyData.set(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, { consultas: 0, cirugias: 0 });
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthlyData.set(monthKey, { consultas: 0, cirugias: 0 });
     }
 
     for (const apt of appointments) {
       const aptDate = new Date(apt.fecha_hora_cita);
-      if (aptDate.toISOString().startsWith(now.toISOString().split('T')[0])) todayConsultations++;
-      if (aptDate >= periodStart) currentPeriodTotal++;
-      else if (aptDate >= previousPeriodStart) previousPeriodTotal++;
-      
+      const aptTimestamp = aptDate.getTime();
+
+      if (aptTimestamp >= todayStartTimestamp) {
+        todayConsultations++;
+      }
+
+      if (aptDate >= periodStart) {
+        currentPeriodTotal++;
+      } else if (aptDate >= previousPeriodStart) {
+        previousPeriodTotal++;
+      }
+
       const monthKey = `${aptDate.getFullYear()}-${String(aptDate.getMonth() + 1).padStart(2, '0')}`;
-      if (monthlyData.has(monthKey)) {
-        if (apt.estado_cita === 'COMPLETADA') monthlyData.get(monthKey)!.consultas++;
-        const isSurgery = Array.isArray((apt as any).motivos_consulta)
-          && (apt as any).motivos_consulta.some((m: string) => typeof m === 'string' && m.toLowerCase().includes('ciru'));
-        if (apt.estado_cita === 'COMPLETADA' && isSurgery) monthlyData.get(monthKey)!.cirugias++;
+      const monthEntry = monthlyData.get(monthKey);
+
+      if (monthEntry && apt.estado_cita === 'COMPLETADA') {
+        monthEntry.consultas++;
+        const isSurgery = apt.motivos_consulta.some(m => m.toLowerCase().includes('ciru'));
+        if (isSurgery) {
+          monthEntry.cirugias++;
+        }
       }
     }
 
-    const operatedPatients = patients.filter(p => p.estado_paciente === PatientStatusEnum.OPERADO).length;
-    const changePercent = previousPeriodTotal > 0 ? Math.round(((currentPeriodTotal - previousPeriodTotal) / previousPeriodTotal) * 100) : 0;
+    const operatedPatients = patients.reduce((acc, p) => 
+      p.estado_paciente === PatientStatusEnum.OPERADO ? acc + 1 : acc, 0);
+
+    const changePercent = previousPeriodTotal > 0
+      ? Math.round(((currentPeriodTotal - previousPeriodTotal) / previousPeriodTotal) * 100)
+      : (currentPeriodTotal > 0 ? 100 : 0);
+
     const chartData: ChartData[] = Array.from(monthlyData.entries()).map(([month, data]) => ({
-      month: new Date(month + '-02').toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }),
+      month: new Date(`${month}-02T00:00:00`).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }),
       consultas: data.consultas,
       cirugias: data.cirugias,
     }));
 
     return {
-      primary: { todayConsultations, totalPatients: patients.length, occupancyRate: 78 }, // Valor de ejemplo
+      primary: { todayConsultations, totalPatients: patients.length, occupancyRate: 78 },
       clinical: { operatedPatients },
       chartData,
       periodComparison: { changePercent }
@@ -126,17 +148,16 @@ const useOptimizedMetrics = (appointments: Appointment[], patients: Patient[], p
   }, [appointments, patients, period]);
 };
 
+
 // =================================================================================
-// COMPONENTES DE UI REUTILIZABLES Y MEJORADOS
+// 3. COMPONENTES DE UI REUTILIZABLES Y MEJORADOS
 // =================================================================================
 
-// --- Tarjeta de Métrica ---
-// Simplificada para usar variables CSS, mejorando rendimiento y mantenimiento.
 interface MetricCardProps {
   title: string;
   value: string | number;
   change?: number;
-  icon: React.ComponentType<LucideProps>;
+  icon: ComponentType<LucideProps>;
   trend?: Trend;
   description?: string;
   isLoading: boolean;
@@ -145,13 +166,13 @@ interface MetricCardProps {
 const MetricCard = memo<MetricCardProps>(({ title, value, change, icon: Icon, trend = 'neutral', description, isLoading }) => {
   const TrendIcon = useMemo(() => ({ up: ArrowUp, down: ArrowDown, neutral: Minus }[trend]), [trend]);
   const trendColorClass = useMemo(() => ({
-    up: 'text-emerald-600 dark:text-emerald-400',
+    up: 'text-success',
     down: 'text-destructive',
     neutral: 'text-muted-foreground'
   }[trend]), [trend]);
 
   if (isLoading) {
-    return <div className="h-[148px] bg-card rounded-2xl animate-pulse" />;
+    return <div className="h-[148px] w-full bg-card rounded-2xl animate-pulse" />;
   }
 
   return (
@@ -168,8 +189,8 @@ const MetricCard = memo<MetricCardProps>(({ title, value, change, icon: Icon, tr
         )}
       </header>
       <main className="mt-2">
-        <div className="text-3xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground mt-1">{title}</p>
+        <p className="text-3xl font-bold">{value}</p>
+        <p className="text-xs text-muted-foreground mt-1 truncate">{title}</p>
         {description && <p className="text-[11px] text-muted-foreground/80 mt-2">{description}</p>}
       </main>
     </div>
@@ -177,8 +198,6 @@ const MetricCard = memo<MetricCardProps>(({ title, value, change, icon: Icon, tr
 });
 MetricCard.displayName = 'MetricCard';
 
-// --- Tooltip del Gráfico ---
-// Mejorado con los nuevos colores del tema.
 const CustomTooltip = memo<TooltipProps<number, string>>(({ active, payload, label }) => {
   if (active && payload?.length) {
     return (
@@ -198,52 +217,54 @@ const CustomTooltip = memo<TooltipProps<number, string>>(({ active, payload, lab
 });
 CustomTooltip.displayName = 'CustomTooltip';
 
+
 // =================================================================================
-// COMPONENTES ESTRUCTURALES DEL DASHBOARD
+// 4. COMPONENTES ESTRUCTURALES DEL DASHBOARD
 // =================================================================================
 
-// --- Encabezado del Dashboard ---
-// Mejorado para una mejor responsividad y alineación en móviles.
 const DashboardHeader = memo<{
   period: Period;
   setPeriod: (period: Period) => void;
   handleRefresh: () => void;
   isLoading: boolean;
-}>(({ period, setPeriod, handleRefresh, isLoading }) => (
-  <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-    <div>
-      <div className="flex items-center gap-3">
-        <div className="p-2 bg-secondary/20 rounded-lg">
-          <Shield className="h-6 w-6 text-secondary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-primary">Panel de Control</h1>
-          <p className="text-sm text-muted-foreground">Resumen de Actividad Clínica</p>
-        </div>
+  theme: Theme;
+  toggleTheme: () => void;
+}>(({ period, setPeriod, handleRefresh, isLoading, theme, toggleTheme }) => (
+  <header className="flex flex-wrap justify-between items-center gap-4">
+    <div className="flex items-center gap-3">
+      <div className="p-2 bg-secondary/20 rounded-lg">
+        <Shield className="h-6 w-6 text-secondary" />
+      </div>
+      <div>
+        <h1 className="text-2xl font-bold text-primary">Panel de Control</h1>
+        <p className="text-sm text-muted-foreground">Resumen de Actividad Clínica</p>
       </div>
     </div>
     <div className="flex items-center gap-2 w-full sm:w-auto">
-      <div className="inline-flex bg-primary/5 rounded-lg p-1" role="group">
+      <div className="inline-flex bg-muted rounded-lg p-1" role="group">
         {(['7d', '30d', '90d'] as Period[]).map((p) => (
-          <button 
-            key={p} 
-            onClick={() => setPeriod(p)} 
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors duration-200 ${period === p ? 'bg-card text-secondary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors duration-200 ${period === p ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             aria-pressed={period === p}
           >
             {p.replace('d', ' Días')}
           </button>
         ))}
       </div>
-      <button onClick={handleRefresh} disabled={isLoading} aria-label="Actualizar datos" className="p-2.5 rounded-lg bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-50">
-        <RefreshCw className={`h-4 w-4 text-primary ${isLoading ? 'animate-spin' : ''}`} />
+      <button onClick={handleRefresh} disabled={isLoading} aria-label="Actualizar datos" className="p-2.5 rounded-lg bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50">
+        <RefreshCw className={`h-4 w-4 text-foreground ${isLoading ? 'animate-spin' : ''}`} />
+      </button>
+      <button onClick={toggleTheme} aria-label="Cambiar tema" className="p-2.5 rounded-lg bg-muted hover:bg-muted/80 transition-colors">
+        <Sun className={`h-4 w-4 text-foreground transition-transform duration-500 scale-100 dark:scale-0`} />
+        <Moon className={`absolute h-4 w-4 text-foreground transition-transform duration-500 scale-0 dark:scale-100`} />
       </button>
     </div>
   </header>
 ));
 DashboardHeader.displayName = 'DashboardHeader';
 
-// --- Cuadrícula de Métricas ---
 const MetricCardGrid = memo<{
     metrics: Metrics;
     isLoading: boolean;
@@ -259,7 +280,6 @@ const MetricCardGrid = memo<{
 ));
 MetricCardGrid.displayName = 'MetricCardGrid';
 
-// --- Gráfico de Procedimientos ---
 const ProcedureChart = memo<{
     data: ChartData[];
     isLoading: boolean;
@@ -296,14 +316,119 @@ const ProcedureChart = memo<{
 ProcedureChart.displayName = 'ProcedureChart';
 
 // =================================================================================
-// COMPONENTE PRINCIPAL DEL DASHBOARD
+// 5. HOOK DE DATOS SIMULADO
 // =================================================================================
+
+const useClinicData = () => {
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<Error | null>(null);
+    const [data, setData] = useState<{ allAppointments: Appointment[], allPatients: Patient[] }>({ allAppointments: [], allPatients: [] });
+
+    const refetch = useCallback(() => {
+        setIsLoading(true);
+        setError(null);
+        setTimeout(() => {
+            try {
+                const mockAppointments: Appointment[] = [];
+                const mockPatients: Patient[] = [];
+                
+                for (let i = 0; i < 250; i++) {
+                    const date = new Date();
+                    date.setDate(date.getDate() - Math.floor(Math.random() * 180));
+                    mockAppointments.push({
+                        id: `apt_${i}`,
+                        fecha_hora_cita: date,
+                        estado_cita: 'COMPLETADA',
+                        motivos_consulta: Math.random() > 0.85 ? ['Revisión', 'Cirugía menor'] : ['Consulta general']
+                    });
+                }
+                for (let i = 0; i < 80; i++) {
+                    mockPatients.push({
+                        id: `pat_${i}`,
+                        estado_paciente: Math.random() > 0.6 ? PatientStatusEnum.OPERADO : PatientStatusEnum.ACTIVO
+                    });
+                }
+
+                setData({ allAppointments: mockAppointments, allPatients: mockPatients });
+            } catch (e) {
+                setError(e instanceof Error ? e : new Error('Error al generar datos simulados'));
+            } finally {
+                setIsLoading(false);
+            }
+        }, 1200);
+    }, []);
+
+    useEffect(() => {
+      refetch();
+    }, [refetch]);
+
+    return { ...data, isLoading, error, refetch };
+};
+
+// =================================================================================
+// 6. COMPONENTE PRINCIPAL DEL DASHBOARD
+// =================================================================================
+
+const GlobalStyles = () => (
+  <style>{`
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 222.2 84% 4.9%;
+      --card: 0 0% 100%;
+      --card-foreground: 222.2 84% 4.9%;
+      --primary: 221.2 83.2% 53.3%;
+      --primary-foreground: 210 40% 98%;
+      --secondary: 210 40% 96.1%;
+      --secondary-foreground: 215.4 16.3% 46.9%;
+      --muted: 210 40% 96.1%;
+      --muted-foreground: 215.4 16.3% 46.9%;
+      --destructive: 0 84.2% 60.2%;
+      --destructive-foreground: 210 40% 98%;
+      --success: 142.1 76.2% 36.3%;
+      --border: 214.3 31.8% 91.4%;
+    }
+    .dark {
+      --background: 222.2 84% 4.9%;
+      --foreground: 210 40% 98%;
+      --card: 222.2 84% 4.9%;
+      --card-foreground: 210 40% 98%;
+      --primary: 217.2 91.2% 59.8%;
+      --primary-foreground: 222.2 47.4% 11.2%;
+      --secondary: 217.2 32.6% 17.5%;
+      --secondary-foreground: 210 40% 98%;
+      --muted: 217.2 32.6% 17.5%;
+      --muted-foreground: 215 20.2% 65.1%;
+      --destructive: 0 62.8% 30.6%;
+      --destructive-foreground: 0 85.7% 97.3%;
+      --success: 142.1 70.2% 46.3%;
+      --border: 217.2 32.6% 17.5%;
+    }
+    body {
+      background-color: hsl(var(--background));
+      color: hsl(var(--foreground));
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+  `}</style>
+);
+
+
 export default function DashboardEnhanced() {
-  const { allAppointments, allPatients, isLoading, error, refetch } = useClinic();
+  const { allAppointments, allPatients, isLoading, error, refetch } = useClinicData();
   const [period, setPeriod] = useState<Period>('30d');
+  const [theme, setTheme] = useState<Theme>('light');
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
+  }, []);
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove(theme === 'light' ? 'dark' : 'light');
+    root.classList.add(theme);
+  }, [theme]);
   
   const metrics = useOptimizedMetrics(allAppointments, allPatients, period);
-  const handleRefresh = useCallback(() => refetch?.(), [refetch]);
+
   const getTrend = useCallback((value: number): Trend => {
     if (value > 2) return 'up';
     if (value < -2) return 'down';
@@ -312,47 +437,35 @@ export default function DashboardEnhanced() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background p-4">
-        <div className="max-w-md w-full bg-card border border-destructive/50 p-8 rounded-2xl text-center">
-            <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">Error al Cargar Datos</h3>
-            <p className="text-muted-foreground mb-6 text-sm">{error.message || 'Ocurrió un error inesperado.'}</p>
-            <button onClick={handleRefresh} className="bg-destructive text-destructive-foreground px-4 py-2 rounded-lg flex items-center justify-center mx-auto">
-              <RefreshCw className="h-4 w-4 mr-2" /> Reintentar
-            </button>
-        </div>
+      <div className="flex flex-col items-center justify-center h-64 bg-destructive/10 text-destructive border border-destructive rounded-lg p-4">
+        <AlertCircle className="h-12 w-12 mb-4" />
+        <h2 className="text-xl font-semibold">Error al cargar los datos</h2>
+        <p className="text-sm">{error.message}</p>
+        <button onClick={refetch} className="mt-4 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90">
+          Reintentar
+        </button>
       </div>
     );
   }
 
   return (
     <>
-      <div className="min-h-screen bg-background text-foreground font-sans p-4 sm:p-6 lg:p-8">
-        <main className="max-w-7xl mx-auto space-y-6">
+      <GlobalStyles />
+      <div className="p-4 sm:p-6 md:p-8 min-h-screen font-sans">
+        <div className="max-w-7xl mx-auto space-y-6">
           <DashboardHeader 
-            period={period}
-            setPeriod={setPeriod}
-            handleRefresh={handleRefresh}
+            period={period} 
+            setPeriod={setPeriod} 
+            handleRefresh={refetch} 
             isLoading={isLoading}
+            theme={theme}
+            toggleTheme={toggleTheme}
           />
-          
-          <section id="overview" data-section="overview" className="scroll-mt-20">
-            <MetricCardGrid 
-              metrics={metrics}
-              isLoading={isLoading}
-              period={period}
-              getTrend={getTrend}
-            />
-          </section>
-
-          <section id="activity" data-section="activity" className="scroll-mt-20">
+          <main className="space-y-6">
+            <MetricCardGrid metrics={metrics} isLoading={isLoading} period={period} getTrend={getTrend} />
             <ProcedureChart data={metrics.chartData} isLoading={isLoading} />
-          </section>
-
-          <footer className="mt-8 text-center text-xs text-muted-foreground">
-            <p>&copy; {new Date().getFullYear()} Clínica Hernia y Vesícula - Dr. Luis Ángel Medina. Todos los derechos reservados.</p>
-          </footer>
-        </main>
+          </main>
+        </div>
       </div>
     </>
   );

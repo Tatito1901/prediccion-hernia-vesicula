@@ -7,7 +7,8 @@ import React, {
   useEffect,
   memo,
   Suspense,
-  startTransition 
+  startTransition,
+  type ChangeEvent
 } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -22,22 +23,21 @@ import {
   Inbox,
   Loader2,
   RefreshCw,
-  TrendingUp,
   Activity
 } from "lucide-react"
+import { useShallow } from "zustand/react/shallow"
 
-// UI Components
+// --- UI Components (Importaciones asumidas) ---
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { StatsCard } from "@/components/ui/stats-card"
 import { SimplePagination } from "@/components/ui/simple-pagination"
 import { EmptyState } from '@/components/ui/empty-state'
-import PatientTable from "./patient-table"
+import PatientTable from "./patient-table" // Asumimos que este componente está optimizado
 
-// Hooks y Tipos
-import { usePatientStore } from "@/stores/patient-store"
+// --- Hooks, Tipos y Utilidades ---
+import { usePatientStore, type PatientStore } from "@/stores/patient-store"
 import { 
   EnrichedPatient, 
   PatientStatusEnum, 
@@ -46,91 +46,25 @@ import {
 import { generateSurveyId } from "@/lib/form-utils"
 import { cn } from "@/lib/utils"
 
-// Lazy loading para modales
+// --- Componentes Lazy-loaded ---
 const SurveyShareDialog = React.lazy(() => import("@/components/surveys/survey-share-dialog"))
 const PatientDetailsDialog = React.lazy(() => import("./patient-details-dialog"))
 const ScheduleAppointmentDialog = React.lazy(() => import("./schedule-appointment-dialog"))
 
-  // 🎨 Configuración de colores elegante y profesional
-const THEME = {
-  colors: {
-    primary: "from-slate-600 to-slate-700",
-    secondary: "from-slate-500 to-slate-600",
-    success: "from-slate-600 to-slate-700",
-    warning: "from-slate-600 to-slate-700",
-    danger: "from-slate-600 to-slate-700",
-  },
-  stats: {
-    total: { 
-      bg: "bg-slate-50 dark:bg-slate-900/50",
-      border: "border-slate-200 dark:border-slate-700",
-      icon: Users,
-      iconColor: "text-slate-600 dark:text-slate-400",
-      textColor: "text-slate-900 dark:text-slate-100"
-    },
-    survey: { 
-      bg: "bg-blue-50/50 dark:bg-blue-950/20",
-      border: "border-blue-200/50 dark:border-blue-800/30",
-      icon: ClipboardCheck,
-      iconColor: "text-blue-600 dark:text-blue-400",
-      textColor: "text-slate-900 dark:text-slate-100"
-    },
-    pending: { 
-      bg: "bg-amber-50/30 dark:bg-amber-950/10",
-      border: "border-amber-200/30 dark:border-amber-800/20",
-      icon: CalendarClock,
-      iconColor: "text-amber-600 dark:text-amber-500",
-      textColor: "text-slate-900 dark:text-slate-100"
-    },
-    operated: { 
-      bg: "bg-emerald-50/30 dark:bg-emerald-950/10",
-      border: "border-emerald-200/30 dark:border-emerald-800/20",
-      icon: Stethoscope,
-      iconColor: "text-emerald-600 dark:text-emerald-500",
-      textColor: "text-slate-900 dark:text-slate-100"
-    }
-  }
-}
+// --- Constantes y Configuración ---
+const DEBOUNCE_DELAY = 300
 
 const STATUS_CONFIG = {
-  [PatientStatusEnum.POTENCIAL]: { 
-    label: "Potencial", 
-    className: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700",
-    icon: AlertTriangle
-  },
-  [PatientStatusEnum.ACTIVO]: { 
-    label: "Activo", 
-    className: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-700",
-    icon: Activity
-  },
-  [PatientStatusEnum.EN_SEGUIMIENTO]: { 
-    label: "En Seguimiento", 
-    className: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700",
-    icon: ClipboardCheck
-  },
-  [PatientStatusEnum.OPERADO]: { 
-    label: "Operado", 
-    className: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700",
-    icon: ClipboardCheck
-  },
-  [PatientStatusEnum.NO_OPERADO]: { 
-    label: "No Operado", 
-    className: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-700",
-    icon: X
-  },
-  [PatientStatusEnum.INACTIVO]: { 
-    label: "Inactivo", 
-    className: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:border-slate-700",
-    icon: Inbox
-  },
-  [PatientStatusEnum.ALTA_MEDICA]: { 
-    label: "Alta Médica", 
-    className: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:border-slate-700",
-    icon: Inbox
-  }
+  [PatientStatusEnum.POTENCIAL]: { label: "Potencial", icon: AlertTriangle },
+  [PatientStatusEnum.ACTIVO]: { label: "Activo", icon: Activity },
+  [PatientStatusEnum.EN_SEGUIMIENTO]: { label: "En Seguimiento", icon: ClipboardCheck },
+  [PatientStatusEnum.OPERADO]: { label: "Operado", icon: ClipboardCheck },
+  [PatientStatusEnum.NO_OPERADO]: { label: "No Operado", icon: X },
+  [PatientStatusEnum.INACTIVO]: { label: "Inactivo", icon: Inbox },
+  [PatientStatusEnum.ALTA_MEDICA]: { label: "Alta Médica", icon: Inbox }
 } as const
 
-type StatusFilterType = keyof typeof PatientStatusEnum | "all"
+// --- Tipos Definidos ---
 type PatientStatsData = {
   totalPatients: number
   surveyRate: number
@@ -138,16 +72,31 @@ type PatientStatsData = {
   operatedPatients: number
 }
 
-// ✅ Header Component Elegante y Profesional
-const PatientHeader = memo(({ 
-  statsData, 
-  isLoadingStats, 
-  onRefresh 
-}: {
+type PatientHeaderProps = {
   statsData: PatientStatsData
   isLoadingStats: boolean
   onRefresh: () => void
-}) => (
+}
+
+type FilterBarProps = {
+  searchTerm: string
+  onSearchChange: (e: ChangeEvent<HTMLInputElement>) => void
+  onClearSearch: () => void
+  statusFilter: string
+  onStatusChange: (value: string) => void
+  onClearFilters: () => void
+  statusStats: StatusStats
+  isLoading?: boolean
+}
+
+type EmptyStateProps = {
+  hasFilters: boolean
+  onClearFilters: () => void
+}
+
+// --- Componentes Puros y Memoizados ---
+
+const PatientHeader = memo(({ statsData, isLoadingStats, onRefresh }: PatientHeaderProps) => (
   <div className="bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6">
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
       <div>
@@ -171,119 +120,39 @@ const PatientHeader = memo(({
     </div>
     
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-      {/* Total Pacientes */}
-      <div className={cn(
-        "relative rounded-xl p-4 sm:p-5 border transition-all",
-        THEME.stats.total.bg,
-        THEME.stats.total.border
-      )}>
-        <div className="flex items-center justify-between mb-3">
-          <div className={cn("p-2 rounded-lg bg-slate-100 dark:bg-slate-800")}>
-            <Users className={cn("w-5 h-5", THEME.stats.total.iconColor)} />
-          </div>
-        </div>
-        <p className={cn("text-2xl font-semibold", THEME.stats.total.textColor)}>
-          {statsData.totalPatients}
-        </p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Total Pacientes
-        </p>
-      </div>
-      
-      {/* Encuestas */}
-      <div className={cn(
-        "relative rounded-xl p-4 sm:p-5 border transition-all",
-        THEME.stats.survey.bg,
-        THEME.stats.survey.border
-      )}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="p-2 rounded-lg bg-blue-100/50 dark:bg-blue-900/20">
-            <ClipboardCheck className={cn("w-5 h-5", THEME.stats.survey.iconColor)} />
-          </div>
-          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-            {statsData.surveyRate}%
-          </span>
-        </div>
-        <p className={cn("text-lg font-semibold", THEME.stats.survey.textColor)}>
-          Encuestas
-        </p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Completadas
-        </p>
-      </div>
-      
-      {/* Pendientes */}
-      <div className={cn(
-        "relative rounded-xl p-4 sm:p-5 border transition-all",
-        THEME.stats.pending.bg,
-        THEME.stats.pending.border
-      )}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="p-2 rounded-lg bg-amber-100/30 dark:bg-amber-900/10">
-            <CalendarClock className={cn("w-5 h-5", THEME.stats.pending.iconColor)} />
-          </div>
-          {statsData.pendingConsults > 0 && (
-            <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-          )}
-        </div>
-        <p className={cn("text-2xl font-semibold", THEME.stats.pending.textColor)}>
-          {statsData.pendingConsults}
-        </p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Pendientes
-        </p>
-      </div>
-      
-      {/* Operados */}
-      <div className={cn(
-        "relative rounded-xl p-4 sm:p-5 border transition-all",
-        THEME.stats.operated.bg,
-        THEME.stats.operated.border
-      )}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="p-2 rounded-lg bg-emerald-100/30 dark:bg-emerald-900/10">
-            <Stethoscope className={cn("w-5 h-5", THEME.stats.operated.iconColor)} />
-          </div>
-        </div>
-        <p className={cn("text-2xl font-semibold", THEME.stats.operated.textColor)}>
-          {statsData.operatedPatients}
-        </p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Operados
-        </p>
-      </div>
+      <StatsCard icon={Users} title="Total Pacientes" value={statsData.totalPatients} />
+      <StatsCard icon={ClipboardCheck} title="Encuestas" value={`${statsData.surveyRate}%`} description="Completadas" />
+      <StatsCard icon={CalendarClock} title="Pendientes" value={statsData.pendingConsults} />
+      <StatsCard icon={Stethoscope} title="Operados" value={statsData.operatedPatients} />
     </div>
   </div>
 ))
 PatientHeader.displayName = "PatientHeader"
 
-// ✅ FilterBar Component Optimizado
+const StatsCard = memo(({ icon: Icon, title, value, description }: { icon: React.ElementType, title: string, value: string | number, description?: string }) => (
+  <div className="relative rounded-xl p-4 sm:p-5 border bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 transition-all">
+    <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 w-fit mb-3">
+      <Icon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+    </div>
+    <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{value}</p>
+    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{title}</p>
+    {description && <p className="text-xs text-slate-400 dark:text-slate-500">{description}</p>}
+  </div>
+));
+StatsCard.displayName = "StatsCard";
+
 const FilterBar = memo(({ 
-  searchTerm, 
-  onSearchChange, 
-  onClearSearch, 
-  statusFilter, 
-  onStatusChange, 
-  onClearFilters, 
-  statusStats,
-  isLoading = false
-}: {
-  searchTerm: string
-  onSearchChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  onClearSearch: () => void
-  statusFilter: StatusFilterType
-  onStatusChange: (value: StatusFilterType) => void
-  onClearFilters: () => void
-  statusStats: StatusStats
-  isLoading?: boolean
-}) => (
+  searchTerm, onSearchChange, onClearSearch, 
+  statusFilter, onStatusChange, onClearFilters, 
+  statusStats, isLoading = false 
+}: FilterBarProps) => (
   <div className="bg-white dark:bg-slate-950 rounded-xl border shadow-sm border-slate-200 dark:border-slate-800 p-4 transition-all">
     <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 items-stretch lg:items-center justify-between">
       <div className="flex flex-col sm:flex-row gap-3 flex-1">
         <div className="relative flex-1 max-w-full lg:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4 pointer-events-none" />
           <Input
-            placeholder="Buscar paciente..."
+            placeholder="Buscar paciente por nombre, apellidos o DNI..."
             value={searchTerm}
             onChange={onSearchChange}
             className="pl-10 pr-10 h-10 bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 focus:bg-white dark:focus:bg-slate-900 transition-colors"
@@ -294,17 +163,14 @@ const FilterBar = memo(({
               onClick={onClearSearch}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1"
               disabled={isLoading}
+              aria-label="Limpiar búsqueda"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
         
-        <Select 
-          value={statusFilter} 
-          onValueChange={onStatusChange}
-          disabled={isLoading}
-        >
+        <Select value={statusFilter} onValueChange={onStatusChange} disabled={isLoading}>
           <SelectTrigger className="w-full sm:w-56 h-10 bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 focus:bg-white dark:focus:bg-slate-900">
             <SelectValue placeholder="Filtrar por estado" />
           </SelectTrigger>
@@ -312,26 +178,19 @@ const FilterBar = memo(({
             <SelectItem value="all">
               <div className="flex items-center justify-between w-full">
                 <span className="font-medium">Todos los estados</span>
-                <Badge variant="secondary" className="ml-2 bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300">
-                  {statusStats.all || 0}
-                </Badge>
+                <Badge variant="secondary" className="ml-2">{statusStats.all || 0}</Badge>
               </div>
             </SelectItem>
-            {Object.entries(PatientStatusEnum).map(([key, value]) => {
-              const config = STATUS_CONFIG[value as keyof typeof STATUS_CONFIG]
-              const count = statusStats[value] || 0
-              const Icon = config?.icon || Users
-              
+            {Object.entries(STATUS_CONFIG).map(([enumValue, config]) => {
+              const count = (statusStats as Record<string, number>)[enumValue] || 0
               return (
-                <SelectItem key={key} value={value}>
+                <SelectItem key={enumValue} value={enumValue}>
                   <div className="flex items-center justify-between w-full">
                     <div className="flex items-center gap-2">
-                      <Icon className="w-4 h-4 opacity-60" />
-                      <span>{config?.label || value}</span>
+                      <config.icon className="w-4 h-4 opacity-60" />
+                      <span>{config.label}</span>
                     </div>
-                    <Badge variant="secondary" className="ml-2">
-                      {count}
-                    </Badge>
+                    <Badge variant="secondary" className="ml-2">{count}</Badge>
                   </div>
                 </SelectItem>
               )
@@ -341,12 +200,7 @@ const FilterBar = memo(({
       </div>
       
       {(searchTerm || statusFilter !== 'all') && (
-        <Button 
-          variant="outline" 
-          onClick={onClearFilters}
-          className="w-full lg:w-auto hover:bg-slate-50 dark:hover:bg-slate-800"
-          disabled={isLoading}
-        >
+        <Button variant="outline" onClick={onClearFilters} className="w-full lg:w-auto hover:bg-slate-50 dark:hover:bg-slate-800" disabled={isLoading}>
           <X className="w-4 h-4 mr-2" />
           Limpiar filtros
         </Button>
@@ -356,18 +210,11 @@ const FilterBar = memo(({
 ))
 FilterBar.displayName = "FilterBar"
 
-// ✅ EmptyState Component
-const EmptyStateComponent = memo(({ hasFilters, onClearFilters }: { 
-  hasFilters: boolean
-  onClearFilters: () => void
-}) => (
+const EmptyStateComponent = memo(({ hasFilters, onClearFilters }: EmptyStateProps) => (
   <div className="bg-white dark:bg-slate-950 rounded-xl border shadow-sm border-slate-200 dark:border-slate-800 p-8 sm:p-12">
     <EmptyState
       title={hasFilters ? "No se encontraron pacientes" : "No hay pacientes registrados"}
-      description={hasFilters 
-        ? "No hay pacientes que coincidan con los filtros aplicados."
-        : "Aún no tienes pacientes registrados en el sistema."
-      }
+      description={hasFilters ? "Prueba a modificar o limpiar los filtros de búsqueda." : "Cuando añadas pacientes, aparecerán aquí."}
       actionText={hasFilters ? "Limpiar filtros" : undefined}
       onAction={hasFilters ? onClearFilters : undefined}
       icon={<Users className="h-10 w-10 text-slate-300 dark:text-slate-600" />}
@@ -376,60 +223,76 @@ const EmptyStateComponent = memo(({ hasFilters, onClearFilters }: {
 ))
 EmptyStateComponent.displayName = "EmptyState"
 
-// 🚀 Componente Principal Optimizado
-const PatientManagement: React.FC = () => {
-  const router = useRouter()
-  
-  // Estados locales optimizados
-  const [selectedPatient, setSelectedPatient] = useState<EnrichedPatient | null>(null)
-  const [patientForAppointment, setPatientForAppointment] = useState<EnrichedPatient | null>(null)
-  const [surveyLink, setSurveyLink] = useState("")
-  const [shareDialogOpen, setShareDialogOpen] = useState(false)
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
-  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false)
+// --- Hooks Personalizados ---
 
-  // Zustand patient store
-  const paginatedPatients = usePatientStore(s => s.paginatedPatients)
-  const patientsPagination = usePatientStore(s => s.patientsPagination)
-  const patientsStats = usePatientStore(s => s.patientsStats)
-  const patientsFilters = usePatientStore(s => s.patientsFilters)
-  const isPatientsLoading = usePatientStore(s => s.isPatientsLoading)
-  const patientsError = usePatientStore(s => s.patientsError)
+/**
+ * Hook para manejar los datos de pacientes, incluyendo estado de carga, errores,
+ * filtros, paginación y acciones de actualización.
+ */
+function usePatientData() {
+  const {
+    paginatedPatients,
+    patientsPagination,
+    patientsStats,
+    patientsFilters,
+    isPatientsLoading,
+    patientsError,
+    setPatientsPage,
+    setPatientsSearch,
+    setPatientsStatus,
+    clearPatientsFilters,
+    refetchPatients,
+    fetchPatients,
+  } = usePatientStore(
+    useShallow((s: PatientStore) => ({
+      paginatedPatients: s.paginatedPatients,
+      patientsPagination: s.patientsPagination,
+      patientsStats: s.patientsStats,
+      patientsFilters: s.patientsFilters,
+      isPatientsLoading: s.isPatientsLoading,
+      patientsError: s.patientsError,
+      setPatientsPage: s.setPatientsPage,
+      setPatientsSearch: s.setPatientsSearch,
+      setPatientsStatus: s.setPatientsStatus,
+      clearPatientsFilters: s.clearPatientsFilters,
+      refetchPatients: s.refetchPatients,
+      fetchPatients: s.fetchPatients,
+    }))
+  )
 
-  const setPatientsPage = usePatientStore(s => s.setPatientsPage)
-  const setPatientsSearch = usePatientStore(s => s.setPatientsSearch)
-  const setPatientsStatus = usePatientStore(s => s.setPatientsStatus)
-  const clearPatientsFilters = usePatientStore(s => s.clearPatientsFilters)
-  const refetchPatients = usePatientStore(s => s.refetchPatients)
-  const fetchPatients = usePatientStore(s => s.fetchPatients)
+  const [searchInput, setSearchInput] = useState(patientsFilters.search)
 
-  // Initial fetch on mount if needed
+  useEffect(() => {
+    setSearchInput(patientsFilters.search)
+  }, [patientsFilters.search])
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchInput !== patientsFilters.search) {
+        startTransition(() => {
+          setPatientsSearch(searchInput)
+        })
+      }
+    }, DEBOUNCE_DELAY)
+    return () => clearTimeout(handler)
+  }, [searchInput, patientsFilters.search, setPatientsSearch])
+
   useEffect(() => {
     if (!paginatedPatients) {
-      fetchPatients().catch(() => {})
+      fetchPatients().catch(err => console.error("Failed to fetch initial patients:", err))
     }
   }, [fetchPatients, paginatedPatients])
-  
-  // Datos memoizados
-  const patientStatsData: PatientStatsData = useMemo(() => 
-    patientsStats || {
-      totalPatients: 0,
-      surveyRate: 0,
-      pendingConsults: 0,
-      operatedPatients: 0
-    }, [patientsStats])
-  
-  const statusStats: StatusStats = useMemo(() => {
-    if (!patientsStats?.statusStats) {
-      return { all: 0 } as StatusStats
-    }
-    return {
-      ...patientsStats.statusStats,
-      all: patientsStats.totalPatients || 0
-    } as StatusStats
-  }, [patientsStats])
 
-  // Callbacks optimizados
+  const patientStatsData = useMemo<PatientStatsData>(() => 
+    patientsStats || { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0 }, 
+    [patientsStats]
+  )
+
+  const statusStats = useMemo<StatusStats>(() => 
+    patientsStats ? { ...patientsStats.statusStats, all: patientsStats.totalPatients || 0 } : { all: 0 },
+    [patientsStats]
+  )
+  
   const handlePageChange = useCallback((page: number) => {
     startTransition(() => {
       setPatientsPage(page)
@@ -437,161 +300,155 @@ const PatientManagement: React.FC = () => {
     })
   }, [setPatientsPage])
 
-  const handleSelectPatient = useCallback((patient: EnrichedPatient) => {
-    setSelectedPatient(patient)
-    setDetailsDialogOpen(true)
+  const handleStatusFilterChange = useCallback((value: string) => {
+    startTransition(() => setPatientsStatus(value))
+  }, [setPatientsStatus])
+
+  const handleClearFilters = useCallback(() => {
+    startTransition(() => clearPatientsFilters())
+  }, [clearPatientsFilters])
+
+  const handleSearchChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setSearchInput(e.target.value)
   }, [])
 
-  const handleShareSurvey = useCallback((patient: EnrichedPatient) => {
-    const link = typeof window !== 'undefined' 
-      ? `${window.location.origin}/survey/${generateSurveyId()}?patientId=${patient.id}` 
-      : ''
-    setSelectedPatient(patient)
-    setSurveyLink(link)
-    setShareDialogOpen(true)
+  const handleClearSearch = useCallback(() => {
+    setSearchInput("")
   }, [])
 
+  const handleRefresh = useCallback(() => {
+    refetchPatients()
+  }, [refetchPatients])
+
+  return {
+    paginatedPatients,
+    patientsPagination,
+    patientsFilters,
+    isPatientsLoading,
+    patientsError,
+    patientStatsData,
+    statusStats,
+    searchInput,
+    handlePageChange,
+    handleStatusFilterChange,
+    handleClearFilters,
+    handleSearchChange,
+    handleClearSearch,
+    handleRefresh
+  }
+}
+
+/**
+ * Hook para gestionar el estado y la lógica de los diálogos modales.
+ */
+function usePatientDialogs() {
+  const router = useRouter()
+  const [dialogState, setDialogState] = useState<{
+    type: 'details' | 'share' | 'appointment' | null
+    patient: EnrichedPatient | null
+  }>({ type: null, patient: null })
+
+  const surveyLink = useMemo(() => {
+    if (dialogState.type === 'share' && dialogState.patient) {
+      const surveyId = generateSurveyId()
+      const patientId = dialogState.patient.id
+      return `${window.location.origin}/survey/${surveyId}?patientId=${patientId}`
+    }
+    return ""
+  }, [dialogState.type, dialogState.patient])
+
+  const openDialog = useCallback((type: 'details' | 'share' | 'appointment', patient: EnrichedPatient) => {
+    setDialogState({ type, patient })
+  }, [])
+
+  const closeDialog = useCallback(() => {
+    setDialogState({ type: null, patient: null })
+  }, [])
+
+  const handleStartInternalSurvey = useCallback(() => {
+    if (dialogState.patient) {
+      router.push(`/survey/${generateSurveyId()}?patientId=${dialogState.patient.id}&mode=internal`)
+      closeDialog()
+    }
+  }, [dialogState.patient, router, closeDialog])
+
+  return {
+    dialogState,
+    surveyLink,
+    openDialog,
+    closeDialog,
+    handleStartInternalSurvey
+  }
+}
+
+// --- Componente de Vista Principal ---
+
+const PatientManagementView: React.FC = () => {
+  const router = useRouter()
+  const data = usePatientData()
+  const dialogs = usePatientDialogs()
+
+  // Callbacks para acciones de la tabla
   const handleEditPatient = useCallback((patient: EnrichedPatient) => {
-    toast.info(`Editar paciente: ${patient.nombre} ${patient.apellidos}`)
+    toast.info(`Funcionalidad para editar a: ${patient.nombre} ${patient.apellidos}`)
   }, [])
 
   const handleAnswerSurvey = useCallback((patient: EnrichedPatient) => {
     router.push(`/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`)
   }, [router])
 
-  const handleScheduleAppointment = useCallback((patient: EnrichedPatient) => {
-    setPatientForAppointment(patient)
-    setAppointmentDialogOpen(true)
-  }, [])
+  // Variables derivadas para renderizado
+  const hasFilters = data.patientsFilters.search !== "" || data.patientsFilters.status !== "all"
+  const hasPatients = data.paginatedPatients && data.paginatedPatients.length > 0
 
-  const handleStatusFilterChange = useCallback((value: StatusFilterType) => {
-    startTransition(() => {
-      setPatientsStatus(value)
-    })
-  }, [setPatientsStatus])
-
-  const handleClearFilters = useCallback(() => {
-    startTransition(() => {
-      clearPatientsFilters()
-    })
-  }, [clearPatientsFilters])
-
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    startTransition(() => {
-      setPatientsSearch(e.target.value)
-    })
-  }, [setPatientsSearch])
-
-  const handleClearSearch = useCallback(() => {
-    startTransition(() => {
-      setPatientsSearch("")
-    })
-  }, [setPatientsSearch])
-
-  const handleStartInternal = useCallback(() => {
-    if (selectedPatient) {
-      router.push(`/survey/${generateSurveyId()}?patientId=${selectedPatient.id}&mode=internal`)
-      setShareDialogOpen(false)
-    }
-  }, [selectedPatient, router])
-
-  const handleRefresh = useCallback(() => {
-    refetchPatients()
-  }, [refetchPatients])
-
-  // Variables derivadas
-  const isLoading = isPatientsLoading
-  const isFetching = isPatientsLoading
-  const hasFilters = patientsFilters.search !== "" || patientsFilters.status !== "all"
-  const hasPatients = paginatedPatients && paginatedPatients.length > 0
-
-  // Loading state
-  if (isLoading && !paginatedPatients) {
-    return (
-      <div className="animate-pulse space-y-4">
-        <div className="bg-white dark:bg-slate-950 rounded-2xl h-48 border border-slate-200 dark:border-slate-800" />
-        <div className="bg-white dark:bg-slate-950 rounded-xl h-20 border border-slate-200 dark:border-slate-800" />
-        <div className="bg-white dark:bg-slate-950 rounded-xl h-96 border border-slate-200 dark:border-slate-800" />
-      </div>
-    )
+  if (data.isPatientsLoading && !data.paginatedPatients) {
+    return <LoadingSkeleton />
   }
 
-  // Error state
-  if (patientsError) {
-    return (
-      <div className="bg-white dark:bg-slate-950 rounded-xl border shadow-sm border-slate-200 dark:border-slate-800 p-8 sm:p-12">
-        <div className="text-center">
-          <div className="rounded-full bg-red-100 dark:bg-red-900/30 p-4 mx-auto w-16 h-16 flex items-center justify-center mb-4">
-            <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
-          </div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
-            Error al cargar pacientes
-          </h3>
-          <p className="text-slate-500 dark:text-slate-400 mb-4">
-            {patientsError.message || "Ha ocurrido un error inesperado"}
-          </p>
-          <Button onClick={handleRefresh} variant="outline">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Reintentar
-          </Button>
-        </div>
-      </div>
-    )
+  if (data.patientsError) {
+    return <ErrorState error={data.patientsError} onRetry={data.handleRefresh} />
   }
 
   return (
     <div className="w-full space-y-4 pb-8">
-      {/* Header con estadísticas */}
       <PatientHeader 
-        statsData={patientStatsData}
-        isLoadingStats={isLoading}
-        onRefresh={handleRefresh}
+        statsData={data.patientStatsData}
+        isLoadingStats={data.isPatientsLoading}
+        onRefresh={data.handleRefresh}
       />
-
-      {/* Barra de filtros */}
+ 
       <FilterBar 
-        searchTerm={patientsFilters.search}
-        onSearchChange={handleSearchChange}
-        onClearSearch={handleClearSearch}
-        statusFilter={patientsFilters.status as StatusFilterType}
-        onStatusChange={handleStatusFilterChange}
-        onClearFilters={handleClearFilters}
-        statusStats={statusStats}
-        isLoading={isFetching}
+        searchTerm={data.searchInput}
+        onSearchChange={data.handleSearchChange}
+        onClearSearch={data.handleClearSearch}
+        statusFilter={String(data.patientsFilters.status)}
+        onStatusChange={data.handleStatusFilterChange}
+        onClearFilters={data.handleClearFilters}
+        statusStats={data.statusStats}
+        isLoading={data.isPatientsLoading}
       />
-
-      {/* Contenido principal */}
+ 
       {hasPatients ? (
         <>
           <div className="relative">
-            {isFetching && (
-              <div className="absolute inset-0 z-10 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm rounded-xl flex items-center justify-center p-4">
-                <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-4 py-2 rounded-lg shadow-lg">
-                  <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                    Actualizando...
-                  </span>
-                </div>
-              </div>
-            )}
+            {data.isPatientsLoading && <UpdatingOverlay />}
             <PatientTable 
-              patients={paginatedPatients}
-              onSelectPatient={handleSelectPatient}
-              onShareSurvey={handleShareSurvey}
+              patients={data.paginatedPatients}
+              onSelectPatient={(p) => dialogs.openDialog('details', p)}
+              onShareSurvey={(p) => dialogs.openDialog('share', p)}
               onEditPatient={handleEditPatient}
               onAnswerSurvey={handleAnswerSurvey}
-              onScheduleAppointment={handleScheduleAppointment}
+              onScheduleAppointment={(p) => dialogs.openDialog('appointment', p)}
             />
           </div>
-
-          {/* Paginación */}
-          {patientsPagination.totalPages > 1 && (
+ 
+          {data.patientsPagination.totalPages > 1 && (
             <div className="mt-4 pb-4">
               <SimplePagination 
-                currentPage={patientsFilters.page} 
-                totalPages={patientsPagination.totalPages} 
-                onPageChange={handlePageChange}
-                loading={isFetching}
+                currentPage={data.patientsFilters.page} 
+                totalPages={data.patientsPagination.totalPages} 
+                onPageChange={data.handlePageChange}
+                loading={data.isPatientsLoading}
               />
             </div>
           )}
@@ -599,42 +456,34 @@ const PatientManagement: React.FC = () => {
       ) : (
         <EmptyStateComponent 
           hasFilters={hasFilters}
-          onClearFilters={handleClearFilters}
+          onClearFilters={data.handleClearFilters}
         />
       )}
-
-      {/* Modales con Lazy Loading */}
-      <Suspense fallback={
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 flex items-center shadow-2xl">
-            <Loader2 className="h-6 w-6 animate-spin text-teal-600 mr-3" />
-            <span className="text-slate-700 dark:text-slate-300 font-medium">Cargando...</span>
-          </div>
-        </div>
-      }>
-        {selectedPatient && shareDialogOpen && (
+ 
+      <Suspense fallback={<ModalLoadingFallback />}>
+        {dialogs.dialogState.type === 'share' && dialogs.dialogState.patient && (
           <SurveyShareDialog 
-            isOpen={shareDialogOpen} 
-            patient={selectedPatient} 
-            surveyLink={surveyLink}
-            onStartInternal={handleStartInternal}
-            onClose={() => setShareDialogOpen(false)} 
+            isOpen={true} 
+            patient={dialogs.dialogState.patient} 
+            surveyLink={dialogs.surveyLink}
+            onStartInternal={dialogs.handleStartInternalSurvey}
+            onClose={dialogs.closeDialog} 
           />
         )}
         
-        {selectedPatient && detailsDialogOpen && (
+        {dialogs.dialogState.type === 'details' && dialogs.dialogState.patient && (
           <PatientDetailsDialog
-            isOpen={detailsDialogOpen}
-            patient={selectedPatient}
-            onClose={() => setDetailsDialogOpen(false)}
+            isOpen={true}
+            patient={dialogs.dialogState.patient}
+            onClose={dialogs.closeDialog}
           />
         )}
         
-        {patientForAppointment && appointmentDialogOpen && (
+        {dialogs.dialogState.type === 'appointment' && dialogs.dialogState.patient && (
           <ScheduleAppointmentDialog
-            isOpen={appointmentDialogOpen}
-            patient={patientForAppointment}
-            onClose={() => setAppointmentDialogOpen(false)}
+            isOpen={true}
+            patient={dialogs.dialogState.patient}
+            onClose={dialogs.closeDialog}
           />
         )}
       </Suspense>
@@ -642,7 +491,57 @@ const PatientManagement: React.FC = () => {
   )
 }
 
-const MemoizedPatientManagement = memo(PatientManagement)
+// --- Componentes de Estado Auxiliares ---
+
+const LoadingSkeleton = () => (
+  <div className="animate-pulse space-y-4">
+    <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl h-48" />
+    <div className="bg-slate-100 dark:bg-slate-800/50 rounded-xl h-20" />
+    <div className="bg-slate-100 dark:bg-slate-800/50 rounded-xl h-96" />
+  </div>
+)
+
+const ErrorState = ({ error, onRetry }: { error: Error, onRetry: () => void }) => (
+  <div className="bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 p-8 sm:p-12">
+    <div className="text-center">
+      <div className="rounded-full bg-red-100 dark:bg-red-900/30 p-4 mx-auto w-16 h-16 flex items-center justify-center mb-4">
+        <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
+      </div>
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
+        Error al cargar pacientes
+      </h3>
+      <p className="text-slate-500 dark:text-slate-400 mb-4 text-sm">
+        {error.message || "Ha ocurrido un error inesperado. Por favor, inténtalo de nuevo."}
+      </p>
+      <Button onClick={onRetry} variant="outline">
+        <RefreshCw className="w-4 h-4 mr-2" />
+        Reintentar
+      </Button>
+    </div>
+  </div>
+)
+
+const UpdatingOverlay = () => (
+  <div className="absolute inset-0 z-10 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm rounded-xl flex items-center justify-center p-4">
+    <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-4 py-2 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700">
+      <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
+      <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+        Actualizando...
+      </span>
+    </div>
+  </div>
+)
+
+const ModalLoadingFallback = () => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white dark:bg-slate-900 rounded-xl p-6 flex items-center shadow-2xl">
+      <Loader2 className="h-6 w-6 animate-spin text-teal-600 mr-3" />
+      <span className="text-slate-700 dark:text-slate-300 font-medium">Cargando...</span>
+    </div>
+  </div>
+)
+
+const MemoizedPatientManagement = memo(PatientManagementView)
 MemoizedPatientManagement.displayName = "PatientManagement"
 
 export { MemoizedPatientManagement as PatientManagement }

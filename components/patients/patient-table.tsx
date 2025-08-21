@@ -1,4 +1,5 @@
 import React, { useState, useMemo, memo, useCallback } from "react"
+import { FixedSizeList as List } from "react-window"
 import {
   Table,
   TableHeader,
@@ -56,6 +57,11 @@ type SortConfig = {
   key: keyof EnrichedPatient
   direction: "asc" | "desc"
 }
+
+// Virtualization config
+const VIRTUALIZE_THRESHOLD = 100
+const ROW_HEIGHT = 64 // px
+const VLIST_HEIGHT = 560 // px visible area
 
 // 🎨 Configuración de colores elegante y profesional
 const THEME = {
@@ -480,6 +486,119 @@ const MobilePatientCard = memo(({
 })
 MobilePatientCard.displayName = "MobilePatientCard"
 
+// ✅ Fila virtualizada (equivalente visual a PatientRow, usando CSS Grid)
+const VirtualPatientRow = memo(({ 
+  patient, 
+  onSelectPatient, 
+  onShareSurvey, 
+  onAnswerSurvey, 
+  onEditPatient,
+  onScheduleAppointment
+}: {
+  patient: EnrichedPatient
+  onSelectPatient: (patient: EnrichedPatient) => void
+  onShareSurvey?: (patient: EnrichedPatient) => void
+  onAnswerSurvey?: (patient: EnrichedPatient) => void
+  onEditPatient?: (patient: EnrichedPatient) => void
+  onScheduleAppointment?: (patient: EnrichedPatient) => void
+}) => {
+  const surveyState = getPatientSurveyState(patient)
+
+  return (
+    <div 
+      className="grid grid-cols-[2fr_90px_2fr_1.5fr_1fr_1fr_80px] items-center gap-2 px-2 border-b border-slate-200 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50"
+      style={{ height: ROW_HEIGHT }}
+      onClick={() => onSelectPatient(patient)}
+    >
+      {/* Paciente */}
+      <div className="py-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-semibold text-white flex-shrink-0 bg-slate-700 dark:bg-slate-600">
+            {patient.nombreCompleto.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-slate-900 dark:text-slate-100 truncate">
+              {formatText(patient.nombreCompleto)}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span className="font-mono opacity-75">ID: {patient.id.slice(0, 8)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Edad */}
+      <div className="py-2 text-center">
+        {patient.edad ? (
+          <Badge className="bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
+            {patient.edad} años
+          </Badge>
+        ) : (
+          <span className="text-slate-400 dark:text-slate-500 text-sm">—</span>
+        )}
+      </div>
+
+      {/* Diagnóstico */}
+      <div className="py-2">
+        <Badge className={cn(
+          "border font-medium",
+          getDiagnosticStyle(patient.diagnostico_principal)
+        )}>
+          <Stethoscope className="h-3 w-3 mr-1 opacity-60" />
+          {toDisplayDiagnosis(patient.diagnostico_principal)}
+        </Badge>
+      </div>
+
+      {/* Registro */}
+      <div className="py-2">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-slate-400 dark:text-slate-500 flex-shrink-0" />
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            {formatDate(patient.fecha_registro)}
+          </span>
+        </div>
+      </div>
+
+      {/* Estado */}
+      <div className="py-2">
+        {patient.estado_paciente && (
+          <Badge className={cn(
+            "border font-medium",
+            THEME.status[patient.estado_paciente]
+          )}>
+            {patient.estado_paciente.replace(/_/g, ' ')}
+          </Badge>
+        )}
+      </div>
+
+      {/* Encuesta */}
+      <div className="py-2 text-center">
+        <Badge className={cn(
+          "border font-medium",
+          THEME.survey[surveyState]
+        )}>
+          {surveyState === 'contestada' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+          {surveyState === 'contestando' && <Clock className="h-3 w-3 mr-1 animate-pulse" />}
+          {SURVEY_LABELS[surveyState]}
+        </Badge>
+      </div>
+
+      {/* Acciones */}
+      <div className="py-2 text-right">
+        <PatientActions
+          patient={patient}
+          onSelectPatient={onSelectPatient}
+          onShareSurvey={onShareSurvey}
+          onAnswerSurvey={onAnswerSurvey}
+          onEditPatient={onEditPatient}
+          onScheduleAppointment={onScheduleAppointment}
+        />
+      </div>
+    </div>
+  )
+})
+VirtualPatientRow.displayName = "VirtualPatientRow"
+
 // 🚀 Componente principal optimizado
 const PatientTable: React.FC<PatientTableProps> = ({
   patients,
@@ -629,17 +748,46 @@ const PatientTable: React.FC<PatientTableProps> = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedPatients.map((patient) => (
-              <PatientRow
-                key={patient.id}
-                patient={patient}
-                onSelectPatient={onSelectPatient}
-                onShareSurvey={onShareSurvey}
-                onAnswerSurvey={onAnswerSurvey}
-                onEditPatient={onEditPatient}
-                onScheduleAppointment={onScheduleAppointment}
-              />
-            ))}
+            {sortedPatients.length >= VIRTUALIZE_THRESHOLD ? (
+              <TableRow className="border-none">
+                <TableCell colSpan={7} className="p-0">
+                  <div style={{ height: VLIST_HEIGHT }}>
+                    <List
+                      height={VLIST_HEIGHT}
+                      itemCount={sortedPatients.length}
+                      itemSize={ROW_HEIGHT}
+                      width={"100%"}
+                      itemKey={(index) => sortedPatients[index].id}
+                    >
+                      {({ index, style }) => (
+                        <div style={style} key={sortedPatients[index].id}>
+                          <VirtualPatientRow
+                            patient={sortedPatients[index]}
+                            onSelectPatient={onSelectPatient}
+                            onShareSurvey={onShareSurvey}
+                            onAnswerSurvey={onAnswerSurvey}
+                            onEditPatient={onEditPatient}
+                            onScheduleAppointment={onScheduleAppointment}
+                          />
+                        </div>
+                      )}
+                    </List>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : (
+              sortedPatients.map((patient) => (
+                <PatientRow
+                  key={patient.id}
+                  patient={patient}
+                  onSelectPatient={onSelectPatient}
+                  onShareSurvey={onShareSurvey}
+                  onAnswerSurvey={onAnswerSurvey}
+                  onEditPatient={onEditPatient}
+                  onScheduleAppointment={onScheduleAppointment}
+                />
+              ))
+            )}
           </TableBody>
         </Table>
       </div>

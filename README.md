@@ -16,7 +16,6 @@
 
 ### Organización por Flujo de Trabajo
 ```
-/components/leads/          # Gestión de prospectos
 /components/scheduling/     # Agendamiento unificado  
 /components/check-in/       # Admisiones y llegadas
 /components/surveys/        # Formularios de encuesta
@@ -26,15 +25,11 @@
 ## 2. Plan de Acción
 
 ### Fase 1: Backend (API Routes)
-- `POST /api/leads` - Crear leads
-- `GET /api/leads` - Búsqueda de leads
 - `POST /api/appointments` - Flujo dual (lead→cita / directo)
 - `POST /api/survey/responses` - Guardar encuestas
 
-### Fase 2: Módulo Leads
-- `app/leads/page.tsx`
-- `LeadDataTable`, `NewLeadForm`, `LeadProfile`
-- `hooks/useLeads.ts`
+### Fase 2: (Deprecado) Módulo Leads
+Se elimina el sistema de leads. No implementar ni usar.
 
 ### Fase 3: Agendamiento Unificado
 - `UnifiedScheduleDialog.tsx` (reemplaza schedule-appointment-dialog)
@@ -60,15 +55,11 @@
 
 ### RPCs de Supabase
 ```sql
--- Crear cita desde lead
-create_appointment_from_lead(lead_id, appointment_data)
-
 -- Crear cita directa
 create_direct_appointment(patient_data, appointment_data)
 ```
 
 ### Flujo de Datos
-1. **Lead** → Formulario → `POST /api/leads`
 2. **Agendamiento** → Búsqueda → RPC → Nueva cita
 3. **Llegada** → Check-in → `UPDATE appointments`
 4. **Encuesta** → Respuestas → Trigger IA

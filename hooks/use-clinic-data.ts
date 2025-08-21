@@ -188,6 +188,7 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     isLoading: loadingEssential,
     error: errorEssential,
     refetch: refetchEssential,
+    dataUpdatedAt: essentialUpdatedAt,
   } = useQuery({
     queryKey: queryKeys.clinic.data,
     queryFn: async () => {
@@ -231,6 +232,7 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     isLoading: loadingPaginated,
     error: errorPaginated,
     refetch: refetchPaginated,
+    dataUpdatedAt: paginatedUpdatedAt,
   } = useQuery({
     queryKey: queryKeys.patients.paginated({
       page: filters.page,
@@ -257,8 +259,10 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
 
   const lastUpdated = useMemo(() => {
     if (!essential && !paginated) return null;
-    return Date.now();
-  }, [essential, paginated]);
+    const times = [essentialUpdatedAt || 0, paginatedUpdatedAt || 0].filter(Boolean);
+    if (!times.length) return null;
+    return Math.max(...times);
+  }, [essential, paginated, essentialUpdatedAt, paginatedUpdatedAt]);
 
   // Acciones
   const setFilters = useCallback((partial: Partial<ClinicFilters>) => {

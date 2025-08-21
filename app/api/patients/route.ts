@@ -208,6 +208,7 @@ export async function POST(request: Request) {
       ? createAdminClient()
       : await createServerClient();
     const body = await request.json();
+    const enforceBirthdate = process.env.ENFORCE_PATIENT_BIRTHDATE === 'true';
 
     // 1. Validar campos requeridos
     if (!body.nombre || !body.apellidos) {
@@ -216,11 +217,94 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // 2. Preparar datos del paciente
+    // 2. Normalizar y pre-chequear duplicados por identidad si hay fecha_nacimiento
+    const norm = (s: any) => (typeof s === 'string' ? s.trim().toLowerCase() : '');
+    const inputNombre = norm(body.nombre);
+    const inputApellidos = norm(body.apellidos);
+    const parseDateOnly = (v: any): string | null => {
+      if (typeof v !== 'string') return null;
+      const s = v.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; // ya viene como fecha (DATE)
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+    };
+    const inputFechaNac: string | null = parseDateOnly(body.fecha_nacimiento);
+
+    // 2.1. Si está habilitada la obligatoriedad de fecha_nacimiento, exigirla
+    if (enforceBirthdate && !inputFechaNac) {
+      return NextResponse.json({
+        message: 'fecha_nacimiento es obligatoria'
+      }, { status: 400 });
+    }
+
+    if (inputFechaNac) {
+      const { data: candidates, error: dupErr } = await supabase
+        .from('patients')
+        .select('id, nombre, apellidos, fecha_nacimiento')
+        .eq('fecha_nacimiento', inputFechaNac);
+
+      if (dupErr) {
+        console.warn('[/api/patients][POST] No se pudo verificar duplicados:', dupErr.message);
+      } else {
+        const match = (candidates || []).find(
+          (p: any) => norm(p.nombre) === inputNombre && norm(p.apellidos) === inputApellidos
+        );
+        if (match) {
+          return NextResponse.json(
+            {
+              message: 'Paciente duplicado: ya existe un registro con mismo nombre, apellidos y fecha de nacimiento',
+              code: 'duplicate_patient',
+              existing_patient: {
+                id: match.id,
+                nombre: match.nombre,
+                apellidos: match.apellidos,
+                fecha_nacimiento: match.fecha_nacimiento,
+              },
+            },
+            { status: 409 }
+          );
+        }
+      }
+    } else {
+      // Nota: sin fecha de nacimiento no podemos aplicar regla de unicidad fuerte.
+      // Se mantiene compatibilidad y se registra un warning de diagnóstico.
+      console.warn('[/api/patients][POST] Creación sin fecha_nacimiento; no se aplica verificación de duplicados por identidad.');
+    }
+
+    // 3. Preparar datos del paciente (incluir fecha_nacimiento y edad coherente si aplica)
+    const computeAge = (yyyyMmDd: string): number | null => {
+      try {
+        const [y, m, d] = yyyyMmDd.split('-').map((v) => parseInt(v, 10));
+        const today = new Date();
+        let age = today.getFullYear() - y;
+        const hasHadBirthday =
+          today.getMonth() + 1 > m || (today.getMonth() + 1 === m && today.getDate() >= d);
+        if (!hasHadBirthday) age -= 1;
+        if (age < 0 || age > 120) return null;
+        return age;
+      } catch {
+        return null;
+      }
+    };
+
+    const fechaNacimientoToSave = inputFechaNac;
+    const edadToSave: number | null =
+      fechaNacimientoToSave
+        ? computeAge(fechaNacimientoToSave)
+        : (typeof body.edad === 'number' ? body.edad : null);
+
+    // Validación: si viene fecha_nacimiento pero la edad calculada es inválida, abortar con 400
+    if (fechaNacimientoToSave && (edadToSave === null)) {
+      return NextResponse.json({
+        message: 'Fecha de nacimiento inválida o inconsistente (edad fuera de rango)'
+      }, { status: 400 });
+    }
+
     const patientData = {
       nombre: body.nombre.trim(),
       apellidos: body.apellidos.trim(),
-      edad: body.edad || null,
+      edad: edadToSave,
+      fecha_nacimiento: fechaNacimientoToSave,
       telefono: body.telefono?.trim() || null,
       email: body.email?.trim() || null,
       estado_paciente: body.estado_paciente || PatientStatusEnum.POTENCIAL,
@@ -238,7 +322,7 @@ export async function POST(request: Request) {
       ultimo_contacto: body.ultimo_contacto || null,
     };
 
-    // 3. Insertar paciente en la base de datos
+    // 4. Insertar paciente en la base de datos
     const { data: newPatient, error } = await supabase
       .from('patients')
       .insert(patientData)
@@ -247,13 +331,24 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('Error creating patient:', error);
+      const code = (error as any)?.code;
+      const msg = (error as any)?.message || '';
+      const details = (error as any)?.details || '';
+      const isUnique = code === '23505' || /duplicate key value/i.test(msg);
+      const isPhoneDup = isUnique && (msg.includes('patients_telefono_key') || details.includes('telefono'));
+      if (isPhoneDup) {
+        return NextResponse.json({
+          message: 'Teléfono duplicado',
+          error: msg
+        }, { status: 400 });
+      }
       return NextResponse.json({ 
         message: 'Error al crear paciente', 
-        error: error.message 
+        error: msg 
       }, { status: 500 });
     }
 
-    // 4. Retornar paciente creado
+    // 5. Retornar paciente creado
     return NextResponse.json({
       message: 'Paciente creado exitosamente',
       patient: newPatient

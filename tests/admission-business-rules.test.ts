@@ -8,7 +8,12 @@ const makeAppointment = (estado: AppointmentStatus, dt: Date): AppointmentWithPa
   fecha_hora_cita: dt.toISOString(),
   motivos_consulta: [],
   estado_cita: estado,
-  patients: { id: 'p1' },
+  patients: { 
+    id: 'p1',
+    nombre: 'Juan',
+    apellidos: 'Pérez',
+    estado_paciente: 'activo',
+  },
 });
 
 describe('Admission Business Rules', () => {

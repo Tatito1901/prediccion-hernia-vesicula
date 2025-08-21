@@ -1,5 +1,4 @@
 import type React from "react";
-import QueryProvider from '@/components/providers/query-provider';
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 // Importamos el CSS global después del CSS crítico para no bloquear el renderizado
@@ -59,7 +58,7 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <Providers>
-          <QueryProvider>{children}</QueryProvider>
+          {children}
         </Providers>
       </body>
     </html>
