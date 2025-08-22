@@ -2,6 +2,8 @@
 
 import React, { useMemo } from 'react';
 import { useClinic } from '@/contexts/clinic-data-provider';
+import { AppointmentStatusEnum } from '@/lib/types';
+import type { AppointmentStatus } from '@/lib/types';
 
 // Lista reactiva mínima de citas recientes para el Dashboard
 // Usa la fuente de verdad unificada del contexto (useClinic)
@@ -57,8 +59,13 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
               timeStyle: 'short',
             })
           : 'Sin fecha';
-        const rawStatus = String(appt?.estado_cita ?? '').toUpperCase();
-        const status = rawStatus.replaceAll('_', ' ');
+        const rawStatusValue = String(appt?.estado_cita ?? '').toUpperCase();
+        // Normalizar variantes masculinas/femeninas (p.ej., CANCELADO -> CANCELADA)
+        const normalizedStatus: AppointmentStatus =
+          rawStatusValue.startsWith('CANCELAD')
+            ? AppointmentStatusEnum.CANCELADA
+            : (rawStatusValue as AppointmentStatus);
+        const status = String(normalizedStatus).replaceAll('_', ' ');
         const name =
           appt?.nombreCompletoPaciente ||
           appt?.nombrePaciente ||
@@ -69,15 +76,14 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
 
         const initial = (name || 'P').trim().charAt(0).toUpperCase();
         const statusClasses = (() => {
-          switch (rawStatus) {
-            case 'COMPLETADA':
+          switch (normalizedStatus) {
+            case AppointmentStatusEnum.COMPLETADA:
               return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300';
-            case 'PROGRAMADA':
+            case AppointmentStatusEnum.PROGRAMADA:
               return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300';
-            case 'CANCELADA':
-            case 'CANCELADO':
+            case AppointmentStatusEnum.CANCELADA:
               return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300';
-            case 'NO_ASISTIO':
+            case AppointmentStatusEnum.NO_ASISTIO:
               return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
             default:
               return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';

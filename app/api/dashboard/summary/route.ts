@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 // ==================== HANDLER PARA RESUMEN DEL DASHBOARD ====================
 export async function GET() {
@@ -34,7 +35,7 @@ export async function GET() {
       supabase
         .from('appointments')
         .select('id', { count: 'exact', head: true })
-        .eq('estado_cita', 'PROGRAMADA'),
+        .eq('estado_cita', AppointmentStatusEnum.PROGRAMADA),
       
       // Encuestas completadas
       supabase
@@ -60,7 +61,7 @@ export async function GET() {
     const newPatients = recentPatients.length;
     
     const completedAppointments = recentPatients.reduce((count, patient) => {
-      const completed = patient.appointments?.filter((apt: any) => apt.estado_cita === 'COMPLETADA').length || 0;
+      const completed = patient.appointments?.filter((apt: any) => apt.estado_cita === AppointmentStatusEnum.COMPLETADA).length || 0;
       return count + completed;
     }, 0);
     

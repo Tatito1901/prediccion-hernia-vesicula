@@ -72,6 +72,7 @@ import { cn, formatPhoneNumber } from '@/lib/utils';
 import { useDebounce } from '@/hooks/use-debounce';
 import type { Patient } from '@/lib/types';
 import { useClinic } from '@/contexts/clinic-data-provider';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 // Constants - moved outside component for better performance
 const TIME_SLOTS = Array.from({ length: 12 }, (_, i) => {
@@ -723,7 +724,11 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
         
         const occupied = new Set<string>();
         res.data?.forEach((apt: any) => {
-          if (['PROGRAMADA', 'CONFIRMADA', 'PRESENTE'].includes(apt.estado_cita)) {
+          if ([
+            AppointmentStatusEnum.PROGRAMADA,
+            AppointmentStatusEnum.CONFIRMADA,
+            AppointmentStatusEnum.PRESENTE,
+          ].includes(apt.estado_cita)) {
             const time = format(new Date(apt.fecha_hora_cita), 'HH:mm');
             occupied.add(time);
           }

@@ -2,8 +2,38 @@
 
 // Single source of truth for database types
 import type { Database } from './database.types';
-// Re-export centralized compatibility enums generated from DB constants
-export { AppointmentStatusEnum, PatientStatusEnum, UserRoleEnum } from '@/lib/validation/enums';
+// Import centralized compatibility enums generated from DB constants and re-export explicitly
+import {
+  AppointmentStatusEnum as _AppointmentStatusEnum,
+  PatientStatusEnum as _PatientStatusEnum,
+  UserRoleEnum as _UserRoleEnum,
+} from '@/lib/validation/enums';
+
+export const AppointmentStatusEnum = _AppointmentStatusEnum;
+export const PatientStatusEnum = _PatientStatusEnum;
+export const UserRoleEnum = _UserRoleEnum;
+
+// Re-export validation schemas and helpers so consumers can import from '@/lib/types'
+export {
+  ZAppointmentStatus,
+  ZDiagnosisDb,
+  dbDiagnosisToDisplay,
+  DIAGNOSIS_DB_VALUES,
+} from '@/lib/validation/enums';
+
+// Re-export statistics validation schemas and their inferred types
+export {
+  ZLabelCount,
+  ZClinicalProfile,
+  ZDemographicProfile,
+  ZOperationalMetrics,
+  ZStatisticsMeta,
+  ZStatisticsResponse,
+} from '@/lib/validation/statistics';
+export type { LabelCount, StatisticsResponse } from '@/lib/validation/statistics';
+
+// Re-export database constants for enum lists and other static values
+export { Constants } from './database.types';
 
 // --- Row Types (for reading data) ---
 export type Patient = Database['public']['Tables']['patients']['Row'];

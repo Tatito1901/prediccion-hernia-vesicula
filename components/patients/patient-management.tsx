@@ -288,10 +288,20 @@ function usePatientData() {
     [patientsStats]
   )
 
-  const statusStats = useMemo<StatusStats>(() => 
-    patientsStats ? { ...patientsStats.statusStats, all: patientsStats.totalPatients || 0 } : { all: 0 },
-    [patientsStats]
-  )
+  const statusStats = useMemo<StatusStats>(() => {
+    const base: StatusStats = {
+      potencial: 0,
+      activo: 0,
+      operado: 0,
+      no_operado: 0,
+      en_seguimiento: 0,
+      inactivo: 0,
+      alta_medica: 0,
+      all: 0,
+    }
+    if (!patientsStats) return base
+    return { ...base, ...(patientsStats.statusStats || {}), all: patientsStats.totalPatients || 0 }
+  }, [patientsStats])
   
   const handlePageChange = useCallback((page: number) => {
     startTransition(() => {
@@ -321,7 +331,7 @@ function usePatientData() {
   }, [refetchPatients])
 
   return {
-    paginatedPatients,
+    paginatedPatients: paginatedPatients ?? [],
     patientsPagination,
     patientsFilters,
     isPatientsLoading,

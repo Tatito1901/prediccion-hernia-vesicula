@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { ZStatisticsResponse, type StatisticsResponse, type LabelCount } from '@/lib/validation/statistics';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 async function fetchStatistics(): Promise<StatisticsResponse> {
   const res = await fetch('/api/statistics');
@@ -54,9 +55,9 @@ export function useAnalyticsData() {
     const operational = data.operationalMetrics || undefined;
     const totalAppointments = (operational?.appointments_by_status || []).reduce((acc, s) => acc + (s.count || 0), 0);
     const findStatus = (name: string) => (operational?.appointments_by_status || []).find((s) => s.status?.toUpperCase?.() === name)?.count || 0;
-    const completed = findStatus('COMPLETADA');
-    const scheduled = findStatus('PROGRAMADA');
-    const canceled = findStatus('CANCELADA');
+    const completed = findStatus(AppointmentStatusEnum.COMPLETADA);
+    const scheduled = findStatus(AppointmentStatusEnum.PROGRAMADA);
+    const canceled = findStatus(AppointmentStatusEnum.CANCELADA);
 
     const noShowRate = operational?.no_show_rate ?? null;
     const punctualityRate = operational?.punctuality_rate ?? null;

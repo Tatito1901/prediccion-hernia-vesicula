@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore, useState, useEffect } from "react";
+import { useSyncExternalStore, useState, useEffect, useMemo } from "react";
 
 /* ---------- Tipos ---------- */
 export type Breakpoint = "mobile" | "tablet" | "desktop" | "largeDesktop";
@@ -15,112 +15,124 @@ type QueryKey =
   | "reducedMotion";
 
 /* ---------- Media-queries centralizadas ---------- */
-// Estas queries definen los breakpoints y otras características del dispositivo/entorno.
-// Están basadas en rangos comunes, similares a los de Tailwind CSS.
 const queries: Record<QueryKey, string> = {
-  /* Anchos ↔ Tailwind sm/md/lg/xl/2xl */
-  mobile: "(max-width: 639px)", // Pantallas pequeñas, hasta el breakpoint 'sm' de Tailwind
-  tablet: "(min-width: 640px) and (max-width: 1023px)", // Desde 'sm' hasta justo antes de 'lg'
-  desktop: "(min-width: 1024px) and (max-width: 1535px)", // Desde 'lg' hasta justo antes de '2xl'
-  largeDesktop: "(min-width: 1536px)", // Desde '2xl' en adelante
+  // Breakpoints basados en Tailwind CSS
+  mobile: "(max-width: 639px)",
+  tablet: "(min-width: 640px) and (max-width: 1023px)",
+  desktop: "(min-width: 1024px) and (max-width: 1535px)",
+  largeDesktop: "(min-width: 1536px)",
 
-  /* Orientación */
+  // Orientación
   portrait: "(orientation: portrait)",
   landscape: "(orientation: landscape)",
 
-  /* Tipo de puntero (ayuda a distinguir dispositivos táctiles de los que usan mouse) */
-  touch: "(hover: none) and (pointer: coarse)", // Típico de pantallas táctiles
-  mouse: "(hover: hover) and (pointer: fine)",   // Típico de dispositivos con mouse
+  // Tipo de dispositivo
+  touch: "(hover: none) and (pointer: coarse)",
+  mouse: "(hover: hover) and (pointer: fine)",
 
-  /* Preferencias de usuario */
+  // Preferencias del usuario
   dark: "(prefers-color-scheme: dark)",
   reducedMotion: "(prefers-reduced-motion: reduce)",
 };
 
-/* ---------- Estado interno para useBreakpointStore ---------- */
+/* ---------- Estado y listeners centralizados ---------- */
 type BreakpointState = Record<QueryKey, boolean>;
 
-// Calcula el estado actual de todas las media-queries predefinidas.
-const computeState = (): BreakpointState =>
-  Object.fromEntries(
+// Función optimizada para calcular el estado
+const computeState = (): BreakpointState => {
+  if (typeof window === "undefined") {
+    return Object.fromEntries(
+      Object.keys(queries).map(key => [key, false])
+    ) as BreakpointState;
+  }
+
+  return Object.fromEntries(
     Object.entries(queries).map(([key, query]) => [
       key,
-      // Solo intentar usar window.matchMedia si estamos en el cliente.
-      typeof window !== "undefined" ? window.matchMedia(query).matches : false,
-    ]),
+      window.matchMedia(query).matches
+    ])
   ) as BreakpointState;
+};
 
-// 'state' es la fuente de verdad para useBreakpointStore, actualizada por los listeners.
+// Estado reactivo centralizado
 let state: BreakpointState = computeState();
 const listeners = new Set<() => void>();
 
-/* ---------- Registro de listeners (solo en el cliente) para useBreakpointStore ---------- */
+// Registro de listeners solo en el cliente
 if (typeof window !== "undefined") {
-  Object.values(queries).forEach((queryString) => {
-    const mql = window.matchMedia(queryString);
-    const handler = () => {
-      // Cuando una media query cambia, se recalcula todo el objeto 'state'.
-      // Esto es simple y efectivo ya que 'state' agrupa todos los flags.
-      state = computeState();
-      // Notificar a todos los suscriptores de useBreakpointStore.
-      listeners.forEach((cb) => cb());
-    };
+  // Usamos un solo listener para todas las queries
+  const handleChange = () => {
+    const newState = computeState();
+    let hasChanged = false;
+    
+    // Solo notificamos si realmente hubo cambios
+    for (const key in newState) {
+      if (newState[key as QueryKey] !== state[key as QueryKey]) {
+        hasChanged = true;
+        break;
+      }
+    }
+    
+    if (hasChanged) {
+      state = newState;
+      listeners.forEach(cb => cb());
+    }
+  };
 
-    // Usar addEventListener si está disponible, con fallback a addListener para navegadores antiguos (Safari <= 13).
+  // Registrar un listener para cada media query
+  Object.values(queries).forEach(queryString => {
+    const mql = window.matchMedia(queryString);
+    
+    // Usar addEventListener moderno con fallback
     if (mql.addEventListener) {
-      mql.addEventListener("change", handler);
+      mql.addEventListener("change", handleChange);
     } else {
-      mql.addListener(handler);
+      mql.addListener(handleChange);
     }
   });
 }
 
-/* ---------- Funciones para useSyncExternalStore (usado por useBreakpointStore) ---------- */
-function subscribe(cb: () => void) {
+/* ---------- Funciones para useSyncExternalStore ---------- */
+const subscribe = (cb: () => void) => {
   listeners.add(cb);
-  return () => listeners.delete(cb); // Función de limpieza para desuscribirse.
-}
-const getSnapshot = () => state; // Devuelve el estado actual en el cliente.
+  return () => listeners.delete(cb);
+};
 
-// Estado precalculado para el servidor. Es una referencia estable.
-// En el servidor, todas las media queries se asumen como 'false' para consistencia en SSR.
-const serverState: BreakpointState = Object.fromEntries(
-  Object.keys(queries).map((k) => [k, false])
-) as BreakpointState;
-
-const getServerSnapshot = (): BreakpointState => serverState; // Devuelve el estado del servidor.
+const getSnapshot = () => state;
+const getServerSnapshot = (): BreakpointState => 
+  Object.fromEntries(
+    Object.keys(queries).map(key => [key, false])
+  ) as BreakpointState;
 
 /* ---------- Hooks públicos ---------- */
 
-/** * Hook principal que utiliza useSyncExternalStore para suscribirse a los cambios
- * del conjunto predefinido de media-queries.
- * Devuelve un objeto con todos los flags (mobile, tablet, dark, etc.).
+/**
+ * Hook principal que rastrea todas las media queries predefinidas
+ * @returns Objeto con todos los estados de las media queries
  */
 export function useBreakpointStore() {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
-/** * Devuelve el breakpoint principal actual ('mobile', 'tablet', 'desktop', 'largeDesktop') 
- * basado en el ancho de la pantalla.
+/**
+ * Devuelve el breakpoint principal actual
  */
 export function useCurrentBreakpoint(): Breakpoint {
   const s = useBreakpointStore();
+  
+  // Prioridad lógica: mobile > tablet > desktop > largeDesktop
   if (s.mobile) return "mobile";
   if (s.tablet) return "tablet";
   if (s.desktop) return "desktop";
-  return "largeDesktop"; // Fallback si ninguno de los anteriores es true.
+  return "largeDesktop";
 }
 
-/* ---------- Hook genérico para cualquier media query (useMediaQuery) ---------- */
 /**
- * Hook personalizado que rastrea el estado de una cadena de media query CSS arbitraria.
- * @param query La cadena de media query a observar (ej. "(min-width: 768px)").
- * @returns `true` si la media query coincide, `false` en caso contrario.
- * Este hook usa useState y useEffect, adecuado para queries dinámicas y específicas del componente.
+ * Hook para cualquier media query personalizada
+ * @param query Cadena de media query
+ * @returns Estado booleano de la query
  */
 export function useMediaQuery(query: string): boolean {
-  // Inicializa 'matches'. En el servidor, será 'false'.
-  // En el cliente, se evalúa window.matchMedia(query).matches en la primera carga.
   const [matches, setMatches] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       return window.matchMedia(query).matches;
@@ -129,41 +141,34 @@ export function useMediaQuery(query: string): boolean {
   });
 
   useEffect(() => {
-    // El código dentro de useEffect solo se ejecuta en el cliente.
+    if (typeof window === "undefined") return;
+
     const mediaQueryList = window.matchMedia(query);
+    const listener = (event: MediaQueryListEvent) => setMatches(event.matches);
 
-    const listener = (event: MediaQueryListEvent) => {
-      setMatches(event.matches);
-    };
+    // Sincronización inicial
+    setMatches(mediaQueryList.matches);
 
-    // Sincronizar el estado si cambió entre la inicialización de useState y la ejecución de useEffect.
-    // Esto es una salvaguarda importante.
-    if (mediaQueryList.matches !== matches) {
-      setMatches(mediaQueryList.matches);
-    }
-
-    // Adjuntar el listener.
+    // Registro de listener
     if (mediaQueryList.addEventListener) {
       mediaQueryList.addEventListener('change', listener);
     } else {
-      mediaQueryList.addListener(listener); // Fallback para Safari <= 13.
+      mediaQueryList.addListener(listener);
     }
 
-    // Función de limpieza para remover el listener cuando el componente se desmonta o la query cambia.
     return () => {
       if (mediaQueryList.removeEventListener) {
         mediaQueryList.removeEventListener('change', listener);
       } else {
-        mediaQueryList.removeListener(listener); // Fallback para Safari <= 13.
+        mediaQueryList.removeListener(listener);
       }
     };
-  }, [query]); // El efecto depende solo de la cadena 'query'.
+  }, [query]);
 
   return matches;
 }
 
-/* ---------- Selectores individuales (retrocompatibilidad y conveniencia) ---------- */
-// Estos hooks utilizan useBreakpointStore para acceder a flags específicos.
+/* ---------- Hooks selectores individuales ---------- */
 export const useIsMobile = () => useBreakpointStore().mobile;
 export const useIsTablet = () => useBreakpointStore().tablet;
 export const useIsDesktop = () => useBreakpointStore().desktop;
@@ -175,14 +180,73 @@ export const useIsLandscape = () => useBreakpointStore().landscape;
 export const useIsTouchDevice = () => useBreakpointStore().touch;
 export const useIsMouseDevice = () => useBreakpointStore().mouse;
 
-/* ---------- Helpers compuestos (ejemplos de cómo combinar flags) ---------- */
+export const usePrefersDark = () => useBreakpointStore().dark;
+export const usePrefersReducedMotion = () => useBreakpointStore().reducedMotion;
+
+/* ---------- Hooks compuestos optimizados ---------- */
+/**
+ * Determina si es una pantalla de tamaño medio o mayor
+ */
 export const useIsMediumScreen = () => {
-  const s = useBreakpointStore();
-  // Considera una pantalla "mediana" si es tablet, desktop o largeDesktop (es decir, no móvil).
-  return s.tablet || s.desktop || s.largeDesktop; 
+  const { tablet, desktop, largeDesktop } = useBreakpointStore();
+  return tablet || desktop || largeDesktop;
 };
+
+/**
+ * Determina si es una pantalla grande
+ */
 export const useIsLargeScreen = () => {
-  const s = useBreakpointStore();
-  // Considera una pantalla "grande" si es desktop o largeDesktop.
-  return s.desktop || s.largeDesktop;
+  const { desktop, largeDesktop } = useBreakpointStore();
+  return desktop || largeDesktop;
+};
+
+/**
+ * Determina si es un dispositivo móvil o táctil
+ */
+export const useIsMobileOrTouch = () => {
+  const { mobile, touch } = useBreakpointStore();
+  return mobile || touch;
+};
+
+/**
+ * Determina si es un dispositivo de escritorio con mouse
+ */
+export const useIsDesktopWithMouse = () => {
+  const { desktop, largeDesktop, mouse } = useBreakpointStore();
+  return (desktop || largeDesktop) && mouse;
+};
+
+/* ---------- Hook de breakpoint con valor específico ---------- */
+/**
+ * Hook para verificar un breakpoint específico
+ * @param breakpoint Breakpoint a verificar
+ * @returns Booleano indicando si el breakpoint actual coincide
+ */
+export const useBreakpoint = (breakpoint: Breakpoint) => {
+  const currentBreakpoint = useCurrentBreakpoint();
+  return useMemo(() => currentBreakpoint === breakpoint, [currentBreakpoint, breakpoint]);
+};
+
+/* ---------- Hook para rango de breakpoints ---------- */
+/**
+ * Hook para verificar si el breakpoint actual está dentro de un rango
+ * @param minBreakpoint Breakpoint mínimo (inclusive)
+ * @param maxBreakpoint Breakpoint máximo (inclusive)
+ * @returns Booleano indicando si está en el rango
+ */
+export const useBreakpointRange = (
+  minBreakpoint: Breakpoint,
+  maxBreakpoint: Breakpoint
+) => {
+  const breakpoints: Breakpoint[] = ["mobile", "tablet", "desktop", "largeDesktop"];
+  const currentIndex = useCurrentBreakpoint();
+  
+  const minIndex = breakpoints.indexOf(minBreakpoint);
+  const maxIndex = breakpoints.indexOf(maxBreakpoint);
+  const currentIndexValue = breakpoints.indexOf(currentIndex);
+  
+  return useMemo(() => 
+    currentIndexValue >= minIndex && currentIndexValue <= maxIndex,
+    [currentIndexValue, minIndex, maxIndex]
+  );
 };

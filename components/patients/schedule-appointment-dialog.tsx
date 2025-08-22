@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useCreateAppointment } from "@/hooks/use-appointments"
-import { EnrichedPatient } from "@/lib/types"
+import { EnrichedPatient, AppointmentStatusEnum } from "@/lib/types"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -183,7 +183,7 @@ const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({
     const promise = addAppointment({
       patient_id: patient.id,
       fecha_hora_cita: `${format(formData.fechaConsulta, "yyyy-MM-dd")}T${formData.horaConsulta}:00`,
-      estado_cita: "PROGRAMADA",
+      estado_cita: AppointmentStatusEnum.PROGRAMADA,
       motivos_consulta: [formData.motivoConsulta.trim()],
       notas_breves: formData.notas.trim() || "",
       doctor_id: "default-doctor",

@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { startOfDay, endOfDay, addDays, subDays } from 'date-fns';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 // ==================== TIPOS ====================
 interface AppointmentFilters {
@@ -152,7 +153,7 @@ const getCountsQuery = async (supabase: any) => {
   const { data: allAppointments, error } = await supabase
     .from('appointments')
     .select('fecha_hora_cita, estado_cita')
-    .neq('estado_cita', 'CANCELADA'); // Excluir canceladas
+    .neq('estado_cita', AppointmentStatusEnum.CANCELADA); // Excluir canceladas
 
   if (error) {
     console.error('❌ [Appointments API] Error fetching counts:', error);

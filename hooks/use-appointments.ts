@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 // Importar tipos actualizados
 import { AppointmentStatus, AppointmentWithPatient, PatientStatus, DiagnosisType } from '@/components/patient-admision/admision-types'
 import { queryKeys } from '@/lib/query-keys';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 // Canonical patient hooks are centralized in hooks/use-patient
 export { useAdmitPatient, useUpdatePatient } from '@/hooks/use-patient';
@@ -256,13 +257,13 @@ export const useUpdateAppointmentStatus = (
       queryClient.invalidateQueries({ queryKey: queryKeys.patients.historyAll });
       
       const statusMessages: Record<AppointmentStatus, string> = {
-        'PROGRAMADA': 'Cita programada',
-        'CONFIRMADA': 'Cita confirmada',
-        'PRESENTE': 'Check-in registrado',
-        'COMPLETADA': 'Consulta completada',
-        'CANCELADA': 'Cita cancelada',
-        'NO_ASISTIO': 'Marcado como no asistió',
-        'REAGENDADA': 'Cita reagendada',
+        [AppointmentStatusEnum.PROGRAMADA]: 'Cita programada',
+        [AppointmentStatusEnum.CONFIRMADA]: 'Cita confirmada',
+        [AppointmentStatusEnum.PRESENTE]: 'Check-in registrado',
+        [AppointmentStatusEnum.COMPLETADA]: 'Consulta completada',
+        [AppointmentStatusEnum.CANCELADA]: 'Cita cancelada',
+        [AppointmentStatusEnum.NO_ASISTIO]: 'Marcado como no asistió',
+        [AppointmentStatusEnum.REAGENDADA]: 'Cita reagendada',
       };
       
       toast.success(statusMessages[updatedAppointment.estado_cita] || 'Estado actualizado');

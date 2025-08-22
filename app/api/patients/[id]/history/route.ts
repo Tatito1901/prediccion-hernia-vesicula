@@ -1,9 +1,10 @@
 // app/api/patients/[id]/history/route.ts
-// 🎯 ADAPTADA A TU ESQUEMA REAL - Para el botón "Ver Historial"
+// ADAPTADA A TU ESQUEMA REAL - Para el botón "Ver Historial"
 
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 export async function GET(
   request: NextRequest,
@@ -26,7 +27,7 @@ export async function GET(
     const offset = parseInt(searchParams.get('offset') || '0');
     const includeHistory = searchParams.get('includeHistory') === 'true';
 
-    console.log(`[API] 📊 Obteniendo historial del paciente: ${patientId}`);
+    console.log(`[API] Obteniendo historial del paciente: ${patientId}`);
 
     // 1. OBTENER DATOS DEL PACIENTE (sin embeds para evitar dependencias a FKs inexistentes)
     const { data: patient, error: patientError } = await supabase
@@ -57,7 +58,7 @@ export async function GET(
 
     const patientFound = !patientError && !!patient;
     if (!patientFound) {
-      console.warn('[API] ⚠️ Paciente no encontrado, devolviendo historial parcial. Detalle:', patientError?.message || patientError);
+      console.warn('[API] Paciente no encontrado, devolviendo historial parcial. Detalle:', patientError?.message || patientError);
     }
     // Construir safePatient temprano para usar en estadísticas y respuesta
     const safePatient = patientFound ? patient : {
@@ -99,7 +100,7 @@ export async function GET(
       .range(offset, offset + limit - 1);
 
     if (appointmentsError) {
-      console.error('[API] ❌ Error al obtener citas:', appointmentsError);
+      console.error('[API] Error al obtener citas:', appointmentsError);
       return NextResponse.json(
         { error: 'Error al obtener el historial de citas' }, 
         { status: 500 }
@@ -175,14 +176,14 @@ export async function GET(
     // Usar el historial de cambios para contar reagendamientos reales
     const rescheduledCount = Array.isArray(appointmentHistory)
       ? appointmentHistory.filter(h => h.field_changed === 'fecha_hora_cita').length
-      : (appointments?.filter(a => a.estado_cita === 'REAGENDADA').length || 0);
+      : (appointments?.filter(a => a.estado_cita === AppointmentStatusEnum.REAGENDADA).length || 0);
 
     const stats = {
       // Estadísticas básicas de citas
       total_appointments: appointments?.length || 0,
-      completed_appointments: appointments?.filter(a => a.estado_cita === 'COMPLETADA').length || 0,
-      cancelled_appointments: appointments?.filter(a => a.estado_cita === 'CANCELADA').length || 0,
-      no_show_appointments: appointments?.filter(a => a.estado_cita === 'NO_ASISTIO').length || 0,
+      completed_appointments: appointments?.filter(a => a.estado_cita === AppointmentStatusEnum.COMPLETADA).length || 0,
+      cancelled_appointments: appointments?.filter(a => a.estado_cita === AppointmentStatusEnum.CANCELADA).length || 0,
+      no_show_appointments: appointments?.filter(a => a.estado_cita === AppointmentStatusEnum.NO_ASISTIO).length || 0,
       rescheduled_appointments: rescheduledCount,
       
       // Fechas importantes
@@ -286,12 +287,12 @@ export async function GET(
       }
     };
 
-    console.log(`[API] ✅ Historial obtenido: ${appointments?.length || 0} citas, ${surveys?.length || 0} encuestas para paciente ${patientId}`);
+    console.log(`[API] Historial obtenido: ${appointments?.length || 0} citas, ${surveys?.length || 0} encuestas para paciente ${patientId}`);
 
     return NextResponse.json(response);
 
   } catch (error: any) {
-    console.error('[API] ❌ Error en obtención de historial:', error);
+    console.error('[API] Error en obtención de historial:', error);
     return NextResponse.json(
       { error: 'Error interno del servidor', details: error.message }, 
       { status: 500 }
@@ -303,13 +304,13 @@ export async function GET(
 
 function getStatusLabel(status: string): string {
   const statusLabels: Record<string, string> = {
-    'PROGRAMADA': 'Programada',
-    'CONFIRMADA': 'Confirmada', 
-    'PRESENTE': 'Presente',
-    'COMPLETADA': 'Completada',
-    'CANCELADA': 'Cancelada',
-    'NO_ASISTIO': 'No asistió',
-    'REAGENDADA': 'Reagendada'
+    [AppointmentStatusEnum.PROGRAMADA]: 'Programada',
+    [AppointmentStatusEnum.CONFIRMADA]: 'Confirmada',
+    [AppointmentStatusEnum.PRESENTE]: 'Presente',
+    [AppointmentStatusEnum.COMPLETADA]: 'Completada',
+    [AppointmentStatusEnum.CANCELADA]: 'Cancelada',
+    [AppointmentStatusEnum.NO_ASISTIO]: 'No asistió',
+    [AppointmentStatusEnum.REAGENDADA]: 'Reagendada'
   };
   
   return statusLabels[status] || status;

@@ -42,6 +42,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { AppointmentStatusEnum } from '@/lib/types';
+
 import type { AppointmentWithPatient, AdmissionAction, PatientCardProps } from './admision-types';
 import { getPatientFullName, getStatusConfig, canPerformAction } from './admision-types';
 import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
@@ -220,10 +222,10 @@ export const PatientCard = memo<PatientCardProps>(({
     if (!confirmDialog) return;
     
     const statusMap = {
-      checkIn: 'PRESENTE',
-      complete: 'COMPLETADA',
-      cancel: 'CANCELADA',
-      noShow: 'NO_ASISTIO',
+      checkIn: AppointmentStatusEnum.PRESENTE,
+      complete: AppointmentStatusEnum.COMPLETADA,
+      cancel: AppointmentStatusEnum.CANCELADA,
+      noShow: AppointmentStatusEnum.NO_ASISTIO,
     } as const;
     
     try {
@@ -246,7 +248,7 @@ export const PatientCard = memo<PatientCardProps>(({
     // 1) Set REAGENDADA with new datetime to pass server-side validation and log audit trail
     await updateStatus({
       appointmentId: appointment.id,
-      newStatus: 'REAGENDADA',
+      newStatus: AppointmentStatusEnum.REAGENDADA,
       nuevaFechaHora: newDateTime.toISOString(),
       motivo: 'Reagendamiento de cita'
     });
@@ -254,7 +256,7 @@ export const PatientCard = memo<PatientCardProps>(({
     // Immediately return to PROGRAMADA so the appointment appears in main tabs by the new datetime
     await updateStatus({
       appointmentId: appointment.id,
-      newStatus: 'PROGRAMADA',
+      newStatus: AppointmentStatusEnum.PROGRAMADA,
       motivo: 'Cita reagendada confirmada en nueva fecha'
     });
 

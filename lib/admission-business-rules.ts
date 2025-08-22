@@ -12,6 +12,7 @@ import {
 // ✅ Tipos locales mínimos para evitar depender de components/* (isomórfico FE/BE)
 import { z } from 'zod';
 import { ZAppointmentStatus } from '@/lib/validation/enums';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
 export type AdmissionAction = 'checkIn' | 'complete' | 'cancel' | 'noShow' | 'reschedule' | 'viewHistory';
@@ -99,7 +100,10 @@ export const canCheckIn = (
   const rules: Rule[] = [
     // Estado válido
     ({ appointment }) => {
-      if (!['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita)) {
+      if (
+        appointment.estado_cita !== AppointmentStatusEnum.PROGRAMADA &&
+        appointment.estado_cita !== AppointmentStatusEnum.CONFIRMADA
+      ) {
         return { valid: false, reason: `No se puede marcar presente desde estado: ${appointment.estado_cita}` };
       }
       return { valid: true };
@@ -149,7 +153,7 @@ export const canCompleteAppointment = (
 
   const rules: Rule[] = [
     ({ appointment }) => {
-      if (appointment.estado_cita !== 'PRESENTE') {
+      if (appointment.estado_cita !== AppointmentStatusEnum.PRESENTE) {
         return { valid: false, reason: `No se puede completar desde estado: ${appointment.estado_cita}` };
       }
       return { valid: true };
@@ -175,7 +179,10 @@ export const canCancelAppointment = (
 
   const rules: Rule[] = [
     ({ appointment }) => {
-      if (!['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita)) {
+      if (
+        appointment.estado_cita !== AppointmentStatusEnum.PROGRAMADA &&
+        appointment.estado_cita !== AppointmentStatusEnum.CONFIRMADA
+      ) {
         return { valid: false, reason: `No se puede cancelar una cita en estado: ${appointment.estado_cita}` };
       }
       return { valid: true };
@@ -202,7 +209,10 @@ export const canMarkNoShow = (
 
   const rules: Rule[] = [
     ({ appointment }) => {
-      if (!['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita)) {
+      if (
+        appointment.estado_cita !== AppointmentStatusEnum.PROGRAMADA &&
+        appointment.estado_cita !== AppointmentStatusEnum.CONFIRMADA
+      ) {
         return { valid: false, reason: `No se puede marcar "No Asistió" desde estado: ${appointment.estado_cita}` };
       }
       return { valid: true };
@@ -230,13 +240,22 @@ export const canRescheduleAppointment = (
 
   const rules: Rule[] = [
     ({ appointment }) => {
-      if (!['PROGRAMADA', 'CONFIRMADA', 'CANCELADA', 'NO_ASISTIO'].includes(appointment.estado_cita)) {
+      if (
+        appointment.estado_cita !== AppointmentStatusEnum.PROGRAMADA &&
+        appointment.estado_cita !== AppointmentStatusEnum.CONFIRMADA &&
+        appointment.estado_cita !== AppointmentStatusEnum.CANCELADA &&
+        appointment.estado_cita !== AppointmentStatusEnum.NO_ASISTIO
+      ) {
         return { valid: false, reason: `No se puede reagendar una cita en estado: ${appointment.estado_cita}` };
       }
       return { valid: true };
     },
     ({ now, ctx, appointment }) => {
-      if (['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita) && !ctx?.allowOverride) {
+      if (
+        (appointment.estado_cita === AppointmentStatusEnum.PROGRAMADA ||
+         appointment.estado_cita === AppointmentStatusEnum.CONFIRMADA) &&
+        !ctx?.allowOverride
+      ) {
         if (isAfter(now, rescheduleDeadline)) {
           return { valid: false, reason: `No se puede reagendar con menos de ${BUSINESS_RULES.RESCHEDULE_DEADLINE_HOURS} horas de anticipación.` };
         }
@@ -294,7 +313,7 @@ export const needsUrgentAttention = (
   const minutesSinceAppointment = differenceInMinutes(currentTime, appointmentTime);
   
   // Paciente presente esperando mucho tiempo
-  if (appointment.estado_cita === 'PRESENTE' && minutesSinceAppointment > 30) {
+  if (appointment.estado_cita === AppointmentStatusEnum.PRESENTE && minutesSinceAppointment > 30) {
     return {
       urgent: true,
       reason: `Paciente esperando ${minutesSinceAppointment} minutos desde check-in`,
@@ -303,7 +322,11 @@ export const needsUrgentAttention = (
   }
   
   // Cita que debería marcarse como no asistió
-  if (['PROGRAMADA', 'CONFIRMADA'].includes(appointment.estado_cita) && minutesSinceAppointment > 30) {
+  if (
+    (appointment.estado_cita === AppointmentStatusEnum.PROGRAMADA ||
+     appointment.estado_cita === AppointmentStatusEnum.CONFIRMADA) &&
+    minutesSinceAppointment > 30
+  ) {
     return {
       urgent: true,
       reason: 'Cita pasada sin check-in. Considere marcar como "No Asistió"',
@@ -312,7 +335,10 @@ export const needsUrgentAttention = (
   }
   
   // Cita próxima sin confirmar
-  if (appointment.estado_cita === 'PROGRAMADA' && minutesSinceAppointment > -60 && minutesSinceAppointment < 0) {
+  if (
+    appointment.estado_cita === AppointmentStatusEnum.PROGRAMADA &&
+    minutesSinceAppointment > -60 && minutesSinceAppointment < 0
+  ) {
     return {
       urgent: true,
       reason: 'Cita próxima sin confirmar',
@@ -373,13 +399,36 @@ export const canTransitionToStatus = (
 ): ValidationResult => {
   // Definir transiciones válidas
   const validTransitions: Record<AppointmentStatus, AppointmentStatus[]> = {
-    'PROGRAMADA': ['CONFIRMADA', 'PRESENTE', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'],
-    'CONFIRMADA': ['PRESENTE', 'CANCELADA', 'NO_ASISTIO', 'REAGENDADA'],
-    'PRESENTE': ['COMPLETADA', 'CANCELADA'],
-    'COMPLETADA': ['REAGENDADA'], // Solo si se necesita una nueva cita
-    'CANCELADA': ['REAGENDADA'],
-    'NO_ASISTIO': ['REAGENDADA'],
-    'REAGENDADA': ['PROGRAMADA', 'CONFIRMADA'],
+    [AppointmentStatusEnum.PROGRAMADA]: [
+      AppointmentStatusEnum.CONFIRMADA,
+      AppointmentStatusEnum.PRESENTE,
+      AppointmentStatusEnum.CANCELADA,
+      AppointmentStatusEnum.NO_ASISTIO,
+      AppointmentStatusEnum.REAGENDADA,
+    ],
+    [AppointmentStatusEnum.CONFIRMADA]: [
+      AppointmentStatusEnum.PRESENTE,
+      AppointmentStatusEnum.CANCELADA,
+      AppointmentStatusEnum.NO_ASISTIO,
+      AppointmentStatusEnum.REAGENDADA,
+    ],
+    [AppointmentStatusEnum.PRESENTE]: [
+      AppointmentStatusEnum.COMPLETADA,
+      AppointmentStatusEnum.CANCELADA,
+    ],
+    [AppointmentStatusEnum.COMPLETADA]: [
+      AppointmentStatusEnum.REAGENDADA, // Solo si se necesita una nueva cita
+    ],
+    [AppointmentStatusEnum.CANCELADA]: [
+      AppointmentStatusEnum.REAGENDADA,
+    ],
+    [AppointmentStatusEnum.NO_ASISTIO]: [
+      AppointmentStatusEnum.REAGENDADA,
+    ],
+    [AppointmentStatusEnum.REAGENDADA]: [
+      AppointmentStatusEnum.PROGRAMADA,
+      AppointmentStatusEnum.CONFIRMADA,
+    ],
   };
 
   // Verificar si la transición es válida

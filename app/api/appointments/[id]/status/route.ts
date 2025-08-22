@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { z } from 'zod';
 import { ZAppointmentStatus } from '@/lib/validation/enums';
-import { PatientStatusEnum } from '@/lib/types';
+import { PatientStatusEnum, AppointmentStatusEnum } from '@/lib/types';
 import { canSetFollowUpFrom } from '@/lib/patient-state-rules';
 import {
   canTransitionToStatus,
@@ -30,7 +30,7 @@ const UpdateStatusSchema = z.object({
   fecha_hora_cita: z.string().datetime().optional(),
   notas_adicionales: z.string().max(500).optional(),
 }).superRefine((data, ctx) => {
-  if (data.newStatus === 'REAGENDADA') {
+  if (data.newStatus === AppointmentStatusEnum.REAGENDADA) {
     if (!data.nuevaFechaHora && !data.fecha_hora_cita) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -39,7 +39,7 @@ const UpdateStatusSchema = z.object({
       });
     }
   }
-  if (data.newStatus === 'CANCELADA') {
+  if (data.newStatus === AppointmentStatusEnum.CANCELADA) {
     const motivo = (data.motivo_cambio ?? '').trim();
     if (!motivo) {
       ctx.addIssue({
@@ -145,7 +145,7 @@ export async function PATCH(
     const effectiveNewDateTime = nuevaFechaHora ?? fecha_hora_cita;
 
     // 1.1 Validar reglas de agenda del lado servidor para REAGENDADA
-    if (newStatus === 'REAGENDADA') {
+    if (newStatus === AppointmentStatusEnum.REAGENDADA) {
       if (!effectiveNewDateTime) {
         return NextResponse.json(
           { error: 'Fecha/hora requerida para reagendar' },
@@ -234,7 +234,7 @@ export async function PATCH(
     let actionValidation: { valid: boolean; reason?: string } = { valid: true };
 
     switch (newStatus) {
-      case 'PRESENTE': {
+      case AppointmentStatusEnum.PRESENTE: {
         const res = canCheckIn(currentAppointment as any, now);
         actionValidation = { valid: res.valid, reason: res.reason };
         if (!res.valid) {
@@ -260,22 +260,22 @@ export async function PATCH(
         }
         break;
       }
-      case 'COMPLETADA': {
+      case AppointmentStatusEnum.COMPLETADA: {
         const res = canCompleteAppointment(currentAppointment as any, now);
         actionValidation = { valid: res.valid, reason: res.reason };
         break;
       }
-      case 'CANCELADA': {
+      case AppointmentStatusEnum.CANCELADA: {
         const res = canCancelAppointment(currentAppointment as any, now);
         actionValidation = { valid: res.valid, reason: res.reason };
         break;
       }
-      case 'NO_ASISTIO': {
+      case AppointmentStatusEnum.NO_ASISTIO: {
         const res = canMarkNoShow(currentAppointment as any, now);
         actionValidation = { valid: res.valid, reason: res.reason };
         break;
       }
-      case 'REAGENDADA': {
+      case AppointmentStatusEnum.REAGENDADA: {
         const res = canRescheduleAppointment(currentAppointment as any, now);
         actionValidation = { valid: res.valid, reason: res.reason };
         break;
@@ -315,13 +315,17 @@ export async function PATCH(
     const ipAddress = forwardedFor?.split(',')[0] || realIp || undefined;
     
     // 5.1 Verificar conflicto de horario si es reagendamiento (mismo médico, fecha/hora exacta)
-    if (newStatus === 'REAGENDADA' && effectiveNewDateTime) {
+    if (newStatus === AppointmentStatusEnum.REAGENDADA && effectiveNewDateTime) {
       const { data: conflicts, error: conflictError } = await supabase
         .from('appointments')
         .select('id')
         .eq('doctor_id', currentAppointment.doctor_id)
         .eq('fecha_hora_cita', effectiveNewDateTime)
-        .in('estado_cita', ['PROGRAMADA', 'CONFIRMADA', 'PRESENTE'])
+        .in('estado_cita', [
+          AppointmentStatusEnum.PROGRAMADA,
+          AppointmentStatusEnum.CONFIRMADA,
+          AppointmentStatusEnum.PRESENTE,
+        ])
         .neq('id', appointmentId)
         .limit(1);
 
@@ -345,7 +349,7 @@ export async function PATCH(
     };
     
     // Agregar nueva fecha/hora si es reagendamiento
-    if (newStatus === 'REAGENDADA' && effectiveNewDateTime) {
+    if (newStatus === AppointmentStatusEnum.REAGENDADA && effectiveNewDateTime) {
       updateData.fecha_hora_cita = effectiveNewDateTime;
     }
     
@@ -408,7 +412,7 @@ export async function PATCH(
     );
     
     // 9. ACTUALIZAR ESTADO DEL PACIENTE SI ES NECESARIO
-    if (newStatus === 'COMPLETADA') {
+    if (newStatus === AppointmentStatusEnum.COMPLETADA) {
       // Determinar si el estado actual del paciente permite mover a EN_SEGUIMIENTO
       const patientForUpdate: any = Array.isArray(currentAppointment.patients)
         ? currentAppointment.patients[0]

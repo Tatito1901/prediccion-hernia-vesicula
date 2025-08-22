@@ -7,6 +7,7 @@ import { startOfDay, endOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useClinic } from '@/contexts/clinic-data-provider';
 import type { Patient } from '@/lib/types';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 // UI Components
 import { Button } from '@/components/ui/button';
@@ -208,12 +209,12 @@ const SearchAndFilters = memo<{
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Todos los estados</SelectItem>
-          <SelectItem value="PROGRAMADA">Programadas</SelectItem>
-          <SelectItem value="CONFIRMADA">Confirmadas</SelectItem>
-          <SelectItem value="PRESENTE">En Consulta</SelectItem>
-          <SelectItem value="COMPLETADA">Completadas</SelectItem>
-          <SelectItem value="CANCELADA">Canceladas</SelectItem>
-          <SelectItem value="NO_ASISTIO">No Asistió</SelectItem>
+          <SelectItem value={AppointmentStatusEnum.PROGRAMADA}>Programadas</SelectItem>
+          <SelectItem value={AppointmentStatusEnum.CONFIRMADA}>Confirmadas</SelectItem>
+          <SelectItem value={AppointmentStatusEnum.PRESENTE}>En Consulta</SelectItem>
+          <SelectItem value={AppointmentStatusEnum.COMPLETADA}>Completadas</SelectItem>
+          <SelectItem value={AppointmentStatusEnum.CANCELADA}>Canceladas</SelectItem>
+          <SelectItem value={AppointmentStatusEnum.NO_ASISTIO}>No Asistió</SelectItem>
         </SelectContent>
       </Select>
     </div>
@@ -295,7 +296,7 @@ const useAppointmentData = (search: string, statusFilter: string) => {
       const aptDate = new Date(apt.fecha_hora_cita);
 
       // Hide rescheduled appointments from main tabs (only visible in history)
-      if (apt.estado_cita === 'REAGENDADA') {
+      if (apt.estado_cita === AppointmentStatusEnum.REAGENDADA) {
         continue;
       }
 
@@ -320,10 +321,11 @@ const useAppointmentData = (search: string, statusFilter: string) => {
   const stats = useMemo(() => ({
     today: classifiedAppointments.today.length,
     pending: classifiedAppointments.today.filter(a => 
-      ['PROGRAMADA', 'CONFIRMADA'].includes(a.estado_cita)
+      a.estado_cita === AppointmentStatusEnum.PROGRAMADA ||
+      a.estado_cita === AppointmentStatusEnum.CONFIRMADA
     ).length,
     completed: classifiedAppointments.today.filter(a => 
-      a.estado_cita === 'COMPLETADA'
+      a.estado_cita === AppointmentStatusEnum.COMPLETADA
     ).length,
   }), [classifiedAppointments]);
 

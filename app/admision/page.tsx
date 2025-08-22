@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CalendarIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useIsMobile } from "@/hooks/use-breakpoint"
+import { useMediaQuery } from "@/hooks/use-breakpoint"
 import { ClinicDataProvider } from "@/contexts/clinic-data-provider"
 
 // ──────────────────────────────────────────────────────────
@@ -23,31 +23,53 @@ const PatientAdmission = dynamic(
 // ──────────────────────────────────────────────────────────
 //  Componentes de UI Reutilizables
 // ──────────────────────────────────────────────────────────
-const HeaderSkeleton = () => (
-  <div className="flex items-center gap-2 mb-4">
-    <Skeleton className="h-5 w-5 sm:h-6 sm:w-6 rounded-full" />
-    <Skeleton className="h-6 w-48 sm:w-64" />
-  </div>
-)
+const HeaderSkeleton = memo(function HeaderSkeleton() {
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <Skeleton className={cn(
+        "rounded-full",
+        isMobile ? "h-5 w-5" : "h-6 w-6"
+      )} />
+      <Skeleton className={cn(
+        isMobile ? "h-6 w-32" : "h-6 w-48"
+      )} />
+    </div>
+  )
+})
 
-const ContentSkeleton = () => (
-  <div className="space-y-4">
-    <Skeleton className="h-10 w-full rounded-lg" />
-    {Array.from({ length: 3 }).map((_, i) => (
-      <Skeleton key={i} className="h-24 w-full rounded-lg" />
-    ))}
-  </div>
-)
+const ContentSkeleton = memo(function ContentSkeleton() {
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  
+  return (
+    <div className="space-y-4">
+      <Skeleton className={cn(
+        "rounded-lg",
+        isMobile ? "h-9" : "h-10"
+      )} />
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Skeleton 
+          key={i} 
+          className={cn(
+            "rounded-lg",
+            isMobile ? "h-20" : "h-24"
+          )} 
+        />
+      ))}
+    </div>
+  )
+})
 
 // ──────────────────────────────────────────────────────────
 //  Skeleton de Carga Principal
 // ──────────────────────────────────────────────────────────
 const AdmissionLoadingSkeleton = memo(function AdmissionLoadingSkeleton() {
-  const isMobile = useIsMobile()
+  const isMobile = useMediaQuery("(max-width: 640px)")
   
   if (isMobile) {
     return (
-      <div className="space-y-4 animate-pulse">
+      <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Skeleton className="h-5 w-5 rounded-full" />
           <Skeleton className="h-5 w-32" />
@@ -76,7 +98,7 @@ const AdmissionLoadingSkeleton = memo(function AdmissionLoadingSkeleton() {
   }
 
   return (
-    <div className="space-y-6 animate-pulse">
+    <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Skeleton className="h-6 w-6 rounded-full" />
         <Skeleton className="h-6 w-48" />
@@ -109,7 +131,7 @@ const AdmissionLoadingSkeleton = memo(function AdmissionLoadingSkeleton() {
 //  Encabezado Responsivo
 // ──────────────────────────────────────────────────────────
 const PageHeader = memo(function PageHeader() {
-  const isMobile = useIsMobile()
+  const isMobile = useMediaQuery("(max-width: 640px)")
 
   return (
     <div className={cn(
@@ -143,11 +165,9 @@ const PageHeader = memo(function PageHeader() {
 // ──────────────────────────────────────────────────────────
 const AdmissionContent = memo(function AdmissionContent() {
   return (
-    <Suspense fallback={<ContentSkeleton />}>
-      <div className="animate-in fade-in duration-300">
-        <PatientAdmission />
-      </div>
-    </Suspense>
+    <div className="animate-in fade-in duration-300">
+      <PatientAdmission />
+    </div>
   )
 })
 
@@ -155,7 +175,7 @@ const AdmissionContent = memo(function AdmissionContent() {
 //  Página Principal
 // ──────────────────────────────────────────────────────────
 export default function AdmisionPage() {
-  const isMobile = useIsMobile()
+  const isMobile = useMediaQuery("(max-width: 640px)")
 
   return (
     <ClinicDataProvider>
@@ -163,9 +183,7 @@ export default function AdmisionPage() {
         "animate-in fade-in duration-300",
         isMobile ? "px-2 space-y-4" : "px-0 space-y-6"
       )}>
-        <Suspense fallback={<HeaderSkeleton />}>
-          <PageHeader />
-        </Suspense>
+        <PageHeader />
 
         <Card className="border shadow-sm">
           <CardContent className={cn(

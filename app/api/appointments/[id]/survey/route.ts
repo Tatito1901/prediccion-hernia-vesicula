@@ -2,6 +2,7 @@
 // 🎯 ADAPTADA A TU SISTEMA DE ENCUESTAS COMPLETO - survey_templates + questions + assigned_surveys + survey_responses
 
 import { NextResponse, NextRequest } from 'next/server';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 // POST - Completar encuesta con respuestas detalladas
 export async function POST(
@@ -11,7 +12,13 @@ export async function POST(
   // Deprecated: This appointment-scoped survey endpoint is no longer used.
   // Prefer patient/template assignment via `/api/assign-survey` and current flows.
   return NextResponse.json(
-    { error: 'Endpoint deprecado. Use /api/assign-survey y flujos actuales' },
+    {
+      error: 'Endpoint deprecado. Use /api/assign-survey y flujos actuales',
+      valid_states: [
+        AppointmentStatusEnum.PRESENTE,
+        AppointmentStatusEnum.COMPLETADA,
+      ],
+    },
     { status: 410 }
   );
   /*
@@ -47,7 +54,10 @@ export async function POST(
     }
 
     // 2. VALIDAR ESTADO DE CITA PARA ENCUESTA
-    const validStatesForSurvey = ['PRESENTE', 'COMPLETADA'];
+    const validStatesForSurvey = [
+      AppointmentStatusEnum.PRESENTE,
+      AppointmentStatusEnum.COMPLETADA,
+    ];
     if (!validStatesForSurvey.includes(appointment.estado_cita)) {
       return NextResponse.json(
         { 
@@ -251,7 +261,13 @@ export async function PATCH(
   // Deprecated: This appointment-scoped survey endpoint is no longer used.
   // Prefer patient/template assignment via `/api/assign-survey` and current flows.
   return NextResponse.json(
-    { error: 'Endpoint deprecado. Use /api/assign-survey y flujos actuales' },
+    {
+      error: 'Endpoint deprecado. Use /api/assign-survey y flujos actuales',
+      valid_states: [
+        AppointmentStatusEnum.PRESENTE,
+        AppointmentStatusEnum.COMPLETADA,
+      ],
+    },
     { status: 410 }
   );
   /*
@@ -276,7 +292,10 @@ export async function PATCH(
     }
 
     // 2. VALIDAR ESTADO DE CITA
-    const validStates = ['PRESENTE', 'COMPLETADA'];
+    const validStates = [
+      AppointmentStatusEnum.PRESENTE,
+      AppointmentStatusEnum.COMPLETADA,
+    ];
     if (!validStates.includes(appointment.estado_cita)) {
       return NextResponse.json(
         { error: 'La cita debe estar en estado PRESENTE o COMPLETADA para iniciar encuesta' }, 
@@ -392,7 +411,13 @@ export async function GET(
   // Deprecated: This appointment-scoped survey endpoint is no longer used.
   // Prefer patient/template assignment via `/api/assign-survey` and current flows.
   return NextResponse.json(
-    { error: 'Endpoint deprecado. Use /api/assign-survey y flujos actuales' },
+    {
+      error: 'Endpoint deprecado. Use /api/assign-survey y flujos actuales',
+      valid_states: [
+        AppointmentStatusEnum.PRESENTE,
+        AppointmentStatusEnum.COMPLETADA,
+      ],
+    },
     { status: 410 }
   );
   /*
@@ -468,7 +493,10 @@ export async function GET(
     }
 
     // 4. DETERMINAR CAPACIDADES Y ESTADO
-    const validStatesForSurvey = ['PRESENTE', 'COMPLETADA'];
+    const validStatesForSurvey = [
+      AppointmentStatusEnum.PRESENTE,
+      AppointmentStatusEnum.COMPLETADA,
+    ];
     const canStartSurvey = validStatesForSurvey.includes(appointment.estado_cita);
     const surveyExists = !!assignedSurvey && !surveyError;
     const hasResponses = surveyExists && assignedSurvey.survey_responses && assignedSurvey.survey_responses.length > 0;

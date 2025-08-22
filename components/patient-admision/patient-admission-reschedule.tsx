@@ -32,6 +32,7 @@ import type { AppointmentWithPatient, RescheduleProps } from './admision-types';
 import { getPatientFullName } from './admision-types';
 import { useClinic } from "@/contexts/clinic-data-provider";
 import { CLINIC_SCHEDULE, isWorkDay } from '@/lib/clinic-schedule';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 // Utilidades
 const formatAppointmentDate = (date: Date): string => {
@@ -123,7 +124,11 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
     
     // Filtrar ocupados
     const occupiedSlots = new Set<string>();
-    const activeStates = ['PROGRAMADA', 'CONFIRMADA', 'PRESENTE'];
+    const activeStates = [
+      AppointmentStatusEnum.PROGRAMADA,
+      AppointmentStatusEnum.CONFIRMADA,
+      AppointmentStatusEnum.PRESENTE,
+    ];
     
     allAppointments
       ?.filter(apt => 

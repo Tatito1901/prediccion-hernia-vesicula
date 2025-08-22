@@ -34,6 +34,9 @@ import {
   Award
 } from "lucide-react";
 
+import { AppointmentStatusEnum } from '@/lib/types';
+import type { AppointmentStatus } from '@/lib/types';
+
 import type { 
   AppointmentWithPatient, 
   PatientHistoryModalProps,
@@ -106,13 +109,13 @@ const AppointmentTimeline = memo<{
   };
 
   const statusIcon = {
-    'PROGRAMADA': Calendar,
-    'CONFIRMADA': CheckCircle2,
-    'PRESENTE': Activity,
-    'COMPLETADA': CheckCircle2,
-    'CANCELADA': XCircle,
-    'NO_ASISTIO': AlertCircle,
-    'REAGENDADA': CalendarDays,
+    [AppointmentStatusEnum.PROGRAMADA]: Calendar,
+    [AppointmentStatusEnum.CONFIRMADA]: CheckCircle2,
+    [AppointmentStatusEnum.PRESENTE]: Activity,
+    [AppointmentStatusEnum.COMPLETADA]: CheckCircle2,
+    [AppointmentStatusEnum.CANCELADA]: XCircle,
+    [AppointmentStatusEnum.NO_ASISTIO]: AlertCircle,
+    [AppointmentStatusEnum.REAGENDADA]: CalendarDays,
   }[appointment.estado_cita] || Calendar;
 
   const StatusIcon = statusIcon;
@@ -233,11 +236,13 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
     
     const apps = historyData.appointments;
     const total = apps.length;
-    const completed = apps.filter(a => a.estado_cita === 'COMPLETADA').length;
-    const cancelled = apps.filter(a => a.estado_cita === 'CANCELADA').length;
-    const noShow = apps.filter(a => a.estado_cita === 'NO_ASISTIO').length;
+    const completed = apps.filter(a => a.estado_cita === AppointmentStatusEnum.COMPLETADA).length;
+    const cancelled = apps.filter(a => a.estado_cita === AppointmentStatusEnum.CANCELADA).length;
+    const noShow = apps.filter(a => a.estado_cita === AppointmentStatusEnum.NO_ASISTIO).length;
     const scheduled = apps.filter(a => 
-      ['COMPLETADA', 'CANCELADA', 'NO_ASISTIO'].includes(a.estado_cita)
+      a.estado_cita === AppointmentStatusEnum.COMPLETADA ||
+      a.estado_cita === AppointmentStatusEnum.CANCELADA ||
+      a.estado_cita === AppointmentStatusEnum.NO_ASISTIO
     ).length;
     
     return {
@@ -256,10 +261,17 @@ const PatientHistoryModal = memo<PatientHistoryModalProps>(({
     const now = new Date();
     const upcoming: AppointmentWithPatient[] = [];
     const past: AppointmentWithPatient[] = [];
+    const excludedUpcoming = new Set<AppointmentStatus>([
+      AppointmentStatusEnum.CANCELADA,
+      AppointmentStatusEnum.NO_ASISTIO,
+    ]);
     
     historyData.appointments.forEach(apt => {
       const aptDate = new Date(apt.fecha_hora_cita);
-      if (aptDate > now && !['CANCELADA', 'NO_ASISTIO'].includes(apt.estado_cita)) {
+      if (
+        aptDate > now &&
+        !excludedUpcoming.has(apt.estado_cita as AppointmentStatus)
+      ) {
         upcoming.push(apt);
       } else {
         past.push(apt);

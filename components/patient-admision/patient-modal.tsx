@@ -31,6 +31,7 @@ import {
   dbDiagnosisToDisplay, 
   type DbDiagnosis 
 } from '@/lib/validation/enums';
+import { AppointmentStatusEnum } from '@/lib/types';
 
 interface PatientModalProps {
   trigger: React.ReactNode;
@@ -110,7 +111,11 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
         });
         
         const occupied = new Set<string>();
-        const blockingStatuses = ['PROGRAMADA', 'CONFIRMADA', 'PRESENTE'];
+        const blockingStatuses = [
+          AppointmentStatusEnum.PROGRAMADA,
+          AppointmentStatusEnum.CONFIRMADA,
+          AppointmentStatusEnum.PRESENTE,
+        ];
         
         res.data?.forEach((apt: any) => {
           if (blockingStatuses.includes(apt.estado_cita)) {

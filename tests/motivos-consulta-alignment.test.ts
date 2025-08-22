@@ -10,7 +10,7 @@ describe('Diagnóstico enum alignment', () => {
   });
 
   it('provee etiquetas de display legibles', () => {
-    expect(dbDiagnosisToDisplay('HERNIA_INGUINAL')).toBe('HERNIA INGUINAL');
-    expect(dbDiagnosisToDisplay('HERNIA_UMBILICAL')).toBe('HERNIA UMBILICAL');
+    expect(dbDiagnosisToDisplay('HERNIA_INGUINAL')).toBe('Hernia inguinal');
+    expect(dbDiagnosisToDisplay('HERNIA_UMBILICAL')).toBe('Hernia umbilical');
   });
 });
