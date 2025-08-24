@@ -1,6 +1,6 @@
-import React, { useState, useMemo, memo, useCallback, ComponentType, useEffect } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, TooltipProps } from 'recharts';
-import { Stethoscope, Users, Target, Heart, Shield, RefreshCw, ArrowUp, ArrowDown, Minus, LucideProps, AlertCircle, Sun, Moon } from 'lucide-react';
+import React, { useState, useMemo, memo, useCallback, Suspense } from 'react';
+import dynamic from 'next/dynamic';
+import { Stethoscope, Users, Target, Heart, Shield, RefreshCw, ArrowUp, ArrowDown, Minus, AlertCircle } from 'lucide-react';
 
 // Tipos y enums centralizados desde la base de datos
 import { PatientStatusEnum, AppointmentStatusEnum } from '@/lib/types';
@@ -170,68 +170,86 @@ const useTheme = () => {
   return { theme, toggleTheme };
 };
 
-// Componentes UI optimizados
-interface MetricCardProps {
+// Componente MetricCard optimizado con React.memo y comparador personalizado
+const MetricCard = memo(({ title, value, change, icon: Icon, trend = 'neutral', description, isLoading }: {
   title: string;
-  value: string | number;
-  change?: number;
-  icon: ComponentType<LucideProps>;
-  trend?: Trend;
+  value: number | string;
+  change: number;
+  icon: React.ComponentType<{ className?: string }>;
+  trend?: keyof typeof TREND_COLORS;
   description?: string;
-  isLoading: boolean;
-}
-
-const MetricCard = memo<MetricCardProps>(({ 
-  title, 
-  value, 
-  change, 
-  icon: Icon, 
-  trend = 'neutral', 
-  description, 
-  isLoading 
+  isLoading?: boolean;
 }) => {
+  // Memoización de componentes costosos
+  const TrendIcon = useMemo(() => TREND_ICONS[trend], [trend]);
+  const trendColor = useMemo(() => TREND_COLORS[trend], [trend]);
+
+  // Loader optimizado memoizado
+  const LoadingComponent = useMemo(() => (
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 animate-pulse">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-24" />
+          <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-16" />
+        </div>
+        <div className="h-8 w-8 bg-gray-300 dark:bg-gray-600 rounded" />
+      </div>
+    </div>
+  ), []);
+
   if (isLoading) {
-    return (
-      <div className="h-36 w-full bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 animate-pulse" />
-    );
+    return LoadingComponent;
   }
 
-  const trendIcons = {
-    up: ArrowUp,
-    down: ArrowDown,
-    neutral: Minus
-  };
-  
-  const TrendIcon = trendIcons[trend];
-  
-  const trendColors = {
-    up: 'text-emerald-600 dark:text-emerald-400',
-    down: 'text-rose-600 dark:text-rose-400',
-    neutral: 'text-slate-500 dark:text-slate-400'
-  };
+  // Memoización de contenido de cambio
+  const changeContent = useMemo(() => {
+    if (change === 0) return null;
+    
+    return (
+      <div className={`flex items-center text-sm ${trendColor}`}>
+        <TrendIcon className="w-4 h-4 mr-1" />
+        <span>{Math.abs(change).toFixed(1)}%</span>
+      </div>
+    );
+  }, [change, trendColor, TrendIcon]);
 
   return (
-    <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-      <header className="flex items-start justify-between">
-        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-          <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-        </div>
-        {change !== undefined && (
-          <div className={`flex items-center gap-1 text-xs font-semibold ${trendColors[trend]}`}>
-            <TrendIcon className="h-3 w-3" />
-            <span>{change > 0 ? '+' : ''}{change}%</span>
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 hover:shadow-lg transition-shadow duration-200">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+            {title}
+          </p>
+          <div className="flex items-baseline space-x-2">
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              {value}
+            </p>
+            {changeContent}
           </div>
-        )}
-      </header>
-      <main className="mt-2">
-        <p className="text-3xl font-bold">{value}</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">{title}</p>
-        {description && <p className="text-[11px] text-slate-500/70 dark:text-slate-400/70 mt-2">{description}</p>}
-      </main>
+          {description && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {description}
+            </p>
+          )}
+        </div>
+        <div className="flex-shrink-0">
+          <Icon className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+        </div>
+      </div>
     </div>
   );
+}, (prevProps, nextProps) => {
+  // Comparador optimizado - evita re-renders cuando valores son funcionalmente iguales
+  return (
+    prevProps.title === nextProps.title &&
+    prevProps.value === nextProps.value &&
+    prevProps.change === nextProps.change &&
+    prevProps.trend === nextProps.trend &&
+    prevProps.description === nextProps.description &&
+    prevProps.isLoading === nextProps.isLoading &&
+    prevProps.icon === nextProps.icon // También comparar función icon
+  );
 });
-MetricCard.displayName = 'MetricCard';
 
 const CustomTooltip = memo<TooltipProps<number, string>>(({ active, payload, label }) => {
   if (active && payload?.length) {
