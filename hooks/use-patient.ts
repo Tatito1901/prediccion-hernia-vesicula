@@ -39,33 +39,72 @@ async function fetchPatientHistory(patientId: string, options?: PatientHistoryOp
 }
 
 async function postAdmission(payload: AdmissionPayload): Promise<AdmissionDBResponse> {
-  const res = await fetch('/api/patient-admission', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    // Mensajes enriquecidos en caso de conflicto/validaciones
-    if (res.status === 400 && data.validation_errors) {
-      const msg = data.validation_errors.map((e: any) => `${e.field}: ${e.message}`).join(', ');
-      const err = new Error(`Errores de validación: ${msg}`, { cause: { status: res.status, data } });
-      throw err;
+  let response: Response;
+  
+  try {
+    response = await fetch('/api/patient-admission', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (networkError) {
+    // ✅ Error de red separado
+    throw new Error('Error de conexión. Verifica tu conexión a internet.', {
+      cause: { type: 'network', originalError: networkError }
+    });
+  }
+  
+  // ✅ Intentar parsear respuesta SIEMPRE
+  let data: any;
+  try {
+    data = await response.json();
+  } catch (parseError) {
+    if (!response.ok) {
+      throw new Error(`Error del servidor (${response.status})`, {
+        cause: { type: 'server', status: response.status }
+      });
     }
-    if (res.status === 409) {
+    // Si la respuesta es ok pero no es JSON, continuar
+    data = {};
+  }
+  
+  if (!response.ok) {
+    // ✅ Preservar TODA la información del error con contexto específico
+    if (response.status === 400 && data.validation_errors) {
+      const msg = data.validation_errors.map((e: any) => `${e.field}: ${e.message}`).join(', ');
+      const error = new Error(`Errores de validación: ${msg}`) as any;
+      error.status = response.status;
+      error.data = data;
+      error.validation_errors = data.validation_errors;
+      throw error;
+    }
+    
+    if (response.status === 409) {
       const conflict = data.error || 'Conflicto de horario';
       const suggestions = Array.isArray(data.suggested_times) && data.suggested_times.length > 0
         ? ` Horarios sugeridos: ${data.suggested_times.map((t: any) => t.time_formatted).join(', ')}`
         : '';
-      const err = new Error(conflict + suggestions, { cause: { status: res.status, data } });
-      throw err;
+      const error = new Error(conflict + suggestions) as any;
+      error.status = response.status;
+      error.data = data;
+      error.suggested_times = data.suggested_times;
+      throw error;
     }
-    // 422 (reglas de negocio) u otros estados
-    const msg = data.error || 'Error al procesar la admisión.';
-    const err = new Error(msg, { cause: { status: res.status, data } });
-    throw err;
+    
+    // ✅ Casos específicos con información preservada
+    const msg = data.error || data.message || `Error HTTP ${response.status}`;
+    const error = new Error(msg) as any;
+    error.status = response.status;
+    error.data = data;
+    error.validation_errors = data.validation_errors;
+    error.suggested_times = data.suggested_times;
+    throw error;
   }
-  return res.json();
+  
+  return data;
 }
 
 async function patchPatient({ id, updates }: { id: string; updates: Partial<Patient> }): Promise<Patient> {
@@ -121,16 +160,20 @@ export const useAdmitPatient = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
     },
     onError: (error: any) => {
-      const cause = error?.cause as any;
-      const status = cause?.status as number | undefined;
-      const data = cause?.data;
-      const msg = error?.message || data?.error || 'No se pudo completar el registro. Intente de nuevo.';
+      // ✅ Acceso directo a propiedades del error mejorado
+      const status = error?.status as number | undefined;
+      const data = error?.data;
+      const validationErrors = error?.validation_errors;
+      const suggestedTimes = error?.suggested_times;
+      const msg = error?.message || 'No se pudo completar el registro. Intente de nuevo.';
 
-      // Evitar toast duplicado si el formulario ya manejará errores de campo
-      const isValidation = status === 400 && Array.isArray(data?.validation_errors);
+      // ✅ Detección más robusta de tipos de error
+      const isValidation = status === 400 && Array.isArray(validationErrors);
       const isDuplicatePhone = status === 400 && (msg?.includes('patients_telefono_key') || /tel[eé]fono/i.test(msg));
       const isDuplicatePatient = status === 409 && (data?.code === 'duplicate_patient');
-      const isBusinessRule = status === 422; // horario, domingo, pasado, etc.
+      const isConflict = status === 409;
+      const isBusinessRule = status === 422;
+      
       if (isValidation || isDuplicatePhone || isDuplicatePatient || isBusinessRule) {
         if (isDuplicatePatient) {
           const existing = data?.existing_patient;
@@ -141,12 +184,19 @@ export const useAdmitPatient = () => {
               : 'Ya existe un registro con mismo nombre, apellidos y fecha de nacimiento.',
             duration: 6000,
           });
+        } else if (isConflict && Array.isArray(suggestedTimes) && suggestedTimes.length > 0) {
+          // ✅ Mostrar horarios sugeridos cuando hay conflicto
+          toast.error('Conflicto de Horario', {
+            description: `${msg}\nHorarios disponibles: ${suggestedTimes.map((t: any) => t.time_formatted || t).join(', ')}`,
+            duration: 8000,
+          });
         }
         return;
       }
 
+      // ✅ Error general con más contexto
       toast.error('Error en la Admisión', {
-        description: msg,
+        description: status ? `${msg} (Código: ${status})` : msg,
         duration: 6000,
       });
     },

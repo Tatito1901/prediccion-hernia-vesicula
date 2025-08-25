@@ -399,56 +399,79 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
       return;
     }
 
+    const controller = new AbortController();
     const searchData = async () => {
       setIsSearching(true);
       try {
-        const res = await fetch(`/api/patients?search=${debouncedSearch}&pageSize=3`);
+        const res = await fetch(`/api/patients?search=${debouncedSearch}&pageSize=3`, { signal: controller.signal });
         const patientsData = await res.json();
         setSearchResults({ patients: patientsData?.data || [] });
       } catch (error) {
-        console.error('Search error:', error);
+        const isAborted = error instanceof Error && error.name === 'AbortError';
+        if (!isAborted) {
+          console.error('Search error:', error);
+        }
       } finally {
         setIsSearching(false);
       }
     };
 
     searchData();
+    return () => { try { controller.abort(); } catch {} };
   }, [debouncedSearch]);
 
-  // Load occupied time slots
+  // ✅ Load occupied time slots con manejo MEJORADO de stale closures
   useEffect(() => {
-    if (!selectedDate) return;
+    if (!selectedDate) {
+      setOccupiedTimes(new Set());
+      return;
+    }
+    
+    const controller = new AbortController();
+    const BLOCKING_STATUSES = [
+      AppointmentStatusEnum.PROGRAMADA,
+      AppointmentStatusEnum.CONFIRMADA,
+      AppointmentStatusEnum.PRESENTE,
+    ];
     
     const loadAppointments = async () => {
-      const dateStr = selectedDate.toISOString().split('T')[0];
       try {
+        const dateStr = selectedDate.toISOString().split('T')[0];
         const res = await fetchSpecificAppointments({
           dateFilter: 'range',
           startDate: dateStr,
           endDate: dateStr,
           pageSize: 100,
+          signal: controller.signal, // ✅ Pasar signal para cancelación
         });
         
-        const occupied = new Set<string>();
-        res.data?.forEach((apt: any) => {
-          if ([
-            AppointmentStatusEnum.PROGRAMADA,
-            AppointmentStatusEnum.CONFIRMADA,
-            AppointmentStatusEnum.PRESENTE,
-          ].includes(apt.estado_cita)) {
-            const time = format(new Date(apt.fecha_hora_cita), 'HH:mm');
-            occupied.add(time);
-          }
-        });
-        
-        setOccupiedTimes(occupied);
+        // ✅ Verificar que no se canceló antes de setState
+        if (!controller.signal.aborted) {
+          const occupied = new Set<string>();
+          res.data?.forEach((apt: any) => {
+            if (BLOCKING_STATUSES.includes(apt.estado_cita)) {
+              const time = format(new Date(apt.fecha_hora_cita), 'HH:mm');
+              occupied.add(time);
+            }
+          });
+          setOccupiedTimes(occupied);
+        }
       } catch (err) {
-        console.error('Error loading appointments:', err);
+        // ✅ Solo logear si no fue cancelación
+        if (!controller.signal.aborted) {
+          console.error('Error loading appointments:', err);
+          setOccupiedTimes(new Set()); // Reset on error
+        }
       }
     };
 
     loadAppointments();
-  }, [selectedDate, fetchSpecificAppointments]);
+    
+    // ✅ Cleanup function robusta
+    return () => {
+      controller.abort();
+    };
+  }, [selectedDate, fetchSpecificAppointments]); // ✅ Dependencias completas
 
   // Handlers
   const handleSelectRecord = (patient: Patient) => {

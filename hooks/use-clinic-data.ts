@@ -6,6 +6,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import { queryKeys } from '@/lib/query-keys';
 import type {
   Patient,
+  EnrichedPatient,
   Appointment,
   PatientStatus,
   AppointmentStatus,
@@ -13,6 +14,7 @@ import type {
 } from '@/lib/types';
 import { PatientStatusEnum } from '@/lib/types';
 import type { PatientHistoryData } from '@/components/patient-admision/admision-types';
+import { dbDiagnosisToDisplay, type DbDiagnosis, DIAGNOSIS_DB_VALUES } from '@/lib/validation/enums';
 
 // =============== Tipos del Hook ===============
 export type ClinicFilters = {
@@ -29,8 +31,8 @@ export type ClinicFilters = {
 
 export type ClinicDataState = {
   patients: {
-    active: Patient[];
-    paginated: Patient[];
+    active: EnrichedPatient[];
+    paginated: EnrichedPatient[];
     pagination: {
       page: number;
       pageSize: number;
@@ -69,7 +71,7 @@ export type ClinicDataActions = {
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
   refetch: () => Promise<void>;
-  fetchSpecificAppointments: (params: Pick<ClinicFilters, 'dateFilter' | 'startDate' | 'endDate' | 'appointmentStatus' | 'patientId' | 'search'> & { page?: number; pageSize?: number }) => Promise<{
+  fetchSpecificAppointments: (params: Pick<ClinicFilters, 'dateFilter' | 'startDate' | 'endDate' | 'appointmentStatus' | 'patientId' | 'search'> & { page?: number; pageSize?: number; signal?: AbortSignal }) => Promise<{
     data: Appointment[];
     pagination?: {
       hasMore?: boolean;
@@ -79,7 +81,7 @@ export type ClinicDataActions = {
       totalPages?: number;
     };
   }>;
-  fetchPatientDetail: (id: string) => Promise<Patient>;
+  fetchPatientDetail: (id: string) => Promise<EnrichedPatient>;
   fetchPatientHistory: (patientId: string, options?: { includeHistory?: boolean; limit?: number }) => Promise<PatientHistoryData>;
 };
 
@@ -134,52 +136,84 @@ const withDebugParam = (url: string): string => {
   }
 };
 
-const fetchJson = async <T,>(input: RequestInfo | URL): Promise<T> => {
+const fetchJson = async <T,>(
+  input: RequestInfo | URL,
+  options?: { signal?: AbortSignal; timeoutMs?: number }
+): Promise<T> => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+  const timeoutMs = options?.timeoutMs ?? 10000; // 10s timeout
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  // Bridge external signal (from React Query/effects) to local controller
+  const onAbort = () => {
+    try { controller.abort(); } catch {}
+  };
+  if (options?.signal) {
+    if (options.signal.aborted) {
+      onAbort();
+    } else {
+      options.signal.addEventListener('abort', onAbort, { once: true });
+    }
+  }
 
   try {
     logApi('request', { url: typeof input === 'string' ? input : (input as any)?.toString?.() || input });
-    const res = await fetch(input, { 
+    const res = await fetch(input, {
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
     });
-    
-    clearTimeout(timeoutId);
-    
+
     if (!res.ok) {
       let message = 'Request failed';
+      let errorData = null;
       try {
-        const data = await res.json();
-        message = (data && (data.message || data.error)) || message;
-        logApi('error', { url: typeof input === 'string' ? input : (input as any)?.toString?.(), status: res.status, body: previewResponse(data) });
+        errorData = await res.json();
+        message = (errorData && (errorData.message || errorData.error)) || message;
+        logApi('error', { url: typeof input === 'string' ? input : (input as any)?.toString?.(), status: res.status, body: previewResponse(errorData) });
       } catch (_) {
-        // ignore
+        // If response is not JSON, create generic error
+        logApi('error', { url: typeof input === 'string' ? input : (input as any)?.toString?.(), status: res.status, body: 'Non-JSON error response' });
       }
-      throw new Error(message);
+      
+      // Create error with additional context for better debugging
+      const error = new Error(message) as any;
+      error.status = res.status;
+      error.data = errorData;
+      throw error;
     }
-    
+
     const json = await res.json();
     logApi('response', { url: typeof input === 'string' ? input : (input as any)?.toString?.(), status: res.status, body: previewResponse(json) });
     return json;
   } catch (error) {
-    clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
+      // If external canceled, propagate AbortError, else treat as timeout
+      if (options?.signal?.aborted) throw error;
       throw new Error('Request timeout');
     }
     throw error;
+  } finally {
+    // ✅ CRÍTICO: SIEMPRE limpiar el timeout y listeners
+    clearTimeout(timeoutId);
+    if (options?.signal) {
+      try { options.signal.removeEventListener('abort', onAbort as any); } catch {}
+    }
   }
 };
 
 // =============== API Fetch Functions Optimizadas ===============
-const fetchActivePatients = () =>
-  fetchJson<{ data: Patient[] }>(withDebugParam(`/api/patients?estado=${PatientStatusEnum.ACTIVO}&pageSize=50`));
+const fetchActivePatients = (opts?: { signal?: AbortSignal }) =>
+  fetchJson<{ data: Patient[] }>(
+    withDebugParam(`/api/patients?estado=${PatientStatusEnum.ACTIVO}&pageSize=50`),
+    opts
+  );
 
-const fetchTodayAppointments = () =>
+const fetchTodayAppointments = (opts?: { signal?: AbortSignal }) =>
   fetchJson<{ data?: Appointment[]; summary?: ClinicDataState['appointments']['summary'] }>(
-    withDebugParam('/api/appointments?dateFilter=today&pageSize=100')
+    withDebugParam('/api/appointments?dateFilter=today&pageSize=100'),
+    opts
   );
 
 const buildPatientsQueryString = (p: {
@@ -207,12 +241,16 @@ const fetchPaginatedPatients = (params: {
   status?: string;
   startDate?: string;
   endDate?: string;
+  signal?: AbortSignal;
 }) =>
   fetchJson<
     PaginatedResponse<Patient> & {
       stats?: ClinicDataState['patients']['stats'];
     }
-  >(withDebugParam(`/api/patients?${buildPatientsQueryString(params)}`));
+  >(
+    withDebugParam(`/api/patients?${buildPatientsQueryString(params)}`),
+    { signal: params.signal }
+  );
 
 const fetchAppointmentsByFilter = (filter: {
   dateFilter?: 'today' | 'future' | 'past' | 'range';
@@ -222,6 +260,7 @@ const fetchAppointmentsByFilter = (filter: {
   page?: number;
   startDate?: string | null;
   endDate?: string | null;
+  signal?: AbortSignal;
 }) => {
   const sp = new URLSearchParams();
   if (filter.dateFilter) sp.set('dateFilter', filter.dateFilter);
@@ -234,7 +273,8 @@ const fetchAppointmentsByFilter = (filter: {
     if (filter.endDate) sp.set('endDate', filter.endDate);
   }
   return fetchJson<{ data?: Appointment[]; pagination?: any; summary?: ClinicDataState['appointments']['summary'] }>(
-    withDebugParam(`/api/appointments?${sp.toString()}`)
+    withDebugParam(`/api/appointments?${sp.toString()}`),
+    { signal: filter.signal }
   );
 };
 
@@ -264,27 +304,50 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     dataUpdatedAt: essentialUpdatedAt,
   } = useQuery({
     queryKey: queryKeys.clinic.data,
-    queryFn: async () => {
-      // Paralelización tipada para mantener tipos precisos por respuesta
-      type PatientsRes = Awaited<ReturnType<typeof fetchActivePatients>>;
-      type TodayRes = Awaited<ReturnType<typeof fetchTodayAppointments>>;
-      type FilterRes = Awaited<ReturnType<typeof fetchAppointmentsByFilter>>;
+    queryFn: async ({ signal }) => {
+      // ✅ Paralelización MEJORADA con manejo granular de errores
+      const results = await Promise.allSettled([
+        fetchActivePatients({ signal }),
+        fetchTodayAppointments({ signal }),
+        fetchAppointmentsByFilter({ dateFilter: 'future', pageSize: 50, signal }),
+        fetchAppointmentsByFilter({ dateFilter: 'past', pageSize: 50, signal }),
+      ]);
 
-      const [patientsRes, appointmentsRes, futureRes, pastRes]: [PatientsRes, TodayRes, FilterRes, FilterRes] =
-        await Promise.all([
-          fetchActivePatients(),
-          fetchTodayAppointments(),
-          fetchAppointmentsByFilter({ dateFilter: 'future', pageSize: 50 }),
-          fetchAppointmentsByFilter({ dateFilter: 'past', pageSize: 50 }),
-        ]);
+      const [patientsResult, appointmentsResult, futureResult, pastResult] = results;
 
-      const todayAppointments = (appointmentsRes?.data ?? []) as Appointment[];
-      const futureAppointments = (futureRes?.data ?? []) as Appointment[];
-      const pastAppointments = (pastRes?.data ?? []) as Appointment[];
+      // ✅ Manejar cada resultado individualmente con fallbacks seguros
+      const patients = patientsResult.status === 'fulfilled' 
+        ? (patientsResult.value?.data ?? []) 
+        : [];
+        
+      const todayAppointments = appointmentsResult.status === 'fulfilled'
+        ? ((appointmentsResult.value?.data ?? []) as Appointment[])
+        : [];
+        
+      const futureAppointments = futureResult.status === 'fulfilled'
+        ? ((futureResult.value?.data ?? []) as Appointment[])
+        : [];
+        
+      const pastAppointments = pastResult.status === 'fulfilled'
+        ? ((pastResult.value?.data ?? []) as Appointment[])
+        : [];
 
-      // Calcular summary mínimo si no viene del backend
-      const summary =
-        appointmentsRes?.summary ||
+      // ✅ Log errores sin romper el flujo de datos
+      if (patientsResult.status === 'rejected') {
+        console.warn('[useClinicData] Failed to fetch patients:', patientsResult.reason?.message || patientsResult.reason);
+      }
+      if (appointmentsResult.status === 'rejected') {
+        console.warn('[useClinicData] Failed to fetch today appointments:', appointmentsResult.reason?.message || appointmentsResult.reason);
+      }
+      if (futureResult.status === 'rejected') {
+        console.warn('[useClinicData] Failed to fetch future appointments:', futureResult.reason?.message || futureResult.reason);
+      }
+      if (pastResult.status === 'rejected') {
+        console.warn('[useClinicData] Failed to fetch past appointments:', pastResult.reason?.message || pastResult.reason);
+      }
+
+      // ✅ Summary más robusto con datos reales obtenidos
+      const summary = (appointmentsResult.status === 'fulfilled' ? appointmentsResult.value?.summary : undefined) ||
         ({
           total_appointments: todayAppointments.length + futureAppointments.length + pastAppointments.length,
           today_count: todayAppointments.length,
@@ -293,7 +356,7 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
         } as ClinicDataState['appointments']['summary']);
 
       return {
-        patients: patientsRes.data ?? [],
+        patients,
         appointments: {
           today: todayAppointments,
           future: futureAppointments,
@@ -324,7 +387,7 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
       startDate: filters.startDate || undefined,
       endDate: filters.endDate || undefined,
     }),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       fetchPaginatedPatients({
         page: filters.page,
         pageSize: filters.pageSize,
@@ -332,6 +395,7 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
         status: filters.patientStatus === 'ALL' ? 'all' : (filters.patientStatus as string),
         startDate: filters.startDate || undefined,
         endDate: filters.endDate || undefined,
+        signal,
       }),
     staleTime: 60 * 1000, // 1m
     gcTime: 3 * 60 * 1000, // 3m
@@ -349,8 +413,29 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     return Math.max(...times);
   }, [essential, paginated, essentialUpdatedAt, paginatedUpdatedAt]);
 
-  // Memoización de funciones de acción
-  const actions = useMemo(() => {
+  // ✅ Función para enriquecer pacientes con campos computados
+  const enrichPatients = useCallback((rawPatients: Patient[]): EnrichedPatient[] => {
+    return rawPatients.map((patient) => {
+      const nombreCompleto = `${patient.nombre || ''} ${patient.apellidos || ''}`.trim();
+      
+      // Diagnóstico legible
+      const displayDiagnostico = patient.diagnostico_principal 
+        ? dbDiagnosisToDisplay(patient.diagnostico_principal)
+        : 'Sin diagnóstico';
+      
+      // Estado de encuesta (simulado - se puede mejorar con datos reales)
+      const encuesta_completada = patient.updated_at !== patient.created_at;
+      
+      return {
+        ...patient,
+        nombreCompleto,
+        displayDiagnostico,
+        encuesta_completada,
+      } as EnrichedPatient;
+    });
+  }, []);
+
+  const actions: ClinicDataActions = useMemo(() => {
     const setFilters = (partial: Partial<ClinicFilters>) => {
       setFiltersState((prev) => ({ ...prev, ...partial }));
     };
@@ -389,7 +474,8 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
       patientId,
       search,
       page,
-      pageSize = 100
+      pageSize = 100,
+      signal: externalSignal,
     }: Parameters<ClinicDataActions['fetchSpecificAppointments']>[0]) => {
       const key = queryKeys.appointments.filtered({
         dateFilter: dateFilter as 'today' | 'future' | 'past',
@@ -400,20 +486,32 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
 
       return queryClient.fetchQuery({
         queryKey: key,
-        queryFn: async () => {
-          const res = await fetchAppointmentsByFilter({ 
-            dateFilter, 
-            startDate, 
-            endDate, 
-            patientId, 
-            search, 
-            page, 
-            pageSize 
-          });
-          return {
-            data: (res.data ?? []) as Appointment[],
-            pagination: res.pagination,
-          };
+        queryFn: async ({ signal }) => {
+          // compone señales para que cualquier cancelación (React Query o externa) aborte la petición
+          const composed = new AbortController();
+          const abort = () => { try { composed.abort(); } catch {} };
+          try {
+            if (signal) signal.addEventListener('abort', abort, { once: true });
+            if (externalSignal) externalSignal.addEventListener('abort', abort, { once: true });
+
+            const res = await fetchAppointmentsByFilter({
+              dateFilter,
+              startDate,
+              endDate,
+              patientId,
+              search,
+              page,
+              pageSize,
+              signal: composed.signal,
+            });
+            return {
+              data: (res.data ?? []) as Appointment[],
+              pagination: res.pagination,
+            };
+          } finally {
+            try { if (signal) signal.removeEventListener('abort', abort as any); } catch {}
+            try { if (externalSignal) externalSignal.removeEventListener('abort', abort as any); } catch {}
+          }
         },
         staleTime: 60 * 1000,
         gcTime: 3 * 60 * 1000,
@@ -422,12 +520,14 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
 
     const fetchPatientDetail = async (id: string) => {
       const key = queryKeys.patients.detail(id);
-      return queryClient.fetchQuery({
+      const patient = await queryClient.fetchQuery({
         queryKey: key,
-        queryFn: () => fetchJson<Patient>(withDebugParam(`/api/patients/${id}`)),
+        queryFn: ({ signal }) => fetchJson<Patient>(withDebugParam(`/api/patients/${id}`), { signal }),
         staleTime: 2 * 60 * 1000,
         gcTime: 5 * 60 * 1000,
       });
+      // Enriquecer el paciente individual con los campos calculados
+      return enrichPatient(patient);
     };
 
     const fetchPatientHistory = async (
@@ -441,7 +541,7 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
 
       return queryClient.fetchQuery({
         queryKey: key,
-        queryFn: () => fetchJson<PatientHistoryData>(withDebugParam(`/api/patients/${patientId}/history?${params.toString()}`)),
+        queryFn: ({ signal }) => fetchJson<PatientHistoryData>(withDebugParam(`/api/patients/${patientId}/history?${params.toString()}`), { signal }),
         staleTime: 2 * 60 * 1000,
         gcTime: 5 * 60 * 1000,
       });
@@ -462,8 +562,8 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
   // Memoización del estado con tipos explícitos
   const state = useMemo((): ClinicDataState => ({
     patients: {
-      active: (essential?.patients as Patient[]) ?? [],
-      paginated: (paginated?.data as Patient[]) ?? [],
+      active: enrichPatients((essential?.patients as Patient[]) ?? []),
+      paginated: enrichPatients((paginated?.data as Patient[]) ?? []),
       pagination: {
         page: paginated?.pagination?.page ?? (filters.page ?? 1),
         pageSize: paginated?.pagination?.pageSize ?? (filters.pageSize ?? 15),
@@ -497,3 +597,31 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     ...actions,
   }), [state, actions]);
 }
+
+// =============== UTILIDAD DE ENRIQUECIMIENTO ===============
+// Función auxiliar para enriquecer pacientes (definida aquí para reutilización)
+
+const enrichPatient = (patient: Patient): EnrichedPatient => {
+  const nombreCompleto = `${patient.nombre || ''} ${patient.apellidos || ''}`.trim() || 'Sin nombre';
+  
+  const displayDiagnostico = patient.diagnostico_principal 
+    ? (DIAGNOSIS_DB_VALUES as readonly string[]).includes(patient.diagnostico_principal)
+      ? dbDiagnosisToDisplay(patient.diagnostico_principal as DbDiagnosis)
+      : patient.diagnostico_principal
+    : 'Sin diagnóstico';
+  
+  // Por ahora asumimos que no está completada, esto se puede mejorar con datos reales
+  const encuesta_completada = false;
+  
+  return {
+    ...patient,
+    nombreCompleto,
+    displayDiagnostico,
+    encuesta_completada,
+    encuesta: null // Se puede enriquecer con datos reales si están disponibles
+  };
+};
+
+const enrichPatients = (patients: Patient[]): EnrichedPatient[] => {
+  return patients.map(enrichPatient);
+};

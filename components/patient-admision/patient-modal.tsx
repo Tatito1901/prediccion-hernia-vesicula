@@ -90,6 +90,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
       return;
     }
 
+    const controller = new AbortController();
     const loadAppointments = async () => {
       const dateStr = selectedDate.toISOString().split('T')[0];
       try {
@@ -98,6 +99,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
           startDate: dateStr,
           endDate: dateStr,
           pageSize: 100,
+          signal: controller.signal,
         });
         
         const occupied = new Set<string>();
@@ -116,11 +118,18 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
         
         setOccupiedTimes(occupied);
       } catch (err) {
-        console.error('Error loading appointments:', err);
+        // Silently ignore aborts; log other errors
+        const isAborted = controller.signal.aborted || (err instanceof Error && err.name === 'AbortError');
+        if (!isAborted) {
+          console.error('Error loading appointments:', err);
+        }
       }
     };
 
     loadAppointments();
+    return () => {
+      try { controller.abort(); } catch {}
+    };
   }, [selectedDate, fetchSpecificAppointments]);
 
   // (Lead handlers removed)

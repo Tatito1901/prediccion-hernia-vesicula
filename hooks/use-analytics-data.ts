@@ -1,7 +1,7 @@
 // hooks/use-analytics-data.ts - unified statistics data manager
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { ZStatisticsResponse, type StatisticsResponse, type LabelCount } from '@/lib/validation/statistics';
@@ -15,18 +15,21 @@ async function fetchStatistics(): Promise<StatisticsResponse> {
       const j = await res.json();
       message = j?.message || j?.error || message;
     } catch {}
+    console.error('[useAnalyticsData] HTTP error when fetching /api/statistics:', message);
     throw new Error(message);
   }
   const json = await res.json();
   const parsed = ZStatisticsResponse.safeParse(json);
   if (!parsed.success) {
+    console.error('[useAnalyticsData] Statistics schema validation failed', parsed.error.issues);
     throw new Error('Statistics schema validation failed');
   }
+  try { console.debug('[useAnalyticsData] fetched statistics meta', parsed.data.meta); } catch {}
   return parsed.data;
 }
 
 export function useAnalyticsData() {
-  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, isSuccess, error, refetch, isFetching } = useQuery({
     queryKey: queryKeys.statistics.unified,
     queryFn: fetchStatistics,
     staleTime: 60 * 1000,
@@ -85,10 +88,23 @@ export function useAnalyticsData() {
     };
   }, [data]);
 
+  useEffect(() => {
+    if (normalized) {
+      try { console.debug('[useAnalyticsData] normalized ready', normalized.meta); } catch {}
+    }
+  }, [normalized]);
+
+  useEffect(() => {
+    if (isError && error) {
+      console.error('[useAnalyticsData] error state', error);
+    }
+  }, [isError, error]);
+
   return {
     data: normalized,
     isLoading,
     isError,
+    isSuccess,
     error: error as Error | null,
     refetch,
     isFetching,

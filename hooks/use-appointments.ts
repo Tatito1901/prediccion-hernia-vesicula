@@ -243,18 +243,25 @@ export const useUpdateAppointmentStatus = (
         updatedAppointment
       );
       
-      // Invalidar queries relacionadas
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
+      // ✅ Invalidación inteligente basada en prefijos - evita cascadas excesivas
+      // Solo invalidar las queries que realmente necesitan actualización
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.appointments.all,
+        exact: false // Invalida appointments.all y sus derivados automáticamente
+      });
       
-      // Invalidar vistas derivadas y historiales relevantes
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.today });
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.upcoming });
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.past });
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.byPatient(updatedAppointment.patient_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.history(updatedAppointment.id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.patients.history(updatedAppointment.patient_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.patients.historyAll });
+      queryClient.invalidateQueries({ 
+        queryKey: queryKeys.clinic.data,
+        exact: false // Invalida contexto global
+      });
+      
+      // ✅ Invalidación específica solo para el paciente afectado
+      if (updatedAppointment.patient_id) {
+        queryClient.invalidateQueries({ 
+          queryKey: queryKeys.patients.history(updatedAppointment.patient_id),
+          exact: false 
+        });
+      }
       
       const statusMessages: Record<AppointmentStatus, string> = {
         [AppointmentStatusEnum.PROGRAMADA]: 'Cita programada',

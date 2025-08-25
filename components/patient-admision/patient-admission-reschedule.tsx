@@ -155,10 +155,12 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
     
     // Filtrar ocupados
     const occupiedSlots = new Set<string>();
-    const activeStates = [
+    const activeStates: AppointmentStatusEnum[] = [
       AppointmentStatusEnum.PROGRAMADA,
       AppointmentStatusEnum.CONFIRMADA,
       AppointmentStatusEnum.PRESENTE,
+      AppointmentStatusEnum.COMPLETADA,
+      AppointmentStatusEnum.EN_CONSULTA,
     ];
     
     allAppointments

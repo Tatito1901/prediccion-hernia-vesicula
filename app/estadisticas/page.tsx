@@ -1,15 +1,16 @@
 "use client"
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useClinic } from "@/contexts/clinic-data-provider";
 import { useChartData, type AppointmentFilters } from "@/hooks/use-chart-data";
 import { Users, Calendar, CalendarCheck, CalendarClock, TrendingUp, Activity, ChartBar, PieChart, AlertCircle } from 'lucide-react';
-import { MetricsGrid, ChartContainer, type MetricValue } from '@/components/ui/metrics-system';
+import { MetricsGrid, ChartContainer, type MetricValue, createMetric } from '@/components/ui/metrics-system';
 import { AppointmentStatusEnum } from '@/lib/types';
 import { useSurveyAnalytics } from '@/hooks/use-survey-analytics';
 import { GenericLineChart } from '@/components/charts/common/generic-line-chart';
 import { GenericBarChart } from '@/components/charts/common/generic-bar-chart';
 import { GenericPieChart } from '@/components/charts/common/generic-pie-chart';
+import { useAnalyticsData } from '@/hooks/use-analytics-data';
 
 const INITIAL_FILTERS: AppointmentFilters = {
   dateRange: 'month',
@@ -33,12 +34,28 @@ const EstadisticasContent = () => {
     refetch,
   } = useClinic();
 
+  // Backend unified statistics (RPC via /api/statistics)
+  const analytics = useAnalyticsData();
+
+  // 🐛 DEBUG: Log loading states to verify they're triggered
+  useEffect(() => {
+    console.log('[DEBUG] Loading states:', {
+      clinic: { isLoading, error: !!error },
+      analytics: { 
+        isLoading: analytics.isLoading, 
+        isFetching: analytics.isFetching, 
+        error: !!analytics.error 
+      },
+      timestamp: new Date().toLocaleTimeString()
+    });
+  }, [isLoading, analytics.isLoading, analytics.isFetching, error, analytics.error]);
+
   const [filters, setFilters] = useState<AppointmentFilters>(INITIAL_FILTERS);
   const [activeSection, setActiveSection] = useState<'overview' | 'appointments' | 'surveys'>('overview');
 
   const chartData = useChartData({
-    patients: allPatients,
-    appointments: allAppointments,
+    patients: allPatients as any,
+    appointments: allAppointments as any,
     ...filters,
   });
 
@@ -110,7 +127,8 @@ const EstadisticasContent = () => {
     if (!allAppointments?.length) return [] as { name: string; value: number }[];
     const map = new Map<string, number>();
     for (const apt of allAppointments) {
-      const key = String(apt.estado_cita || apt.estado || 'desconocido');
+      const a = apt as any;
+      const key = String(a.estado_cita || a.estado || 'desconocido');
       map.set(key, (map.get(key) || 0) + 1);
     }
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
@@ -187,6 +205,18 @@ const EstadisticasContent = () => {
       trendValue: "en el sistema"
     }
   ], [appointmentStats, allPatients.length]);
+
+  // KPIs from backend analytics (RPC-derived)
+  const backendKpis = useMemo(() => {
+    return [
+      createMetric('Total citas (RPC)', analytics.data?.derived.totalAppointments ?? 0, { description: 'Suma por estado', color: 'info' }),
+      createMetric('Completadas (RPC)', analytics.data?.derived.completed ?? 0, { color: 'success' }),
+      createMetric('Programadas (RPC)', analytics.data?.derived.scheduled ?? 0, { color: 'info' }),
+      createMetric('Canceladas (RPC)', analytics.data?.derived.canceled ?? 0, { color: 'warning' }),
+      createMetric('No-show (RPC)', analytics.data?.derived.noShowRate ?? 0, { description: '% sobre total', color: 'error' }),
+      createMetric('Puntualidad (RPC)', analytics.data?.derived.punctualityRate ?? 0, { description: '% a tiempo', color: 'success' }),
+    ];
+  }, [analytics.data]);
 
   // Métricas de encuestas
   const surveyMetrics: MetricValue[] = useMemo(() => [
@@ -293,6 +323,17 @@ const EstadisticasContent = () => {
       {/* Contenido según la sección activa */}
       {activeSection === 'overview' && (
         <div className="space-y-6">
+          {/* 🐛 DEBUG: Always visible skeleton for testing */}
+          <div>
+            <h2 className="text-lg font-semibold mb-4">🐛 TEST: Always Visible Skeleton</h2>
+            <MetricsGrid 
+              metrics={[]} 
+              isLoading={true} 
+              columns={4} 
+              variant="detailed"
+            />
+          </div>
+
           {/* Métricas principales */}
           <div>
             <h2 className="text-lg font-semibold mb-4">Resumen General</h2>
@@ -300,6 +341,17 @@ const EstadisticasContent = () => {
               metrics={overviewMetrics} 
               isLoading={isLoading} 
               columns={4} 
+              variant="detailed"
+            />
+          </div>
+
+          {/* KPIs del backend (RPC) */}
+          <div>
+            <h2 className="text-lg font-semibold mb-4">KPIs del Backend (RPC)</h2>
+            <MetricsGrid
+              metrics={backendKpis}
+              isLoading={analytics.isLoading || analytics.isFetching}
+              columns={3}
               variant="detailed"
             />
           </div>
@@ -346,6 +398,75 @@ const EstadisticasContent = () => {
                   <p className="text-sm text-muted-foreground">
                     Sin datos de estado disponibles
                   </p>
+                </div>
+              )}
+            </ChartContainer>
+          </div>
+
+          {/* Gráficos basados en backend */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ChartContainer
+              title="Distribución por género (RPC)"
+              description="Pacientes por género"
+              isLoading={analytics.isLoading}
+              error={analytics.isError ? (analytics.error as Error) : null}
+              onRefresh={analytics.refetch}
+            >
+              {Array.isArray(analytics.data?.demographicProfile?.gender_distribution) && analytics.data?.demographicProfile?.gender_distribution?.length ? (
+                <GenericPieChart
+                  data={(analytics.data.demographicProfile.gender_distribution as any[]).map((d: any) => ({ name: d.label, value: d.count }))}
+                  dataKey="value"
+                  nameKey="name"
+                  donut
+                  colors={["#10b981", "#6366f1", "#f59e0b"]}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-48">
+                  <p className="text-sm text-muted-foreground">Sin datos disponibles</p>
+                </div>
+              )}
+            </ChartContainer>
+
+            <ChartContainer
+              title="Top diagnósticos (RPC)"
+              description="Principales diagnósticos clínicos"
+              isLoading={analytics.isLoading}
+              error={analytics.isError ? (analytics.error as Error) : null}
+              onRefresh={analytics.refetch}
+            >
+              {Array.isArray(analytics.data?.clinicalProfile?.diagnoses_distribution) && analytics.data?.clinicalProfile?.diagnoses_distribution?.length ? (
+                <GenericBarChart
+                  data={(analytics.data.clinicalProfile.diagnoses_distribution as any[]).map((d: any) => ({ name: d.label, count: d.count }))}
+                  xAxisKey="name"
+                  yAxisKey="count"
+                  colors={["#3b82f6"]}
+                  gradient
+                />
+              ) : (
+                <div className="flex items-center justify-center h-48">
+                  <p className="text-sm text-muted-foreground">Sin datos disponibles</p>
+                </div>
+              )}
+            </ChartContainer>
+
+            <ChartContainer
+              title="Citas por estado (RPC)"
+              description="Distribución operacional"
+              isLoading={analytics.isLoading}
+              error={analytics.isError ? (analytics.error as Error) : null}
+              onRefresh={analytics.refetch}
+            >
+              {Array.isArray(analytics.data?.operationalMetrics?.appointments_by_status) && analytics.data?.operationalMetrics?.appointments_by_status?.length ? (
+                <GenericPieChart
+                  data={(analytics.data.operationalMetrics.appointments_by_status as any[]).map((d: any) => ({ name: d.status || 'N/A', value: d.count || 0 }))}
+                  dataKey="value"
+                  nameKey="name"
+                  donut
+                  colors={["#10b981", "#f59e0b", "#ef4444", "#6366f1"]}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-48">
+                  <p className="text-sm text-muted-foreground">Sin datos disponibles</p>
                 </div>
               )}
             </ChartContainer>

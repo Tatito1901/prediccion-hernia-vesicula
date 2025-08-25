@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createAdminClient } from '@/utils/supabase/admin'
+import { createClient } from '@/utils/supabase/server'
+import { ADMISSION_BUSINESS_RULES } from '@/lib/admission-business-rules'
+import { createApiResponse, createApiError } from '@/lib/api-response-types'
 import { AppointmentStatusEnum } from '@/lib/types'
 
 export const runtime = 'nodejs'
@@ -68,20 +70,26 @@ export async function POST(req: NextRequest) {
       const validation_errors = parse.error.issues.map((i) => ({
         field: i.path.join('.') || 'root',
         message: i.message,
+        code: i.code,
       }))
-      return NextResponse.json({ validation_errors }, { status: 400 })
+      const errorResponse = createApiError('Errores de validación', {
+        validation_errors,
+        code: 'VALIDATION_ERROR',
+      })
+      return NextResponse.json(errorResponse, { status: 400 })
     }
 
     const payload = parse.data
     const appointmentDate = new Date(payload.fecha_hora_cita)
     if (appointmentDate.getTime() < Date.now()) {
-      return NextResponse.json(
-        { error: 'La fecha de la cita no puede ser en el pasado.' },
-        { status: 422 }
-      )
+      const errorResponse = createApiError('La fecha de la cita no puede ser en el pasado.', {
+        code: 'INVALID_DATE',
+        details: { provided_date: payload.fecha_hora_cita, current_date: new Date().toISOString() }
+      });
+      return NextResponse.json(errorResponse, { status: 422 });
     }
 
-    const supabase = await createAdminClient()
+    const supabase = await createClient()
 
     // Conflicto de horario por doctor (si se especifica)
     if (payload.doctor_id) {
@@ -92,10 +100,12 @@ export async function POST(req: NextRequest) {
         .eq('fecha_hora_cita', payload.fecha_hora_cita)
         .limit(1)
       if (conflicting && conflicting.length > 0) {
-        return NextResponse.json(
-          { error: 'Conflicto de horario', suggested_times: [] },
-          { status: 409 }
-        )
+        const errorResponse = createApiError('Conflicto de horario', {
+          code: 'SCHEDULE_CONFLICT',
+          details: { conflicting_appointment_id: conflicting[0].id },
+          suggested_actions: ['Seleccionar otro horario', 'Contactar al doctor']
+        });
+        return NextResponse.json(errorResponse, { status: 409 });
       }
     }
 
@@ -110,14 +120,12 @@ export async function POST(req: NextRequest) {
         .limit(1)
 
       if (existing && existing.length > 0) {
-        return NextResponse.json(
-          {
-            error: 'Paciente duplicado',
-            code: 'duplicate_patient',
-            existing_patient: existing[0],
-          },
-          { status: 409 }
-        )
+        const errorResponse = createApiError('Paciente duplicado', {
+          code: 'DUPLICATE_PATIENT',
+          details: { existing_patient: existing[0] },
+          suggested_actions: ['Verificar datos del paciente', 'Actualizar registro existente']
+        });
+        return NextResponse.json(errorResponse, { status: 409 });
       }
     }
 
@@ -152,10 +160,11 @@ export async function POST(req: NextRequest) {
 
     if (patientError) {
       // Duplicado por teléfono u otros constraints
-      return NextResponse.json(
-        { error: patientError.message },
-        { status: 400 }
-      )
+      const errorResponse = createApiError(patientError.message, {
+        code: 'PATIENT_CREATION_ERROR',
+        details: { supabase_error: patientError }
+      });
+      return NextResponse.json(errorResponse, { status: 400 });
     }
 
     const patient_id = patientData!.id as string
@@ -179,22 +188,27 @@ export async function POST(req: NextRequest) {
     if (apptError) {
       // rollback básico
       await supabase.from('patients').delete().eq('id', patient_id)
-      return NextResponse.json(
-        { error: apptError.message },
-        { status: 400 }
-      )
+      const errorResponse = createApiError(apptError.message, {
+        code: 'APPOINTMENT_CREATION_ERROR',
+        details: { supabase_error: apptError, patient_id }
+      });
+      return NextResponse.json(errorResponse, { status: 400 });
     }
 
-    return NextResponse.json({
-      message: 'Admisión creada',
+    const successResponse = createApiResponse({
       patient_id,
       appointment_id: apptData!.id as string,
       next_steps: ['confirmar_cita', 'enviar_recordatorio'],
-    })
+    }, {
+      message: 'Admisión creada exitosamente'
+    });
+    
+    return NextResponse.json(successResponse, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Error interno del servidor' },
-      { status: 500 }
-    )
+    const errorResponse = createApiError(error?.message || 'Error interno del servidor', {
+      code: 'INTERNAL_SERVER_ERROR',
+      details: process.env.NODE_ENV === 'development' ? { stack: error?.stack } : undefined
+    });
+    return NextResponse.json(errorResponse, { status: 500 });
   }
 }

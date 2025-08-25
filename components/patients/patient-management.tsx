@@ -319,8 +319,14 @@ function usePatientData() {
   }, [refetchPatients])
 
   return {
-    paginatedPatients: paginatedPatients ?? [],
-    patientsPagination,
+    paginatedPatients: Array.isArray(paginatedPatients) ? paginatedPatients : [],
+    patientsPagination: patientsPagination || { 
+      page: 1, 
+      pageSize: 15, 
+      totalCount: 0, 
+      totalPages: 1, 
+      hasMore: false 
+    },
     patientsFilters,
     isPatientsLoading,
     patientsError,
@@ -395,11 +401,12 @@ const PatientManagementView: React.FC = () => {
     router.push(`/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`)
   }, [router])
 
-  // Variables derivadas para renderizado
-  const hasFilters = data.patientsFilters.search !== "" || data.patientsFilters.status !== "all"
-  const hasPatients = data.paginatedPatients && data.paginatedPatients.length > 0
+  // Variables derivadas para renderizado con guardas defensivas
+  const hasFilters = Boolean(data.patientsFilters.search) || data.patientsFilters.status !== "all"
+  const hasPatients = Array.isArray(data.paginatedPatients) && data.paginatedPatients.length > 0
+  const totalPages = Math.max(1, data.patientsPagination.totalPages || 1)
 
-  if (data.isPatientsLoading && !data.paginatedPatients) {
+  if (data.isPatientsLoading && (!data.paginatedPatients || data.paginatedPatients.length === 0)) {
     return <LoadingSkeleton />
   }
 
@@ -440,11 +447,11 @@ const PatientManagementView: React.FC = () => {
             />
           </div>
  
-          {data.patientsPagination.totalPages > 1 && (
+          {totalPages > 1 && (
             <div className="mt-4 pb-4">
               <SimplePagination 
                 currentPage={data.patientsFilters.page} 
-                totalPages={data.patientsPagination.totalPages} 
+                totalPages={totalPages} 
                 onPageChange={data.handlePageChange}
                 loading={data.isPatientsLoading}
               />

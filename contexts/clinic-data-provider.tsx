@@ -1,12 +1,13 @@
 // contexts/clinic-data-provider.tsx
 'use client';
 
-import React, { createContext, useContext, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useCallback, useMemo, useRef, useEffect, ReactNode } from 'react';
 import { useClinicData } from '@/hooks/use-clinic-data';
 // Removed Zustand stores: React Query (useClinicData) is the single source of truth
 
-import type { Patient, Appointment, ExtendedAppointment, PatientStatus } from '@/lib/types';
+import type { Patient, Appointment, ExtendedAppointment, PatientStatus, EnrichedPatient } from '@/lib/types';
 import type { ClinicDataState, UseClinicDataReturn } from '@/hooks/use-clinic-data';
+import { dbDiagnosisToDisplay, type DbDiagnosis, DIAGNOSIS_DB_VALUES } from '@/lib/validation/enums';
 
 // ==================== TIPOS Y CONTRATOS ====================
 
@@ -14,7 +15,7 @@ import type { ClinicDataState, UseClinicDataReturn } from '@/hooks/use-clinic-da
 type ExtendedClinicDataContextType = UseClinicDataReturn & {
   // Funcionalidad de paginación de pacientes
   patientsData?: {
-    data: Patient[];
+    data: EnrichedPatient[];
     count: number;
   };
   patientsFilters: {
@@ -31,13 +32,13 @@ type ExtendedClinicDataContextType = UseClinicDataReturn & {
   patientsError: Error | null;
   refetchPatients: () => Promise<void>;
   // ✅ Propiedades adicionales proporcionadas en el contexto
-  paginatedPatients?: Patient[] | null;
+  paginatedPatients?: EnrichedPatient[] | null;
   patientsPagination?: ClinicDataState['patients']['pagination'];
   patientsStats?: ClinicDataState['patients']['stats'] | null;
   // ✅ Compatibilidad hacia atrás con el provider legado
-  allPatients: Patient[];
+  allPatients: EnrichedPatient[];
   allAppointments: (Appointment | ExtendedAppointment)[];
-  enrichedPatients: Patient[];
+  enrichedPatients: EnrichedPatient[];
   appointmentsWithPatientData: (Appointment | ExtendedAppointment)[];
   appointmentsSummary?: ClinicDataState['appointments']['summary'];
   // Alias de estados
@@ -52,18 +53,51 @@ const ClinicDataContext = createContext<ClinicDataContextType | undefined>(
   undefined
 );
 
+// ==================== UTILIDADES DE ENRIQUECIMIENTO ====================
+
+// Función para enriquecer pacientes con datos calculados
+const enrichPatient = (patient: Patient): EnrichedPatient => {
+  const nombreCompleto = `${patient.nombre || ''} ${patient.apellidos || ''}`.trim() || 'Sin nombre';
+  
+  const displayDiagnostico = patient.diagnostico_principal 
+    ? (DIAGNOSIS_DB_VALUES as readonly string[]).includes(patient.diagnostico_principal)
+      ? dbDiagnosisToDisplay(patient.diagnostico_principal as DbDiagnosis)
+      : patient.diagnostico_principal
+    : 'Sin diagnóstico';
+  
+  // Por ahora asumimos que no está completada, esto se puede mejorar con datos reales
+  const encuesta_completada = false;
+  
+  return {
+    ...patient,
+    nombreCompleto,
+    displayDiagnostico,
+    encuesta_completada,
+    encuesta: null // Se puede enriquecer con datos reales si están disponibles
+  };
+};
+
+const enrichPatients = (patients: Patient[]): EnrichedPatient[] => {
+  return patients.map(enrichPatient);
+};
+
 // ==================== PROVEEDOR ====================
 
 export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   // Fuente única de verdad centralizada
   const clinic = useClinicData();
 
-  // Crear estructura de datos compatible con el contrato anterior usando únicamente React Query
-  const patientsData = useMemo<{ data: Patient[]; count: number }>(() => {
-    const paginated = clinic.patients?.paginated ?? [];
-    const count = clinic.patients?.pagination?.totalCount ?? (paginated?.length ?? 0);
-    return { data: paginated, count };
-  }, [clinic.patients?.paginated, clinic.patients?.pagination?.totalCount]);
+  // ✅ Crear estructura de datos compatible con referencias ESTABLES
+  const patientsData = useMemo<{ data: EnrichedPatient[]; count: number }>(() => {
+    const paginatedRaw = clinic.patients?.paginated ?? [];
+    const enrichedPaginated = enrichPatients(paginatedRaw);
+    const totalCount = clinic.patients?.pagination?.totalCount;
+    const count = totalCount ?? enrichedPaginated.length;
+    return { data: enrichedPaginated, count };
+  }, [
+    clinic.patients?.paginated,
+    clinic.patients?.pagination?.totalCount
+  ]); // ✅ Dependencias estables y con optional chaining
 
   // Filtros compatibles
   const patientsFilters = useMemo(() => ({
@@ -93,7 +127,8 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   const allPatients = useMemo(() => {
     const pag = clinic.patients?.paginated ?? [];
     const act = clinic.patients?.active ?? [];
-    return (pag && pag.length > 0) ? pag : act;
+    const rawPatients = (pag && pag.length > 0) ? pag : act;
+    return enrichPatients(rawPatients);
   }, [clinic.patients?.paginated, clinic.patients?.active]);
 
   const allAppointments = useMemo<(Appointment | ExtendedAppointment)[]>(() => {
@@ -103,7 +138,7 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     return [...today, ...future, ...past] as (Appointment | ExtendedAppointment)[];
   }, [clinic.appointments?.today, clinic.appointments?.future, clinic.appointments?.past]);
 
-  // Los pacientes ya vienen enriquecidos desde el backend
+  // Los pacientes están enriquecidos con datos calculados
   const enrichedPatients = allPatients;
 
   // Alias simple: dejamos que los componentes hagan el enriquecimiento adicional si lo requieren
@@ -113,9 +148,54 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
 
   const appointmentsSummary = useMemo(() => clinic.appointments?.summary, [clinic.appointments?.summary]);
 
-  // Valor combinado del contexto
+  // ✅ Estabilizar datos críticos
+  const stablePatients = useMemo(
+    () => clinic.patients,
+    [clinic.patients.paginated, clinic.patients.active, clinic.patients.pagination]
+  );
+  
+  const stableAppointments = useMemo(
+    () => clinic.appointments,
+    [clinic.appointments.today, clinic.appointments.future, clinic.appointments.past]
+  );
+
+  // ✅ Usar useRef para funciones que no cambian frecuentemente
+  const actionsRef = useRef({
+    setFilters: clinic.setFilters,
+    resetFilters: clinic.resetFilters,
+    refetch: clinic.refetch,
+    fetchSpecificAppointments: clinic.fetchSpecificAppointments,
+    fetchPatientDetail: clinic.fetchPatientDetail,
+    fetchPatientHistory: clinic.fetchPatientHistory,
+  });
+
+  // ✅ Actualizar ref solo cuando sea necesario
+  useEffect(() => {
+    actionsRef.current = {
+      setFilters: clinic.setFilters,
+      resetFilters: clinic.resetFilters,
+      refetch: clinic.refetch,
+      fetchSpecificAppointments: clinic.fetchSpecificAppointments,
+      fetchPatientDetail: clinic.fetchPatientDetail,
+      fetchPatientHistory: clinic.fetchPatientHistory,
+    };
+  }, [clinic.setFilters, clinic.resetFilters, clinic.refetch, clinic.fetchSpecificAppointments, clinic.fetchPatientDetail, clinic.fetchPatientHistory]);
+
+  // ✅ Context value más estable y optimizado
   const contextValue = useMemo(() => ({
-    ...clinic,
+    // Core stable data
+    patients: stablePatients,
+    appointments: stableAppointments,
+    filters: clinic.filters,
+    loading: clinic.loading,
+    error: clinic.error,
+    lastUpdated: clinic.lastUpdated,
+    
+    // ✅ Stable actions con métodos faltantes incluidos
+    ...actionsRef.current,
+    setPage: clinic.setPage,
+    setPageSize: clinic.setPageSize,
+    
     // ===== Pacientes via React Query =====
     patientsData,
     patientsFilters,
@@ -126,22 +206,29 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     isPatientsLoading: clinic.loading,
     patientsError: clinic.error,
     refetchPatients: clinic.refetch,
-    // Datos adicionales de paginación
-    paginatedPatients: clinic.patients?.paginated ?? [],
-    patientsPagination: clinic.patients?.pagination,
-    patientsStats: clinic.patients?.stats ?? null,
+    
+    // Datos adicionales de paginación (enriquecidos)
+    paginatedPatients: patientsData.data,
+    patientsPagination: stablePatients?.pagination,
+    patientsStats: stablePatients?.stats ?? null,
+    
     // ===== Exposición de campos heredados =====
     allPatients,
     allAppointments,
     enrichedPatients,
     appointmentsWithPatientData,
     appointmentsSummary,
+    
     // Alias de estados
     isLoading: clinic.loading,
     isLoadingAppointments: clinic.loading,
-    error: clinic.error,
   }), [
-    clinic,
+    stablePatients, 
+    stableAppointments, 
+    clinic.filters, 
+    clinic.loading, 
+    clinic.error, 
+    clinic.lastUpdated,
     patientsData,
     patientsFilters,
     setPatientsPage,
@@ -150,6 +237,7 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     clearPatientsFilters,
     allPatients,
     allAppointments,
+    enrichedPatients,
     appointmentsWithPatientData,
     appointmentsSummary,
   ]);
