@@ -1,63 +1,93 @@
-// components/ui/stats-card.tsx
+"use client";
 
 import React from "react";
-import { Card } from "@/components/ui/card";
-import { TrendingUp } from "lucide-react";
-import { cn } from "@/lib/utils";
+import clsx from "clsx";
 
-interface StatsCardProps {
-  icon?: React.ReactNode;
-  label: string;
-  value: number | string;
-  trend?: number;
-  color?: "blue" | "purple" | "amber" | "emerald" | "red" | "slate";
+export type StatsCardColor = "blue" | "red" | "purple" | "emerald" | "amber" | "slate";
+
+export interface StatsCardProps extends React.HTMLAttributes<HTMLDivElement> {
+  title?: string;
+  label?: string; // keep optional for flexibility with historical usages
+  value: string | number;
+  icon?: React.ComponentType<any> | React.ReactNode;
+  color?: StatsCardColor;
+  trend?: string; // e.g. "+12% vs. last week"
+  isLoading?: boolean;
 }
 
-const colorClasses = {
-  blue: "bg-blue-100 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
-  purple: "bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400",
-  amber: "bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400",
-  emerald: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
-  red: "bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400",
-  slate: "bg-slate-100 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400"
+const colorMap: Record<StatsCardColor, { bg: string; text: string; ring: string }> = {
+  blue: { bg: "bg-blue-50 dark:bg-blue-950/30", text: "text-blue-600 dark:text-blue-300", ring: "ring-blue-200 dark:ring-blue-900" },
+  red: { bg: "bg-red-50 dark:bg-red-950/30", text: "text-red-600 dark:text-red-300", ring: "ring-red-200 dark:ring-red-900" },
+  purple: { bg: "bg-purple-50 dark:bg-purple-950/30", text: "text-purple-600 dark:text-purple-300", ring: "ring-purple-200 dark:ring-purple-900" },
+  emerald: { bg: "bg-emerald-50 dark:bg-emerald-950/30", text: "text-emerald-600 dark:text-emerald-300", ring: "ring-emerald-200 dark:ring-emerald-900" },
+  amber: { bg: "bg-amber-50 dark:bg-amber-950/30", text: "text-amber-600 dark:text-amber-300", ring: "ring-amber-200 dark:ring-amber-900" },
+  slate: { bg: "bg-slate-50 dark:bg-slate-900/40", text: "text-slate-600 dark:text-slate-300", ring: "ring-slate-200 dark:ring-slate-800" },
 };
 
-const gradientClasses = {
-  blue: "from-blue-400 to-blue-600 dark:from-blue-500/70 dark:to-blue-700/70",
-  purple: "from-purple-400 to-purple-600 dark:from-purple-500/70 dark:to-purple-700/70",
-  amber: "from-amber-400 to-amber-600 dark:from-amber-500/70 dark:to-amber-700/70",
-  emerald: "from-emerald-400 to-emerald-600 dark:from-emerald-500/70 dark:to-emerald-700/70",
-  red: "from-red-400 to-red-600 dark:from-red-500/70 dark:to-red-700/70",
-  slate: "from-slate-400 to-slate-600 dark:from-slate-500/70 dark:to-slate-700/70"
-};
+function renderIcon(icon?: React.ComponentType<any> | React.ReactNode, className?: string) {
+  if (!icon) return null;
+  if (typeof icon === "function") {
+    const C = icon as React.ComponentType<any>;
+    return <C className={className} aria-hidden="true" />;
+  }
+  return <span className={className}>{icon}</span>;
+}
 
-export function StatsCard({ icon, label, value, trend, color = "blue" }: StatsCardProps) {
+export const StatsCard: React.FC<StatsCardProps> = ({
+  title,
+  label,
+  value,
+  icon,
+  color = "slate",
+  trend,
+  isLoading = false,
+  className,
+  ...rest
+}) => {
+  const palette = colorMap[color] || colorMap.slate;
+
   return (
-    <Card className="relative overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-slate-900">
-      <div className="p-3 sm:p-4">
-        <div className="flex items-center justify-between">
-          <div className={cn(
-            "h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
-            colorClasses[color]
-          )}>
-            {icon}
-          </div>
-          {trend !== undefined && (
-            <div className={cn(
-              "flex items-center gap-1 text-xs font-medium",
-              trend >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
-            )}>
-              <TrendingUp className={cn("h-3 w-3", trend < 0 && "transform rotate-180")} />
-              {Math.abs(trend)}%
-            </div>
+    <div
+      className={clsx(
+        "rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4 sm:p-5",
+        "transition-colors",
+        className
+      )}
+      {...rest}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1 min-w-0">
+          {title && (
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate" title={title}>
+              {title}
+            </p>
           )}
+          {label && !title && (
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate" title={label}>
+              {label}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            {isLoading ? (
+              <div className="h-7 w-24 rounded-md bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            ) : (
+              <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                {value}
+              </p>
+            )}
+            {trend && (
+              <span className="text-xs text-slate-500 dark:text-slate-400">{trend}</span>
+            )}
+          </div>
         </div>
-        <div className="mt-2 sm:mt-3">
-          <p className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 truncate">{value}</p>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 truncate">{label}</p>
+        <div className={clsx("p-2 rounded-lg", palette.bg, palette.ring)}>
+          {renderIcon(icon, clsx("w-5 h-5", palette.text))}
         </div>
       </div>
-      <div className={cn("absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r", gradientClasses[color])} />
-    </Card>
+    </div>
   );
-}
+};
+
+StatsCard.displayName = "StatsCard";
+
+export default StatsCard;

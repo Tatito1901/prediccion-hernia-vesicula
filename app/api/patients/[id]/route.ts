@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { PatientStatusEnum } from '@/lib/types';
-import { isTerminalPatientStatus } from '@/lib/patient-state-rules';
+import { validatePatientStatusChange } from '@/lib/patient-state-rules';
 
 // GET /api/patients/[id] - Obtener un paciente específico por ID
 export async function GET(
@@ -94,30 +93,25 @@ export async function PATCH(
 
     if (Object.prototype.hasOwnProperty.call(safeBody, 'estado_paciente')) {
       const desiredRaw = safeBody.estado_paciente;
-      const desired = typeof desiredRaw === 'string' ? desiredRaw.toLowerCase() : desiredRaw;
-      const validValues = Object.values(PatientStatusEnum) as string[];
-
-      if (desired != null && !validValues.includes(desired)) {
-        return NextResponse.json(
-          { message: 'Valor de estado_paciente inválido' },
-          { status: 400 }
-        );
-      }
-
-      const currentStatus = (existingPatient as any)?.estado_paciente ?? null;
-
-      // No permitir cambiar estados terminales
-      if (isTerminalPatientStatus(currentStatus) && desired !== currentStatus) {
+      // Si el valor es null/undefined, omitir el cambio de estado explícito
+      if (desiredRaw == null) {
         delete safeBody.estado_paciente;
-      }
-
-      // No permitir degradar a POTENCIAL desde un estado ya establecido distinto a POTENCIAL
-      if (
-        desired === PatientStatusEnum.POTENCIAL &&
-        currentStatus &&
-        currentStatus !== PatientStatusEnum.POTENCIAL
-      ) {
-        delete safeBody.estado_paciente;
+      } else {
+        const currentStatus = (existingPatient as any)?.estado_paciente ?? null;
+        const result = validatePatientStatusChange(currentStatus, desiredRaw);
+        if (!result.allowed) {
+          if (result.code === 'INVALID_VALUE') {
+            return NextResponse.json(
+              { message: 'Valor de estado_paciente inválido' },
+              { status: 400 }
+            );
+          }
+          // Para bloqueos por terminal o degradación, ignorar el cambio de estado
+          delete safeBody.estado_paciente;
+        } else {
+          // Aplicar valor normalizado
+          safeBody.estado_paciente = result.normalized;
+        }
       }
     }
 

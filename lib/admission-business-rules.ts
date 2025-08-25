@@ -470,3 +470,6 @@ export const ADMISSION_BUSINESS_RULES = {
 } as const;
 
 export default ADMISSION_BUSINESS_RULES;
+
+// Re-exportar helpers/constantes de agenda para uso en UI (fachada única)
+export { CLINIC_SCHEDULE, CLINIC_TIMEZONE, validateRescheduleDateTime, isWorkDay } from '@/lib/clinic-schedule';

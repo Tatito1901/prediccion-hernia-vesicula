@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import React, { useMemo, type ComponentProps, type ElementType } from "react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { 
@@ -11,11 +11,11 @@ import {
 } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
 
-interface NavMainProps {
+interface NavMainProps extends ComponentProps<typeof SidebarGroup> {
   items: {
     title: string
     url: string
-    icon: React.ElementType
+    icon: ElementType
   }[]
   pathname?: string
   onNavigate?: () => void

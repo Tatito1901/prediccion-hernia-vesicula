@@ -13,13 +13,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import { Patient, PatientStatusEnum } from "@/lib/types"
 import { format, differenceInYears, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { useMediaQuery } from "@/hooks/use-breakpoint"
 import { dbDiagnosisToDisplay, DIAGNOSIS_DB_VALUES, type DbDiagnosis } from "@/lib/validation/enums"
+import EmptyState from "@/components/ui/empty-state"
 
 import { 
   User, 

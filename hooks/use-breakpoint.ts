@@ -58,6 +58,14 @@ const computeState = (): BreakpointState => {
 let state: BreakpointState = computeState();
 const listeners = new Set<() => void>();
 
+// Snapshot de servidor en caché para evitar nuevas referencias por llamada
+const serverSnapshot: BreakpointState = (() => {
+  const snap = Object.fromEntries(
+    Object.keys(queries).map(key => [key, false])
+  ) as BreakpointState;
+  return snap;
+})();
+
 // Registro de listeners solo en el cliente
 if (typeof window !== "undefined") {
   // Usamos un solo listener para todas las queries
@@ -99,10 +107,12 @@ const subscribe = (cb: () => void) => {
 };
 
 const getSnapshot = () => state;
-const getServerSnapshot = (): BreakpointState => 
-  Object.fromEntries(
-    Object.keys(queries).map(key => [key, false])
-  ) as BreakpointState;
+// Importante: devolver SIEMPRE la misma referencia en SSR para evitar bucles
+const getServerSnapshot = (): BreakpointState => serverSnapshot;
+
+// Helper de solo pruebas para verificar estabilidad del snapshot en SSR
+// No usar en código de producción. Exportado únicamente para tests unitarios.
+export const __getServerSnapshotForTest = (): BreakpointState => getServerSnapshot();
 
 /* ---------- Hooks públicos ---------- */
 

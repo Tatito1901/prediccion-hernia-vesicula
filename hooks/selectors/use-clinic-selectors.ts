@@ -3,26 +3,25 @@
 
 import { useMemo } from 'react';
 import { useClinic } from '@/contexts/clinic-data-provider';
-import type { Appointment, Patient } from '@/lib/types';
+import type { Appointment, Patient, AppointmentStatus } from '@/lib/types';
 
 // Returns today's appointments from context and some derived groupings
 export function useTodayAppointmentsSelector() {
   const { appointments: appts, loading, error } = useClinic();
 
-  const today = appts?.today ?? [];
+  const today: Appointment[] = appts?.today ?? [];
 
   const byStatus = useMemo(() => {
-    const groups: Record<string, Appointment[]> = {} as any;
-    for (const a of today as any[]) {
-      const key = (a as any).estado_cita ?? 'UNKNOWN';
-      if (!groups[key]) groups[key] = [] as any;
-      (groups[key] as any).push(a);
+    const groups: Partial<Record<AppointmentStatus, Appointment[]>> = {};
+    for (const a of today) {
+      const key = a.estado_cita;
+      (groups[key] ??= []).push(a);
     }
     return groups;
   }, [today]);
 
   return {
-    todayAppointments: today as any[],
+    todayAppointments: today,
     byStatus,
     loading,
     error,
@@ -32,22 +31,23 @@ export function useTodayAppointmentsSelector() {
 // Locates a patient in the context cache by id (no fetch)
 export function usePatientByIdSelector(id: string | null | undefined): Patient | undefined {
   const { patients } = useClinic();
-  const all = patients?.paginated?.length ? patients.paginated : patients?.active || [];
+  const all: Patient[] = patients?.paginated?.length ? patients.paginated : (patients?.active || []);
   return useMemo(() => {
     if (!id) return undefined;
-    return (all as Patient[]).find(p => p.id === id);
+    return all.find(p => p.id === id);
   }, [all, id]);
 }
 
 // Filters appointments currently available in context (typically today's) by status
-export function useAppointmentsByStatusSelector(status: string | 'ALL') {
+export function useAppointmentsByStatusSelector(status: AppointmentStatus | 'ALL') {
   const { appointments } = useClinic();
-  const source = appointments?.today ?? [];
+  const source: Appointment[] = appointments?.today ?? [];
 
   const list = useMemo(() => {
-    if (!status || status === 'ALL') return source as any[];
-    return (source as any[]).filter(a => (a as any).estado_cita === status);
+    if (!status || status === 'ALL') return source;
+    return source.filter(a => a.estado_cita === status);
   }, [source, status]);
 
   return list;
 }
+

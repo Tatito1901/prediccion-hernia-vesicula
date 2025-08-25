@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useMemo } from 'react';
-import { ClinicDataProvider, useClinic } from "@/contexts/clinic-data-provider";
+import { useClinic } from "@/contexts/clinic-data-provider";
 import { useChartData, type AppointmentFilters } from "@/hooks/use-chart-data";
 import { Users, Calendar, CalendarCheck, CalendarClock, TrendingUp, Activity, ChartBar, PieChart, AlertCircle } from 'lucide-react';
 import { MetricsGrid, ChartContainer, type MetricValue } from '@/components/ui/metrics-system';
@@ -603,11 +603,7 @@ const EstadisticasContent = () => {
 };
 
 const EstadisticasPage = () => {
-  return (
-    <ClinicDataProvider>
-      <EstadisticasContent />
-    </ClinicDataProvider>
-  );
+  return <EstadisticasContent />;
 };
 
 export default EstadisticasPage;

@@ -38,10 +38,10 @@ import {
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from "@/components/ui/badge"
-import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from "@/lib/utils"
 import { PatientStatusEnum, EnrichedPatient } from "@/lib/types"
 import { dbDiagnosisToDisplay, DIAGNOSIS_DB_VALUES, type DbDiagnosis } from "@/lib/validation/enums"
+import EmptyState from "@/components/ui/empty-state"
 
 interface PatientTableProps {
   patients: EnrichedPatient[]

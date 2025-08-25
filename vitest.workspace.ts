@@ -20,6 +20,8 @@ export default defineWorkspace([
       name: 'ui',
       include: ['tests/**/*.test.tsx'],
       environment: 'jsdom',
+      globals: true,
+      setupFiles: ['tests/setup/ui-setup.ts'],
       pool: 'forks',
       poolOptions: {
         forks: {

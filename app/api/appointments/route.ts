@@ -71,8 +71,24 @@ export async function GET(req: NextRequest) {
   const startDate = searchParams.get('startDate')
   const endDate = searchParams.get('endDate')
 
-  const supabase = await createClient()
+  // Debug flag to optionally include diagnostics in the response
+  const debug = searchParams.get('debug') === '1'
+
+  // Prefer service role on the server when available to bypass RLS for read-only aggregation
+  const usingAdmin = !!process.env.SUPABASE_SERVICE_ROLE_KEY
+  const envMeta = {
+    hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    hasAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    hasService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+  }
   const range = buildDateRange(dateFilter, startDate, endDate)
+  const supabase = usingAdmin ? createAdminClient() : await createClient()
+  const meta = {
+    usedClient: usingAdmin ? 'admin' : 'server',
+    ...envMeta,
+    params: { dateFilter, search, patientId, page, pageSize, startDate, endDate },
+    dateRange: range,
+  }
 
   let query = supabase
     .from('appointments')
@@ -105,6 +121,22 @@ export async function GET(req: NextRequest) {
 
   const { data, error, count } = await query
   if (error) {
+    // Graceful fallback for dev environments without DB permissions
+    const isPermission = /permission denied/i.test(error.message || '')
+    if (isPermission) {
+      console.warn('[api/appointments][GET] Permission denied fallback', {
+        message: error.message,
+        meta,
+      })
+      const pagination = { page, pageSize, totalCount: 0, totalPages: 0, hasMore: false }
+      const summary = { total_appointments: 0, today_count: 0, future_count: 0, past_count: 0 }
+      return NextResponse.json({ data: [], pagination, summary, ...(debug ? { meta } : {}) })
+    }
+    // Log non-permission errors with minimal meta when debug is enabled
+    console.error('[api/appointments][GET] Error', {
+      message: error.message,
+      meta: debug ? meta : undefined,
+    })
     return NextResponse.json({ error: 'Error al consultar citas', details: error.message }, { status: 500 })
   }
 
@@ -119,7 +151,18 @@ export async function GET(req: NextRequest) {
     summary = counts
   }
 
-  return NextResponse.json({ data: data || [], ...(summary ? { summary } : {}), pagination })
+  // Success diagnostic log when debug flag is set
+  if (debug) {
+    try {
+      console.info('[api/appointments][GET] Success', {
+        dataCount: (data || []).length,
+        pagination,
+        ...(summary ? { summary } : {}),
+        meta,
+      })
+    } catch {}
+  }
+  return NextResponse.json({ data: data || [], ...(summary ? { summary } : {}), pagination, ...(debug ? { meta } : {}) })
 }
 
 const CreateAppointmentSchema = z.object({

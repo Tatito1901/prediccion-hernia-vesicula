@@ -1,39 +1,48 @@
-// components/ui/empty-state.tsx
-import React from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+"use client"
 
-interface EmptyStateProps {
-  title: string;
-  description: string;
-  icon?: React.ReactNode;
-  actionText?: string;
-  onAction?: () => void;
-  className?: string;
+import React from "react"
+import { cn } from "@/lib/utils"
+
+export interface EmptyStateProps {
+  title: string
+  description?: string
+  icon?: React.ReactNode
+  action?: React.ReactNode
+  className?: string
 }
 
-export function EmptyState({ title, description, icon, actionText, onAction, className }: EmptyStateProps) {
+const EmptyState: React.FC<EmptyStateProps> = ({
+  title,
+  description,
+  icon,
+  action,
+  className,
+}) => {
   return (
-    <div className={cn("text-center py-16 px-6", className)}>
-      <Card className="max-w-md mx-auto border-0 shadow-xl bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900">
-        <CardContent className="p-8 flex flex-col items-center justify-center">
-          {icon && (
-            <div className="relative mb-6">
-              <div className="mx-auto h-20 w-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center shadow-lg">
-                {icon}
-              </div>
-            </div>
-          )}
-          <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-3">{title}</h3>
-          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{description}</p>
-          {actionText && onAction && (
-            <Button onClick={onAction} variant="outline" className="mt-4">
-              {actionText}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+    <div
+      className={cn(
+        "w-full text-center flex flex-col items-center justify-center gap-3",
+        className
+      )}
+      aria-live="polite"
+      role="status"
+    >
+      {icon && (
+        <div className="rounded-full bg-slate-100 dark:bg-slate-800/50 p-4 w-16 h-16 flex items-center justify-center">
+          {icon}
+        </div>
+      )}
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        {title}
+      </h3>
+      {description && (
+        <p className="text-slate-500 dark:text-slate-400 text-sm max-w-md">
+          {description}
+        </p>
+      )}
+      {action ? <div className="mt-1">{action}</div> : null}
     </div>
-  );
-};
+  )
+}
+
+export default EmptyState

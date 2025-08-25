@@ -12,16 +12,10 @@ export default function DashboardLayout({
   children: React.ReactNode 
 }) {
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)");
-  const isToggleableLayout = useMediaQuery("(max-width: 1279px)");
-
-  // Memoizamos el valor del sidebarBehavior para evitar renders innecesarios
-  const sidebarBehavior = isToggleableLayout ? "offcanvas" : "permanent";
 
   return (
     <ClinicDataProvider>
       <SidebarProvider 
-        sidebarBehavior={sidebarBehavior}
         className={cn(
           "min-h-screen bg-background",
           isMobile && "flex-col"

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, AreaChart, ReferenceLine } from 'recharts';
 import { useChartConfig } from './use-chart-config';
+import { formatClinicShortDate, formatClinicMediumDateTime } from '@/lib/timezone';
 
 interface GenericLineChartProps {
   data: any[];
@@ -18,6 +19,15 @@ interface GenericLineChartProps {
 // 🎨 Componente de tooltip personalizado elegante
 const CustomTooltip = ({ active, payload, label }: any) => {
   const { tooltipStyle, isDark } = useChartConfig();
+  const formatLabel = (val: any) => {
+    try {
+      const s = String(val);
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? s : formatClinicMediumDateTime(d);
+    } catch {
+      return String(val);
+    }
+  };
   
   if (active && payload && payload.length) {
     return (
@@ -27,7 +37,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             className="w-3 h-3 rounded-full" 
             style={{ backgroundColor: payload[0].color }}
           />
-          <span className="font-semibold text-sm">{label}</span>
+          <span className="font-semibold text-sm">{formatLabel(label)}</span>
         </div>
         <div className="text-lg font-bold">
           {payload[0].value.toLocaleString()}
@@ -115,6 +125,15 @@ export const GenericLineChart: React.FC<GenericLineChartProps> = ({
             dataKey={xAxisKey} 
             tickLine={false} 
             axisLine={false} 
+            tickFormatter={(value) => {
+              try {
+                const s = String(value);
+                const d = new Date(s);
+                return isNaN(d.getTime()) ? s : formatClinicShortDate(d);
+              } catch {
+                return String(value);
+              }
+            }}
             tick={baseLabelStyle}
             interval={0}
             angle={-45}
@@ -212,6 +231,15 @@ export const GenericLineChart: React.FC<GenericLineChartProps> = ({
               dataKey={xAxisKey} 
               tickLine={false} 
               axisLine={false} 
+              tickFormatter={(value) => {
+                try {
+                  const s = String(value);
+                  const d = new Date(s);
+                  return isNaN(d.getTime()) ? s : formatClinicShortDate(d);
+                } catch {
+                  return String(value);
+                }
+              }}
               tick={baseLabelStyle}
               interval={0}
               angle={-45}

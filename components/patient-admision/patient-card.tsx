@@ -7,7 +7,6 @@ import { es } from 'date-fns/locale';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -289,20 +288,6 @@ export const PatientCard = memo<PatientCardProps>(({
           {/* Header con información del paciente */}
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <Avatar className={cn(
-                "h-11 w-11 ring-2 ring-offset-2 ring-offset-background",
-                statusConfig.borderClass.replace('border', 'ring')
-              )}>
-                <AvatarFallback className={cn(
-                  "text-sm font-semibold",
-                  statusConfig.iconBg,
-                  statusConfig.color === 'sky' && "text-sky-700 dark:text-sky-300",
-                  statusConfig.color === 'emerald' && "text-emerald-700 dark:text-emerald-300",
-                  statusConfig.color === 'red' && "text-red-700 dark:text-red-300",
-                )}>
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
               
               <div className="min-w-0 flex-1">
                 <h3 className="font-semibold text-base text-gray-900 dark:text-gray-100 truncate">

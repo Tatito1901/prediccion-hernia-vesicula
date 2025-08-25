@@ -1,6 +1,5 @@
-import type * as React from "react"
+import React, { type ComponentProps, type ElementType, useCallback, useState } from "react"
 import Link from "next/link"
-import { useCallback, useState } from "react"
 
 import {
   SidebarGroup,
@@ -12,11 +11,11 @@ import {
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 
-interface NavSecondaryProps extends React.HTMLAttributes<HTMLDivElement> {
+interface NavSecondaryProps extends ComponentProps<typeof SidebarGroup> {
   items: {
     title: string
     url: string
-    icon: React.ElementType
+    icon: ElementType
   }[]
   pathname?: string
   onNavigate?: () => void
@@ -75,6 +74,7 @@ export function NavSecondary({ items, pathname, className, onNavigate, ...props 
                     onClick={closeSidebarOnMobile}
                     onMouseEnter={() => setHoveredItem(item.title)}
                     onMouseLeave={() => setHoveredItem(null)}
+                    aria-current={isActive ? "page" : undefined}
                     className="flex items-center gap-3 w-full"
                   >
                     <div className={cn(
@@ -101,10 +101,6 @@ export function NavSecondary({ items, pathname, className, onNavigate, ...props 
                       </div>
                     )}
                   </Link>
-                  
-                  {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-gradient-to-b from-blue-500 to-purple-500" />
-                  )}
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )

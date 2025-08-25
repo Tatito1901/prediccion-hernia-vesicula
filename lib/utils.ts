@@ -1,5 +1,13 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import {
+  formatClinicLongDate,
+  formatClinicTime,
+  formatClinicDateTime,
+  formatClinicMediumDateTime,
+  formatClinicDate,
+  formatClinicShortDate,
+} from '@/lib/timezone'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -23,14 +31,15 @@ export const validatePhoneNumber = (phone: string): boolean => {
 };
 
 // ==================== FORMATEO DE FECHAS/TIEMPO ====================
-import { format, parseISO, isValid } from 'date-fns';
-import { es } from 'date-fns/locale';
+// Helpers locales mínimos para validar y normalizar entradas
+const toDate = (input: Date | string): Date => (input instanceof Date ? input : new Date(input));
+const isValidDate = (d: Date): boolean => !isNaN(d.getTime());
 
 export const formatAppointmentDate = (date: Date | string): string => {
   try {
-    const dateObj = typeof date === 'string' ? parseISO(date) : date;
-    if (!isValid(dateObj)) return 'Fecha no válida';
-    return format(dateObj, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es });
+    const d = toDate(date);
+    if (!isValidDate(d)) return 'Fecha no válida';
+    return formatClinicLongDate(d);
   } catch {
     return 'Fecha no válida';
   }
@@ -39,9 +48,9 @@ export const formatAppointmentDate = (date: Date | string): string => {
 export const formatAppointmentTime = (date: Date | string | null): string => {
   try {
     if (!date) return '--:--';
-    const dateObj = typeof date === 'string' ? parseISO(date) : date;
-    if (!isValid(dateObj)) return '--:--';
-    return format(dateObj, 'HH:mm');
+    const d = toDate(date);
+    if (!isValidDate(d)) return '--:--';
+    return formatClinicTime(d);
   } catch {
     return '--:--';
   }
@@ -49,9 +58,9 @@ export const formatAppointmentTime = (date: Date | string | null): string => {
 
 export const formatAppointmentDateTime = (date: Date | string): string => {
   try {
-    const dateObj = typeof date === 'string' ? parseISO(date) : date;
-    if (!isValid(dateObj)) return 'Fecha y hora no válida';
-    return format(dateObj, "dd/MM/yyyy 'a las' HH:mm", { locale: es });
+    const d = toDate(date);
+    if (!isValidDate(d)) return 'Fecha y hora no válida';
+    return formatClinicDateTime(d);
   } catch {
     return 'Fecha y hora no válida';
   }
@@ -59,18 +68,21 @@ export const formatAppointmentDateTime = (date: Date | string): string => {
 
 export const formatReadableDateTime = (date: Date | string): string => {
   try {
-    const dateObj = typeof date === 'string' ? parseISO(date) : date;
-    if (!isValid(dateObj)) return 'Fecha no válida';
-    return format(dateObj, "PPpp", { locale: es });
+    const d = toDate(date);
+    if (!isValidDate(d)) return 'Fecha no válida';
+    // Estilo legible: Intl dateStyle: 'medium', timeStyle: 'short'
+    return formatClinicMediumDateTime(d);
   } catch {
     return 'Fecha no válida';
   }
 };
 
 export const formatDisplayDate = (date: Date | null): string => {
-  if (!date || !isValid(date)) return 'Seleccionar fecha';
-  const formatted = format(date, "EEEE, d 'de' MMMM", { locale: es });
-  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  if (!date) return 'Seleccionar fecha';
+  const d = toDate(date);
+  if (!isValidDate(d)) return 'Seleccionar fecha';
+  // Formato "EEEE, d de MMMM" capitalizado
+  return formatClinicDate(d);
 };
 
 // ==================== FORMATEO GENERAL ====================
@@ -80,9 +92,9 @@ export const formatText = (text: string | undefined | null): string =>
 export const formatDate = (date: string | Date | undefined | null): string => {
   if (!date) return 'N/A';
   try {
-    const dateObj = typeof date === 'string' ? parseISO(date) : date;
-    if (!isValid(dateObj)) return 'N/A';
-    return format(dateObj, 'dd/MM/yyyy');
+    const d = toDate(date);
+    if (!isValidDate(d)) return 'N/A';
+    return formatClinicShortDate(d);
   } catch {
     return 'N/A';
   }

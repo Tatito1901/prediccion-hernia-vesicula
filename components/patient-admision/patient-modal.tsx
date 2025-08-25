@@ -3,33 +3,23 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Card } from '@/components/ui/card';
-import { cn, formatPhoneNumber } from '@/lib/utils';
+import { TextField, NumberField, PhoneField, EmailField, GenderSelectField, DiagnosisSelectField, DatePickerField, TimeSelectField } from '@/components/ui/form-components';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { addDays, format, isBefore, isSunday, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
-  User2, CalendarIcon, Loader2, Clock, 
+  User2, CalendarIcon, Loader2, 
   Stethoscope, Info, CheckCircle2 
 } from 'lucide-react';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import { useClinic } from '@/contexts/clinic-data-provider';
 import { 
-  ZDiagnosisDb, 
-  DIAGNOSIS_DB_VALUES, 
-  dbDiagnosisToDisplay, 
-  type DbDiagnosis 
+  ZDiagnosisDb 
 } from '@/lib/validation/enums';
 import { AppointmentStatusEnum } from '@/lib/types';
 
@@ -196,85 +186,19 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
                   <User2 className="h-4 w-4" />
                   Datos Personales
                 </h3>
-                
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="nombre">Nombre *</Label>
-                    <Input
-                      id="nombre"
-                      {...form.register('nombre')}
-                      className={form.formState.errors.nombre ? 'border-red-500' : ''}
-                    />
-                    {form.formState.errors.nombre && (
-                      <p className="text-xs text-red-500">{form.formState.errors.nombre.message}</p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="apellidos">Apellidos *</Label>
-                    <Input
-                      id="apellidos"
-                      {...form.register('apellidos')}
-                      className={form.formState.errors.apellidos ? 'border-red-500' : ''}
-                    />
-                    {form.formState.errors.apellidos && (
-                      <p className="text-xs text-red-500">{form.formState.errors.apellidos.message}</p>
-                    )}
-                  </div>
+                  <TextField form={form} name="nombre" label="Nombre *" />
+                  <TextField form={form} name="apellidos" label="Apellidos *" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edad">Edad</Label>
-                    <Input
-                      id="edad"
-                      type="number"
-                      {...form.register('edad', { valueAsNumber: true })}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="genero">Género *</Label>
-                    <Select 
-                      value={form.watch('genero')} 
-                      onValueChange={(value) => form.setValue('genero', value as any)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Masculino">Masculino</SelectItem>
-                        <SelectItem value="Femenino">Femenino</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {form.formState.errors.genero && (
-                      <p className="text-xs text-red-500">{form.formState.errors.genero.message}</p>
-                    )}
-                  </div>
+                  <NumberField form={form} name="edad" label="Edad" />
+                  <GenderSelectField form={form} name="genero" label="Género *" options={["Masculino", "Femenino"]} />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="telefono">Teléfono *</Label>
-                    <Input
-                      id="telefono"
-                      {...form.register('telefono')}
-                      onChange={(e) => form.setValue('telefono', formatPhoneNumber(e.target.value))}
-                      className={form.formState.errors.telefono ? 'border-red-500' : ''}
-                    />
-                    {form.formState.errors.telefono && (
-                      <p className="text-xs text-red-500">{form.formState.errors.telefono.message}</p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      {...form.register('email')}
-                    />
-                  </div>
+                  <PhoneField form={form} name="telefono" label="Teléfono *" />
+                  <EmailField form={form} name="email" label="Email" />
                 </div>
               </div>
 
@@ -286,25 +210,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
                   <Stethoscope className="h-4 w-4" />
                   Información Médica
                 </h3>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="diagnostico">Diagnóstico Principal *</Label>
-                  <Select 
-                    value={form.watch('diagnostico_principal')} 
-                    onValueChange={(value) => form.setValue('diagnostico_principal', value as DbDiagnosis)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar diagnóstico" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DIAGNOSIS_DB_VALUES.map((diagnosis) => (
-                        <SelectItem key={diagnosis} value={diagnosis}>
-                          {dbDiagnosisToDisplay(diagnosis)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <DiagnosisSelectField form={form} name="diagnostico_principal" label="Diagnóstico Principal *" />
               </div>
 
               <Separator />
@@ -317,67 +223,20 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
                 </h3>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Fecha *</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !form.watch('fecha') && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {form.watch('fecha') 
-                            ? format(form.watch('fecha'), 'PPP', { locale: es })
-                            : "Seleccionar"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={form.watch('fecha')}
-                          onSelect={(date) => date && form.setValue('fecha', date)}
-                          disabled={(date) => !isValidDate(date)}
-                          locale={es}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    {form.formState.errors.fecha && (
-                      <p className="text-xs text-red-500">{form.formState.errors.fecha.message}</p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Hora *</Label>
-                    <Select 
-                      value={form.watch('hora')} 
-                      onValueChange={(value) => form.setValue('hora', value)}
-                      disabled={!form.watch('fecha')}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar hora" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableSlots.length === 0 ? (
-                          <div className="p-4 text-center text-sm text-gray-500">
-                            No hay horarios disponibles
-                          </div>
-                        ) : (
-                          availableSlots.map((slot) => (
-                            <SelectItem key={slot.value} value={slot.value}>
-                              <div className="flex items-center gap-2">
-                                <Clock className="h-3.5 w-3.5" />
-                                {slot.label}
-                              </div>
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <DatePickerField
+                    form={form}
+                    name="fecha"
+                    label="Fecha *"
+                    isValidDate={isValidDate}
+                  />
+                  <TimeSelectField
+                    form={form}
+                    name="hora"
+                    label="Hora *"
+                    timeSlots={availableSlots}
+                    disabled={!form.watch('fecha') || availableSlots.length === 0}
+                    description={availableSlots.length === 0 ? 'No hay horarios disponibles' : undefined}
+                  />
                 </div>
               </div>
 

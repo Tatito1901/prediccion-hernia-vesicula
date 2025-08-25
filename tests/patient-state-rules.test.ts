@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isTerminalPatientStatus, canSetFollowUpFrom, terminalPatientStatuses } from '@/lib/patient-state-rules'
+import { isTerminalPatientStatus, canSetFollowUpFrom, terminalPatientStatuses, isValidPatientStatus, normalizePatientStatus, validatePatientStatusChange, planUpdateOnAppointmentCompleted } from '@/lib/patient-state-rules'
 import { PatientStatusEnum } from '@/lib/types'
 
 describe('patient-state-rules', () => {
@@ -43,5 +43,59 @@ describe('patient-state-rules', () => {
     expect(canSetFollowUpFrom(PatientStatusEnum.NO_OPERADO)).toBe(false)
     expect(canSetFollowUpFrom(PatientStatusEnum.ALTA_MEDICA)).toBe(false)
     expect(canSetFollowUpFrom(PatientStatusEnum.INACTIVO)).toBe(false)
+  })
+
+  it('isValidPatientStatus validates patient status values (case-insensitive)', () => {
+    expect(isValidPatientStatus('potencial')).toBe(true)
+    expect(isValidPatientStatus('ACTIVO')).toBe(true)
+    expect(isValidPatientStatus('INVALID')).toBe(false)
+    expect(isValidPatientStatus(123 as any)).toBe(false)
+    expect(isValidPatientStatus(null as any)).toBe(false)
+  })
+
+  it('normalizePatientStatus normalizes values to canonical lowercase or null', () => {
+    expect(normalizePatientStatus('ACTIVO')).toBe('activo')
+    expect(normalizePatientStatus('invalid')).toBeNull()
+    expect(normalizePatientStatus(123 as any)).toBeNull()
+  })
+
+  it('validatePatientStatusChange enforces rules and normalizes', () => {
+    // invalid value
+    const invalid = validatePatientStatusChange('activo', 'INVALID')
+    expect(invalid.allowed).toBe(false)
+    expect(invalid.code).toBe('INVALID_VALUE')
+
+    // idempotent
+    const same = validatePatientStatusChange('activo', 'ACTIVO')
+    expect(same.allowed).toBe(true)
+    expect(same.normalized).toBe('activo')
+    expect(same.code).toBe('NO_CHANGE')
+
+    // blocked from terminal
+    const blocked = validatePatientStatusChange('operado', 'activo')
+    expect(blocked.allowed).toBe(false)
+    expect(blocked.code).toBe('BLOCKED_TERMINAL')
+
+    // downgrade not allowed
+    const downgrade = validatePatientStatusChange('activo', 'potencial')
+    expect(downgrade.allowed).toBe(false)
+    expect(downgrade.code).toBe('DOWNGRADE_NOT_ALLOWED')
+
+    // allowed upgrade
+    const ok = validatePatientStatusChange('potencial', 'ACTIVO')
+    expect(ok.allowed).toBe(true)
+    expect(ok.normalized).toBe('activo')
+  })
+
+  it('planUpdateOnAppointmentCompleted sets follow-up when non-terminal and always updates last consult date', () => {
+    const plan1 = planUpdateOnAppointmentCompleted('activo', '2025-02-03T10:00:00.000Z')
+    expect(plan1.changed).toBe(true)
+    expect(plan1.update.fecha_ultima_consulta).toBe('2025-02-03')
+    expect(plan1.update.estado_paciente).toBe('en_seguimiento')
+
+    const plan2 = planUpdateOnAppointmentCompleted('operado', '2025-02-03T10:00:00.000Z')
+    expect(plan2.changed).toBe(false)
+    expect(plan2.update.fecha_ultima_consulta).toBe('2025-02-03')
+    expect('estado_paciente' in plan2.update).toBe(false)
   })
 })

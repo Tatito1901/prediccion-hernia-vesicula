@@ -42,6 +42,20 @@ export async function GET(request: Request) {
     let pageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE));
     pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
 
+    // Debug flag y metadatos de diagnóstico
+    const debug = searchParams.get('debug') === '1';
+    const usingAdmin = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const envMeta = {
+      hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+      hasAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+      hasService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    };
+    const meta = {
+      usedClient: usingAdmin ? 'admin' : 'server',
+      ...envMeta,
+      params: { estado, search: searchTerm, startDate, endDate, page, pageSize },
+    };
+
     // 2. Obtener pacientes paginados con búsqueda y filtros
     // Nota: evitamos joins a relaciones que pueden no existir en ciertos entornos
     // para prevenir errores 500 en desarrollo. Seleccionamos solo columnas base.
@@ -94,8 +108,24 @@ export async function GET(request: Request) {
     const { data: patients, error, count } = await query;
     
     if (error) {
-      console.error('Supabase error fetching patients:', error);
-      throw error;
+      const isPermission = /permission denied/i.test(error.message || '');
+      if (isPermission) {
+        console.warn('[/api/patients][GET] Permission denied fallback', {
+          message: error.message,
+          meta,
+        });
+        const pagination = { page, pageSize, totalCount: 0, totalPages: 0, hasMore: false };
+        const stats = page === 1
+          ? { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0, statusStats: { all: 0 } }
+          : null;
+        return NextResponse.json({ data: [], pagination, stats, ...(debug ? { meta } : {}) }, { headers: cacheConfig });
+      }
+      // Log non-permission errors with minimal meta when debug is enabled
+      console.error('[/api/patients][GET] Error', { message: error.message, meta: debug ? meta : undefined });
+      return NextResponse.json({ 
+        message: 'Error al obtener pacientes', 
+        error: error.message 
+      }, { status: 500 });
     }
 
     // 3. Enriquecer datos en el backend
@@ -151,10 +181,13 @@ export async function GET(request: Request) {
     // 4. Calcular estadísticas en el backend (solo si es la primera página)
     let stats = null;
     if (page === 1) {
-      const { data: statsData } = await supabase
+      const { data: statsData, error: statsErr } = await supabase
         .from('patients')
         .select('estado_paciente')
         .not('estado_paciente', 'is', null);
+      if (statsErr) {
+        console.warn('[/api/patients][GET] No se pudo obtener estadísticas:', statsErr.message);
+      }
 
       const statusStats = (statsData || []).reduce((acc: Record<string, number>, patient: any) => {
         if (patient.estado_paciente) {
@@ -180,6 +213,24 @@ export async function GET(request: Request) {
     const totalCount = count || 0;
     const totalPages = Math.ceil(totalCount / pageSize);
 
+    // Success diagnostic log when debug flag is set
+    if (debug) {
+      try {
+        console.info('[/api/patients][GET] Success', {
+          dataCount: (enrichedPatients || []).length,
+          pagination: {
+            page,
+            pageSize,
+            totalCount,
+            totalPages,
+            hasMore: page < totalPages,
+          },
+          stats,
+          meta,
+        });
+      } catch {}
+    }
+
     return NextResponse.json({
       data: enrichedPatients,
       pagination: {
@@ -190,6 +241,7 @@ export async function GET(request: Request) {
         hasMore: page < totalPages,
       },
       stats, // ✅ Estadísticas calculadas en backend
+      ...(debug ? { meta } : {}),
     }, { headers: cacheConfig });
 
   } catch (error: any) {

@@ -86,11 +86,60 @@ export type ClinicDataActions = {
 export type UseClinicDataReturn = ClinicDataState & ClinicDataActions;
 
 // =============== Utilidades de Fetch Optimizadas ===============
+const isDebugApi = (): boolean => {
+  try {
+    if (process.env.NEXT_PUBLIC_DEBUG_API === 'true') return true;
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('debug') === '1') return true;
+      try { if (localStorage.getItem('debugApi') === '1') return true; } catch {}
+    }
+  } catch {}
+  return false;
+};
+
+const previewResponse = (d: any) => {
+  try {
+    const out: any = {};
+    if (d && typeof d === 'object') {
+      if (d.data && Array.isArray(d.data)) out.dataCount = d.data.length;
+      if (d.pagination) {
+        const p = d.pagination;
+        out.pagination = { page: p.page, pageSize: p.pageSize, totalCount: p.totalCount, totalPages: p.totalPages };
+      }
+      if (d.summary) out.summary = d.summary;
+      if (d.stats) out.stats = d.stats;
+      if (d.meta) out.meta = d.meta;
+    }
+    return out;
+  } catch {
+    return undefined;
+  }
+};
+
+const logApi = (phase: 'request' | 'response' | 'error', payload: any) => {
+  if (!isDebugApi()) return;
+  const tag = phase === 'error' ? '[API][error]' : phase === 'request' ? '[API][request]' : '[API][response]';
+  try { console.info(tag, payload); } catch {}
+};
+
+// Asegura que las peticiones incluyan debug=1 cuando el modo debug está activo
+const withDebugParam = (url: string): string => {
+  if (!isDebugApi()) return url;
+  try {
+    const hasQuery = url.includes('?');
+    return `${url}${hasQuery ? '&' : '?'}debug=1`;
+  } catch {
+    return url;
+  }
+};
+
 const fetchJson = async <T,>(input: RequestInfo | URL): Promise<T> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
   try {
+    logApi('request', { url: typeof input === 'string' ? input : (input as any)?.toString?.() || input });
     const res = await fetch(input, { 
       signal: controller.signal,
       headers: {
@@ -105,13 +154,16 @@ const fetchJson = async <T,>(input: RequestInfo | URL): Promise<T> => {
       try {
         const data = await res.json();
         message = (data && (data.message || data.error)) || message;
+        logApi('error', { url: typeof input === 'string' ? input : (input as any)?.toString?.(), status: res.status, body: previewResponse(data) });
       } catch (_) {
         // ignore
       }
       throw new Error(message);
     }
     
-    return res.json();
+    const json = await res.json();
+    logApi('response', { url: typeof input === 'string' ? input : (input as any)?.toString?.(), status: res.status, body: previewResponse(json) });
+    return json;
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
@@ -123,11 +175,11 @@ const fetchJson = async <T,>(input: RequestInfo | URL): Promise<T> => {
 
 // =============== API Fetch Functions Optimizadas ===============
 const fetchActivePatients = () =>
-  fetchJson<{ data: Patient[] }>(`/api/patients?estado=${PatientStatusEnum.ACTIVO}&pageSize=50`);
+  fetchJson<{ data: Patient[] }>(withDebugParam(`/api/patients?estado=${PatientStatusEnum.ACTIVO}&pageSize=50`));
 
 const fetchTodayAppointments = () =>
   fetchJson<{ data?: Appointment[]; summary?: ClinicDataState['appointments']['summary'] }>(
-    '/api/appointments?dateFilter=today&pageSize=100'
+    withDebugParam('/api/appointments?dateFilter=today&pageSize=100')
   );
 
 const buildPatientsQueryString = (p: {
@@ -160,7 +212,7 @@ const fetchPaginatedPatients = (params: {
     PaginatedResponse<Patient> & {
       stats?: ClinicDataState['patients']['stats'];
     }
-  >(`/api/patients?${buildPatientsQueryString(params)}`);
+  >(withDebugParam(`/api/patients?${buildPatientsQueryString(params)}`));
 
 const fetchAppointmentsByFilter = (filter: {
   dateFilter?: 'today' | 'future' | 'past' | 'range';
@@ -182,7 +234,7 @@ const fetchAppointmentsByFilter = (filter: {
     if (filter.endDate) sp.set('endDate', filter.endDate);
   }
   return fetchJson<{ data?: Appointment[]; pagination?: any; summary?: ClinicDataState['appointments']['summary'] }>(
-    `/api/appointments?${sp.toString()}`
+    withDebugParam(`/api/appointments?${sp.toString()}`)
   );
 };
 
@@ -372,7 +424,7 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
       const key = queryKeys.patients.detail(id);
       return queryClient.fetchQuery({
         queryKey: key,
-        queryFn: () => fetchJson<Patient>(`/api/patients/${id}`),
+        queryFn: () => fetchJson<Patient>(withDebugParam(`/api/patients/${id}`)),
         staleTime: 2 * 60 * 1000,
         gcTime: 5 * 60 * 1000,
       });
@@ -389,7 +441,7 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
 
       return queryClient.fetchQuery({
         queryKey: key,
-        queryFn: () => fetchJson<PatientHistoryData>(`/api/patients/${patientId}/history?${params.toString()}`),
+        queryFn: () => fetchJson<PatientHistoryData>(withDebugParam(`/api/patients/${patientId}/history?${params.toString()}`)),
         staleTime: 2 * 60 * 1000,
         gcTime: 5 * 60 * 1000,
       });

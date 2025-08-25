@@ -25,12 +25,18 @@ import {
   Sun,
   Moon,
   Hospital,
+  LifeBuoy,
+  Wrench,
+  Settings,
+  User,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-breakpoint"
 import { NavMain } from "./nav-main"
+import { NavSecondary } from "./nav-secondary"
+import { NavUser } from "./nav-user"
 
 /* ──────────────────────────────────────────────────────────────────────────── */
 /* Static Data                                                                 */
@@ -46,6 +52,16 @@ const NAV_MAIN = [
   { title: "Encuesta Digital", url: "/encuesta", icon: TabletIcon },
   { title: "Admisión", url: "/admision", icon: UserPlusIcon },
   { title: "Estadísticas", url: "/estadisticas", icon: FileBarChart },
+] as const
+
+const NAV_SECONDARY = [
+  { title: "Soporte", url: "/soporte", icon: LifeBuoy },
+  { title: "Herramientas", url: "/herramientas", icon: Wrench },
+] as const
+
+const NAV_USER = [
+  { title: "Perfil", url: "/perfil", icon: User },
+  { title: "Ajustes", url: "/ajustes", icon: Settings },
 ] as const
 
 /* ──────────────────────────────────────────────────────────────────────────── */
@@ -219,6 +235,17 @@ export function AppSidebar({
     []
   )
 
+  // Secondary and User navigation items
+  const navSecondaryItems = useMemo(() => 
+    NAV_SECONDARY.map(item => ({ ...item })), 
+    []
+  )
+
+  const navUserItems = useMemo(() => 
+    NAV_USER.map(item => ({ ...item })), 
+    []
+  )
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -287,6 +314,19 @@ export function AppSidebar({
             items={navItems}
             pathname={pathname}
             onNavigate={handleNavigate}
+            collapsed={isCollapsed && !isMobile}
+          />
+          <NavSecondary
+            items={navSecondaryItems}
+            pathname={pathname}
+            onNavigate={handleNavigate}
+            className="mt-6"
+          />
+          <NavUser
+            items={navUserItems}
+            pathname={pathname}
+            onNavigate={handleNavigate}
+            className="mt-6"
           />
         </SidebarContent>
 

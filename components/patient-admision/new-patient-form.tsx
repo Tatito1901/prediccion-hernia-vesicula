@@ -40,6 +40,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { TextField, NumberField, PhoneField, EmailField, GenderSelectField, DiagnosisSelectField, DatePickerField, TimeSelectField } from '@/components/ui/form-components';
 
 // Icons
 import {
@@ -155,125 +156,12 @@ const PersonalInfoTab: React.FC<{ form: any }> = ({ form }) => (
       </h3>
       
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField
-          control={form.control}
-          name="nombre"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Nombre *</FormLabel>
-              <FormControl>
-                <Input placeholder="Nombre del paciente" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="apellidos"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Apellidos *</FormLabel>
-              <FormControl>
-                <Input placeholder="Apellidos del paciente" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="edad"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Edad</FormLabel>
-              <FormControl>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  max={120}
-                  placeholder="Edad"
-                  value={field.value ?? ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    field.onChange(value === '' ? undefined : parseInt(value, 10));
-                  }}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="genero"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Género</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar género" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="Masculino">Masculino</SelectItem>
-                  <SelectItem value="Femenino">Femenino</SelectItem>
-                  <SelectItem value="Otro">Otro</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="telefono"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Teléfono</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="555-123-4567"
-                    className="pl-10"
-                    {...field}
-                    onChange={(e) => field.onChange(formatPhoneNumber(e.target.value))}
-                  />
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    type="email" 
-                    placeholder="correo@ejemplo.com"
-                    className="pl-10"
-                    {...field}
-                  />
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <TextField form={form} name="nombre" label="Nombre *" placeholder="Nombre del paciente" />
+        <TextField form={form} name="apellidos" label="Apellidos *" placeholder="Apellidos del paciente" />
+        <NumberField form={form} name="edad" label="Edad" placeholder="Edad" min={0} max={120} />
+        <GenderSelectField form={form} name="genero" />
+        <PhoneField form={form} name="telefono" label="Teléfono" />
+        <EmailField form={form} name="email" label="Email" />
       </div>
     </div>
 
@@ -287,33 +175,8 @@ const PersonalInfoTab: React.FC<{ form: any }> = ({ form }) => (
       </h3>
       
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField
-          control={form.control}
-          name="ciudad"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Ciudad</FormLabel>
-              <FormControl>
-                <Input placeholder="Ciudad de residencia" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="estado"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Estado/Provincia</FormLabel>
-              <FormControl>
-                <Input placeholder="Estado o provincia" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <TextField form={form} name="ciudad" label="Ciudad" placeholder="Ciudad de residencia" />
+        <TextField form={form} name="estado" label="Estado/Provincia" placeholder="Estado o provincia" />
       </div>
     </div>
 
@@ -327,37 +190,8 @@ const PersonalInfoTab: React.FC<{ form: any }> = ({ form }) => (
       </h3>
       
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField
-          control={form.control}
-          name="contacto_emergencia_nombre"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Nombre del Contacto</FormLabel>
-              <FormControl>
-                <Input placeholder="Nombre completo" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="contacto_emergencia_telefono"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Teléfono del Contacto</FormLabel>
-              <FormControl>
-                <Input 
-                  placeholder="555-123-4567"
-                  {...field}
-                  onChange={(e) => field.onChange(formatPhoneNumber(e.target.value))}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <TextField form={form} name="contacto_emergencia_nombre" label="Nombre del Contacto" placeholder="Nombre completo" />
+        <PhoneField form={form} name="contacto_emergencia_telefono" label="Teléfono del Contacto" />
       </div>
     </div>
   </div>
@@ -373,33 +207,7 @@ const MedicalInfoTab: React.FC<{ form: any }> = ({ form }) => (
       </h3>
       
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField
-          control={form.control}
-          name="diagnostico_principal"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Diagnóstico Principal *</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar diagnóstico" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {DIAGNOSIS_DB_VALUES.map((diagnosis) => (
-                    <SelectItem key={diagnosis} value={diagnosis}>
-                      {dbDiagnosisToDisplay(diagnosis)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                Diagnóstico principal del paciente
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <DiagnosisSelectField form={form} name="diagnostico_principal" description="Diagnóstico principal del paciente" />
         
         <FormField
           control={form.control}
@@ -479,33 +287,8 @@ const MedicalInfoTab: React.FC<{ form: any }> = ({ form }) => (
       </h3>
       
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField
-          control={form.control}
-          name="numero_expediente"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Número de Expediente</FormLabel>
-              <FormControl>
-                <Input placeholder="EXP-00000" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="seguro_medico"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Seguro Médico</FormLabel>
-              <FormControl>
-                <Input placeholder="Nombre del seguro" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <TextField form={form} name="numero_expediente" label="Número de Expediente" placeholder="EXP-00000" />
+        <TextField form={form} name="seguro_medico" label="Seguro Médico" placeholder="Nombre del seguro" />
       </div>
     </div>
   </div>
@@ -531,98 +314,22 @@ const AppointmentTab: React.FC<{
     </Alert>
     
     <div className="grid gap-4 sm:grid-cols-2">
-      <FormField
-        control={form.control}
+      <DatePickerField
+        form={form}
         name="fechaConsulta"
-        render={({ field }) => (
-          <FormItem className="flex flex-col">
-            <FormLabel>Fecha de Consulta *</FormLabel>
-            <Popover>
-              <PopoverTrigger asChild>
-                <FormControl>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !field.value && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {field.value ? (
-                      format(field.value, "PPP", { locale: es })
-                    ) : (
-                      <span>Seleccionar fecha</span>
-                    )}
-                  </Button>
-                </FormControl>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={field.value}
-                  onSelect={(date) => {
-                    field.onChange(date);
-                    setSelectedDate(date);
-                  }}
-                  disabled={(date) => !isValidDate(date)}
-                  initialFocus
-                  locale={es}
-                />
-              </PopoverContent>
-            </Popover>
-            <FormDescription>
-              Días laborales, hasta 90 días en adelante
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
+        label="Fecha de Consulta *"
+        isValidDate={isValidDate}
+        onDateChange={setSelectedDate}
+        description="Días laborales, hasta 90 días en adelante"
       />
-      
-      <FormField
-        control={form.control}
+      <TimeSelectField
+        form={form}
         name="horaConsulta"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Hora de Consulta *</FormLabel>
-            <Select 
-              onValueChange={field.onChange} 
-              value={field.value}
-              disabled={!selectedDate}
-            >
-              <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder={selectedDate ? "Seleccionar hora" : "Seleccione fecha primero"} />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                {TIME_SLOTS.map((slot) => {
-                  const isOccupied = occupiedTimes.has(slot.value);
-                  return (
-                    <SelectItem 
-                      key={slot.value} 
-                      value={slot.value} 
-                      disabled={isOccupied}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span>{slot.label}</span>
-                        {isOccupied && (
-                          <Badge variant="secondary" className="ml-2 text-xs">
-                            Ocupado
-                          </Badge>
-                        )}
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-            <FormDescription>
-              Horarios disponibles de 9:00 a 14:30
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
+        label="Hora de Consulta *"
+        timeSlots={TIME_SLOTS}
+        occupiedTimes={occupiedTimes}
+        disabled={!selectedDate}
+        description="Horarios disponibles de 9:00 a 14:30"
       />
     </div>
     

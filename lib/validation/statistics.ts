@@ -11,8 +11,8 @@ export type LabelCount = z.infer<typeof ZLabelCount>;
 // Clinical profile: keep flexible but ensure known arrays validate
 export const ZClinicalProfile = z
   .object({
-    diagnoses_distribution: z.array(ZLabelCount).optional(),
-    top_diagnoses: z.array(ZLabelCount).optional(),
+    diagnoses_distribution: z.array(ZLabelCount).nullable().optional(),
+    top_diagnoses: z.array(ZLabelCount).nullable().optional(),
   })
   .passthrough();
 
@@ -26,8 +26,9 @@ export const ZDemographicProfile = z
           .object({ male: z.number().optional(), female: z.number().optional(), other: z.number().optional() })
           .partial(),
       ])
+      .nullable()
       .optional(),
-    age_groups: z.array(ZLabelCount).optional(),
+    age_groups: z.array(ZLabelCount).nullable().optional(),
   })
   .passthrough();
 
@@ -41,6 +42,7 @@ export const ZOperationalMetrics = z
           count: z.number().optional().nullable(),
         })
       )
+      .nullable()
       .optional(),
     no_show_rate: z.number().nullable().optional(),
     punctuality_rate: z.number().nullable().optional(),

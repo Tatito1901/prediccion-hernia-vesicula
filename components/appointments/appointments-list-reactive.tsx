@@ -3,19 +3,21 @@
 import React, { useMemo } from 'react';
 import { useClinic } from '@/contexts/clinic-data-provider';
 import { AppointmentStatusEnum } from '@/lib/types';
-import type { AppointmentStatus } from '@/lib/types';
+import type { AppointmentStatus, Appointment, ExtendedAppointment } from '@/lib/types';
+import { formatClinicMediumDateTime } from '@/lib/timezone';
 
 // Lista reactiva mínima de citas recientes para el Dashboard
 // Usa la fuente de verdad unificada del contexto (useClinic)
 export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number }) {
   const { allAppointments, isLoading, error, refetch } = useClinic();
 
-  const recentAppointments = useMemo(() => {
-    if (!allAppointments) return [] as any[];
+  const recentAppointments = useMemo<(Appointment | ExtendedAppointment)[]>(() => {
+    if (!allAppointments) return [];
+    const list = (allAppointments ?? []) as (Appointment | ExtendedAppointment)[];
     // Ordenar por fecha descendente y limitar a maxItems
-    return [...allAppointments]
-      .filter((a: any) => !!a?.fecha_hora_cita)
-      .sort((a: any, b: any) => {
+    return [...list]
+      .filter((a) => !!a?.fecha_hora_cita)
+      .sort((a, b) => {
         const da = new Date(a.fecha_hora_cita).getTime();
         const db = new Date(b.fecha_hora_cita).getTime();
         return db - da;
@@ -52,12 +54,15 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
 
   return (
     <div className="divide-y rounded-md border bg-white dark:bg-slate-900">
-      {recentAppointments.map((appt: any) => {
+      {recentAppointments.map((appt) => {
         const dateLabel = appt?.fecha_hora_cita
-          ? new Date(appt.fecha_hora_cita).toLocaleString('es-MX', {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-            })
+          ? (() => {
+              try {
+                return formatClinicMediumDateTime(appt.fecha_hora_cita);
+              } catch {
+                return 'Sin fecha';
+              }
+            })()
           : 'Sin fecha';
         const rawStatusValue = String(appt?.estado_cita ?? '').toUpperCase();
         // Normalizar variantes masculinas/femeninas (p.ej., CANCELADO -> CANCELADA)
@@ -66,13 +71,11 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
             ? AppointmentStatusEnum.CANCELADA
             : (rawStatusValue as AppointmentStatus);
         const status = String(normalizedStatus).replaceAll('_', ' ');
-        const name =
-          appt?.nombreCompletoPaciente ||
-          appt?.nombrePaciente ||
-          appt?.nombre_paciente ||
-          appt?.paciente_nombre ||
-          appt?.paciente?.nombre ||
-          'Paciente';
+        const name = (() => {
+          const p = (appt as ExtendedAppointment).patients;
+          const composed = [p?.nombre, p?.apellidos].filter(Boolean).join(' ').trim();
+          return composed || 'Paciente';
+        })();
 
         const initial = (name || 'P').trim().charAt(0).toUpperCase();
         const statusClasses = (() => {
@@ -112,3 +115,4 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
     </div>
   );
 }
+

@@ -25,19 +25,17 @@ import {
   RefreshCw,
   Activity
 } from "lucide-react"
-import { useShallow } from "zustand/react/shallow"
+// Estado de servidor unificado vía React Query + Context
+import { useClinic } from "@/contexts/clinic-data-provider"
 
 // --- UI Components (Importaciones asumidas) ---
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { SimplePagination } from "@/components/ui/simple-pagination"
-import { EmptyState } from '@/components/ui/empty-state'
 import PatientTable from "./patient-table" // Asumimos que este componente está optimizado
 
 // --- Hooks, Tipos y Utilidades ---
-import { usePatientStore, type PatientStore } from "@/stores/patient-store"
 import { 
   EnrichedPatient, 
   PatientStatusEnum, 
@@ -212,16 +210,26 @@ FilterBar.displayName = "FilterBar"
 
 const EmptyStateComponent = memo(({ hasFilters, onClearFilters }: EmptyStateProps) => (
   <div className="bg-white dark:bg-slate-950 rounded-xl border shadow-sm border-slate-200 dark:border-slate-800 p-8 sm:p-12">
-    <EmptyState
-      title={hasFilters ? "No se encontraron pacientes" : "No hay pacientes registrados"}
-      description={hasFilters ? "Prueba a modificar o limpiar los filtros de búsqueda." : "Cuando añadas pacientes, aparecerán aquí."}
-      actionText={hasFilters ? "Limpiar filtros" : undefined}
-      onAction={hasFilters ? onClearFilters : undefined}
-      icon={<Users className="h-10 w-10 text-slate-300 dark:text-slate-600" />}
-    />
+    <div className="text-center space-y-3">
+      <div className="rounded-full bg-slate-100 dark:bg-slate-800/50 p-4 mx-auto w-16 h-16 flex items-center justify-center">
+        <Users className="h-8 w-8 text-slate-400" />
+      </div>
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        {hasFilters ? "No se encontraron pacientes" : "No hay pacientes registrados"}
+      </h3>
+      <p className="text-slate-500 dark:text-slate-400 text-sm">
+        {hasFilters ? "Prueba a modificar o limpiar los filtros de búsqueda." : "Cuando añadas pacientes, aparecerán aquí."}
+      </p>
+      {hasFilters && (
+        <Button variant="outline" onClick={onClearFilters}>
+          <X className="w-4 h-4 mr-2" />
+          Limpiar filtros
+        </Button>
+      )}
+    </div>
   </div>
 ))
-EmptyStateComponent.displayName = "EmptyState"
+EmptyStateComponent.displayName = "EmptyStateComponent"
 
 // --- Hooks Personalizados ---
 
@@ -242,23 +250,7 @@ function usePatientData() {
     setPatientsStatus,
     clearPatientsFilters,
     refetchPatients,
-    fetchPatients,
-  } = usePatientStore(
-    useShallow((s: PatientStore) => ({
-      paginatedPatients: s.paginatedPatients,
-      patientsPagination: s.patientsPagination,
-      patientsStats: s.patientsStats,
-      patientsFilters: s.patientsFilters,
-      isPatientsLoading: s.isPatientsLoading,
-      patientsError: s.patientsError,
-      setPatientsPage: s.setPatientsPage,
-      setPatientsSearch: s.setPatientsSearch,
-      setPatientsStatus: s.setPatientsStatus,
-      clearPatientsFilters: s.clearPatientsFilters,
-      refetchPatients: s.refetchPatients,
-      fetchPatients: s.fetchPatients,
-    }))
-  )
+  } = useClinic()
 
   const [searchInput, setSearchInput] = useState(patientsFilters.search)
 
@@ -277,11 +269,7 @@ function usePatientData() {
     return () => clearTimeout(handler)
   }, [searchInput, patientsFilters.search, setPatientsSearch])
 
-  useEffect(() => {
-    if (!paginatedPatients) {
-      fetchPatients().catch(err => console.error("Failed to fetch initial patients:", err))
-    }
-  }, [fetchPatients, paginatedPatients])
+  // React Query maneja el fetch inicial automáticamente vía contexto
 
   const patientStatsData = useMemo<PatientStatsData>(() => 
     patientsStats || { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0 }, 
@@ -541,6 +529,35 @@ const UpdatingOverlay = () => (
     </div>
   </div>
 )
+
+type SimplePaginationProps = {
+  currentPage: number
+  totalPages: number
+  onPageChange: (page: number) => void
+  loading?: boolean
+}
+
+const SimplePagination: React.FC<SimplePaginationProps> = ({ currentPage, totalPages, onPageChange, loading }) => {
+  const canPrev = currentPage > 1
+  const canNext = currentPage < totalPages
+
+  const goPrev = () => canPrev && onPageChange(currentPage - 1)
+  const goNext = () => canNext && onPageChange(currentPage + 1)
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <Button variant="outline" size="sm" onClick={goPrev} disabled={!canPrev || loading}>
+        Anterior
+      </Button>
+      <div className="text-sm text-slate-600 dark:text-slate-400">
+        Página <span className="font-medium">{currentPage}</span> de <span className="font-medium">{totalPages}</span>
+      </div>
+      <Button variant="outline" size="sm" onClick={goNext} disabled={!canNext || loading}>
+        Siguiente
+      </Button>
+    </div>
+  )
+}
 
 const ModalLoadingFallback = () => (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

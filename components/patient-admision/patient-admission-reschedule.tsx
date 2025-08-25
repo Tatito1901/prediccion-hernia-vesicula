@@ -31,7 +31,7 @@ import {
 import type { AppointmentWithPatient, RescheduleProps } from './admision-types';
 import { getPatientFullName } from './admision-types';
 import { useClinic } from "@/contexts/clinic-data-provider";
-import { CLINIC_SCHEDULE, isWorkDay } from '@/lib/clinic-schedule';
+import { CLINIC_SCHEDULE, CLINIC_TIMEZONE, isWorkDay, validateRescheduleDateTime, canRescheduleAppointment, BUSINESS_RULES } from '@/lib/admission-business-rules';
 import { AppointmentStatusEnum } from '@/lib/types';
 
 // Utilidades
@@ -45,13 +45,46 @@ const isValidAppointmentDate = (date: Date): boolean => {
   return !isBefore(date, today) && !isBefore(maxDate, date) && isWorkDay(date);
 };
 
-const canRescheduleAppointment = (fechaHoraCita: string): boolean => {
-  const appointmentTime = new Date(fechaHoraCita);
-  const now = new Date();
-  const minRescheduleTime = new Date(
-    appointmentTime.getTime() - (CLINIC_SCHEDULE.RESCHEDULE_MIN_ADVANCE_HOURS * 60 * 60 * 1000)
-  );
-  return now < minRescheduleTime;
+// Convierte un Date a su offset (ms) para una zona horaria específica usando Intl
+const getTimeZoneOffsetMs = (date: Date, timeZone: string): number => {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = dtf.formatToParts(date);
+  const map: Record<string, string> = {};
+  for (const p of parts) map[p.type] = p.value;
+  // Interpreta la fecha/hora mostrada en la zona como si fuera UTC
+  const asUTC = new Date(`${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}:${map.second}.000Z`);
+  return asUTC.getTime() - date.getTime();
+};
+
+// Construye un ISO (UTC) a partir de fecha (día) y HH:mm en la zona de la clínica sin librerías externas
+const toIsoFromDateAndTime = (date: Date, time: string): string => {
+  const [h, m] = time.split(':').map(Number);
+  // Obtener Y-M-D según la zona horaria de la clínica (no según el navegador/UTC)
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CLINIC_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = Number(parts.find(p => p.type === 'year')?.value ?? '1970');
+  const month = Number(parts.find(p => p.type === 'month')?.value ?? '01');
+  const day = Number(parts.find(p => p.type === 'day')?.value ?? '01');
+  // Construir un instante base (supuesto UTC) con esos campos
+  const base = new Date(Date.UTC(year, month - 1, day, h, m, 0, 0));
+  // Calcular offset de la zona clínica para ese instante base
+  const offsetMs = getTimeZoneOffsetMs(base, CLINIC_TIMEZONE);
+  // Ajustar para obtener el verdadero instante UTC que corresponde a esa hora local de la clínica
+  const utcDate = new Date(base.getTime() - offsetMs);
+  return utcDate.toISOString();
 };
 
 // Componente de slot de tiempo mejorado
@@ -101,11 +134,9 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
   
   const { allAppointments, isLoading } = useClinic();
   
-  // Validación de reagendamiento
-  const canReschedule = useMemo(() => 
-    canRescheduleAppointment(appointment.fecha_hora_cita), 
-    [appointment.fecha_hora_cita]
-  );
+  // Validación de reagendamiento (estado/tiempo restante)
+  const rescheduleCheck = useMemo(() => canRescheduleAppointment(appointment), [appointment]);
+  const canReschedule = rescheduleCheck.valid;
 
   // Horarios disponibles
   const availableTimeSlots = useMemo(() => {
@@ -140,19 +171,31 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
         occupiedSlots.add(format(new Date(apt.fecha_hora_cita), 'HH:mm'));
       });
     
-    return slots.filter(slot => !occupiedSlots.has(slot));
+    return slots.filter(slot => {
+      if (occupiedSlots.has(slot)) return false;
+      const iso = toIsoFromDateAndTime(selectedDate, slot);
+      const { valid } = validateRescheduleDateTime(iso);
+      return valid;
+    });
   }, [selectedDate, allAppointments, appointment.id]);
+
+  // Validación del slot seleccionado con reglas centralizadas
+  const selectedSlotValidation = useMemo(() => {
+    if (!selectedDate || !selectedTime) return null;
+    const iso = toIsoFromDateAndTime(selectedDate, selectedTime);
+    return validateRescheduleDateTime(iso);
+  }, [selectedDate, selectedTime]);
 
   // Handlers
   const handleConfirm = useCallback(() => {
-    if (selectedDate && selectedTime) {
+    if (selectedDate && selectedTime && selectedSlotValidation?.valid) {
       setIsProcessing(true);
       setTimeout(() => {
         onReschedule(selectedDate, selectedTime);
         onClose();
       }, 500);
     }
-  }, [selectedDate, selectedTime, onReschedule, onClose]);
+  }, [selectedDate, selectedTime, selectedSlotValidation, onReschedule, onClose]);
 
   const patientName = getPatientFullName(appointment.patients);
 
@@ -167,7 +210,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
               No se puede reagendar
             </DialogTitle>
             <DialogDescription>
-              Esta cita no puede ser reagendada porque faltan menos de {CLINIC_SCHEDULE.RESCHEDULE_MIN_ADVANCE_HOURS} horas.
+              {rescheduleCheck.reason ?? `No se puede reagendar con menos de ${BUSINESS_RULES.RESCHEDULE_DEADLINE_HOURS} horas de anticipación.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -267,7 +310,16 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
               </ScrollArea>
             )}
 
-            {selectedDate && selectedTime && (
+            {selectedDate && selectedTime && selectedSlotValidation && !selectedSlotValidation.valid && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {selectedSlotValidation.reason}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {selectedDate && selectedTime && selectedSlotValidation?.valid && (
               <Card className="mt-4 p-4 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5" />
@@ -295,7 +347,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
           </Button>
           <Button 
             onClick={handleConfirm} 
-            disabled={!selectedDate || !selectedTime || isProcessing}
+            disabled={!selectedDate || !selectedTime || isProcessing || (selectedSlotValidation ? !selectedSlotValidation.valid : false)}
             className="gap-2 bg-violet-600 hover:bg-violet-700"
           >
             {isProcessing ? (
