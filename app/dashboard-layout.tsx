@@ -11,7 +11,7 @@ export default function DashboardLayout({
 }: { 
   children: React.ReactNode 
 }) {
-  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isMobile = useMediaQuery("(max-width: 767px)");
 
   return (
     <ClinicDataProvider>
@@ -21,16 +21,13 @@ export default function DashboardLayout({
           isMobile && "flex-col"
         )}
       >
-        <div className={cn(
-          "border-r",
-          isMobile && "fixed inset-y-0 z-50"
-        )}>
-          <AppSidebar />
-        </div>
+        <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
           <main className="flex-1 flex flex-col overflow-y-auto">
-            <div className="flex-1 p-4 sm:p-6 lg:p-8 @container/main">
-              {children}
+            <div className="flex-1 @container/main">
+              <div className="mx-auto w-full max-w-screen-2xl px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+                {children}
+              </div>
             </div>
           </main>
         </SidebarInset>

@@ -19,8 +19,6 @@ import {
   TabletIcon,
   UserPlusIcon,
   FileBarChart,
-  MenuIcon,
-  XIcon,
   ChevronLeft,
   Sun,
   Moon,
@@ -30,10 +28,9 @@ import {
   Settings,
   User,
 } from "lucide-react"
-import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar"
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useIsMobile } from "@/hooks/use-breakpoint"
 import { NavMain } from "./nav-main"
 import { NavSecondary } from "./nav-secondary"
 import { NavUser } from "./nav-user"
@@ -149,85 +146,49 @@ export function AppSidebar({
   onToggle,
 }: PropsWithChildren<AppSidebarProps>) {
   const pathname = usePathname()
-  const isMobile = useIsMobile()
+  const { state, isMobile, openMobile, setOpenMobile, toggleSidebar } = useSidebar()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
 
   // State management
-  const [isMobileOpen, setIsMobileOpen] = useState(false)
-  const [isCollapsed, setIsCollapsed] = useState(collapsedProp ?? false)
+  const isCollapsed = state === "collapsed"
 
   // Theme initialization
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Sync with prop changes
+  // Sync callback when collapsed state changes (desktop)
   useEffect(() => {
-    if (collapsedProp !== undefined && collapsedProp !== isCollapsed) {
-      setIsCollapsed(collapsedProp)
-    }
-  }, [collapsedProp, isCollapsed])
+    onCollapsedChange?.(isCollapsed)
+  }, [isCollapsed, onCollapsedChange])
 
   // Navigation handlers
   const handleNavigate = useCallback(() => {
-    if (isMobile && isMobileOpen) {
-      setIsMobileOpen(false)
+    if (isMobile && openMobile) {
+      setOpenMobile(false)
       onToggle?.()
     }
-  }, [isMobile, isMobileOpen, onToggle])
+  }, [isMobile, openMobile, setOpenMobile, onToggle])
 
   // Toggle handlers
-  const toggleMobile = useCallback(() => {
-    setIsMobileOpen((prev) => {
-      const newState = !prev
-      onToggle?.()
-      return newState
-    })
-  }, [onToggle])
-
   const toggleCollapsedDesktop = useCallback(() => {
-    const nextState = !isCollapsed
-    setIsCollapsed(nextState)
-    onCollapsedChange?.(nextState)
-  }, [isCollapsed, onCollapsedChange])
+    toggleSidebar()
+  }, [toggleSidebar])
 
   const toggleTheme = useCallback(() => {
     setTheme(theme === "dark" ? "light" : "dark")
   }, [theme, setTheme])
 
-  // Mobile interactions (optimized)
-  useEffect(() => {
-    if (!isMobile) return
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (isMobileOpen && sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
-        setIsMobileOpen(false)
-      }
-    }
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isMobileOpen) {
-        setIsMobileOpen(false)
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside)
-    document.addEventListener("keydown", handleEscape)
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-      document.removeEventListener("keydown", handleEscape)
-    }
-  }, [isMobile, isMobileOpen])
+  // Mobile interactions handled by Sheet via Sidebar primitives
 
   // Close mobile sidebar when route changes
   useEffect(() => {
-    if (isMobile && isMobileOpen) {
-      setIsMobileOpen(false)
+    if (isMobile && openMobile) {
+      setOpenMobile(false)
     }
-  }, [pathname, isMobile, isMobileOpen])
+  }, [pathname, isMobile, openMobile, setOpenMobile])
 
   // Convert readonly array to mutable array for NavMain component
   const navItems = useMemo(() => 
@@ -248,55 +209,25 @@ export function AppSidebar({
 
   return (
     <>
-      {/* Mobile Overlay */}
-      {isMobile && isMobileOpen && (
-        <div
-          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden"
-          onClick={() => setIsMobileOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Mobile Toggle Button */}
-      <Button
-        variant="outline"
-        size="icon"
+      {/* Mobile Toggle Button (uses SidebarTrigger) */}
+      <SidebarTrigger
         className={cn(
           "md:hidden fixed top-4 left-4 z-50",
           "bg-background/95 backdrop-blur-sm border",
           "shadow-lg transition-all duration-200",
           "focus-visible:ring-2 focus-visible:ring-primary/20"
         )}
-        onClick={toggleMobile}
-        aria-label={isMobileOpen ? "Cerrar menú" : "Abrir menú"}
-        aria-expanded={isMobileOpen}
-      >
-        <div className="relative w-5 h-5">
-          <MenuIcon
-            className={cn(
-              "absolute transition-all duration-200",
-              isMobileOpen ? "rotate-90 opacity-0" : "rotate-0 opacity-100"
-            )}
-          />
-          <XIcon
-            className={cn(
-              "absolute transition-all duration-200",
-              isMobileOpen ? "rotate-0 opacity-100" : "-rotate-90 opacity-0"
-            )}
-          />
-        </div>
-      </Button>
+        aria-label={openMobile ? "Cerrar menú" : "Abrir menú"}
+        aria-expanded={openMobile}
+      />
 
       {/* Sidebar */}
       <Sidebar
         ref={sidebarRef}
+        collapsible="icon"
         className={cn(
-          "transition-all duration-300 ease-in-out z-50 border-r bg-background/95 backdrop-blur-sm",
-          isMobile
-            ? "fixed left-0 top-0 h-full shadow-xl md:hidden"
-            : "relative shadow-sm",
-          isMobile ? (isMobileOpen ? "translate-x-0" : "-translate-x-full") : "",
-          isCollapsed && !isMobile ? "w-16" : "w-64"
+          "border-r bg-background",
+          "shadow-sm"
         )}
       >
         <SidebarHeader

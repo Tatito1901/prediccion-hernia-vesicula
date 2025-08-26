@@ -18,8 +18,17 @@ const buildDateRange = (dateFilter: string, startDate?: string | null, endDate?:
   const todayStart = startOfDay(today)
   const todayEnd = endOfDay(today)
   switch (dateFilter) {
+    case 'all':
+      // Return empty object to get all appointments
+      return {}
     case 'today':
       return { gte: todayStart.toISOString(), lt: todayEnd.toISOString() }
+    case 'week':
+      // Next 7 days
+      return { gte: todayStart.toISOString(), lt: addDays(todayStart, 7).toISOString() }
+    case 'month':
+      // Next 30 days
+      return { gte: todayStart.toISOString(), lt: addDays(todayStart, 30).toISOString() }
     case 'future':
       return { gte: addDays(todayStart, 1).toISOString() }
     case 'past':
@@ -72,7 +81,7 @@ export async function GET(req: NextRequest) {
   const endDate = searchParams.get('endDate')
 
   // Debug flag to optionally include diagnostics in the response
-  const debug = searchParams.get('debug') === '1'
+  const debug = true // Force debug for troubleshooting
 
   // Prefer service role on the server when available to bypass RLS for read-only aggregation
   const usingAdmin = !!process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -120,6 +129,18 @@ export async function GET(req: NextRequest) {
     .order('fecha_hora_cita', { ascending: dateFilter !== 'past' })
 
   const { data, error, count } = await query
+  
+  // Debug: Log query results
+  console.log('🔍 [/api/appointments][GET] Query result:', {
+    dataLength: data?.length || 0,
+    count,
+    error: error?.message,
+    hasData: !!data,
+    firstItem: data?.[0],
+    dateFilter,
+    range
+  });
+  
   if (error) {
     // Graceful fallback for dev environments without DB permissions
     const isPermission = /permission denied/i.test(error.message || '')

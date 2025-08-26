@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
 
     // Debug flag y metadatos de diagnóstico
-    const debug = searchParams.get('debug') === '1';
+    const debug = true; // Force debug for troubleshooting
     const usingAdmin = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
     const envMeta = {
       hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
@@ -106,6 +106,15 @@ export async function GET(request: Request) {
     query = query.range(start, start + pageSize - 1);
 
     const { data: patients, error, count } = await query;
+    
+    // Debug: Log query results
+    console.log('🔍 [/api/patients][GET] Query result:', {
+      dataLength: patients?.length || 0,
+      count,
+      error: error?.message,
+      hasData: !!patients,
+      firstItem: patients?.[0]
+    });
     
     if (error) {
       const isPermission = /permission denied/i.test(error.message || '');
@@ -359,19 +368,20 @@ export async function POST(request: Request) {
       fecha_nacimiento: fechaNacimientoToSave,
       telefono: body.telefono?.trim() || null,
       email: body.email?.trim() || null,
+      genero: body.genero || null,
       estado_paciente: body.estado_paciente || PatientStatusEnum.POTENCIAL,
       diagnostico_principal: body.diagnostico_principal || null,
-      diagnostico_principal_detalle: body.diagnostico_principal_detalle?.trim() || null,
-      probabilidad_cirugia: body.probabilidad_cirugia || null,
-      fecha_cirugia_programada: body.fecha_cirugia_programada || null,
-      fecha_primera_consulta: body.fecha_primera_consulta || null,
-      fecha_registro: new Date().toISOString(),
-      doctor_asignado_id: body.doctor_asignado_id || null,
-      origen_paciente: body.origen_paciente?.trim() || null,
-      etiquetas: body.etiquetas || null,
+      antecedentes_medicos: body.antecedentes_medicos || null,
+      ciudad: body.ciudad || null,
+      estado: body.estado || null,
+      contacto_emergencia_nombre: body.contacto_emergencia_nombre || null,
+      contacto_emergencia_telefono: body.contacto_emergencia_telefono || null,
+      numero_expediente: body.numero_expediente || null,
+      seguro_medico: body.seguro_medico || null,
+      creation_source: body.creation_source || null,
+      marketing_source: body.marketing_source || null,
       comentarios_registro: body.comentarios_registro?.trim() || null,
-      proximo_contacto: body.proximo_contacto || null,
-      ultimo_contacto: body.ultimo_contacto || null,
+      probabilidad_cirugia: body.probabilidad_cirugia || null,
     };
 
     // 4. Insertar paciente en la base de datos

@@ -16,7 +16,7 @@ import { RefreshCw } from "lucide-react"
 
 // Keep types local to avoid coupling with dashboard component
 export type ChartDatum = {
-  month: string
+  label: string
   consultas: number
   cirugias: number
 }
@@ -24,6 +24,8 @@ export type ChartDatum = {
 export interface ProcedureChartProps {
   data: ChartDatum[]
   isLoading: boolean
+  // Optional period indicator for subtitle (keep local union to avoid cross-file coupling)
+  period?: '7d' | '30d' | '90d'
 }
 
 const CustomTooltip = memo(({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
@@ -45,34 +47,56 @@ const CustomTooltip = memo(({ active, payload, label }: TooltipProps<ValueType, 
 })
 CustomTooltip.displayName = "CustomTooltip"
 
-function ProcedureChart({ data, isLoading }: ProcedureChartProps) {
+function ProcedureChart({ data, isLoading, period }: ProcedureChartProps) {
+  const subtitle = (() => {
+    if (!period) return "Evolución de consultas y cirugías";
+    const map: Record<string, string> = { '7d': '7 días', '30d': '30 días', '90d': '90 días' };
+    return `Evolución de consultas y cirugías (últimos ${map[period] ?? 'días'})`;
+  })();
+  const rotateTicks = data.length > 30;
+  const tickFormatter = (value: string) => {
+    const [dd, mm] = String(value).split('/');
+    return dd && mm ? `${dd}/${mm}` : String(value);
+  };
+  const renderRotatedTick = (props: any) => {
+    const { x, y, payload } = props;
+    const text = tickFormatter(payload?.value ?? '');
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text
+          textAnchor="end"
+          fill="#9CA3AF"
+          fontSize={11}
+          transform="rotate(-45)"
+          dy={10}
+          dx={-4}
+        >
+          {text}
+        </text>
+      </g>
+    );
+  };
+  const chartMargin = { top: 8, right: 8, left: 0, bottom: rotateTicks ? 20 : 0 } as const;
   return (
     <div className="bg-white dark:bg-gray-900 p-4 sm:p-6 rounded-lg border border-gray-200 dark:border-gray-700">
       <header className="mb-4">
         <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">Análisis de Procedimientos</h2>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-          Evolución de consultas y cirugías (últimos 6 meses)
+          {subtitle}
         </p>
       </header>
       <div className="w-full">
         {isLoading ? (
-          <div className="h-[200px] sm:h-[300px] flex items-center justify-center text-slate-500 dark:text-slate-400">
+          <div className="h-56 sm:h-64 md:h-72 lg:h-80 flex items-center justify-center text-slate-500 dark:text-slate-400">
             <RefreshCw className="h-6 w-6 sm:h-8 sm:w-8 animate-spin" />
           </div>
         ) : (
-          <ResponsiveContainer
-            width="100%"
-            height={typeof window !== "undefined" && window.innerWidth < 640 ? 200 : 300}
-          >
-            <AreaChart
-              data={data}
-              margin={{
-                top: 5,
-                right: typeof window !== "undefined" && window.innerWidth < 640 ? 5 : 10,
-                left: typeof window !== "undefined" && window.innerWidth < 640 ? -30 : -20,
-                bottom: 0,
-              }}
-            >
+          <div className="h-56 sm:h-64 md:h-72 lg:h-80 select-none touch-pan-y">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={data}
+                margin={chartMargin}
+              >
               <defs>
                 <linearGradient id="colorConsultas" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4} />
@@ -85,19 +109,24 @@ function ProcedureChart({ data, isLoading }: ProcedureChartProps) {
               </defs>
               <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" className="dark:stroke-gray-700" />
               <XAxis
-                dataKey="month"
+                dataKey="label"
                 stroke="#9CA3AF"
-                fontSize={typeof window !== "undefined" && window.innerWidth < 640 ? 10 : 12}
+                fontSize={11}
                 tickLine={false}
                 axisLine={false}
                 className="dark:stroke-gray-400"
+                tick={rotateTicks ? renderRotatedTick : undefined}
+                tickFormatter={!rotateTicks ? tickFormatter : undefined}
+                interval="preserveStartEnd"
+                minTickGap={16}
               />
               <YAxis
                 stroke="#9CA3AF"
-                fontSize={typeof window !== "undefined" && window.innerWidth < 640 ? 10 : 12}
+                fontSize={11}
                 tickLine={false}
                 axisLine={false}
                 className="dark:stroke-gray-400"
+                allowDecimals={false}
               />
               <Tooltip content={<CustomTooltip />} />
               <Area
@@ -107,6 +136,8 @@ function ProcedureChart({ data, isLoading }: ProcedureChartProps) {
                 strokeWidth={2}
                 fill="url(#colorConsultas)"
                 name="Consultas"
+                dot={false}
+                activeDot={{ r: 3 }}
               />
               <Area
                 type="monotone"
@@ -115,9 +146,12 @@ function ProcedureChart({ data, isLoading }: ProcedureChartProps) {
                 strokeWidth={2}
                 fill="url(#colorCirugias)"
                 name="Cirugías"
+                dot={false}
+                activeDot={{ r: 3 }}
               />
-            </AreaChart>
-          </ResponsiveContainer>
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </div>
     </div>

@@ -2,11 +2,13 @@
 'use client';
 import React, { memo, useMemo, useCallback, useState } from "react";
 import dynamic from 'next/dynamic';
-import { format, isValid, parseISO } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { isValid, parseISO } from 'date-fns';
+import { formatMx, isMxToday, mxLocalPartsToUtcIso } from '@/utils/datetime';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -38,6 +40,7 @@ import {
   Loader2,
   ArrowUpRight,
   Stethoscope,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +49,15 @@ import { AppointmentStatusEnum } from '@/lib/types';
 import type { AppointmentWithPatient, AdmissionAction, PatientCardProps } from './admision-types';
 import { getPatientFullName, getStatusConfig, canPerformAction } from './admision-types';
 import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
+
+// Helpers de formato de texto
+const toTitleCaseEs = (s: string) =>
+  s
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : ''))
+    .join(' ');
+const prettifyEnumLabel = (v?: string) => (v ? toTitleCaseEs(v.replace(/_/g, ' ')) : '');
 
 // Lazy loading optimizado
 const RescheduleDatePicker = dynamic(
@@ -114,17 +126,24 @@ export const PatientCard = memo<PatientCardProps>(({
   appointment, 
   onAction, 
   disableActions = false, 
-  className 
+  className,
+  open: controlledOpen,
+  onOpenChange
 }) => {
   const { mutateAsync: updateStatus, isPending } = useUpdateAppointmentStatus();
   const [confirmDialog, setConfirmDialog] = useState<AdmissionAction | null>(null);
   const [showReschedule, setShowReschedule] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [infoDialog, setInfoDialog] = useState<null | { kind: 'tooEarly' | 'expired' }>(null);
+  // Estado controlado/ no controlado para expansión
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = onOpenChange ?? setUncontrolledOpen;
 
   const patient = useMemo(() => appointment.patients, [appointment.patients]);
   const statusConfig = useMemo(() => getStatusConfig(appointment.estado_cita), [appointment.estado_cita]);
   const fullName = useMemo(() => getPatientFullName(patient), [patient]);
+  const dxLabel = useMemo(() => prettifyEnumLabel(String(patient?.diagnostico_principal || '')), [patient?.diagnostico_principal]);
   
   const initials = useMemo(() => {
     const n = patient?.nombre?.[0] || '';
@@ -138,13 +157,13 @@ export const PatientCard = memo<PatientCardProps>(({
       if (!isValid(date)) return null;
       
       const now = new Date();
-      const isToday = format(date, 'yyyy-MM-dd') === format(now, 'yyyy-MM-dd');
+      const isToday = isMxToday(appointment.fecha_hora_cita);
       const isPast = date < now;
       
       return {
-        date: format(date, "EEE d MMM", { locale: es }),
-        time: format(date, 'HH:mm'),
-        fullDate: format(date, "EEEE d 'de' MMMM", { locale: es }),
+        date: formatMx(appointment.fecha_hora_cita, "EEE d MMM"),
+        time: formatMx(appointment.fecha_hora_cita, 'HH:mm'),
+        fullDate: formatMx(appointment.fecha_hora_cita, "EEEE d 'de' MMMM"),
         isToday,
         isPast,
         isNear: !isPast && (date.getTime() - now.getTime()) < 3600000,
@@ -190,6 +209,21 @@ export const PatientCard = memo<PatientCardProps>(({
     availableActions.find(a => a === 'checkIn' || a === 'complete'),
     [availableActions]
   );
+
+  const prettyMotivos = useMemo(() => {
+    const base = new Set<string>();
+    const dxNorm = (dxLabel || '').toLowerCase().replace(/\s+/g, '');
+    const items = (appointment.motivos_consulta || []).map(m => prettifyEnumLabel(String(m)) || '').filter(Boolean);
+    const dedup = [] as string[];
+    for (const item of items) {
+      const norm = item.toLowerCase().replace(/\s+/g, '');
+      if (norm && norm !== dxNorm && !base.has(norm)) {
+        base.add(norm);
+        dedup.push(item);
+      }
+    }
+    return dedup;
+  }, [appointment.motivos_consulta, dxLabel]);
 
   const handleAction = useCallback(async (action: AdmissionAction) => {
     if (action === 'reschedule') {
@@ -241,14 +275,14 @@ export const PatientCard = memo<PatientCardProps>(({
 
   const handleReschedule = useCallback(async (date: Date, time: string) => {
     const [hh, mm] = time.split(':').map(Number);
-    const newDateTime = new Date(date);
-    newDateTime.setHours(hh, mm, 0, 0);
+    const yyyyMmDd = formatMx(date, 'yyyy-MM-dd');
+    const newIso = mxLocalPartsToUtcIso(yyyyMmDd, hh, mm);
     
     // 1) Set REAGENDADA with new datetime to pass server-side validation and log audit trail
     await updateStatus({
       appointmentId: appointment.id,
       newStatus: AppointmentStatusEnum.REAGENDADA,
-      nuevaFechaHora: newDateTime.toISOString(),
+      nuevaFechaHora: newIso,
       motivo: 'Reagendamiento de cita'
     });
 
@@ -283,143 +317,178 @@ export const PatientCard = memo<PatientCardProps>(({
             </Badge>
           </div>
         )}
+        <CardContent className="p-3 sm:p-4">
+          <Collapsible open={open} onOpenChange={setOpen}>
+            {/* Header compacto con Trigger en el lado izquierdo */}
+            <div className="flex items-start justify-between gap-2">
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-3 min-w-0 flex-1 text-left">
+                  <Avatar className="h-9 w-9 shrink-0 ring-1 ring-black/5 dark:ring-white/10">
+                    <AvatarFallback className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-[15px] sm:text-base text-gray-900 dark:text-gray-100 truncate">
+                      {fullName}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                      <Badge variant="outline" className={cn(
+                        "text-[10px] sm:text-xs font-medium",
+                        statusConfig.bgClass
+                      )}>
+                        {statusConfig.label}
+                      </Badge>
+                      {appointment.es_primera_vez && (
+                        <Badge variant="secondary" className="text-[10px] sm:text-xs">
+                          1ª vez
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronDown className={cn("h-4 w-4 text-gray-500 transition-transform", open && "rotate-180")} />
+                </button>
+              </CollapsibleTrigger>
 
-        <CardContent className="p-4 sm:p-5">
-          {/* Header con información del paciente */}
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              
-              <div className="min-w-0 flex-1">
-                <h3 className="font-semibold text-base text-gray-900 dark:text-gray-100 truncate">
-                  {fullName}
-                </h3>
-                <div className="flex items-center gap-4 mt-1">
-                  <Badge variant="outline" className={cn(
-                    "text-xs font-medium",
-                    statusConfig.bgClass
-                  )}>
-                    {statusConfig.label}
-                  </Badge>
-                  {appointment.es_primera_vez && (
-                    <Badge variant="secondary" className="text-xs">
-                      1ª Consulta
-                    </Badge>
+              {/* Hora y menú de acciones */}
+              <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span className="font-medium">{dateTime.time}</span>
+                </div>
+                {!disableActions && availableActions.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-8 w-8 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        disabled={isPending}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      {availableActions.filter(a => a !== primaryAction).map((action, index) => {
+                        const config = ACTION_CONFIG[action];
+                        return (
+                          <React.Fragment key={action}>
+                            {index > 0 && action === 'viewHistory' && <DropdownMenuSeparator />}
+                            <DropdownMenuItem 
+                              onClick={() => handleAction(action)}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <config.icon className="h-4 w-4" />
+                              {config.label}
+                            </DropdownMenuItem>
+                          </React.Fragment>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </div>
+
+            {/* Contenido expandible */}
+            <CollapsibleContent>
+              <div className="mt-3 md:grid md:grid-cols-6 md:gap-4">
+                {/* Información de la cita, motivos y contacto */}
+                <div className="md:col-span-4 space-y-2 mb-3 md:mb-0">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                    <Calendar className="h-4 w-4" />
+                    <span className="capitalize">{dateTime.fullDate}</span>
+                    <span className="text-gray-400">•</span>
+                    <Clock className="h-4 w-4" />
+                    <span className="font-medium">{dateTime.time}</span>
+                  </div>
+
+                  {/* Badges adicionales (edad, diagnóstico) */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {typeof patient?.edad === 'number' && (
+                      <Badge variant="secondary" className="text-[10px] sm:text-xs">
+                        {patient.edad} años
+                      </Badge>
+                    )}
+                    {patient?.diagnostico_principal && (
+                      <Badge variant="outline" className="text-[10px] sm:text-xs max-w-[240px] truncate">
+                        Dx: {dxLabel}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {prettyMotivos.length > 0 && (
+                    <div className="flex items-start gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                      <Stethoscope className="h-4 w-4 mt-0.5" />
+                      <span className="line-clamp-1">
+                        {prettyMotivos.join(', ')}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Contacto */}
+                  <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
+                    {patient?.telefono && (
+                      <a 
+                        href={`tel:${patient.telefono}`}
+                        className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                      >
+                        <Phone className="h-4 w-4" />
+                        <span>{patient.telefono}</span>
+                      </a>
+                    )}
+                    {patient?.email && (
+                      <a 
+                        href={`mailto:${patient.email}`}
+                        className="hidden sm:flex items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                      >
+                        <Mail className="h-4 w-4" />
+                        <span className="truncate max-w-[180px]">{patient.email}</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Acción principal en columna derecha */}
+                <div className="md:col-span-2">
+                  {!disableActions && primaryAction && (
+                    <Button
+                      onClick={() => handleAction(primaryAction)}
+                      disabled={isPending}
+                      className={cn(
+                        "w-full gap-2 font-medium",
+                        ACTION_CONFIG[primaryAction].className
+                      )}
+                    >
+                      {isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Procesando...
+                        </>
+                      ) : (
+                        <>
+                          {React.createElement(ACTION_CONFIG[primaryAction].icon, { 
+                            className: "h-4 w-4" 
+                          })}
+                          {ACTION_CONFIG[primaryAction].label}
+                          <ArrowUpRight className="h-3.5 w-3.5 ml-auto" />
+                        </>
+                      )}
+                    </Button>
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Menú de acciones */}
-            {!disableActions && availableActions.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    className="h-8 w-8 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    disabled={isPending}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  {availableActions.filter(a => a !== primaryAction).map((action, index) => {
-                    const config = ACTION_CONFIG[action];
-                    return (
-                      <React.Fragment key={action}>
-                        {index > 0 && action === 'viewHistory' && <DropdownMenuSeparator />}
-                        <DropdownMenuItem 
-                          onClick={() => handleAction(action)}
-                          className="gap-2 cursor-pointer"
-                        >
-                          <config.icon className="h-4 w-4" />
-                          {config.label}
-                        </DropdownMenuItem>
-                      </React.Fragment>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-
-          {/* Información de la cita */}
-          <div className="space-y-2 mb-4">
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <Calendar className="h-4 w-4" />
-              <span className="capitalize">{dateTime.fullDate}</span>
-              <span className="text-gray-400">•</span>
-              <Clock className="h-4 w-4" />
-              <span className="font-medium">{dateTime.time}</span>
-            </div>
-
-            {appointment.motivos_consulta?.length > 0 && (
-              <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                <Stethoscope className="h-4 w-4 mt-0.5" />
-                <span className="line-clamp-1">
-                  {appointment.motivos_consulta.join(', ')}
-                </span>
-              </div>
-            )}
-
-            {/* Contacto - Solo móvil visible */}
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              {patient?.telefono && (
-                <a 
-                  href={`tel:${patient.telefono}`}
-                  className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
-                >
-                  <Phone className="h-4 w-4" />
-                  <span>{patient.telefono}</span>
-                </a>
+              {/* Notas */}
+              {appointment.notas_breves && (
+                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg mt-3">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                    {appointment.notas_breves}
+                  </p>
+                </div>
               )}
-              {patient?.email && (
-                <a 
-                  href={`mailto:${patient.email}`}
-                  className="hidden sm:flex items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
-                >
-                  <Mail className="h-4 w-4" />
-                  <span className="truncate max-w-[150px]">{patient.email}</span>
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Notas */}
-          {appointment.notas_breves && (
-            <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg mb-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                {appointment.notas_breves}
-              </p>
-            </div>
-          )}
-
-          {/* Acción principal: siempre visible; la validación se maneja al click */}
-          {!disableActions && primaryAction && (
-            <Button
-              onClick={() => handleAction(primaryAction)}
-              disabled={isPending}
-              className={cn(
-                "w-full gap-2 font-medium",
-                ACTION_CONFIG[primaryAction].className
-              )}
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Procesando...
-                </>
-              ) : (
-                <>
-                  {React.createElement(ACTION_CONFIG[primaryAction].icon, { 
-                    className: "h-4 w-4" 
-                  })}
-                  {ACTION_CONFIG[primaryAction].label}
-                  <ArrowUpRight className="h-3.5 w-3.5 ml-auto" />
-                </>
-              )}
-            </Button>
-          )}
+            </CollapsibleContent>
+          </Collapsible>
         </CardContent>
       </Card>
 
@@ -474,7 +543,7 @@ export const PatientCard = memo<PatientCardProps>(({
                   El check-in se habilita 30 minutos antes de la cita
                   {checkInUi.start && (
                     <>
-                      {" "}(desde {format(checkInUi.start, 'HH:mm')}
+                      {" "}(desde {formatMx(checkInUi.start, 'HH:mm')}
                       {typeof checkInUi.minutes === 'number' && `, faltan ${checkInUi.minutes} min`} ).
                     </>
                   )}
@@ -482,7 +551,7 @@ export const PatientCard = memo<PatientCardProps>(({
               )}
               {infoDialog?.kind === 'expired' && (
                 <span className="block">
-                  La ventana de check-in cerró{checkInUi.end && <> a las {format(checkInUi.end, 'HH:mm')}</>}.
+                  La ventana de check-in cerró{checkInUi.end && <> a las {formatMx(checkInUi.end, 'HH:mm')}</>}.
                   Puedes marcar <strong>No Asistió</strong> o <strong>Reagendar</strong>.
                 </span>
               )}

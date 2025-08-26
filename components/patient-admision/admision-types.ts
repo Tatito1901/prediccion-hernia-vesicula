@@ -153,6 +153,9 @@ export interface PatientCardProps {
   onAction?: (action: AdmissionAction, appointmentId: string) => void;
   disableActions?: boolean;
   className?: string;
+  // Control externo de expansión (opcional)
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export interface RescheduleProps {

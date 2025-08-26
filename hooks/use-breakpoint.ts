@@ -17,8 +17,8 @@ type QueryKey =
 /* ---------- Media-queries centralizadas ---------- */
 const queries: Record<QueryKey, string> = {
   // Breakpoints basados en Tailwind CSS
-  mobile: "(max-width: 639px)",
-  tablet: "(min-width: 640px) and (max-width: 1023px)",
+  mobile: "(max-width: 767px)",
+  tablet: "(min-width: 768px) and (max-width: 1023px)",
   desktop: "(min-width: 1024px) and (max-width: 1535px)",
   largeDesktop: "(min-width: 1536px)",
 

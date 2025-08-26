@@ -155,18 +155,17 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
     
     // Filtrar ocupados
     const occupiedSlots = new Set<string>();
-    const activeStates: AppointmentStatusEnum[] = [
+    const activeStates: typeof AppointmentStatusEnum[keyof typeof AppointmentStatusEnum][] = [
       AppointmentStatusEnum.PROGRAMADA,
       AppointmentStatusEnum.CONFIRMADA,
       AppointmentStatusEnum.PRESENTE,
       AppointmentStatusEnum.COMPLETADA,
-      AppointmentStatusEnum.EN_CONSULTA,
     ];
     
     allAppointments
       ?.filter(apt => 
         apt.id !== appointment.id && 
-        activeStates.includes(apt.estado_cita) &&
+        activeStates.includes(apt.estado_cita as any) &&
         format(new Date(apt.fecha_hora_cita), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
       )
       .forEach(apt => {

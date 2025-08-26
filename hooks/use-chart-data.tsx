@@ -1,109 +1,66 @@
 // hooks/use-chart-data.tsx - Minimal replacement for chart data processing
+'use client';
+
 import { useMemo } from 'react';
-import type { Patient, Appointment } from '@/lib/types';
-import { PatientStatusEnum } from '@/lib/types';
-
-// Basic types for chart data
-export interface AppointmentFilters {
-  dateRange?: 'week' | 'month' | 'year';
-  patientId?: string;
-  doctorId?: string;
-  estado?: string;
-  motiveFilter?: string;
-  statusFilter?: string[];
-  timeRange?: [number, number];
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-}
-
-interface ChartSeries {
-  name: string;
-  data: number[];
-}
-
-interface ChartData {
-  series: ChartSeries[];
-  categories: string[];
-}
-
-interface UseChartDataProps extends AppointmentFilters {
-  patients: Patient[];
-  appointments: Appointment[];
-}
+import { useClinic } from '@/contexts/clinic-data-provider';
 
 /**
- * Minimal hook for processing chart data from patients and appointments
- * Replaces the removed use-chart-data hook with essential functionality only
+ * Hook simplificado que actúa como selector de datos de gráficos
+ * desde la fuente centralizada useClinic
  */
-export function useChartData({
-  patients,
-  appointments,
-  dateRange = 'month',
-  estado = 'todos'
-}: UseChartDataProps) {
-  
-  const chart = useMemo((): ChartData => {
-    if (!patients || !appointments) {
-      return {
-        series: [],
-        categories: []
-      };
-    }
 
-    // Simple chart data processing
-    const now = new Date();
-    const timeframe = dateRange === 'week' ? 7 : dateRange === 'year' ? 365 : 30;
-    const startDate = new Date(now.getTime() - (timeframe * 24 * 60 * 60 * 1000));
-    
-    // Filter appointments by date range
-    const filteredAppointments = appointments.filter(apt => {
-      const aptDate = new Date(apt.fecha_hora_cita);
-      return aptDate >= startDate && aptDate <= now;
-    });
-
-    // Group by day/week/month depending on dateRange
-    const groupedData: { [key: string]: { consultas: number; operados: number } } = {};
-    
-    filteredAppointments.forEach(apt => {
-      const date = new Date(apt.fecha_hora_cita);
-      const key = dateRange === 'week' 
-        ? date.toISOString().split('T')[0] // Daily for week view
-        : dateRange === 'year'
-        ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` // Monthly for year view  
-        : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; // Daily for month view
-      
-      if (!groupedData[key]) {
-        groupedData[key] = { consultas: 0, operados: 0 };
-      }
-      
-      groupedData[key].consultas += 1;
-      
-      // Check if patient was operated (simplified logic)
-      const patient = patients.find(p => p.id === apt.patient_id);
-      if (patient && patient.estado_paciente === PatientStatusEnum.OPERADO) {
-        groupedData[key].operados += 1;
-      }
-    });
-
-    const categories = Object.keys(groupedData).sort();
-    const consultasData = categories.map(key => groupedData[key]?.consultas || 0);
-    const operadosData = categories.map(key => groupedData[key]?.operados || 0);
-
-    return {
-      series: [
-        { name: 'Consultas', data: consultasData },
-        { name: 'Operados', data: operadosData }
-      ],
-      categories
-    };
-  }, [patients, appointments, dateRange]);
-
-  return {
-    chart,
-    // Additional processed data that might be needed
-    transformedPatients: patients,
-    filteredAppointments: appointments,
-    isLoading: false,
-    error: null
-  };
+interface UseChartDataOptions {
+  startDate?: Date;
+  endDate?: Date;
+  groupBy?: 'day' | 'month' | 'year';
 }
+
+export const useChartData = (options?: UseChartDataOptions) => {
+  const { chartData, getChartData } = useClinic();
+  
+  const data = useMemo(() => {
+    // Si se proporcionan opciones específicas, usar getChartData
+    if (options?.startDate || options?.endDate || options?.groupBy) {
+      return getChartData(
+        options.startDate,
+        options.endDate,
+        options.groupBy || 'day'
+      );
+    }
+    
+    // Por defecto, retornar los datos pre-calculados según el groupBy
+    const groupBy = options?.groupBy || 'day';
+    switch (groupBy) {
+      case 'month':
+        return chartData.monthly;
+      case 'year':
+        return chartData.yearly;
+      default:
+        return chartData.daily;
+    }
+  }, [chartData, getChartData, options?.startDate, options?.endDate, options?.groupBy]);
+
+  return data;
+};
+
+/**
+ * Función de utilidad para usar directamente los datos de gráficos
+ * sin necesidad de un hook (útil en componentes que ya usan useClinic)
+ */
+export const selectChartData = (
+  chartData: {
+    daily: any;
+    monthly: any;
+    yearly: any;
+  },
+  groupBy: 'day' | 'month' | 'year' = 'day'
+) => {
+  switch (groupBy) {
+    case 'month':
+      return chartData.monthly;
+    case 'year':
+      return chartData.yearly;
+    default:
+      return chartData.daily;
+  }
+};

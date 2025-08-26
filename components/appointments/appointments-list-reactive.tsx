@@ -93,8 +93,9 @@ export function AppointmentsListReactive({ maxItems = 10 }: { maxItems?: number 
           }
         })();
 
+        const stableKey = appt?.id || `${(appt as any)?.patient_id || 'unknown'}::${appt?.fecha_hora_cita || dateLabel}`;
         return (
-          <div key={appt?.id ?? dateLabel + Math.random()} className="flex items-center justify-between p-3 gap-3">
+          <div key={stableKey} className="flex items-center justify-between p-3 gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-9 w-9 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 flex items-center justify-center text-sm font-semibold flex-shrink-0">
                 {initial}

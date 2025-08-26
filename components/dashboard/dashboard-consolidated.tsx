@@ -16,7 +16,7 @@ import {
 import { useClinic } from '@/contexts/clinic-data-provider';
 import type { Appointment, Patient } from '@/lib/types';
 import { AppointmentStatusEnum, PatientStatusEnum } from '@/lib/types';
-import { formatClinicMonthShortYear } from '@/lib/timezone';
+import { clinicDayId, formatClinicShortDate } from '@/lib/timezone';
 
 // Tipos y enums importados desde '@/lib/types' para evitar duplicación
 
@@ -24,7 +24,7 @@ export type Period = '7d' | '30d' | '90d';
 export type Trend = 'up' | 'down' | 'neutral';
 
 export interface ChartData {
-  month: string;
+  label: string;
   consultas: number;
   cirugias: number;
 }
@@ -82,22 +82,23 @@ const useOptimizedMetrics = (
     const now = new Date();
     const todayStartTimestamp = new Date(now).setHours(0, 0, 0, 0);
     const periodDays = { '7d': 7, '30d': 30, '90d': 90 }[period];
-    const periodStart = new Date(now);
-    periodStart.setDate(now.getDate() - periodDays);
+    // inicio del período al inicio del día (periodDays - 1 días atrás) para incluir hoy
+    const periodStart = new Date(new Date(todayStartTimestamp));
+    periodStart.setDate(periodStart.getDate() - (periodDays - 1));
     const previousPeriodStart = new Date(periodStart);
-    previousPeriodStart.setDate(periodStart.getDate() - periodDays);
+    previousPeriodStart.setDate(previousPeriodStart.getDate() - periodDays);
 
     let todayConsultations = 0;
     let currentPeriodTotal = 0;
     let previousPeriodTotal = 0;
 
-    // Inicializar datos mensuales
-    const monthlyData = new Map<string, { consultas: number; cirugias: number }>();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now);
-      d.setMonth(now.getMonth() - i, 1);
-      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      monthlyData.set(monthKey, { consultas: 0, cirugias: 0 });
+    // Inicializar datos diarios para el rango seleccionado
+    const dailyData = new Map<string, { consultas: number; cirugias: number; label: string }>();
+    for (let i = periodDays - 1; i >= 0; i--) {
+      const d = new Date(todayStartTimestamp);
+      d.setDate(d.getDate() - i);
+      const dayKey = clinicDayId(d);
+      dailyData.set(dayKey, { consultas: 0, cirugias: 0, label: formatClinicShortDate(d) });
     }
 
     // Procesar citas
@@ -115,16 +116,18 @@ const useOptimizedMetrics = (
         previousPeriodTotal++;
       }
 
-      const monthKey = `${aptDate.getFullYear()}-${String(aptDate.getMonth() + 1).padStart(2, '0')}`;
-      const monthEntry = monthlyData.get(monthKey);
-
-      if (monthEntry && apt.estado_cita === AppointmentStatusEnum.COMPLETADA) {
-        monthEntry.consultas++;
-        const isSurgery = apt.motivos_consulta.some(m => 
-          m.toLowerCase().includes('ciru') || m.toLowerCase().includes('operac')
-        );
-        if (isSurgery) {
-          monthEntry.cirugias++;
+      // Agregar a buckets diarios dentro del período actual
+      if (aptDate >= periodStart && apt.estado_cita === AppointmentStatusEnum.COMPLETADA) {
+        const dayKey = clinicDayId(aptDate);
+        const entry = dailyData.get(dayKey);
+        if (entry) {
+          entry.consultas++;
+          const isSurgery = apt.motivos_consulta.some(m => 
+            m.toLowerCase().includes('ciru') || m.toLowerCase().includes('operac')
+          );
+          if (isSurgery) {
+            entry.cirugias++;
+          }
         }
       }
     }
@@ -137,10 +140,10 @@ const useOptimizedMetrics = (
       ? Math.round(((currentPeriodTotal - previousPeriodTotal) / previousPeriodTotal) * 100)
       : (currentPeriodTotal > 0 ? 100 : 0);
 
-    const chartData: ChartData[] = Array.from(monthlyData.entries()).map(([month, data]) => ({
-      month: formatClinicMonthShortYear(`${month}-02T00:00:00`),
-      consultas: data.consultas,
-      cirugias: data.cirugias,
+    const chartData: ChartData[] = Array.from(dailyData.values()).map(d => ({
+      label: d.label,
+      consultas: d.consultas,
+      cirugias: d.cirugias,
     }));
 
     // Calcular tasa de ocupación basada en consultas del día
@@ -410,7 +413,8 @@ export default function DashboardEnhanced() {
           />
           <ProcedureChart 
             data={metrics.chartData} 
-            isLoading={isLoading} 
+            isLoading={isLoading}
+            period={period}
           />
         </main>
       </div>

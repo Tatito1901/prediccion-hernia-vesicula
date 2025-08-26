@@ -1,6 +1,7 @@
 // hooks/use-appointments.ts - Hooks optimizados para manejo de citas
 import { useMutation, useQueryClient, UseMutationOptions } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { isMxToday } from '@/utils/datetime';
  
 
 // Importar tipos actualizados
@@ -297,9 +298,7 @@ export const useUpdateAppointmentStatus = (
 // ==================== UTILIDADES ====================
 const isToday = (dateString: string): boolean => {
   try {
-    const date = new Date(dateString);
-    const today = new Date();
-    return date.toDateString() === today.toDateString();
+    return isMxToday(dateString);
   } catch {
     return false;
   }

@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useClinic } from "@/contexts/clinic-data-provider";
-import { useChartData, type AppointmentFilters } from "@/hooks/use-chart-data";
+import { selectChartData } from "@/hooks/use-chart-data";
 import { Users, Calendar, CalendarCheck, CalendarClock, TrendingUp, Activity, ChartBar, PieChart, AlertCircle } from 'lucide-react';
 import { MetricsGrid, ChartContainer, type MetricValue, createMetric } from '@/components/ui/metrics-system';
 import { AppointmentStatusEnum } from '@/lib/types';
@@ -12,23 +12,23 @@ import { GenericBarChart } from '@/components/charts/common/generic-bar-chart';
 import { GenericPieChart } from '@/components/charts/common/generic-pie-chart';
 import { useAnalyticsData } from '@/hooks/use-analytics-data';
 
-const INITIAL_FILTERS: AppointmentFilters = {
-  dateRange: 'month',
-  patientId: undefined,
-  doctorId: undefined,
-  estado: 'todos',
-  motiveFilter: 'all',
-  statusFilter: Object.values(AppointmentStatusEnum),
-  timeRange: [0, 24],
-  sortBy: 'fecha_hora_cita',
-  sortOrder: 'desc',
+interface Filters {
+  dateRange: 'day' | 'month' | 'year';
+  startDate?: Date;
+  endDate?: Date;
+}
+
+const INITIAL_FILTERS: Filters = {
+  dateRange: 'month'
 };
 
 const EstadisticasContent = () => {
   const {
     allPatients,
     allAppointments,
-    appointmentsSummary,
+    appointments,
+    chartData,
+    getChartData,
     isLoading,
     error,
     refetch,
@@ -50,78 +50,49 @@ const EstadisticasContent = () => {
     });
   }, [isLoading, analytics.isLoading, analytics.isFetching, error, analytics.error]);
 
-  const [filters, setFilters] = useState<AppointmentFilters>(INITIAL_FILTERS);
+  const [filters, setFilters] = useState<Filters>(INITIAL_FILTERS);
   const [activeSection, setActiveSection] = useState<'overview' | 'appointments' | 'surveys'>('overview');
 
-  const chartData = useChartData({
-    patients: allPatients as any,
-    appointments: allAppointments as any,
-    ...filters,
-  });
+  // Seleccionar datos de gráfico basados en el filtro actual
+  const currentChartData = useMemo(() => {
+    if (filters.startDate || filters.endDate) {
+      return getChartData(filters.startDate, filters.endDate, filters.dateRange);
+    }
+    return selectChartData(chartData, filters.dateRange);
+  }, [chartData, getChartData, filters]);
 
   // Analíticas de encuestas
   const surveyQuery = useSurveyAnalytics({ groupBy: 'month' });
   const survey = surveyQuery.data;
 
-  // Calcular estadísticas desde los datos reales de citas
+  // Usar datos centralizados de citas
   const appointmentStats = useMemo(() => {
-    if (!allAppointments?.length) {
-      return { 
-        todayCount: 0, 
-        futureCount: 0, 
-        pastCount: 0, 
-        totalCount: 0,
-        completedRate: 0,
-        cancelledRate: 0 
-      };
-    }
+    const totalCount = allAppointments.length;
+    const todayCount = appointments?.today?.length || 0;
+    const futureCount = appointments?.future?.length || 0;
+    const pastCount = appointments?.past?.length || 0;
+    
+    const completed = allAppointments.filter((apt: any) => apt.estado === 'completada').length;
+    const cancelled = allAppointments.filter((apt: any) => apt.estado === 'cancelada').length;
+    
+    return {
+      todayCount,
+      futureCount,
+      pastCount,
+      totalCount,
+      completed,
+      cancelled,
+      completedRate: totalCount > 0 ? Math.round((completed / totalCount) * 100) : 0,
+      cancelledRate: totalCount > 0 ? Math.round((cancelled / totalCount) * 100) : 0
+    };
+  }, [allAppointments, appointments]);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const stats = allAppointments.reduce((acc: any, apt: any) => {
-      const aptDate = new Date(apt.fecha_hora_cita);
-      aptDate.setHours(0, 0, 0, 0);
-      
-      if (aptDate.getTime() === today.getTime()) {
-        acc.todayCount++;
-      } else if (aptDate > today) {
-        acc.futureCount++;
-      } else {
-        acc.pastCount++;
-      }
-      
-      // Calcular tasas de completado y cancelación
-      if (apt.estado === 'completada') acc.completed++;
-      if (apt.estado === 'cancelada') acc.cancelled++;
-      
-      acc.totalCount++;
-      return acc;
-    }, { 
-      todayCount: 0, 
-      futureCount: 0, 
-      pastCount: 0, 
-      totalCount: 0,
-      completed: 0,
-      cancelled: 0 
-    });
-    
-    stats.completedRate = stats.totalCount > 0 
-      ? Math.round((stats.completed / stats.totalCount) * 100) 
-      : 0;
-    stats.cancelledRate = stats.totalCount > 0 
-      ? Math.round((stats.cancelled / stats.totalCount) * 100) 
-      : 0;
-    
-    return stats;
-  }, [allAppointments]);
-
-  // Datos derivados para gráficos (alineados al hook minimalista useChartData)
+  // Datos derivados para gráficos desde la fuente centralizada
   const lineChartData = useMemo(() => {
-    const series = chartData.chart.series?.[0]?.data || [];
-    const categories = chartData.chart.categories || [];
-    return categories.map((label, i) => ({ date: label, count: Number(series[i] ?? 0) }));
-  }, [chartData.chart]);
+    const series = currentChartData.series?.[0]?.data || [];
+    const categories = currentChartData.categories || [];
+    return categories.map((label: string, i: number) => ({ date: label, count: Number(series[i] ?? 0) }));
+  }, [currentChartData]);
 
   const statusDistribution = useMemo(() => {
     if (!allAppointments?.length) return [] as { name: string; value: number }[];

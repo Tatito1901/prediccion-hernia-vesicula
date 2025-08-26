@@ -15,6 +15,7 @@ import type {
 import { PatientStatusEnum } from '@/lib/types';
 import type { PatientHistoryData } from '@/components/patient-admision/admision-types';
 import { dbDiagnosisToDisplay, type DbDiagnosis, DIAGNOSIS_DB_VALUES } from '@/lib/validation/enums';
+import { dedupeById } from '@/lib/array';
 
 // =============== Tipos del Hook ===============
 export type ClinicFilters = {
@@ -28,6 +29,12 @@ export type ClinicFilters = {
   pageSize?: number;
   patientId?: string | null;
 };
+
+interface ChartDataResult {
+  series: { name: string; data: number[] }[];
+  categories: string[];
+  groupedData: { [key: string]: { consultas: number; operados: number } };
+}
 
 export type ClinicDataState = {
   patients: {
@@ -63,6 +70,12 @@ export type ClinicDataState = {
   loading: boolean;
   error: Error | null;
   lastUpdated: number | null;
+  chartData: {
+    daily: ChartDataResult;
+    monthly: ChartDataResult;
+    yearly: ChartDataResult;
+  };
+  getChartData: (startDate?: Date, endDate?: Date, groupBy?: 'day' | 'month' | 'year') => ChartDataResult;
 };
 
 export type ClinicDataActions = {
@@ -332,6 +345,16 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
         ? ((pastResult.value?.data ?? []) as Appointment[])
         : [];
 
+      // 🔍 DEBUG: Log datos recibidos
+      console.log('[useClinicData] Data received:', {
+        patientsCount: patients.length,
+        todayCount: todayAppointments.length,
+        futureCount: futureAppointments.length,
+        pastCount: pastAppointments.length,
+        patientsFirstItem: patients[0],
+        todayFirstItem: todayAppointments[0],
+      });
+
       // ✅ Log errores sin romper el flujo de datos
       if (patientsResult.status === 'rejected') {
         console.warn('[useClinicData] Failed to fetch patients:', patientsResult.reason?.message || patientsResult.reason);
@@ -560,6 +583,37 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
   }, [queryClient, refetchEssential, refetchPaginated]);
 
   // Memoización del estado con tipos explícitos
+  const enrichedAllAppointments = useMemo(() => {
+    const today = essential?.appointments?.today || [];
+    const future = essential?.appointments?.future || [];
+    const past = essential?.appointments?.past || [];
+    return dedupeById([...(today as any[]), ...(future as any[]), ...(past as any[])]);
+  }, [essential]);
+
+  const chartData = useMemo(() => {
+    if (!enrichedAllAppointments || enrichedAllAppointments.length === 0) {
+      return {
+        daily: { series: [], categories: [], groupedData: {} },
+        monthly: { series: [], categories: [], groupedData: {} },
+        yearly: { series: [], categories: [], groupedData: {} }
+      };
+    }
+    
+    return {
+      daily: processChartData(enrichedAllAppointments, undefined, undefined, 'day'),
+      monthly: processChartData(enrichedAllAppointments, undefined, undefined, 'month'),
+      yearly: processChartData(enrichedAllAppointments, undefined, undefined, 'year')
+    };
+  }, [enrichedAllAppointments]);
+
+  // Función para obtener datos de gráfico con filtros personalizados
+  const getChartData = useCallback(
+    (startDate?: Date, endDate?: Date, groupBy: 'day' | 'month' | 'year' = 'day') => {
+      return processChartData(enrichedAllAppointments, startDate, endDate, groupBy);
+    },
+    [enrichedAllAppointments]
+  );
+
   const state = useMemo((): ClinicDataState => ({
     patients: {
       active: enrichPatients((essential?.patients as Patient[]) ?? []),
@@ -583,13 +637,18 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     loading,
     error,
     lastUpdated,
+    chartData,
+    getChartData,
   }), [
     essential, 
     paginated, 
     filters, 
     loading, 
     error, 
-    lastUpdated
+    lastUpdated,
+    enrichedAllAppointments,
+    chartData,
+    getChartData,
   ]);
 
   return useMemo(() => ({
@@ -597,6 +656,102 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     ...actions,
   }), [state, actions]);
 }
+
+// =============== PROCESAMIENTO DE DATOS PARA GRÁFICOS ===============
+
+const processChartData = (
+  appointments: any[],
+  startDate?: Date,
+  endDate?: Date,
+  groupBy: 'day' | 'month' | 'year' = 'day'
+): ChartDataResult => {
+  // Filtrar por rango de fechas si se especifica
+  const filteredAppointments = appointments.filter(app => {
+    if (!app.fecha_hora_cita) return false;
+    const appointmentDate = new Date(app.fecha_hora_cita);
+    
+    if (startDate && appointmentDate < startDate) return false;
+    if (endDate && appointmentDate > endDate) return false;
+    
+    return true;
+  });
+
+  // Agrupar citas por período
+  const grouped: { [key: string]: { consultas: number; operados: number } } = {};
+  
+  filteredAppointments.forEach(appointment => {
+    const date = new Date(appointment.fecha_hora_cita);
+    let key: string;
+    
+    if (groupBy === 'day') {
+      key = date.toLocaleDateString('es-ES', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+      });
+    } else if (groupBy === 'month') {
+      key = date.toLocaleDateString('es-ES', { 
+        month: 'long', 
+        year: 'numeric' 
+      });
+    } else {
+      key = date.getFullYear().toString();
+    }
+    
+    if (!grouped[key]) {
+      grouped[key] = { consultas: 0, operados: 0 };
+    }
+    
+    grouped[key].consultas++;
+    
+    // Contar operados (cuando el procedimiento es operado)
+    if (appointment.procedimiento === 'operado') {
+      grouped[key].operados++;
+    }
+  });
+  
+  // Ordenar las claves cronológicamente
+  const sortedKeys = Object.keys(grouped).sort((a, b) => {
+    const dateA = parseDate(a, groupBy);
+    const dateB = parseDate(b, groupBy);
+    return dateA.getTime() - dateB.getTime();
+  });
+  
+  // Preparar datos para el gráfico
+  const categories = sortedKeys;
+  const consultasData = sortedKeys.map(key => grouped[key].consultas);
+  const operadosData = sortedKeys.map(key => grouped[key].operados);
+  
+  return {
+    series: [
+      { name: 'Consultas', data: consultasData },
+      { name: 'Operados', data: operadosData }
+    ],
+    categories,
+    groupedData: grouped
+  };
+};
+
+// Función auxiliar para parsear fechas según el formato de agrupación
+const parseDate = (dateStr: string, groupBy: 'day' | 'month' | 'year'): Date => {
+  if (groupBy === 'day') {
+    const [day, month, year] = dateStr.split('/');
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  } else if (groupBy === 'month') {
+    // Para meses en español, mapear a número
+    const monthMap: { [key: string]: number } = {
+      'enero': 0, 'febrero': 1, 'marzo': 2, 'abril': 3,
+      'mayo': 4, 'junio': 5, 'julio': 6, 'agosto': 7,
+      'septiembre': 8, 'octubre': 9, 'noviembre': 10, 'diciembre': 11
+    };
+    const parts = dateStr.toLowerCase().split(' de ');
+    const month = monthMap[parts[0]] || 0;
+    const year = parseInt(parts[1]);
+    return new Date(year, month, 1);
+  } else {
+    return new Date(parseInt(dateStr), 0, 1);
+  }
+};
 
 // =============== UTILIDAD DE ENRIQUECIMIENTO ===============
 // Función auxiliar para enriquecer pacientes (definida aquí para reutilización)

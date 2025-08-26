@@ -8,6 +8,7 @@ import { useClinicData } from '@/hooks/use-clinic-data';
 import type { Patient, Appointment, ExtendedAppointment, PatientStatus, EnrichedPatient } from '@/lib/types';
 import type { ClinicDataState, UseClinicDataReturn } from '@/hooks/use-clinic-data';
 import { dbDiagnosisToDisplay, type DbDiagnosis, DIAGNOSIS_DB_VALUES } from '@/lib/validation/enums';
+import { dedupeById } from '@/lib/array';
 
 // ==================== TIPOS Y CONTRATOS ====================
 
@@ -45,6 +46,9 @@ type ExtendedClinicDataContextType = UseClinicDataReturn & {
   isLoading: boolean;
   isLoadingAppointments?: boolean;
   error: Error | null;
+  // Chart data desde useClinicData
+  chartData?: ClinicDataState['chartData'];
+  getChartData?: ClinicDataState['getChartData'];
 };
 
 export type ClinicDataContextType = ExtendedClinicDataContextType;
@@ -135,7 +139,12 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     const today = clinic.appointments?.today ?? [];
     const future = clinic.appointments?.future ?? [];
     const past = clinic.appointments?.past ?? [];
-    return [...today, ...future, ...past] as (Appointment | ExtendedAppointment)[];
+    // Ensure no duplicates across categories by id
+    return dedupeById([
+      ...(today as (Appointment | ExtendedAppointment)[]),
+      ...(future as (Appointment | ExtendedAppointment)[]),
+      ...(past as (Appointment | ExtendedAppointment)[]),
+    ]);
   }, [clinic.appointments?.today, clinic.appointments?.future, clinic.appointments?.past]);
 
   // Los pacientes están enriquecidos con datos calculados
@@ -222,6 +231,10 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     // Alias de estados
     isLoading: clinic.loading,
     isLoadingAppointments: clinic.loading,
+    
+    // Chart data centralizado
+    chartData: clinic.chartData,
+    getChartData: clinic.getChartData,
   }), [
     stablePatients, 
     stableAppointments, 
@@ -229,6 +242,8 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     clinic.loading, 
     clinic.error, 
     clinic.lastUpdated,
+    clinic.chartData,
+    clinic.getChartData,
     patientsData,
     patientsFilters,
     setPatientsPage,

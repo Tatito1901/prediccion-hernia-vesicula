@@ -3,7 +3,8 @@
 import React, { useState, useCallback, useMemo, memo } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
-import { startOfDay, endOfDay } from 'date-fns';
+// Date handling
+import { getMxDayBounds, mxNow } from '@/utils/datetime';
 import { cn } from '@/lib/utils';
 import { useClinic } from '@/contexts/clinic-data-provider';
 import type { Patient } from '@/lib/types';
@@ -229,6 +230,9 @@ const AppointmentsGrid = memo<{
   emptyMessage: string;
   onAction: (action: AdmissionAction, appointmentId: string) => void;
 }>(({ appointments, isLoading, emptyMessage, onAction }) => {
+  // Controlar que solo una card esté abierta (por cita)
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
+
   if (isLoading) {
     return (
       <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
@@ -243,7 +247,7 @@ const AppointmentsGrid = memo<{
         <CardHeader className="text-center py-12">
           <CalendarDays className="h-12 w-12 mx-auto mb-4 text-gray-400" />
           <CardTitle className="text-lg font-normal text-gray-600 dark:text-gray-400">
-            {emptyMessage}
+          {emptyMessage}
           </CardTitle>
           <CardDescription>
             Las citas aparecerán aquí cuando estén disponibles
@@ -259,7 +263,9 @@ const AppointmentsGrid = memo<{
         <PatientCard 
           key={appointment.id} 
           appointment={appointment} 
-          onAction={onAction} 
+          onAction={onAction}
+          open={expandedId === String(appointment.id)}
+          onOpenChange={(open) => setExpandedId(open ? String(appointment.id) : null)}
         />
       ))}
     </div>
@@ -271,52 +277,61 @@ AppointmentsGrid.displayName = 'AppointmentsGrid';
 const useAppointmentData = (search: string, statusFilter: string) => {
   const { allAppointments, allPatients, isLoading, refetch, error } = useClinic();
 
-  const classifiedAppointments = useMemo(() => {
+  const { classified, rescheduledCount } = useMemo(() => {
     const result = { today: [], future: [], past: [] } as Record<TabType, AppointmentWithPatient[]>;
-    
-    if (!allAppointments || !allPatients) return result;
+    let rescheduled = 0;
+
+    if (!allAppointments || !allPatients) {
+      return { classified: result, rescheduledCount: 0 };
+    }
 
     const patientMap = new Map(allPatients.map(p => [p.id, p]));
     const searchLower = search.toLowerCase();
-    const now = new Date();
+    const now = mxNow();
+    const { startUtc, endUtc } = getMxDayBounds(now);
 
     for (const apt of allAppointments) {
       const patient = patientMap.get(apt.patient_id);
       if (!patient) continue;
 
-      // Apply filters
-      if (statusFilter !== 'all' && apt.estado_cita !== statusFilter) continue;
-      if (search && !(
+      const matchesSearch = !search || (
         patient.nombre?.toLowerCase().includes(searchLower) ||
         patient.apellidos?.toLowerCase().includes(searchLower) ||
         patient.telefono?.includes(search)
-      )) continue;
+      );
+      if (!matchesSearch) continue;
+
+      // Identificar reagendadas pero no mostrarlas en las listas
+      if (apt.estado_cita === AppointmentStatusEnum.REAGENDADA) {
+        rescheduled += 1;
+        continue;
+      }
+
+      // Filtro de estado solo para no-reagendadas
+      if (statusFilter !== 'all' && apt.estado_cita !== statusFilter) continue;
 
       const fullAppointment = { ...apt, patients: patient } as AppointmentWithPatient;
       const aptDate = new Date(apt.fecha_hora_cita);
 
-      // Hide rescheduled appointments from main tabs (only visible in history)
-      if (apt.estado_cita === AppointmentStatusEnum.REAGENDADA) {
-        continue;
-      }
-
-      // Classify by time
-      if (aptDate >= startOfDay(now) && aptDate <= endOfDay(now)) {
+      // Clasificación temporal según día de CDMX (comparando en UTC usando los límites del día en CDMX)
+      if (aptDate >= startUtc && aptDate <= endUtc) {
         result.today.push(fullAppointment);
-      } else if (aptDate > endOfDay(now)) {
+      } else if (aptDate > endUtc) {
         result.future.push(fullAppointment);
       } else {
         result.past.push(fullAppointment);
       }
     }
 
-    // Sort
+    // Ordenar
     result.today.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
     result.future.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
     result.past.sort((a, b) => new Date(b.fecha_hora_cita).getTime() - new Date(a.fecha_hora_cita).getTime());
 
-    return result;
+    return { classified: result, rescheduledCount: rescheduled };
   }, [allAppointments, allPatients, search, statusFilter]);
+
+  const classifiedAppointments = classified;
 
   const stats = useMemo(() => ({
     today: classifiedAppointments.today.length,
@@ -329,7 +344,7 @@ const useAppointmentData = (search: string, statusFilter: string) => {
     ).length,
   }), [classifiedAppointments]);
 
-  return { appointments: classifiedAppointments, stats, isLoading, error, refetch };
+  return { appointments: classifiedAppointments, stats, isLoading, error, refetch, rescheduledCount };
 };
 
 // ==================== MAIN COMPONENT ====================
@@ -338,7 +353,7 @@ const PatientAdmission = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const { appointments, stats, isLoading, error, refetch } = useAppointmentData(search, statusFilter);
+  const { appointments, stats, isLoading, error, refetch, rescheduledCount } = useAppointmentData(search, statusFilter);
 
   const handleAction = useCallback(async (action: AdmissionAction, appointmentId: string) => {
     toast.success('Acción completada correctamente');
@@ -375,6 +390,17 @@ const PatientAdmission = () => {
         onStatusChange={setStatusFilter}
         isLoading={isLoading}
       />
+      {rescheduledCount > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <Badge 
+            variant="outline" 
+            className="border-amber-300 text-amber-800 bg-amber-50 dark:border-amber-800 dark:text-amber-200 dark:bg-amber-900/30"
+          >
+            Reagendadas: {rescheduledCount}
+          </Badge>
+          <span className="text-xs text-muted-foreground">Se identifican pero no se muestran en la lista</span>
+        </div>
+      )}
       
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabType)}>
         <TabsList className="w-full sm:w-auto mb-6">
