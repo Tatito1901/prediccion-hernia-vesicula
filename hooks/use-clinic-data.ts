@@ -1,7 +1,7 @@
 // hooks/use-clinic-data.ts - Fuente única de verdad para datos clínicos
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import type {
@@ -14,7 +14,7 @@ import type {
 } from '@/lib/types';
 import { PatientStatusEnum } from '@/lib/types';
 import type { PatientHistoryData } from '@/components/patient-admision/admision-types';
-import { dbDiagnosisToDisplay, type DbDiagnosis, DIAGNOSIS_DB_VALUES } from '@/lib/validation/enums';
+import { dbDiagnosisToDisplay } from '@/lib/validation/enums';
 import { dedupeById } from '@/lib/array';
 
 // =============== Tipos del Hook ===============
@@ -430,157 +430,153 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
   const error = (errorEssential as Error) || (errorPaginated as Error) || null;
 
   const lastUpdated = useMemo(() => {
-    if (!essential && !paginated) return null;
+    if (!essentialUpdatedAt && !paginatedUpdatedAt) return null;
     const times = [essentialUpdatedAt || 0, paginatedUpdatedAt || 0].filter(Boolean);
     if (!times.length) return null;
     return Math.max(...times);
-  }, [essential, paginated, essentialUpdatedAt, paginatedUpdatedAt]);
+  }, [essentialUpdatedAt, paginatedUpdatedAt]);
 
-  // ✅ Función para enriquecer pacientes con campos computados
-  const enrichPatients = useCallback((rawPatients: Patient[]): EnrichedPatient[] => {
-    return rawPatients.map((patient) => {
-      const nombreCompleto = `${patient.nombre || ''} ${patient.apellidos || ''}`.trim();
-      
-      // Diagnóstico legible
-      const displayDiagnostico = patient.diagnostico_principal 
-        ? dbDiagnosisToDisplay(patient.diagnostico_principal)
-        : 'Sin diagnóstico';
-      
-      // Estado de encuesta (simulado - se puede mejorar con datos reales)
-      const encuesta_completada = patient.updated_at !== patient.created_at;
-      
-      return {
-        ...patient,
-        nombreCompleto,
-        displayDiagnostico,
-        encuesta_completada,
-      } as EnrichedPatient;
+  // Enriquecimiento unificado definido a nivel de módulo (ver al final del archivo)
+
+  // Mantener refs a los refetchers para evitar dependencias inestables
+  const refetchEssentialRef = useRef(refetchEssential);
+  const refetchPaginatedRef = useRef(refetchPaginated);
+  useEffect(() => {
+    refetchEssentialRef.current = refetchEssential;
+    refetchPaginatedRef.current = refetchPaginated;
+  }, [refetchEssential, refetchPaginated]);
+
+  // Acciones estables
+  const setFilters = useCallback((partial: Partial<ClinicFilters>) => {
+    setFiltersState((prev) => ({ ...prev, ...partial }));
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFiltersState({
+      search: '',
+      patientStatus: 'ALL',
+      appointmentStatus: 'ALL',
+      dateFilter: 'today',
+      startDate: null,
+      endDate: null,
+      page: 1,
+      pageSize: 15,
+      patientId: null,
     });
   }, []);
 
-  const actions: ClinicDataActions = useMemo(() => {
-    const setFilters = (partial: Partial<ClinicFilters>) => {
-      setFiltersState((prev) => ({ ...prev, ...partial }));
-    };
+  const setPage = useCallback((page: number) => {
+    setFiltersState((prev) => ({ ...prev, page }));
+  }, []);
 
-    const resetFilters = () => {
-      setFiltersState({
-        search: '',
-        patientStatus: 'ALL',
-        appointmentStatus: 'ALL',
-        dateFilter: 'today',
-        startDate: null,
-        endDate: null,
-        page: 1,
-        pageSize: 15,
-        patientId: null,
-      });
-    };
+  const setPageSize = useCallback((size: number) => {
+    setFiltersState((prev) => ({ ...prev, pageSize: size, page: 1 }));
+  }, []);
 
-    const setPage = (page: number) => {
-      setFiltersState((prev) => ({ ...prev, page }));
-    };
+  const refetch = useCallback(async () => {
+    await Promise.allSettled([refetchEssentialRef.current(), refetchPaginatedRef.current()]);
+  }, []);
 
-    const setPageSize = (size: number) => {
-      setFiltersState((prev) => ({ ...prev, pageSize: size, page: 1 }));
-    };
-
-    const refetch = async () => {
-      await Promise.allSettled([refetchEssential(), refetchPaginated()]);
-    };
-
-    const fetchSpecificAppointments = async ({
-      dateFilter = 'today',
-      startDate,
-      endDate,
-      appointmentStatus,
-      patientId,
+  const fetchSpecificAppointments = useCallback(async ({
+    dateFilter = 'today',
+    startDate,
+    endDate,
+    appointmentStatus,
+    patientId,
+    search,
+    page,
+    pageSize = 100,
+    signal: externalSignal,
+  }: Parameters<ClinicDataActions['fetchSpecificAppointments']>[0]) => {
+    const key = queryKeys.appointments.filtered({
+      dateFilter: dateFilter as 'today' | 'future' | 'past',
+      patientId: patientId || undefined,
       search,
-      page,
-      pageSize = 100,
-      signal: externalSignal,
-    }: Parameters<ClinicDataActions['fetchSpecificAppointments']>[0]) => {
-      const key = queryKeys.appointments.filtered({
-        dateFilter: dateFilter as 'today' | 'future' | 'past',
-        patientId: patientId || undefined,
-        search,
-        pageSize,
-      });
+      pageSize,
+    });
 
-      return queryClient.fetchQuery({
-        queryKey: key,
-        queryFn: async ({ signal }) => {
-          // compone señales para que cualquier cancelación (React Query o externa) aborte la petición
-          const composed = new AbortController();
-          const abort = () => { try { composed.abort(); } catch {} };
-          try {
-            if (signal) signal.addEventListener('abort', abort, { once: true });
-            if (externalSignal) externalSignal.addEventListener('abort', abort, { once: true });
+    return queryClient.fetchQuery({
+      queryKey: key,
+      queryFn: async ({ signal }) => {
+        // compone señales para que cualquier cancelación (React Query o externa) aborte la petición
+        const composed = new AbortController();
+        const abort = () => { try { composed.abort(); } catch {} };
+        try {
+          if (signal) signal.addEventListener('abort', abort, { once: true });
+          if (externalSignal) externalSignal.addEventListener('abort', abort, { once: true });
 
-            const res = await fetchAppointmentsByFilter({
-              dateFilter,
-              startDate,
-              endDate,
-              patientId,
-              search,
-              page,
-              pageSize,
-              signal: composed.signal,
-            });
-            return {
-              data: (res.data ?? []) as Appointment[],
-              pagination: res.pagination,
-            };
-          } finally {
-            try { if (signal) signal.removeEventListener('abort', abort as any); } catch {}
-            try { if (externalSignal) externalSignal.removeEventListener('abort', abort as any); } catch {}
-          }
-        },
-        staleTime: 60 * 1000,
-        gcTime: 3 * 60 * 1000,
-      });
-    };
+          const res = await fetchAppointmentsByFilter({
+            dateFilter,
+            startDate,
+            endDate,
+            patientId,
+            search,
+            page,
+            pageSize,
+            signal: composed.signal,
+          });
+          return {
+            data: (res.data ?? []) as Appointment[],
+            pagination: res.pagination,
+          };
+        } finally {
+          try { if (signal) signal.removeEventListener('abort', abort as any); } catch {}
+          try { if (externalSignal) externalSignal.removeEventListener('abort', abort as any); } catch {}
+        }
+      },
+      staleTime: 60 * 1000,
+      gcTime: 3 * 60 * 1000,
+    });
+  }, [queryClient]);
 
-    const fetchPatientDetail = async (id: string) => {
-      const key = queryKeys.patients.detail(id);
-      const patient = await queryClient.fetchQuery({
-        queryKey: key,
-        queryFn: ({ signal }) => fetchJson<Patient>(withDebugParam(`/api/patients/${id}`), { signal }),
-        staleTime: 2 * 60 * 1000,
-        gcTime: 5 * 60 * 1000,
-      });
-      // Enriquecer el paciente individual con los campos calculados
-      return enrichPatient(patient);
-    };
+  const fetchPatientDetail = useCallback(async (id: string) => {
+    const key = queryKeys.patients.detail(id);
+    const patient = await queryClient.fetchQuery({
+      queryKey: key,
+      queryFn: ({ signal }) => fetchJson<Patient>(withDebugParam(`/api/patients/${id}`), { signal }),
+      staleTime: 2 * 60 * 1000,
+      gcTime: 5 * 60 * 1000,
+    });
+    // Enriquecer el paciente individual con los campos calculados
+    return enrichPatient(patient);
+  }, [queryClient]);
 
-    const fetchPatientHistory = async (
-      patientId: string, 
-      options?: { includeHistory?: boolean; limit?: number }
-    ) => {
-      const key = queryKeys.patients.historyWithOptions(patientId, options as unknown);
-      const params = new URLSearchParams();
-      if (options?.includeHistory) params.set('includeHistory', 'true');
-      if (options?.limit) params.set('limit', String(options.limit));
+  const fetchPatientHistory = useCallback(async (
+    patientId: string, 
+    options?: { includeHistory?: boolean; limit?: number }
+  ) => {
+    const key = queryKeys.patients.historyWithOptions(patientId, options as unknown);
+    const params = new URLSearchParams();
+    if (options?.includeHistory) params.set('includeHistory', 'true');
+    if (options?.limit) params.set('limit', String(options.limit));
 
-      return queryClient.fetchQuery({
-        queryKey: key,
-        queryFn: ({ signal }) => fetchJson<PatientHistoryData>(withDebugParam(`/api/patients/${patientId}/history?${params.toString()}`), { signal }),
-        staleTime: 2 * 60 * 1000,
-        gcTime: 5 * 60 * 1000,
-      });
-    };
+    return queryClient.fetchQuery({
+      queryKey: key,
+      queryFn: ({ signal }) => fetchJson<PatientHistoryData>(withDebugParam(`/api/patients/${patientId}/history?${params.toString()}`), { signal }),
+      staleTime: 2 * 60 * 1000,
+      gcTime: 5 * 60 * 1000,
+    });
+  }, [queryClient]);
 
-    return {
-      setFilters,
-      resetFilters,
-      setPage,
-      setPageSize,
-      refetch,
-      fetchSpecificAppointments,
-      fetchPatientDetail,
-      fetchPatientHistory,
-    };
-  }, [queryClient, refetchEssential, refetchPaginated]);
+  const actions: ClinicDataActions = useMemo(() => ({
+    setFilters,
+    resetFilters,
+    setPage,
+    setPageSize,
+    refetch,
+    fetchSpecificAppointments,
+    fetchPatientDetail,
+    fetchPatientHistory,
+  }), [
+    setFilters,
+    resetFilters,
+    setPage,
+    setPageSize,
+    refetch,
+    fetchSpecificAppointments,
+    fetchPatientDetail,
+    fetchPatientHistory,
+  ]);
 
   // Memoización del estado con tipos explícitos
   const enrichedAllAppointments = useMemo(() => {
@@ -614,10 +610,21 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     [enrichedAllAppointments]
   );
 
+  // Enriquecer pacientes con referencias estables basadas en la fuente de datos
+  const enrichedActivePatients = useMemo(
+    () => enrichPatients((essential?.patients as Patient[]) ?? []),
+    [essential?.patients]
+  );
+
+  const enrichedPaginatedPatients = useMemo(
+    () => enrichPatients((paginated?.data as Patient[]) ?? []),
+    [paginated?.data]
+  );
+
   const state = useMemo((): ClinicDataState => ({
     patients: {
-      active: enrichPatients((essential?.patients as Patient[]) ?? []),
-      paginated: enrichPatients((paginated?.data as Patient[]) ?? []),
+      active: enrichedActivePatients,
+      paginated: enrichedPaginatedPatients,
       pagination: {
         page: paginated?.pagination?.page ?? (filters.page ?? 1),
         pageSize: paginated?.pagination?.pageSize ?? (filters.pageSize ?? 15),
@@ -640,13 +647,26 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     chartData,
     getChartData,
   }), [
-    essential, 
-    paginated, 
-    filters, 
-    loading, 
-    error, 
+    // Pacientes enriquecidos estables
+    enrichedActivePatients,
+    enrichedPaginatedPatients,
+    // Paginación y estadísticas (escalares estables)
+    paginated?.pagination?.page,
+    paginated?.pagination?.pageSize,
+    paginated?.pagination?.totalCount,
+    paginated?.pagination?.totalPages,
+    paginated?.pagination?.hasMore,
+    paginated?.stats,
+    // Citas (arreglos referenciales) y resumen
+    essential?.appointments?.today,
+    essential?.appointments?.future,
+    essential?.appointments?.past,
+    essential?.summary,
+    // Otros estados
+    filters,
+    loading,
+    error,
     lastUpdated,
-    enrichedAllAppointments,
     chartData,
     getChartData,
   ]);
@@ -753,30 +773,23 @@ const parseDate = (dateStr: string, groupBy: 'day' | 'month' | 'year'): Date => 
   }
 };
 
-// =============== UTILIDAD DE ENRIQUECIMIENTO ===============
-// Función auxiliar para enriquecer pacientes (definida aquí para reutilización)
+// =============== UTILIDAD DE ENRIQUECIMIENTO (Única fuente) ===============
+// Definimos una única versión consistente para todo el hook
 
 const enrichPatient = (patient: Patient): EnrichedPatient => {
-  const nombreCompleto = `${patient.nombre || ''} ${patient.apellidos || ''}`.trim() || 'Sin nombre';
-  
-  const displayDiagnostico = patient.diagnostico_principal 
-    ? (DIAGNOSIS_DB_VALUES as readonly string[]).includes(patient.diagnostico_principal)
-      ? dbDiagnosisToDisplay(patient.diagnostico_principal as DbDiagnosis)
-      : patient.diagnostico_principal
+  const nombreCompleto = `${patient.nombre || ''} ${patient.apellidos || ''}`.trim();
+  const displayDiagnostico = patient.diagnostico_principal
+    ? dbDiagnosisToDisplay(patient.diagnostico_principal)
     : 'Sin diagnóstico';
-  
-  // Por ahora asumimos que no está completada, esto se puede mejorar con datos reales
-  const encuesta_completada = false;
-  
+  const encuesta_completada = (patient.updated_at && patient.created_at)
+    ? patient.updated_at !== patient.created_at
+    : false;
   return {
     ...patient,
     nombreCompleto,
     displayDiagnostico,
     encuesta_completada,
-    encuesta: null // Se puede enriquecer con datos reales si están disponibles
-  };
+  } as EnrichedPatient;
 };
 
-const enrichPatients = (patients: Patient[]): EnrichedPatient[] => {
-  return patients.map(enrichPatient);
-};
+const enrichPatients = (patients: Patient[]): EnrichedPatient[] => patients.map(enrichPatient);

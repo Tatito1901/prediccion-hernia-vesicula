@@ -12,11 +12,17 @@ import type {
 // ==================== API HELPERS ====================
 async function fetchPatientDetail(id: string): Promise<Patient> {
   const res = await fetch(`/api/patients/${id}`);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || 'Error al obtener el paciente');
+  let payload: any = {};
+  try {
+    payload = await res.json();
+  } catch {
+    payload = {};
   }
-  return res.json();
+  if (!res.ok) {
+    const msg = payload?.error || payload?.message || 'Error al obtener el paciente';
+    throw new Error(msg);
+  }
+  return (payload && payload.success === true && 'data' in payload) ? payload.data : payload;
 }
 
 interface PatientHistoryOptions {
@@ -113,11 +119,17 @@ async function patchPatient({ id, updates }: { id: string; updates: Partial<Pati
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || 'Error al actualizar paciente');
+  let payload: any = {};
+  try {
+    payload = await res.json();
+  } catch {
+    payload = {};
   }
-  return res.json();
+  if (!res.ok) {
+    const msg = payload?.error || payload?.message || 'Error al actualizar paciente';
+    throw new Error(msg);
+  }
+  return (payload && payload.success === true && 'data' in payload) ? payload.data : payload;
 }
 
 // ==================== QUERIES ====================

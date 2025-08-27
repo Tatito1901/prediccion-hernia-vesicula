@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { PatientStatusEnum, PatientStatus } from '@/lib/types';
+import { createApiResponse, createApiError } from '@/lib/api-response-types';
 
 // Ensure Node.js runtime for access to process.env and server-only libs
 export const runtime = 'nodejs';
@@ -73,11 +74,11 @@ export async function GET(request: Request) {
 
       if (!allowedValues.includes(norm)) {
         console.warn('[patients][GET] Invalid estado received:', estado);
-        return NextResponse.json({
-          message: 'Parámetro estado inválido',
-          received: estado,
-          allowed: allowedValues,
-        }, { status: 400 });
+        const errorResponse = createApiError('Parámetro estado inválido', {
+          code: 'INVALID_PARAM',
+          details: { received: estado, allowed: allowedValues },
+        });
+        return NextResponse.json(errorResponse, { status: 400 });
       }
 
       query = query.eq('estado_paciente', norm as PatientStatus);
@@ -127,14 +128,20 @@ export async function GET(request: Request) {
         const stats = page === 1
           ? { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0, statusStats: { all: 0 } }
           : null;
-        return NextResponse.json({ data: [], pagination, stats, ...(debug ? { meta } : {}) }, { headers: cacheConfig });
+        const successResponse = createApiResponse<any[]>([], {
+          pagination,
+          stats,
+          meta: debug ? meta : undefined,
+        });
+        return NextResponse.json(successResponse, { headers: cacheConfig });
       }
       // Log non-permission errors with minimal meta when debug is enabled
       console.error('[/api/patients][GET] Error', { message: error.message, meta: debug ? meta : undefined });
-      return NextResponse.json({ 
-        message: 'Error al obtener pacientes', 
-        error: error.message 
-      }, { status: 500 });
+      const errorResponse = createApiError('Error al obtener pacientes', {
+        code: 'FETCH_ERROR',
+        details: { message: error.message },
+      });
+      return NextResponse.json(errorResponse, { status: 500 });
     }
 
     // 3. Enriquecer datos en el backend
@@ -240,8 +247,7 @@ export async function GET(request: Request) {
       } catch {}
     }
 
-    return NextResponse.json({
-      data: enrichedPatients,
+    const successResponse = createApiResponse(enrichedPatients, {
       pagination: {
         page,
         pageSize,
@@ -250,15 +256,17 @@ export async function GET(request: Request) {
         hasMore: page < totalPages,
       },
       stats, // ✅ Estadísticas calculadas en backend
-      ...(debug ? { meta } : {}),
-    }, { headers: cacheConfig });
+      meta: debug ? meta : undefined,
+    });
+    return NextResponse.json(successResponse, { headers: cacheConfig });
 
   } catch (error: any) {
     console.error('Error in patients API route (GET):', error);
-    return NextResponse.json({ 
-      message: 'Error al obtener pacientes', 
-      error: error.message 
-    }, { status: 500 });
+    const errorResponse = createApiError('Error al obtener pacientes', {
+      code: 'INTERNAL_SERVER_ERROR',
+      details: { message: error?.message },
+    });
+    return NextResponse.json(errorResponse, { status: 500 });
   }
 }
 
@@ -273,9 +281,11 @@ export async function POST(request: Request) {
 
     // 1. Validar campos requeridos
     if (!body.nombre || !body.apellidos) {
-      return NextResponse.json({ 
-        message: 'Nombre y apellidos son requeridos' 
-      }, { status: 400 });
+      const errorResponse = createApiError('Datos inválidos', {
+        code: 'VALIDATION_ERROR',
+        details: { missing: ['nombre', 'apellidos'].filter((k) => !body[k]) },
+      });
+      return NextResponse.json(errorResponse, { status: 400 });
     }
 
     // 2. Normalizar y pre-chequear duplicados por identidad si hay fecha_nacimiento
@@ -293,38 +303,30 @@ export async function POST(request: Request) {
 
     // 2.1. Si está habilitada la obligatoriedad de fecha_nacimiento, exigirla
     if (enforceBirthdate && !inputFechaNac) {
-      return NextResponse.json({
-        message: 'fecha_nacimiento es obligatoria'
-      }, { status: 400 });
+      const errorResponse = createApiError('fecha_nacimiento es obligatoria', {
+        code: 'MISSING_BIRTHDATE',
+      });
+      return NextResponse.json(errorResponse, { status: 400 });
     }
 
     if (inputFechaNac) {
-      const { data: candidates, error: dupErr } = await supabase
+      const { data: existing, error: dupErr } = await supabase
         .from('patients')
         .select('id, nombre, apellidos, fecha_nacimiento')
-        .eq('fecha_nacimiento', inputFechaNac);
+        .eq('nombre', (body.nombre || '').trim())
+        .eq('apellidos', (body.apellidos || '').trim())
+        .eq('fecha_nacimiento', inputFechaNac)
+        .limit(1);
 
       if (dupErr) {
         console.warn('[/api/patients][POST] No se pudo verificar duplicados:', dupErr.message);
-      } else {
-        const match = (candidates || []).find(
-          (p: any) => norm(p.nombre) === inputNombre && norm(p.apellidos) === inputApellidos
-        );
-        if (match) {
-          return NextResponse.json(
-            {
-              message: 'Paciente duplicado: ya existe un registro con mismo nombre, apellidos y fecha de nacimiento',
-              code: 'duplicate_patient',
-              existing_patient: {
-                id: match.id,
-                nombre: match.nombre,
-                apellidos: match.apellidos,
-                fecha_nacimiento: match.fecha_nacimiento,
-              },
-            },
-            { status: 409 }
-          );
-        }
+      } else if (existing && existing.length > 0) {
+        const errorResponse = createApiError('Paciente duplicado', {
+          code: 'DUPLICATE_PATIENT',
+          details: { existing_patient: existing[0] },
+          suggested_actions: ['Verificar datos del paciente', 'Actualizar registro existente'],
+        });
+        return NextResponse.json(errorResponse, { status: 409 });
       }
     } else {
       // Nota: sin fecha de nacimiento no podemos aplicar regla de unicidad fuerte.
@@ -356,9 +358,10 @@ export async function POST(request: Request) {
 
     // Validación: si viene fecha_nacimiento pero la edad calculada es inválida, abortar con 400
     if (fechaNacimientoToSave && (edadToSave === null)) {
-      return NextResponse.json({
-        message: 'Fecha de nacimiento inválida o inconsistente (edad fuera de rango)'
-      }, { status: 400 });
+      const errorResponse = createApiError('Fecha de nacimiento inválida o inconsistente (edad fuera de rango)', {
+        code: 'INVALID_BIRTHDATE',
+      });
+      return NextResponse.json(errorResponse, { status: 400 });
     }
 
     const patientData = {
@@ -395,32 +398,35 @@ export async function POST(request: Request) {
       console.error('Error creating patient:', error);
       const code = (error as any)?.code;
       const msg = (error as any)?.message || '';
-      const details = (error as any)?.details || '';
+      const detailsMsg = (error as any)?.details || '';
       const isUnique = code === '23505' || /duplicate key value/i.test(msg);
-      const isPhoneDup = isUnique && (msg.includes('patients_telefono_key') || details.includes('telefono'));
+      const isPhoneDup = isUnique && (msg.includes('patients_telefono_key') || detailsMsg.includes('telefono'));
       if (isPhoneDup) {
-        return NextResponse.json({
-          message: 'Teléfono duplicado',
-          error: msg
-        }, { status: 400 });
+        const errorResponse = createApiError('Teléfono duplicado', {
+          code: 'DUPLICATE_PHONE',
+          details: { supabase_error: error },
+        });
+        return NextResponse.json(errorResponse, { status: 409 });
       }
-      return NextResponse.json({ 
-        message: 'Error al crear paciente', 
-        error: msg 
-      }, { status: 500 });
+      const errorResponse = createApiError('Error al crear paciente', {
+        code: 'PATIENT_CREATION_ERROR',
+        details: { message: msg, supabase_error: error },
+      });
+      return NextResponse.json(errorResponse, { status: 400 });
     }
 
     // 5. Retornar paciente creado
-    return NextResponse.json({
+    const successResponse = createApiResponse(newPatient, {
       message: 'Paciente creado exitosamente',
-      patient: newPatient
-    }, { status: 201 });
+    });
+    return NextResponse.json(successResponse, { status: 201 });
 
   } catch (error: any) {
     console.error('Error in patients API route (POST):', error);
-    return NextResponse.json({ 
-      message: 'Error al crear paciente', 
-      error: error.message 
-    }, { status: 500 });
+    const errorResponse = createApiError('Error al crear paciente', {
+      code: 'INTERNAL_SERVER_ERROR',
+      details: { message: error?.message },
+    });
+    return NextResponse.json(errorResponse, { status: 500 });
   }
 }

@@ -14,11 +14,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import { Patient, PatientStatusEnum } from "@/lib/types"
+import { EnrichedPatient, PatientStatusEnum } from "@/lib/types"
 import { format, differenceInYears, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { useMediaQuery } from "@/hooks/use-breakpoint"
-import { dbDiagnosisToDisplay, DIAGNOSIS_DB_VALUES, type DbDiagnosis } from "@/lib/validation/enums"
 import EmptyState from "@/components/ui/empty-state"
 
 import { 
@@ -35,7 +34,7 @@ import {
 
 interface PatientDetailsDialogProps {
   readonly isOpen: boolean
-  readonly patient: Patient
+  readonly patient: EnrichedPatient
   readonly onClose: () => void
 }
 
@@ -101,14 +100,6 @@ const InfoItem = memo(({
   </div>
 ))
 InfoItem.displayName = "InfoItem"
-
-// ✅ Helpers optimizados
-const toDisplayDiagnosis = (diagnostic?: string | null): string => {
-  if (!diagnostic) return "Sin diagnóstico"
-  return (DIAGNOSIS_DB_VALUES as readonly string[]).includes(diagnostic)
-    ? dbDiagnosisToDisplay(diagnostic as DbDiagnosis)
-    : diagnostic
-}
 
 const normalizeKey = (s: string) =>
   s.normalize('NFD')
@@ -307,21 +298,21 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0 space-y-3 bg-white dark:bg-slate-950">
-                    {patient.diagnostico_principal && (
+                    {patient.displayDiagnostico && patient.displayDiagnostico !== "Sin diagnóstico" && (
                       <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50">
                         <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
                           Diagnóstico Principal
                         </p>
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            {toDisplayDiagnosis(patient.diagnostico_principal)}
+                            {patient.displayDiagnostico}
                           </p>
-                          {normalizeKey(toDisplayDiagnosis(patient.diagnostico_principal)).includes("HERNIA") && (
+                          {normalizeKey(patient.displayDiagnostico).includes("HERNIA") && (
                             <Badge className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700">
                               Hernia
                             </Badge>
                           )}
-                          {normalizeKey(toDisplayDiagnosis(patient.diagnostico_principal)).includes("VESICULA") && (
+                          {normalizeKey(patient.displayDiagnostico).includes("VESICULA") && (
                             <Badge className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700">
                               Vesícula
                             </Badge>
@@ -361,8 +352,8 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
                             Edad avanzada
                           </Badge>
                         )}
-                        {patient.diagnostico_principal && 
-                         normalizeKey(toDisplayDiagnosis(patient.diagnostico_principal)).includes("RECIDIVANTE") && (
+                        {patient.displayDiagnostico && 
+                         normalizeKey(patient.displayDiagnostico).includes("RECIDIVANTE") && (
                           <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300">
                             Recidiva
                           </Badge>

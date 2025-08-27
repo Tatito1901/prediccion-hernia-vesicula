@@ -7,7 +7,7 @@ import { useClinicData } from '@/hooks/use-clinic-data';
 
 import type { Patient, Appointment, ExtendedAppointment, PatientStatus, EnrichedPatient } from '@/lib/types';
 import type { ClinicDataState, UseClinicDataReturn } from '@/hooks/use-clinic-data';
-import { dbDiagnosisToDisplay, type DbDiagnosis, DIAGNOSIS_DB_VALUES } from '@/lib/validation/enums';
+// Note: enrichment is handled inside useClinicData; no enrichment utilities here
 import { dedupeById } from '@/lib/array';
 
 // ==================== TIPOS Y CONTRATOS ====================
@@ -57,34 +57,6 @@ const ClinicDataContext = createContext<ClinicDataContextType | undefined>(
   undefined
 );
 
-// ==================== UTILIDADES DE ENRIQUECIMIENTO ====================
-
-// Función para enriquecer pacientes con datos calculados
-const enrichPatient = (patient: Patient): EnrichedPatient => {
-  const nombreCompleto = `${patient.nombre || ''} ${patient.apellidos || ''}`.trim() || 'Sin nombre';
-  
-  const displayDiagnostico = patient.diagnostico_principal 
-    ? (DIAGNOSIS_DB_VALUES as readonly string[]).includes(patient.diagnostico_principal)
-      ? dbDiagnosisToDisplay(patient.diagnostico_principal as DbDiagnosis)
-      : patient.diagnostico_principal
-    : 'Sin diagnóstico';
-  
-  // Por ahora asumimos que no está completada, esto se puede mejorar con datos reales
-  const encuesta_completada = false;
-  
-  return {
-    ...patient,
-    nombreCompleto,
-    displayDiagnostico,
-    encuesta_completada,
-    encuesta: null // Se puede enriquecer con datos reales si están disponibles
-  };
-};
-
-const enrichPatients = (patients: Patient[]): EnrichedPatient[] => {
-  return patients.map(enrichPatient);
-};
-
 // ==================== PROVEEDOR ====================
 
 export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
@@ -93,15 +65,14 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
 
   // ✅ Crear estructura de datos compatible con referencias ESTABLES
   const patientsData = useMemo<{ data: EnrichedPatient[]; count: number }>(() => {
-    const paginatedRaw = clinic.patients?.paginated ?? [];
-    const enrichedPaginated = enrichPatients(paginatedRaw);
+    const enrichedPaginated = clinic.patients?.paginated ?? [];
     const totalCount = clinic.patients?.pagination?.totalCount;
     const count = totalCount ?? enrichedPaginated.length;
     return { data: enrichedPaginated, count };
   }, [
     clinic.patients?.paginated,
     clinic.patients?.pagination?.totalCount
-  ]); // ✅ Dependencias estables y con optional chaining
+  ]); // ✅ Los pacientes ya vienen enriquecidos desde useClinicData
 
   // Filtros compatibles
   const patientsFilters = useMemo(() => ({
@@ -113,26 +84,26 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   // Funciones de manejo de filtros mapeadas al hook central
   const setPatientsPage = useCallback((page: number) => {
     clinic.setPage(page);
-  }, [clinic]);
+  }, [clinic.setPage]);
 
   const setPatientsSearch = useCallback((search: string) => {
     clinic.setFilters({ search, page: 1 });
-  }, [clinic]);
+  }, [clinic.setFilters]);
 
   const setPatientsStatus = useCallback((status: string) => {
     clinic.setFilters({ patientStatus: status === 'all' ? 'ALL' : (status as PatientStatus), page: 1 });
-  }, [clinic]);
+  }, [clinic.setFilters]);
 
   const clearPatientsFilters = useCallback(() => {
     clinic.resetFilters();
-  }, [clinic]);
+  }, [clinic.resetFilters]);
 
   // ===== Mapeo de compatibilidad con API legada =====
   const allPatients = useMemo(() => {
     const pag = clinic.patients?.paginated ?? [];
     const act = clinic.patients?.active ?? [];
-    const rawPatients = (pag && pag.length > 0) ? pag : act;
-    return enrichPatients(rawPatients);
+    const enriched = (pag && pag.length > 0) ? pag : act;
+    return enriched;
   }, [clinic.patients?.paginated, clinic.patients?.active]);
 
   const allAppointments = useMemo<(Appointment | ExtendedAppointment)[]>(() => {
@@ -147,7 +118,7 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     ]);
   }, [clinic.appointments?.today, clinic.appointments?.future, clinic.appointments?.past]);
 
-  // Los pacientes están enriquecidos con datos calculados
+  // Alias: los pacientes ya están enriquecidos en el hook
   const enrichedPatients = allPatients;
 
   // Alias simple: dejamos que los componentes hagan el enriquecimiento adicional si lo requieren
@@ -160,7 +131,16 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   // ✅ Estabilizar datos críticos
   const stablePatients = useMemo(
     () => clinic.patients,
-    [clinic.patients.paginated, clinic.patients.active, clinic.patients.pagination]
+    [
+      clinic.patients.paginated,
+      clinic.patients.active,
+      clinic.patients.pagination?.page,
+      clinic.patients.pagination?.pageSize,
+      clinic.patients.pagination?.totalCount,
+      clinic.patients.pagination?.totalPages,
+      clinic.patients.pagination?.hasMore,
+      clinic.patients.stats,
+    ]
   );
   
   const stableAppointments = useMemo(

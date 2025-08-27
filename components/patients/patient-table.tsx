@@ -40,7 +40,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { PatientStatusEnum, EnrichedPatient } from "@/lib/types"
-import { dbDiagnosisToDisplay, DIAGNOSIS_DB_VALUES, type DbDiagnosis } from "@/lib/validation/enums"
 import EmptyState from "@/components/ui/empty-state"
 
 interface PatientTableProps {
@@ -99,13 +98,6 @@ const formatText = (text: string | undefined | null): string => {
   const formatted = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase()
   formatTextCache.set(text, formatted)
   return formatted
-}
-
-const toDisplayDiagnosis = (diagnostic?: string | null): string => {
-  if (!diagnostic) return "Sin diagnóstico"
-  return (DIAGNOSIS_DB_VALUES as readonly string[]).includes(diagnostic)
-    ? dbDiagnosisToDisplay(diagnostic as DbDiagnosis)
-    : formatText(diagnostic)
 }
 
 const dateFormatCache = new Map<string, string>()
@@ -345,10 +337,10 @@ const PatientRow = memo(({
       <TableCell>
         <Badge className={cn(
           "border font-medium",
-          getDiagnosticStyle(patient.diagnostico_principal)
+          getDiagnosticStyle(patient.displayDiagnostico)
         )}>
           <Stethoscope className="h-3 w-3 mr-1 opacity-60" />
-          {toDisplayDiagnosis(patient.diagnostico_principal)}
+          {patient.displayDiagnostico}
         </Badge>
       </TableCell>
 
@@ -435,9 +427,9 @@ const MobilePatientCard = memo(({
             <div className="flex flex-wrap gap-2 mt-2">
               <Badge className={cn(
                 "text-xs border",
-                getDiagnosticStyle(patient.diagnostico_principal)
+                getDiagnosticStyle(patient.displayDiagnostico)
               )}>
-                {toDisplayDiagnosis(patient.diagnostico_principal)}
+                {patient.displayDiagnostico}
               </Badge>
               
               {patient.estado_paciente && (
@@ -542,10 +534,10 @@ const VirtualPatientRow = memo(({
       <div className="py-2">
         <Badge className={cn(
           "border font-medium",
-          getDiagnosticStyle(patient.diagnostico_principal)
+          getDiagnosticStyle(patient.displayDiagnostico)
         )}>
           <Stethoscope className="h-3 w-3 mr-1 opacity-60" />
-          {toDisplayDiagnosis(patient.diagnostico_principal)}
+          {patient.displayDiagnostico}
         </Badge>
       </div>
 
@@ -712,7 +704,7 @@ const PatientTable: React.FC<PatientTableProps> = ({
                 Edad
               </SortableHeader>
               <SortableHeader 
-                sortKey="diagnostico_principal" 
+                sortKey="displayDiagnostico" 
                 currentSort={sortConfig} 
                 onSort={handleSort} 
                 icon={Stethoscope}

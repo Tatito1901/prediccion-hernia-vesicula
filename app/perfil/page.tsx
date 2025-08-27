@@ -11,8 +11,13 @@ export default async function PerfilPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-4xl">
-      <h1 className="text-2xl font-bold mb-6">Mi Perfil</h1>
+    <div className="container mx-auto max-w-4xl py-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-semibold tracking-tight bg-gradient-to-r from-medical-700 to-medical-500 bg-clip-text text-transparent">
+          Mi Perfil
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">Gestiona tu información personal</p>
+      </div>
       {/* Server component fetches profile by userId */}
       <ProfileCard userId={user.id} email={user.email} />
     </div>

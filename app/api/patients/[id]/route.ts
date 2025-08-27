@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { validatePatientStatusChange } from '@/lib/patient-state-rules';
+import { createApiError, createApiResponse } from '@/lib/api-response-types';
 
 // GET /api/patients/[id] - Obtener un paciente específico por ID
 export async function GET(
@@ -13,7 +14,7 @@ export async function GET(
 
     if (!id) {
       return NextResponse.json(
-        { message: 'ID de paciente requerido' },
+        createApiError('ID de paciente requerido', { code: 'BAD_REQUEST' }),
         { status: 400 }
       );
     }
@@ -28,23 +29,23 @@ export async function GET(
     if (error) {
       if (error.code === 'PGRST116') {
         return NextResponse.json(
-          { message: 'Paciente no encontrado' },
+          createApiError('Paciente no encontrado', { code: 'PATIENT_NOT_FOUND' }),
           { status: 404 }
         );
       }
       console.error('Error fetching patient:', error);
       return NextResponse.json(
-        { message: 'Error al obtener el paciente', error: error.message },
+        createApiError('Error al obtener el paciente', { details: error.message, code: 'INTERNAL_ERROR' }),
         { status: 500 }
       );
     }
 
-    return NextResponse.json(patient);
+    return NextResponse.json(createApiResponse(patient));
 
   } catch (error: any) {
     console.error('Error in GET /api/patients/[id]:', error);
     return NextResponse.json(
-      { message: 'Error interno del servidor', error: error.message },
+      createApiError('Error interno del servidor', { details: error.message, code: 'INTERNAL_ERROR' }),
       { status: 500 }
     );
   }
@@ -62,7 +63,7 @@ export async function PATCH(
 
     if (!id) {
       return NextResponse.json(
-        { message: 'ID de paciente requerido' },
+        createApiError('ID de paciente requerido', { code: 'BAD_REQUEST' }),
         { status: 400 }
       );
     }
@@ -77,13 +78,13 @@ export async function PATCH(
     if (fetchError) {
       if (fetchError.code === 'PGRST116') {
         return NextResponse.json(
-          { message: 'Paciente no encontrado' },
+          createApiError('Paciente no encontrado', { code: 'PATIENT_NOT_FOUND' }),
           { status: 404 }
         );
       }
       console.error('Error checking patient existence:', fetchError);
       return NextResponse.json(
-        { message: 'Error al verificar el paciente', error: fetchError.message },
+        createApiError('Error al verificar el paciente', { details: fetchError.message, code: 'INTERNAL_ERROR' }),
         { status: 500 }
       );
     }
@@ -102,7 +103,7 @@ export async function PATCH(
         if (!result.allowed) {
           if (result.code === 'INVALID_VALUE') {
             return NextResponse.json(
-              { message: 'Valor de estado_paciente inválido' },
+              createApiError('Valor de estado_paciente inválido', { code: 'INVALID_VALUE' }),
               { status: 400 }
             );
           }
@@ -129,17 +130,17 @@ export async function PATCH(
     if (updateError) {
       console.error('Error updating patient:', updateError);
       return NextResponse.json(
-        { message: 'Error al actualizar el paciente', error: updateError.message },
+        createApiError('Error al actualizar el paciente', { details: updateError.message, code: 'INTERNAL_ERROR' }),
         { status: 500 }
       );
     }
 
-    return NextResponse.json(updatedPatient);
+    return NextResponse.json(createApiResponse(updatedPatient));
 
   } catch (error: any) {
     console.error('Error in PATCH /api/patients/[id]:', error);
     return NextResponse.json(
-      { message: 'Error interno del servidor', error: error.message },
+      createApiError('Error interno del servidor', { details: error.message, code: 'INTERNAL_ERROR' }),
       { status: 500 }
     );
   }
@@ -156,7 +157,7 @@ export async function DELETE(
 
     if (!id) {
       return NextResponse.json(
-        { message: 'ID de paciente requerido' },
+        createApiError('ID de paciente requerido', { code: 'BAD_REQUEST' }),
         { status: 400 }
       );
     }
@@ -170,17 +171,17 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting patient:', error);
       return NextResponse.json(
-        { message: 'Error al eliminar el paciente', error: error.message },
+        createApiError('Error al eliminar el paciente', { details: error.message, code: 'INTERNAL_ERROR' }),
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ message: 'Paciente eliminado exitosamente' });
+    return NextResponse.json(createApiResponse({ id }, { message: 'Paciente eliminado exitosamente' }));
 
   } catch (error: any) {
     console.error('Error in DELETE /api/patients/[id]:', error);
     return NextResponse.json(
-      { message: 'Error interno del servidor', error: error.message },
+      createApiError('Error interno del servidor', { details: error.message, code: 'INTERNAL_ERROR' }),
       { status: 500 }
     );
   }

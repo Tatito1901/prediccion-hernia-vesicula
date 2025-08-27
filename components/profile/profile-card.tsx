@@ -1,6 +1,8 @@
 import { createClient } from "@/utils/supabase/server";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { CalendarClock, Mail, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
 
 // Simple helpers exported for testing
 export function getInitials(name?: string | null) {
@@ -22,19 +24,27 @@ async function fetchProfile(userId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("full_name, role, avatar_url")
+    .select("full_name, role, avatar_url, created_at, is_active")
     .eq("id", userId)
     .single();
 
   if (error) {
     // Not fatal; return minimal profile
-    return { full_name: null as string | null, role: null as string | null, avatar_url: null as string | null };
+    return {
+      full_name: null as string | null,
+      role: null as string | null,
+      avatar_url: null as string | null,
+      created_at: null as string | null,
+      is_active: null as boolean | null,
+    };
   }
 
   return {
     full_name: data?.full_name ?? null,
     role: (data?.role as string | null) ?? null,
     avatar_url: data?.avatar_url ?? null,
+    created_at: data?.created_at ?? null,
+    is_active: (data?.is_active as boolean | null) ?? null,
   };
 }
 
@@ -70,31 +80,59 @@ export default async function ProfileCard({ userId, email: emailProp }: { userId
   const name = profile.full_name ?? "Usuario";
   const roleLabel = formatRole(role);
   const initials = getInitials(profile.full_name);
+  const roleKey = (role ?? "").toLowerCase();
+  const RoleIcon = roleKey === "admin" ? ShieldCheck : roleKey === "doctor" ? Stethoscope : UserCog;
+  const memberSince = profile.created_at
+    ? new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" }).format(new Date(profile.created_at))
+    : null;
 
   return (
-    <Card className="max-w-xl">
-      <CardHeader>
-        <div className="flex items-center gap-4">
-          <Avatar className="h-16 w-16">
+    <Card className="max-w-xl overflow-hidden shadow-medical-lg animate-in fade-in-50">
+      <CardHeader className="relative pb-4">
+        <div className="absolute inset-0 bg-gradient-to-r from-medical-600/5 via-medical-500/10 to-medical-400/5 pointer-events-none" aria-hidden="true" />
+        <div className="relative flex items-center gap-4">
+          <Avatar className="h-20 w-20 md:h-24 md:w-24 ring-2 ring-medical-500/20 shadow-md">
             {profile.avatar_url ? (
               <AvatarImage src={profile.avatar_url} alt={name} />
             ) : (
-              <AvatarFallback className="text-lg font-semibold">
+              <AvatarFallback className="text-lg font-semibold bg-medical-50 text-medical-700">
                 {initials}
               </AvatarFallback>
             )}
           </Avatar>
           <div className="flex flex-col">
-            <CardTitle className="text-xl font-semibold">{name}</CardTitle>
-            <CardDescription className="capitalize">{roleLabel}</CardDescription>
-            <span className="text-sm text-muted-foreground break-all">{email ?? "Sin correo"}</span>
+            <CardTitle className="text-2xl md:text-3xl font-semibold tracking-tight">{name}</CardTitle>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <Badge className="bg-medical-50 text-medical-700 border border-medical-200 flex items-center gap-1">
+                <RoleIcon className="h-3.5 w-3.5" />
+                <span className="capitalize">{roleLabel}</span>
+              </Badge>
+              {typeof profile.is_active === "boolean" && (
+                <Badge className={
+                  profile.is_active
+                    ? "bg-clinical-active/10 text-clinical-active border border-clinical-active/20"
+                    : "bg-clinical-cancelled/10 text-clinical-cancelled border border-clinical-cancelled/20"
+                }>
+                  {profile.is_active ? "Activo" : "Inactivo"}
+                </Badge>
+              )}
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground break-all">
+              <Mail className="h-4 w-4 text-medical-600" />
+              <span>{email ?? "Sin correo"}</span>
+            </div>
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        {/* Placeholder for future profile fields */}
-        <div className="text-sm text-muted-foreground">
-          Información de perfil básica obtenida desde Supabase.
+      <CardContent className="pt-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4 text-medical-600" />
+            <div>
+              <div className="text-muted-foreground">Miembro desde</div>
+              <div className="font-medium">{memberSince ?? "—"}</div>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

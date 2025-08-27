@@ -1,7 +1,7 @@
 // app/api/assign-survey/route.ts
 // Asigna una encuesta (template) a un paciente.
 // Soporta: POST únicamente. Las operaciones ligadas a una cita (iniciar, completar, estado)
-// viven en `app/api/appointments/[id]/survey/route.ts`.
+// quedaron deprecadas y fueron removidas para evitar drift con los flujos actuales.
 
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
@@ -100,28 +100,4 @@ export async function POST(request: NextRequest) {
     console.error('[API] Error en asignar encuesta:', error);
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
   }
-}
-
-// PATCH - Iniciar encuesta (marcar como iniciada)
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  // Deprecated on this path: use /api/appointments/[id]/survey
-  return NextResponse.json(
-    { error: 'No soportado en /api/assign-survey. Use /api/appointments/[id]/survey' },
-    { status: 410 }
-  );
-}
-
-// GET - Obtener estado de encuesta
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  // Deprecated on this path: use /api/appointments/[id]/survey
-  return NextResponse.json(
-    { error: 'No soportado en /api/assign-survey. Use /api/appointments/[id]/survey' },
-    { status: 410 }
-  );
 }
