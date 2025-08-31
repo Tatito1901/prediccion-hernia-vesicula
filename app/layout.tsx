@@ -6,6 +6,7 @@ import { Providers } from "@/components/providers";
 import Script from 'next/script';
 import { ThemeScriptInit } from '@/components/theme/theme-script';
 import { Toaster } from "@/components/ui/sonner";
+import { AppErrorBoundary } from "@/components/errors/error-boundary";
 
 // Optimización de Google Fonts usando next/font para auto-hosting
 const inter = Inter({
@@ -106,7 +107,9 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} antialiased bg-background text-foreground min-h-screen`}>
         <Providers>
-          {children}
+          <AppErrorBoundary boundaryName="RootBoundary">
+            {children}
+          </AppErrorBoundary>
           <Toaster />
         </Providers>
         

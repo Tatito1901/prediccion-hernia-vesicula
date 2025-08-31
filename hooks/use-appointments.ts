@@ -1,7 +1,9 @@
 // hooks/use-appointments.ts - Hooks optimizados para manejo de citas
 import { useMutation, useQueryClient, UseMutationOptions } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import { isMxToday } from '@/utils/datetime';
+import { fetchJson } from '@/lib/http';
+import { notifyError, notifySuccess } from '@/lib/client-errors';
+import type { AppError } from '@/lib/errors';
  
 
 // Importar tipos actualizados
@@ -9,8 +11,7 @@ import { AppointmentStatus, AppointmentWithPatient, PatientStatus, DiagnosisType
 import { queryKeys } from '@/lib/query-keys';
 import { AppointmentStatusEnum } from '@/lib/types';
 
-// Canonical patient hooks are centralized in hooks/use-patient
-export { useAdmitPatient, useUpdatePatient } from '@/hooks/use-patient';
+// Patient hooks live exclusively in '@/hooks/use-patient' (no re-exports here)
 
 // ==================== QUERY KEYS: usar lib/query-keys.ts ====================
 
@@ -121,60 +122,47 @@ interface UpdateStatusContext {
 // ==================== MUTACIONES OPTIMIZADAS ====================
 
 export const useCreateAppointment = (
-  options?: Omit<UseMutationOptions<AppointmentWithPatient, Error, CreateAppointmentParams>, 'mutationFn'>
+  options?: Omit<UseMutationOptions<AppointmentWithPatient, AppError, CreateAppointmentParams>, 'mutationFn'>
 ) => {
   const queryClient = useQueryClient();
   
-  return useMutation<AppointmentWithPatient, Error, CreateAppointmentParams>({
+  return useMutation<AppointmentWithPatient, AppError, CreateAppointmentParams>({
     mutationFn: async (data) => {
-      const response = await fetch('/api/appointments', {
+      const created = await fetchJson<ApiAppointment>('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Error al crear la cita');
-      }
-      
-      return transformAppointment(await response.json());
+      return transformAppointment(created);
     },
     onSuccess: (newAppointment) => {
       // Invalidación simplificada y robusta basada en queryKeys centralizadas
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.clinic.data });
 
-      toast.success('Cita agendada exitosamente');
+      notifySuccess('Cita agendada exitosamente');
     },
     onError: (error) => {
-      toast.error('Error al agendar cita', {
-        description: error.message
-      });
+      notifyError(error, { prefix: 'Citas' });
     },
+    meta: { suppressGlobalError: true },
     ...options,
   });
 };
 
 export const useUpdateAppointment = (
-  options?: Omit<UseMutationOptions<AppointmentWithPatient, Error, UpdateAppointmentParams>, 'mutationFn'>
+  options?: Omit<UseMutationOptions<AppointmentWithPatient, AppError, UpdateAppointmentParams>, 'mutationFn'>
 ) => {
   const queryClient = useQueryClient();
   
-  return useMutation<AppointmentWithPatient, Error, UpdateAppointmentParams>({
+  return useMutation<AppointmentWithPatient, AppError, UpdateAppointmentParams>({
     mutationFn: async ({ id, ...updateData }) => {
-      const response = await fetch(`/api/appointments/${id}`, {
+      const updated = await fetchJson<ApiAppointment>(`/api/appointments/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData),
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Error al actualizar la cita');
-      }
-      
-      return transformAppointment(await response.json());
+      return transformAppointment(updated);
     },
     onSuccess: (updatedAppointment) => {
       // Invalidación simplificada y robusta
@@ -184,23 +172,22 @@ export const useUpdateAppointment = (
       // Actualización directa del caché
       queryClient.setQueryData(queryKeys.appointments.detail(updatedAppointment.id), updatedAppointment);
       
-      toast.success('Cita actualizada exitosamente');
+      notifySuccess('Cita actualizada exitosamente');
     },
     onError: (error) => {
-      toast.error('Error al actualizar cita', {
-        description: error.message
-      });
+      notifyError(error, { prefix: 'Citas' });
     },
+    meta: { suppressGlobalError: true },
     ...options,
   });
 };
 
 export const useUpdateAppointmentStatus = (
-  options?: Omit<UseMutationOptions<AppointmentWithPatient, Error, UpdateStatusParams, UpdateStatusContext>, 'mutationFn'>
+  options?: Omit<UseMutationOptions<AppointmentWithPatient, AppError, UpdateStatusParams, UpdateStatusContext>, 'mutationFn'>
 ) => {
   const queryClient = useQueryClient();
   
-  return useMutation<AppointmentWithPatient, Error, UpdateStatusParams, UpdateStatusContext>({
+  return useMutation<AppointmentWithPatient, AppError, UpdateStatusParams, UpdateStatusContext>({
     mutationFn: async ({ appointmentId, newStatus, motivo, nuevaFechaHora }) => {
       const payload = {
         newStatus,
@@ -208,27 +195,13 @@ export const useUpdateAppointmentStatus = (
         nuevaFechaHora
       };
       
-      const response = await fetch(`/api/appointments/${appointmentId}/status`, {
+      const updated = await fetchJson<ApiAppointment>(`/api/appointments/${appointmentId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       
-      if (!response.ok) {
-        let payload: any = null;
-        try {
-          payload = await response.json();
-        } catch {
-          // ignore JSON parse errors
-        }
-        const details = Array.isArray(payload?.details)
-          ? payload.details.map((d: any) => d?.message || d?.path?.join?.('.') || '').filter(Boolean).join('; ')
-          : undefined;
-        const msg = payload?.reason || payload?.error || payload?.message || details || `Error ${response.status}`;
-        throw new Error(msg || 'Error al actualizar el estado de la cita');
-      }
-      
-      return transformAppointment(await response.json());
+      return transformAppointment(updated);
     },
     onMutate: async ({ appointmentId }) => {
       // Snapshot previo para posibles rollbacks; sin actualizaciones optimistas multi-key
@@ -274,7 +247,7 @@ export const useUpdateAppointmentStatus = (
         [AppointmentStatusEnum.REAGENDADA]: 'Cita reagendada',
       };
       
-      toast.success(statusMessages[updatedAppointment.estado_cita] || 'Estado actualizado');
+      notifySuccess(statusMessages[updatedAppointment.estado_cita] || 'Estado actualizado');
     },
     onError: (error, variables, context) => {
       // Rollback en caso de error
@@ -285,15 +258,14 @@ export const useUpdateAppointmentStatus = (
         );
       }
       
-      toast.error('Error al actualizar estado', {
-        description: error.message
-      });
+      notifyError(error, { prefix: 'Estado de cita' });
     },
+    meta: { suppressGlobalError: true },
     ...options,
   });
 };
 
-// Note: useAdmitPatient and useUpdatePatient are re-exported from '@/hooks/use-patient'
+// Note: patient hooks are not re-exported here; import directly from '@/hooks/use-patient'
 
 // ==================== UTILIDADES ====================
 const isToday = (dateString: string): boolean => {

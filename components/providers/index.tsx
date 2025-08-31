@@ -2,11 +2,25 @@
 
 import { useState } from 'react';
 import { ThemeProvider } from "@/components/theme/theme-provider";
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@tanstack/react-query';
 import { ClinicDataProvider } from '@/contexts/clinic-data-provider';
+import { notifyError } from '@/lib/client-errors';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
+    queryCache: new QueryCache({
+      onError: (error, query) => {
+        // Permite desactivar toasts globales por query usando meta
+        const suppress = query?.options?.meta && (query.options.meta as any).suppressGlobalError;
+        if (!suppress) notifyError(error);
+      },
+    }),
+    mutationCache: new MutationCache({
+      onError: (error, _vars, _ctx, mutation) => {
+        const suppress = mutation?.options?.meta && (mutation.options.meta as any).suppressGlobalError;
+        if (!suppress) notifyError(error);
+      },
+    }),
     defaultOptions: {
       queries: {
         retry: 1,

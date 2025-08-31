@@ -4,28 +4,15 @@
 import { useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
-import { ZStatisticsResponse, type StatisticsResponse, type LabelCount } from '@/lib/validation/statistics';
+import { type StatisticsResponse, type LabelCount } from '@/lib/validation/statistics';
 import { AppointmentStatusEnum } from '@/lib/types';
+import { fetchJson } from '@/lib/http';
+import { notifyError } from '@/lib/client-errors';
 
 async function fetchStatistics(): Promise<StatisticsResponse> {
-  const res = await fetch('/api/statistics');
-  if (!res.ok) {
-    let message = 'Failed to load statistics';
-    try {
-      const j = await res.json();
-      message = j?.message || j?.error || message;
-    } catch {}
-    console.error('[useAnalyticsData] HTTP error when fetching /api/statistics:', message);
-    throw new Error(message);
-  }
-  const json = await res.json();
-  const parsed = ZStatisticsResponse.safeParse(json);
-  if (!parsed.success) {
-    console.error('[useAnalyticsData] Statistics schema validation failed', parsed.error.issues);
-    throw new Error('Statistics schema validation failed');
-  }
-  try { console.debug('[useAnalyticsData] fetched statistics meta', parsed.data.meta); } catch {}
-  return parsed.data;
+  const data = await fetchJson<StatisticsResponse>('/api/statistics');
+  try { console.debug('[useAnalyticsData] fetched statistics meta', (data as any)?.meta); } catch {}
+  return data;
 }
 
 export function useAnalyticsData() {
@@ -33,6 +20,7 @@ export function useAnalyticsData() {
     queryKey: queryKeys.statistics.unified,
     queryFn: fetchStatistics,
     staleTime: 60 * 1000,
+    meta: { suppressGlobalError: true },
   });
 
   // Normalizations and derived values
@@ -95,10 +83,8 @@ export function useAnalyticsData() {
   }, [normalized]);
 
   useEffect(() => {
-    if (isError && error) {
-      console.error('[useAnalyticsData] error state', error);
-    }
-  }, [isError, error]);
+    if (error) notifyError(error, { prefix: 'Estadísticas' });
+  }, [error]);
 
   return {
     data: normalized,

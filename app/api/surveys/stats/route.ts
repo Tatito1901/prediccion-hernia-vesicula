@@ -1,5 +1,6 @@
 // app/api/surveys/stats/route.ts - Analíticas agregadas de encuestas (survey_responses)
 import { NextRequest, NextResponse } from 'next/server';
+import { jsonError } from '@/lib/errors';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 
@@ -149,7 +150,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('[Survey Stats API] DB error:', error);
-      return NextResponse.json({ error: 'Error al obtener analíticas de encuestas' }, { status: 500 });
+      return jsonError(500, 'Error al obtener analíticas de encuestas');
     }
 
     const rows = data || [];
@@ -234,6 +235,6 @@ export async function GET(request: NextRequest) {
     }, { headers: { ...CACHE_HEADERS } });
   } catch (error: any) {
     console.error('[Survey Stats API] Unexpected error:', error);
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
+    return jsonError(500, 'Error interno del servidor');
   }
 }

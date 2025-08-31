@@ -46,8 +46,7 @@ export function dbDiagnosisToDisplay(value: DbDiagnosis): string {
   }
 }
 
-// ===== Appointment Status (con compat deprecations) =====
-// EN_CONSULTA está deprecado a nivel de compatibilidad (no se acepta en Zod ni en Enum de frontend)
+// ===== Appointment Status =====
 const APPOINTMENT_STATUS_ALLOWED = [
   'PROGRAMADA',
   'CONFIRMADA',

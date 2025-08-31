@@ -1,5 +1,6 @@
 // app/api/statistics/route.ts - Unified statistics endpoint
 import { NextResponse } from 'next/server';
+import { jsonError } from '@/lib/errors';
 import { createClient as createServerClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { ZStatisticsResponse } from '@/lib/validation/statistics';
@@ -196,13 +197,7 @@ export async function GET(req: Request) {
       });
       console.error('❌ [/api/statistics] Issues específicos:', JSON.stringify(parsed.error.issues, null, 2));
       
-      return NextResponse.json(
-        {
-          message: 'Unified statistics schema validation failed',
-          issues: parsed.error.issues,
-        },
-        { status: 500 }
-      );
+      return jsonError(500, 'Unified statistics schema validation failed', undefined, { issues: parsed.error.issues });
     }
 
     console.log('✅ [/api/statistics] ¡Validación Zod exitosa!');
@@ -220,9 +215,6 @@ export async function GET(req: Request) {
     return NextResponse.json(parsed.data, { headers: { ...cacheHeaders } });
   } catch (error: any) {
     console.error('❌ [/api/statistics] error:', error);
-    return NextResponse.json(
-      { message: 'Error aggregating statistics', error: error?.message },
-      { status: 500 }
-    );
+    return jsonError(500, 'Error aggregating statistics');
   }
 }

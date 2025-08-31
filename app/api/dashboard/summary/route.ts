@@ -4,6 +4,9 @@ import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { AppointmentStatusEnum } from '@/lib/types';
 
+// Ensure Node.js runtime when admin client may be used
+export const runtime = 'nodejs';
+
 // ==================== HANDLER PARA RESUMEN DEL DASHBOARD ====================
 export async function GET() {
   try {
@@ -83,7 +86,7 @@ export async function GET() {
       },
     }, {
       headers: {
-        'Cache-Control': 'max-age=60, s-maxage=180, stale-while-revalidate=300',
+        'Cache-Control': 'public, max-age=60, s-maxage=180, stale-while-revalidate=300',
       },
     });
     
@@ -96,3 +99,4 @@ export async function GET() {
     );
   }
 }
+

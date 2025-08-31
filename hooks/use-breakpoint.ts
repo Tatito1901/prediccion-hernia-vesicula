@@ -35,6 +35,14 @@ const queries: Record<QueryKey, string> = {
   reducedMotion: "(prefers-reduced-motion: reduce)",
 };
 
+// Export centralizado de breakpoints para consumo en componentes
+export const BREAKPOINTS = {
+  mobile: queries.mobile,
+  tablet: queries.tablet,
+  desktop: queries.desktop,
+  largeDesktop: queries.largeDesktop,
+} as const;
+
 /* ---------- Estado y listeners centralizados ---------- */
 type BreakpointState = Record<QueryKey, boolean>;
 
@@ -135,6 +143,19 @@ export function useCurrentBreakpoint(): Breakpoint {
   if (s.tablet) return "tablet";
   if (s.desktop) return "desktop";
   return "largeDesktop";
+}
+
+/**
+ * Devuelve banderas de uso común por breakpoint
+ */
+export function useResponsive() {
+  const s = useBreakpointStore();
+  return {
+    isMobile: s.mobile,
+    isTablet: s.tablet,
+    isDesktop: s.desktop,
+    isLargeDesktop: s.largeDesktop,
+  } as const;
 }
 
 /**

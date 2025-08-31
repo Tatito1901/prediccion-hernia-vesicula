@@ -3,10 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { dbDiagnosisToDisplay } from '@/lib/validation/enums';
+import { jsonError } from '@/lib/errors';
+
+// Ensure Node.js runtime when admin client may be used
+export const runtime = 'nodejs';
 
 // Configuración de cache (2m browser, 5m edge, SWR 15m)
 const CACHE_HEADERS = {
-  'Cache-Control': 'max-age=120, s-maxage=300, stale-while-revalidate=900',
+  'Cache-Control': 'public, max-age=120, s-maxage=300, stale-while-revalidate=900',
 };
 
 // Parse YYYY-MM-DD como fecha local evitando shift por timezone
@@ -71,7 +75,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('[Charts API] DB error:', error);
-      return NextResponse.json({ error: 'Error al obtener datos para gráficos' }, { status: 500 });
+      return jsonError(500, 'Error al obtener datos para gráficos');
     }
 
     const rows = data || [];
@@ -130,6 +134,6 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error('[Charts API] Unexpected error:', error);
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
+    return jsonError(500, 'Error interno del servidor');
   }
 }

@@ -3,7 +3,7 @@ import type React from "react";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
-import { useMediaQuery } from "@/hooks/use-breakpoint";
+import { useIsMobile } from "@/hooks/use-breakpoint";
 import { cn } from "@/lib/utils";
 
 export default function DashboardLayout({ 
@@ -11,7 +11,7 @@ export default function DashboardLayout({
 }: { 
   children: React.ReactNode 
 }) {
-  const isMobile = useMediaQuery("(max-width: 767px)");
+  const isMobile = useIsMobile();
 
   return (
     <ClinicDataProvider>

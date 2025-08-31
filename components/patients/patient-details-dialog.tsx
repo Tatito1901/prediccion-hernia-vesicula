@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils"
 import { EnrichedPatient, PatientStatusEnum } from "@/lib/types"
 import { format, differenceInYears, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
-import { useMediaQuery } from "@/hooks/use-breakpoint"
+import { useIsLargeScreen, useIsMobile } from "@/hooks/use-breakpoint"
 import EmptyState from "@/components/ui/empty-state"
 
 import { 
@@ -122,8 +122,8 @@ const formatCachedDate = (date: Date | string | null, formatStr: string): string
 
 // 🚀 Componente principal optimizado
 const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient, onClose }) => {
-  const isDesktop = useMediaQuery("(min-width: 1024px)")
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isDesktop = useIsLargeScreen()
+  const isMobile = useIsMobile()
   
   // ✅ Datos memoizados
   const patientData = useMemo(() => {

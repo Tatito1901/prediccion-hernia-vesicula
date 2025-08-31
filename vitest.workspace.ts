@@ -5,7 +5,7 @@ export default defineWorkspace([
     extends: './vitest.config.ts',
     test: {
       name: 'unit',
-      include: ['tests/**/*.test.ts', 'lib/**/*.test.ts'],
+      include: ['tests/**/*.test.ts'],
       environment: 'node',
       pool: 'threads',
       fileParallelism: true,

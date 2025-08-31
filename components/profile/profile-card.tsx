@@ -3,22 +3,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CalendarClock, Mail, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
+import AvatarPicker from "@/components/profile/avatar-picker";
 
-// Simple helpers exported for testing
-export function getInitials(name?: string | null) {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map((p) => p.charAt(0).toUpperCase()).join("");
-}
-
-export function formatRole(role?: string | null) {
-  if (!role) return "Sin rol";
-  const r = role.toLowerCase();
-  if (r === "admin") return "Administrador";
-  if (r === "doctor") return "Doctor";
-  if (r === "asistente") return "Asistente";
-  return role;
-}
+import { getInitials, formatRole } from "@/lib/profile-helpers";
+export { getInitials, formatRole };
 
 async function fetchProfile(userId: string) {
   const supabase = await createClient();
@@ -67,11 +55,13 @@ export default async function ProfileCard({ userId, email: emailProp }: { userId
 
   // Email: prefer provided from caller; otherwise retrieve from auth
   let email = emailProp ?? null;
+  let userCreatedAt: string | null = null;
   if (!email) {
     try {
       const supabase = await createClient();
       const { data: { user } } = await supabase.auth.getUser();
       email = user?.email ?? null;
+      userCreatedAt = user?.created_at ?? null;
     } catch {
       email = null;
     }
@@ -82,22 +72,31 @@ export default async function ProfileCard({ userId, email: emailProp }: { userId
   const initials = getInitials(profile.full_name);
   const roleKey = (role ?? "").toLowerCase();
   const RoleIcon = roleKey === "admin" ? ShieldCheck : roleKey === "doctor" ? Stethoscope : UserCog;
-  const memberSince = profile.created_at
-    ? new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" }).format(new Date(profile.created_at))
+  const memberSinceSource = profile.created_at ?? userCreatedAt;
+  const memberSince = memberSinceSource && !Number.isNaN(new Date(memberSinceSource).getTime())
+    ? new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" }).format(new Date(memberSinceSource))
     : null;
 
   return (
-    <Card className="max-w-xl overflow-hidden shadow-medical-lg animate-in fade-in-50">
+    <Card className="w-full sm:max-w-md md:max-w-xl mx-auto overflow-hidden shadow-medical-lg animate-in fade-in-50">
       <CardHeader className="relative pb-4">
         <div className="absolute inset-0 bg-gradient-to-r from-medical-600/5 via-medical-500/10 to-medical-400/5 pointer-events-none" aria-hidden="true" />
-        <div className="relative flex items-center gap-4">
-          <Avatar className="h-20 w-20 md:h-24 md:w-24 ring-2 ring-medical-500/20 shadow-md">
+        <div className="relative flex flex-col items-start sm:flex-row sm:items-center gap-4">
+          <Avatar className="h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 ring-2 ring-medical-500/20 shadow-md">
             {profile.avatar_url ? (
               <AvatarImage src={profile.avatar_url} alt={name} />
             ) : (
               <AvatarFallback className="text-lg font-semibold bg-medical-50 text-medical-700">
                 {initials}
               </AvatarFallback>
+            )}
+            {typeof profile.is_active === "boolean" && (
+              <span
+                className={`absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full ring-2 ring-white dark:ring-neutral-900 ${
+                  profile.is_active ? "bg-clinical-active" : "bg-clinical-cancelled"
+                }`}
+                aria-label={profile.is_active ? "Activo" : "Inactivo"}
+              />
             )}
           </Avatar>
           <div className="flex flex-col">
@@ -117,9 +116,13 @@ export default async function ProfileCard({ userId, email: emailProp }: { userId
                 </Badge>
               )}
             </div>
-            <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground break-all">
+            <div className="mt-2 flex items-center gap-2 text-xs sm:text-sm text-muted-foreground break-all">
               <Mail className="h-4 w-4 text-medical-600" />
               <span>{email ?? "Sin correo"}</span>
+            </div>
+            <div className="mt-2">
+              {/* Client component to pick medical-themed avatars */}
+              <AvatarPicker currentAvatar={profile.avatar_url} />
             </div>
           </div>
         </div>

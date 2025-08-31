@@ -824,7 +824,6 @@ export type Database = {
         | "CANCELADA"
         | "REAGENDADA"
         | "NO_ASISTIO"
-        | "EN_CONSULTA"
       arrival_status_enum: "A_TIEMPO" | "TEMPRANO" | "TARDE"
       diagnosis_enum:
         | "HERNIA_INGUINAL"
@@ -1006,7 +1005,6 @@ export const Constants = {
         "CANCELADA",
         "REAGENDADA",
         "NO_ASISTIO",
-        "EN_CONSULTA",
       ],
       arrival_status_enum: ["A_TIEMPO", "TEMPRANO", "TARDE"],
       diagnosis_enum: [

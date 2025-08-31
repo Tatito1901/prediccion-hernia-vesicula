@@ -18,6 +18,7 @@ import { validateRescheduleDateTime } from '@/lib/clinic-schedule';
 import { BUSINESS_RULES } from '@/lib/admission-business-rules';
 import { addMinutes, differenceInMinutes } from 'date-fns';
 import { formatClinicMediumDateTime } from '@/lib/timezone';
+import { mxNow } from '@/utils/datetime';
 // Type-only imports
 import type {
   AppointmentStatus as BRAppointmentStatus,
@@ -183,7 +184,7 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      const scheduleValidation = validateRescheduleDateTime(effectiveNewDateTime);
+      const scheduleValidation = validateRescheduleDateTime(effectiveNewDateTime, mxNow());
       if (!scheduleValidation.valid) {
         return NextResponse.json(
           {
@@ -287,7 +288,7 @@ export async function PATCH(
     // Synthetic fallback appointment to avoid 404s in unit tests on localhost
     if (!current && (process.env.NODE_ENV === 'test' || isLocalHost)) {
       try { console.warn('[Debug] Entering synthetic fallback', { nodeEnv: process.env.NODE_ENV, isLocalHost }); } catch {}
-      const nowForFallback = new Date();
+      const nowForFallback = mxNow();
       const fallbackApptTime = addMinutes(
         nowForFallback,
         -(BUSINESS_RULES.NO_SHOW_WINDOW_AFTER_MINUTES + 5)
@@ -368,7 +369,7 @@ export async function PATCH(
     // 4.1 VALIDAR REGLAS ESPECÍFICAS SEGÚN LA ACCIÓN
     // Mapeamos el nuevo estado a la acción correspondiente para reutilizar
     // los mismos validadores de la UI en el backend.
-    const now = new Date();
+    const now = mxNow();
     let actionValidation: { valid: boolean; reason?: string } = { valid: true };
 
     if (isTestOverride) {
@@ -596,7 +597,7 @@ export async function PATCH(
     // Agregar notas adicionales
     if (notas_adicionales) {
       const existingNotes = current.notas_breves || '';
-      const timestamp = formatClinicMediumDateTime(new Date());
+      const timestamp = formatClinicMediumDateTime(mxNow());
       updateData.notas_breves = existingNotes 
         ? `${existingNotes} | [${timestamp}] ${notas_adicionales}`
         : `[${timestamp}] ${notas_adicionales}`;
@@ -605,9 +606,12 @@ export async function PATCH(
     // 7. REALIZAR ACTUALIZACIÓN EN LA BASE DE DATOS
     const baseQbUpdate: any = supabase.from('appointments');
     const qbUpdate: any = ensureTable(baseQbUpdate, 'appointments');
+    const previousUpdatedAt = current.updated_at;
     const { data: updatedAppointment, error: updateError } = await qbUpdate
       .update(updateData)
       .eq('id', appointmentId)
+      // Optimistic locking: only update if the row wasn't modified since we fetched it
+      .eq('updated_at', previousUpdatedAt)
       .select(`
         id,
         patient_id,
@@ -623,6 +627,31 @@ export async function PATCH(
       .single();
     
     if (updateError) {
+      const msg = String((updateError as any)?.message || '');
+      const code = String((updateError as any)?.code || '');
+      // Concurrency conflict (no rows matched updated_at guard)
+      if (
+        code === 'PGRST116' || // PostgREST: JSON object requested, no rows
+        msg.toLowerCase().includes('no rows') ||
+        msg.toLowerCase().includes('single row')
+      ) {
+        console.warn('⛔ [Status Update] Optimistic concurrency conflict for appointment', { appointmentId });
+        return NextResponse.json(
+          { error: 'Conflicto de actualización: la cita fue modificada por otro proceso. Refresca y reintenta.' },
+          { status: 409 }
+        );
+      }
+      // Unique violation (e.g., partial unique index on (doctor_id, fecha_hora_cita) for active states)
+      if (code === '23505' || msg.toLowerCase().includes('duplicate key')) {
+        console.warn('⛔ [Status Update] Unique constraint violation (schedule conflict)');
+        return NextResponse.json(
+          {
+            error: 'Horario no disponible',
+            reason: 'Existe otra cita activa en ese horario para el médico seleccionado',
+          },
+          { status: 422 }
+        );
+      }
       console.error('❌ [Status Update] Database update error:', updateError);
       return NextResponse.json(
         { error: 'Error al actualizar el estado de la cita' },
@@ -646,14 +675,18 @@ export async function PATCH(
     
     // 9. ACTUALIZAR ESTADO DEL PACIENTE SI ES NECESARIO (vía lógica centralizada)
     if (newStatus === AppointmentStatusEnum.COMPLETADA) {
-      const patientForUpdate = (Array.isArray(current?.patients)
-        ? (current?.patients as any[])[0]
-        : (current?.patients as any)) as { estado_paciente?: string } | null;
-      const currentPatientStatus = (patientForUpdate?.estado_paciente ?? '').toString();
+      // Obtener estado actual del paciente para evitar sobreescribir estados terminales
+      const baseQbPatient: any = supabase.from('patients');
+      const qbPatient: any = ensureTable(baseQbPatient, 'patients');
+      const { data: patientRow } = await qbPatient
+        .select('id, estado_paciente')
+        .eq('id', current.patient_id)
+        .single();
+      const currentPatientStatus = (patientRow?.estado_paciente ?? null) as string | null;
 
       // Usar la fecha de la cita efectiva (nueva si hubo reprogramación, o la actual)
       const appointmentDateTime = effectiveNewDateTime ?? current.fecha_hora_cita;
-      const plan = planUpdateOnAppointmentCompleted(currentPatientStatus, appointmentDateTime);
+      const plan = planUpdateOnAppointmentCompleted(currentPatientStatus ?? undefined, appointmentDateTime);
 
       await supabase
         .from('patients')

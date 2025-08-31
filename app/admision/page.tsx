@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CalendarIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useMediaQuery } from "@/hooks/use-breakpoint"
+import { useIsMobile } from "@/hooks/use-breakpoint"
 import { ClinicDataProvider } from "@/contexts/clinic-data-provider"
 
 // ──────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ const PatientAdmission = dynamic(
 //  Componentes de UI Reutilizables
 // ──────────────────────────────────────────────────────────
 const HeaderSkeleton = memo(function HeaderSkeleton() {
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isMobile = useIsMobile()
   
   return (
     <div className="flex items-center gap-2 mb-4">
@@ -40,7 +40,7 @@ const HeaderSkeleton = memo(function HeaderSkeleton() {
 })
 
 const ContentSkeleton = memo(function ContentSkeleton() {
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isMobile = useIsMobile()
   
   return (
     <div className="space-y-4">
@@ -65,7 +65,7 @@ const ContentSkeleton = memo(function ContentSkeleton() {
 //  Skeleton de Carga Principal
 // ──────────────────────────────────────────────────────────
 const AdmissionLoadingSkeleton = memo(function AdmissionLoadingSkeleton() {
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isMobile = useIsMobile()
   
   if (isMobile) {
     return (
@@ -131,7 +131,7 @@ const AdmissionLoadingSkeleton = memo(function AdmissionLoadingSkeleton() {
 //  Encabezado Responsivo
 // ──────────────────────────────────────────────────────────
 const PageHeader = memo(function PageHeader() {
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isMobile = useIsMobile()
 
   return (
     <div className={cn(
@@ -175,7 +175,7 @@ const AdmissionContent = memo(function AdmissionContent() {
 //  Página Principal
 // ──────────────────────────────────────────────────────────
 export default function AdmisionPage() {
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isMobile = useIsMobile()
 
   return (
     <ClinicDataProvider>

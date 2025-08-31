@@ -1,7 +1,7 @@
 // lib/timezone.ts
 // Utilidades centralizadas para formateo y conversión de fechas usando la zona horaria de la clínica
 
-import { CLINIC_TIMEZONE } from '@/lib/admission-business-rules';
+import { CLINIC_TIMEZONE } from '@/lib/clinic-schedule';
 
 function toDate(input: Date | string): Date {
   return input instanceof Date ? input : new Date(input);

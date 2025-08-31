@@ -4,8 +4,9 @@
 import { formatInTimeZone, toZonedTime, fromZonedTime } from 'date-fns-tz'
 import type { Locale } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { CLINIC_TIMEZONE } from '@/lib/clinic-schedule'
 
-export const MX_TZ = 'America/Mexico_City'
+export const MX_TZ = CLINIC_TIMEZONE
 
 // Returns a Date representing "now" but adjusted for Mexico City clock values
 export function mxNow(): Date {

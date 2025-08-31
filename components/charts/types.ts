@@ -16,8 +16,3 @@ export interface DiagnosticInsight {
   level: 'info' | 'warning' | 'critical';
 }
 
-export interface TimelineData {
-  date: string; // Cambiado de 'fecha' a 'date' para ser compatible con chart-diagnostic
-  formattedDate: string;
-  cantidad: number;
-}

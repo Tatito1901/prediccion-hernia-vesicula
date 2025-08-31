@@ -1,5 +1,10 @@
 // lib/query-keys.ts - SISTEMA UNIFICADO DE QUERY KEYS
 // Centraliza todas las query keys para garantizar consistencia y sincronización
+// Convenciones:
+// - Estructura: [dominio, subgrupo, params?]
+// - Preferir un único camino canónico por recurso para evitar duplicados.
+// - Params siempre como objeto (estable) para caching determinístico.
+// - Invalidation: usar prefijos (exact: false) sobre `*.all` o raíces por dominio.
 
 export const queryKeys = {
   // ==================== PACIENTES ====================
@@ -17,16 +22,9 @@ export const queryKeys = {
       endDate?: string;
     }) => ['patients', 'paginated', params] as const,
     
-    // Pacientes activos para dashboard y admisión
-    active: (params?: { status?: string; limit?: number }) => 
+    // Pacientes activos (reservado para vistas específicas)
+    active: (params?: { status?: string; limit?: number }) =>
       ['patients', 'active', params] as const,
-    
-    // Estadísticas globales de pacientes
-    stats: ['patients', 'stats'] as const,
-    
-    // Resúmenes/Métricas (compatibilidad con invalidadores)
-    summary: ['patients', 'summary'] as const,
-    metrics: ['patients', 'metrics'] as const,
     
     // Pacientes por estado (útil para invalidaciones específicas)
     byStatus: (status: string) => ['patients', 'byStatus', status] as const,
@@ -44,8 +42,6 @@ export const queryKeys = {
   appointments: {
     all: ['appointments'] as const,
     
-    // Detalle de cita(s)
-    details: ['appointments', 'detail'] as const,
     detail: (id: string) => ['appointments', 'detail', id] as const,
     
     // Citas con filtros específicos
@@ -56,12 +52,10 @@ export const queryKeys = {
       pageSize?: number;
     }) => ['appointments', 'filtered', params] as const,
     
-    // Citas de hoy (para admisión)
-    today: ['appointments', 'today'] as const,
-    
-    // Próximas y pasadas (compatibilidad con estrategias)
-    upcoming: ['appointments', 'upcoming'] as const,
-    past: ['appointments', 'past'] as const,
+    // Alias canónicos sobre `filtered` para evitar claves paralelas
+    today: () => ['appointments', 'filtered', { dateFilter: 'today' as const }] as const,
+    upcoming: () => ['appointments', 'filtered', { dateFilter: 'future' as const }] as const,
+    past: () => ['appointments', 'filtered', { dateFilter: 'past' as const }] as const,
     
     // Citas por fecha y por estado
     byDate: (date: string) => ['appointments', 'date', date] as const,
@@ -72,27 +66,17 @@ export const queryKeys = {
 
     // Historial de estados de una cita
     history: (appointmentId: string) => ['appointments', 'history', appointmentId] as const,
-    
-    // Resúmenes/Métricas de citas
-    summary: ['appointments', 'summary'] as const,
-    metrics: ['appointments', 'metrics'] as const,
   },
 
   // ==================== DASHBOARD ====================
   dashboard: {
     all: ['dashboard'] as const,
     
-    // Resumen general del dashboard
-    summary: ['dashboard', 'summary'] as const,
-    
     // Tendencias históricas
     trends: (period?: string) => ['dashboard', 'trends', period] as const,
     
     // Datos de gráficos del dashboard (agregados en backend)
     charts: (params?: { startDate?: string; endDate?: string; topN?: number }) => ['dashboard', 'charts', params] as const,
-    
-    // Métricas específicas
-    metrics: ['dashboard', 'metrics'] as const,
   },
 
   // ==================== DATOS DE CLÍNICA ====================
@@ -101,12 +85,6 @@ export const queryKeys = {
     
     // Datos centralizados de la clínica
     data: ['clinic', 'data'] as const,
-    
-    // Citas de hoy para el contexto
-    todayAppointments: ['clinic', 'todayAppointments'] as const,
-    
-    // Pacientes activos para el contexto
-    activePatients: ['clinic', 'activePatients'] as const,
   },
 
   // ==================== ENCUESTAS ====================

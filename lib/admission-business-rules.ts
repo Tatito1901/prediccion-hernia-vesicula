@@ -1,7 +1,7 @@
 // lib/admission-business-rules.ts
 // REGLAS DE NEGOCIO COMPLETAS Y CORREGIDAS PARA FLUJO DE ADMISIÓN
 
-import { addMinutes, isBefore, isAfter, differenceInMinutes } from 'date-fns';
+import { addMinutes, isBefore, isAfter, differenceInMinutes, parseISO, isValid } from 'date-fns';
 import {
   CLINIC_SCHEDULE,
   withinWorkHours as scheduleWithinWorkHours,
@@ -13,6 +13,7 @@ import {
 import { z } from 'zod';
 import { ZAppointmentStatus } from '@/lib/validation/enums';
 import { AppointmentStatusEnum, PatientStatusEnum } from '@/lib/types';
+import { mxNow, formatMx } from '@/utils/datetime';
 
 export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
 export type AdmissionAction = 'checkIn' | 'complete' | 'cancel' | 'noShow' | 'reschedule' | 'viewHistory';
@@ -66,7 +67,9 @@ const evaluateRules = (
 
 // ==================== HELPERS DE TIEMPO ====================
 const getAppointmentDateTime = (appointment: AppointmentLike): Date => {
-  return new Date(appointment.fecha_hora_cita);
+  const parsed = parseISO(appointment.fecha_hora_cita);
+  // Fallback to Date constructor only if parseISO fails (backward-compat with non-ISO inputs)
+  return isValid(parsed) ? parsed : new Date(appointment.fecha_hora_cita);
 };
 
 const isWithinWorkHours = (date: Date): boolean => {
@@ -80,9 +83,10 @@ const isLunchTime = (date: Date): boolean => {
 };
 
 const wasRecentlyUpdated = (appointment: AppointmentLike, minutes: number = BUSINESS_RULES.RAPID_CHANGE_COOLDOWN_MINUTES): boolean => {
-  const ts = appointment.updated_at ? new Date(appointment.updated_at) : null;
-  if (!ts || isNaN(ts.getTime())) return false;
-  return differenceInMinutes(new Date(), ts) < minutes;
+  const tsRaw = appointment.updated_at ? parseISO(appointment.updated_at) : null;
+  const ts = tsRaw && isValid(tsRaw) ? tsRaw : null;
+  if (!ts) return false;
+  return differenceInMinutes(mxNow(), ts) < minutes;
 };
 
 // ==================== VALIDADORES ESPECÍFICOS POR ACCIÓN ====================
@@ -90,7 +94,7 @@ const wasRecentlyUpdated = (appointment: AppointmentLike, minutes: number = BUSI
 // ✅ Validar check-in (marcar presente)
 export const canCheckIn = (
   appointment: AppointmentLike, 
-  currentTime: Date = new Date(),
+  currentTime: Date = mxNow(),
   context?: BusinessRuleContext
 ): ValidationResult => {
   const appointmentTime = getAppointmentDateTime(appointment);
@@ -145,7 +149,7 @@ export const canCheckIn = (
 // ✅ Validar completar consulta
 export const canCompleteAppointment = (
   appointment: AppointmentLike, 
-  currentTime: Date = new Date(),
+  currentTime: Date = mxNow(),
   context?: BusinessRuleContext
 ): ValidationResult => {
   const appointmentTime = getAppointmentDateTime(appointment);
@@ -172,7 +176,7 @@ export const canCompleteAppointment = (
 // ✅ Validar cancelar cita
 export const canCancelAppointment = (
   appointment: AppointmentLike, 
-  currentTime: Date = new Date(),
+  currentTime: Date = mxNow(),
   context?: BusinessRuleContext
 ): ValidationResult => {
   const appointmentTime = getAppointmentDateTime(appointment);
@@ -201,7 +205,7 @@ export const canCancelAppointment = (
 // ✅ Validar marcar como "No Asistió"
 export const canMarkNoShow = (
   appointment: AppointmentLike, 
-  currentTime: Date = new Date(),
+  currentTime: Date = mxNow(),
   context?: BusinessRuleContext
 ): ValidationResult => {
   const appointmentTime = getAppointmentDateTime(appointment);
@@ -232,7 +236,7 @@ export const canMarkNoShow = (
 // ✅ Validar reagendar cita
 export const canRescheduleAppointment = (
   appointment: AppointmentLike, 
-  currentTime: Date = new Date(),
+  currentTime: Date = mxNow(),
   context?: BusinessRuleContext
 ): ValidationResult => {
   const appointmentTime = getAppointmentDateTime(appointment);
@@ -272,7 +276,7 @@ export const canRescheduleAppointment = (
 // ✅ Obtener todas las acciones disponibles para una cita
 export const getAvailableActions = (
   appointment: AppointmentLike,
-  currentTime: Date = new Date(),
+  currentTime: Date = mxNow(),
   context?: BusinessRuleContext
 ): Array<{ action: AdmissionAction; valid: boolean; reason?: string }> => {
   return [
@@ -288,7 +292,7 @@ export const getAvailableActions = (
 // ✅ Sugerir próxima acción más relevante
 export const suggestNextAction = (
   appointment: AppointmentLike,
-  currentTime: Date = new Date(),
+  currentTime: Date = mxNow(),
   context?: BusinessRuleContext
 ): AdmissionAction | null => {
   const availableActions = getAvailableActions(appointment, currentTime, context);
@@ -307,7 +311,7 @@ export const suggestNextAction = (
 // ✅ Verificar si una cita necesita atención urgente
 export const needsUrgentAttention = (
   appointment: AppointmentLike,
-  currentTime: Date = new Date()
+  currentTime: Date = mxNow()
 ): { urgent: boolean; reason?: string; severity: 'low' | 'medium' | 'high' } => {
   const appointmentTime = getAppointmentDateTime(appointment);
   const minutesSinceAppointment = differenceInMinutes(currentTime, appointmentTime);
@@ -353,7 +357,7 @@ export const needsUrgentAttention = (
 export const getTimeUntilActionAvailable = (
   appointment: AppointmentLike,
   action: AdmissionAction,
-  currentTime: Date = new Date()
+  currentTime: Date = mxNow()
 ): { available: boolean; minutesUntil?: number; message?: string } => {
   const appointmentTime = getAppointmentDateTime(appointment);
   
@@ -477,9 +481,11 @@ export function planUpdateOnAppointmentCompleted(
   appointmentDateTimeISO?: string,
 ): { update: { fecha_ultima_consulta: string; estado_paciente?: string }; changed: boolean; reason?: string } {
   const datePart = (() => {
-    if (!appointmentDateTimeISO) return new Date().toISOString().split('T')[0];
-    const d = new Date(appointmentDateTimeISO);
-    return isNaN(d.getTime()) ? new Date().toISOString().split('T')[0] : d.toISOString().split('T')[0];
+    const base = appointmentDateTimeISO && isValid(parseISO(appointmentDateTimeISO))
+      ? parseISO(appointmentDateTimeISO)
+      : mxNow();
+    // Use Mexico City day boundary regardless of server timezone
+    return formatMx(base, 'yyyy-MM-dd');
   })();
 
   const shouldSetFollowUp = canSetFollowUpFrom(current);

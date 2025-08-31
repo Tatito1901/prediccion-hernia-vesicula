@@ -97,7 +97,7 @@ export async function PATCH(
         notas_breves,
         es_primera_vez,
         patients:patient_id (
-          id, nombre, apellidos, telefono, email, edad, diagnostico_principal, estado_paciente
+          id, nombre, apellidos, telefono, email, diagnostico_principal, estado_paciente
         )
       `)
       .single()
