@@ -23,12 +23,121 @@ export const debugConfig = {
   },
 };
 
-// Performance monitoring
-const performanceMetrics = {
-  apiCallTimes: new Map<string, number>(),
-  renderCounts: new Map<string, number>(),
-  effectExecutions: new Map<string, number>(),
-};
+// Performance monitoring (bounded + HMR-safe)
+type Timed<T> = { v: T; t: number };
+
+function createBoundedMap<T>(maxEntries: number, ttlMs: number) {
+  const m = new Map<string, Timed<T>>();
+
+  const set = (key: string, value: T) => {
+    const now = Date.now();
+    m.set(key, { v: value, t: now });
+    // Trim oldest if we exceed max entries (simple FIFO eviction)
+    while (m.size > maxEntries) {
+      const firstKey = m.keys().next().value as string | undefined;
+      if (firstKey === undefined) break;
+      m.delete(firstKey);
+    }
+  };
+
+  const get = (key: string): T | undefined => {
+    const now = Date.now();
+    const entry = m.get(key);
+    if (!entry) return undefined;
+    if (now - entry.t > ttlMs) {
+      m.delete(key);
+      return undefined;
+    }
+    return entry.v;
+  };
+
+  const incr = (key: string) => {
+    const current = (get(key) as unknown as number) ?? 0;
+    const next = (current + 1) as unknown as T;
+    set(key, next);
+    return current + 1;
+  };
+
+  const cleanup = () => {
+    const now = Date.now();
+    for (const [k, entry] of m) {
+      if (now - entry.t > ttlMs) m.delete(k);
+    }
+    while (m.size > maxEntries) {
+      const firstKey = m.keys().next().value as string | undefined;
+      if (firstKey === undefined) break;
+      m.delete(firstKey);
+    }
+  };
+
+  const entries = () => Array.from(m.entries());
+
+  return { set, get, incr, cleanup, entries } as const;
+}
+
+interface DebugState {
+  apiCallTimes: ReturnType<typeof createBoundedMap<number>>;
+  renderCounts: ReturnType<typeof createBoundedMap<number>>;
+  effectExecutions: ReturnType<typeof createBoundedMap<number>>;
+  intervalId?: number;
+}
+
+declare global {
+  interface Window {
+    __APP_DEBUG_STATE__?: DebugState;
+  }
+}
+
+const DEBUG_ENABLED =
+  debugConfig.api.logRequests ||
+  debugConfig.api.logResponses ||
+  debugConfig.performance.trackRenders ||
+  debugConfig.performance.trackEffects;
+
+function getDebugState(): DebugState | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as unknown as { __APP_DEBUG_STATE__?: DebugState };
+  if (!w.__APP_DEBUG_STATE__) {
+    const TTL_MS = 5 * 60 * 1000; // 5 min TTL por entrada
+    const MAX = 200; // límite superior razonable y acotado
+    w.__APP_DEBUG_STATE__ = {
+      apiCallTimes: createBoundedMap<number>(MAX, TTL_MS),
+      renderCounts: createBoundedMap<number>(MAX, TTL_MS),
+      effectExecutions: createBoundedMap<number>(MAX, TTL_MS),
+    };
+  }
+  return w.__APP_DEBUG_STATE__!;
+}
+
+function initCleanupLoopIfNeeded() {
+  if (typeof window === 'undefined' || !DEBUG_ENABLED) return;
+  const state = getDebugState();
+  if (!state) return;
+  if (state.intervalId) return; // evitar múltiples intervals en HMR
+
+  const id = window.setInterval(() => {
+    state.apiCallTimes.cleanup();
+    state.renderCounts.cleanup();
+    state.effectExecutions.cleanup();
+  }, 60 * 1000); // limpieza ligera cada 60s
+
+  state.intervalId = id;
+
+  // Limpieza en descarte de pestaña
+  window.addEventListener('beforeunload', () => {
+    if (state.intervalId) window.clearInterval(state.intervalId);
+    state.intervalId = undefined;
+  });
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        state.apiCallTimes.cleanup();
+        state.renderCounts.cleanup();
+        state.effectExecutions.cleanup();
+      }
+    });
+  }
+}
 
 export const logApiCall = (phase: 'request' | 'response' | 'error', data: any) => {
   if (!debugConfig.api.logRequests && phase === 'request') return;
@@ -45,17 +154,21 @@ export const logApiCall = (phase: 'request' | 'response' | 'error', data: any) =
   );
 
   // Track slow requests
-  if (phase === 'request' && data.url) {
-    performanceMetrics.apiCallTimes.set(data.url, Date.now());
+  initCleanupLoopIfNeeded();
+  const state = getDebugState();
+  if (!state) return;
+  if (phase === 'request' && data?.url) {
+    state.apiCallTimes.set(String(data.url), Date.now());
   }
-  if (phase === 'response' && data.url) {
-    const startTime = performanceMetrics.apiCallTimes.get(data.url);
-    if (startTime) {
+  if (phase === 'response' && data?.url) {
+    const startTime = state.apiCallTimes.get(String(data.url));
+    if (typeof startTime === 'number') {
       const duration = Date.now() - startTime;
       if (duration > debugConfig.api.slowRequestThreshold) {
         console.warn(`🐌 Slow API call detected: ${data.url} took ${duration}ms`);
       }
-      performanceMetrics.apiCallTimes.delete(data.url);
+      // No es necesario eliminar explícitamente; TTL limpiará, pero podemos limpiar temprano
+      state.apiCallTimes.set(String(data.url), Date.now()); // re-touch para permitir medición de respuestas tardías sucesivas
     }
   }
 };
@@ -63,28 +176,31 @@ export const logApiCall = (phase: 'request' | 'response' | 'error', data: any) =
 export const trackRender = (componentName: string) => {
   if (!debugConfig.performance.trackRenders) return;
   
-  const count = performanceMetrics.renderCounts.get(componentName) || 0;
-  performanceMetrics.renderCounts.set(componentName, count + 1);
-  
-  if (count > 0 && count % 10 === 0) {
-    console.warn(`🔄 ${componentName} has rendered ${count + 1} times`);
+  initCleanupLoopIfNeeded();
+  const state = getDebugState();
+  if (!state) return;
+  const next = state.renderCounts.incr(componentName);
+  if (next % 10 === 0) {
+    console.warn(`🔄 ${componentName} has rendered ${next} times`);
   }
 };
 
 export const trackEffect = (effectName: string, dependencies: any[]) => {
   if (!debugConfig.performance.trackEffects) return;
   
-  const count = performanceMetrics.effectExecutions.get(effectName) || 0;
-  performanceMetrics.effectExecutions.set(effectName, count + 1);
+  initCleanupLoopIfNeeded();
+  const state = getDebugState();
+  if (!state) return;
+  const next = state.effectExecutions.incr(effectName);
   
   console.log(
-    `%c[EFFECT] ${effectName} executed (${count + 1} times)`,
+    `%c[EFFECT] ${effectName} executed (${next} times)`,
     'color: orange',
     { dependencies }
   );
   
-  if (count > 5) {
-    console.warn(`⚠️ Effect ${effectName} has executed ${count + 1} times. Check dependencies for infinite loops.`);
+  if (next > 5) {
+    console.warn(`⚠️ Effect ${effectName} has executed ${next} times. Check dependencies for infinite loops.`);
   }
 };
 
@@ -130,22 +246,28 @@ export const validateApiResponse = (response: any, expectedShape?: any): boolean
 };
 
 export const getPerformanceMetrics = () => ({
-  apiCalls: Object.fromEntries(performanceMetrics.apiCallTimes),
-  renderCounts: Object.fromEntries(performanceMetrics.renderCounts),
-  effectExecutions: Object.fromEntries(performanceMetrics.effectExecutions),
+  apiCalls: (() => {
+    const s = getDebugState();
+    if (!s) return {} as Record<string, number>;
+    return Object.fromEntries(
+      s.apiCallTimes.entries().map(([k, e]) => [k, e.v])
+    ) as Record<string, number>;
+  })(),
+  renderCounts: (() => {
+    const s = getDebugState();
+    if (!s) return {} as Record<string, number>;
+    return Object.fromEntries(
+      s.renderCounts.entries().map(([k, e]) => [k, e.v])
+    ) as Record<string, number>;
+  })(),
+  effectExecutions: (() => {
+    const s = getDebugState();
+    if (!s) return {} as Record<string, number>;
+    return Object.fromEntries(
+      s.effectExecutions.entries().map(([k, e]) => [k, e.v])
+    ) as Record<string, number>;
+  })(),
 });
 
-// Clear metrics periodically to prevent memory leaks
-if (typeof window !== 'undefined') {
-  setInterval(() => {
-    if (performanceMetrics.apiCallTimes.size > 100) {
-      performanceMetrics.apiCallTimes.clear();
-    }
-    if (performanceMetrics.renderCounts.size > 50) {
-      performanceMetrics.renderCounts.clear();
-    }
-    if (performanceMetrics.effectExecutions.size > 50) {
-      performanceMetrics.effectExecutions.clear();
-    }
-  }, 5 * 60 * 1000); // Every 5 minutes
-}
+// Inicializa limpieza periódica solo cuando el debug está habilitado y en cliente
+initCleanupLoopIfNeeded();

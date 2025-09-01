@@ -153,10 +153,14 @@ A continuación se listan los endpoints disponibles bajo `app/api/`, con sus mé
   - Uso: clientes Supabase (`utils/supabase/client.ts`, `server.ts`, `middleware.ts`).
 - __NEXT_PUBLIC_SUPABASE_ANON_KEY__
   - Uso: clientes Supabase públicos/SSR.
+- __NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY__
+  - Uso: clave publishable preferida por SSR/middleware; si no está definida se usa `NEXT_PUBLIC_SUPABASE_ANON_KEY` como fallback.
 - __SUPABASE_SERVICE_ROLE_KEY__
   - Uso: habilita `createAdminClient()` en servidores para bypass de RLS en operaciones controladas (lecturas agregadas/escrituras seguras).
 - __NEXT_PUBLIC_DEBUG_API__
   - Uso: activa logs de requests/responses en UI y hooks (`lib/debug-config.ts`, `hooks/use-clinic-data.ts`).
+- __DEBUG_AUTH__ y __NEXT_PUBLIC_DEBUG_AUTH__
+  - Uso: habilitan logs de autenticación/cookies en SSR y middleware (`utils/supabase/server.ts`, `utils/supabase/middleware.ts`, `middleware.ts`). Valores aceptados: `1|true|on|yes` (case-insensitive).
 - __NODE_ENV__
   - Uso: rutas con comportamiento especial en `test`/`development` (p.ej. fallback sintético en `appointments/[id]/status`).
 - __CLINIC_TIMEZONE__
@@ -192,13 +196,20 @@ Pasos:
 ```ini
 NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=eyJhbGciOiJIUzI1NiIs...  # Opcional; si falta, se usa ANON
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIs...  # No exponer públicamente
 
 CLINIC_TIMEZONE=America/Mexico_City
 ALLOWED_EMAIL_DOMAINS=example.com,clinic.mx
 ALLOWED_ROLES=admin,doctor,asistente
 ENFORCE_PATIENT_BIRTHDATE=true
+
+# Debug de API/Performance (cliente)
 NEXT_PUBLIC_DEBUG_API=false
+# Debug de autenticación (SSR/middleware). Úsalo sólo en desarrollo.
+DEBUG_AUTH=on
+# (Opcional) Habilita logs de auth también en cliente
+# NEXT_PUBLIC_DEBUG_AUTH=on
 ```
 
 Notas:
@@ -282,6 +293,42 @@ Recomendaciones:
 - __¿Cómo consumo Supabase en cliente?__ → `utils/supabase/client.ts` (SSR/CSR); en servidor usar `utils/supabase/server.ts`.
 - __¿Puedo usar la Service Role en el navegador?__ → No. Solo server-side.
 - __¿Cómo pruebo rápidamente?__ → Usa los “Ejemplos rápidos” con `curl` y las rutas bajo `app/api/`.
+
+## 3.9 Debug e Instrumentación
+
+- __Flags__
+  - `NEXT_PUBLIC_DEBUG_API`: habilita logging de requests/responses en UI y hooks y activa métricas de rendimiento.
+  - `DEBUG_AUTH` / `NEXT_PUBLIC_DEBUG_AUTH`: habilitan logs de autenticación/cookies en `utils/supabase/server.ts`, `utils/supabase/middleware.ts` y `middleware.ts`.
+
+- __API pública (`lib/debug-config.ts`)__
+  - `logApiCall(phase: 'request' | 'response' | 'error', data: any)`
+  - `trackRender(componentName: string)`
+  - `trackEffect(effectName: string, dependencies: any[])`
+  - `getPerformanceMetrics(): { apiCalls; renderCounts; effectExecutions }`
+
+- __Detalles__
+  - Mapas acotados (TTL 5 min, máx 200 entradas) y limpieza cada 60s.
+  - Estado HMR-safe en `window.__APP_DEBUG_STATE__` para evitar múltiples intervals.
+  - Advertencias para requests lentas (`slowRequestThreshold` por defecto 3000ms).
+
+- __Ejemplos rápidos__
+  ```tsx
+  // En un componente React
+  import { trackRender, trackEffect, getPerformanceMetrics } from '@/lib/debug-config'
+
+  export function PatientList({ params }: { params: any }) {
+    trackRender('PatientList')
+    useEffect(() => {
+      trackEffect('PatientList:fetch', [params])
+    }, [params])
+    // En consola
+    // console.table(getPerformanceMetrics().renderCounts)
+    return null
+  }
+  ```
+
+- __Recomendación__
+  - Activa estas banderas sólo en desarrollo. Deshabilítalas en producción.
 
 ## 4. Estado Actual
 

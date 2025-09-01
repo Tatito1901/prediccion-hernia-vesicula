@@ -171,9 +171,7 @@ const ProfessionalLoginForm = ({ nextPath, initialErrorCode }: ProfessionalLogin
   const passwordRef = useRef<HTMLInputElement>(null)
   const validationTimers = useRef<Record<string, number>>({})
   const router = useRouter()
-  // Adaptar server action logout a la firma esperada por el prop `action`
-  // Ignoramos FormData y el valor de retorno a efectos de tipado.
-  const logoutAction = (logout as unknown) as (formData: FormData) => Promise<void>
+
   // Mensaje inicial según errorCode
   useEffect(() => {
     if (!initialErrorCode) return
@@ -261,54 +259,49 @@ const ProfessionalLoginForm = ({ nextPath, initialErrorCode }: ProfessionalLogin
       setPending(true)
       toast.loading("Procesando tu ingreso…")
 
-      try {
-        const payload = new FormData()
-        payload.set("email", email)
-        payload.set("password", password)
-        if (formData.get("rememberMe")) payload.set("rememberMe", "on")
-        if (formData.get("company")) payload.set("company", String(formData.get("company")))
+      const payload = new FormData()
+      payload.set("email", email)
+      payload.set("password", password)
+      if (formData.get("rememberMe")) payload.set("rememberMe", "on")
+      if (formData.get("company")) payload.set("company", String(formData.get("company")))
+      if (nextPath) payload.set("next", nextPath)
 
-        const result: LoginResponse = await login(payload)
-        toast.dismiss()
+      const result: LoginResponse = await login(payload)
+      toast.dismiss()
 
-        if (result.ok) {
-          setSuccessMessage("¡Bienvenido! Redirigiendo a tu panel…")
-          setEntering(true)
-          toast.success("Ingreso exitoso", { description: "Preparando tu sesión." })
-          setTimeout(() => {
-            const safe = sanitizeNextPath(nextPath)
-            router.push(safe || result.redirectTo || "/dashboard")
-          }, 700)
-          return
-        }
-
-        setPending(false)
-
-        if (result.code === "RATE_LIMIT") {
-          const secs = result.retryAfter ? Math.ceil(result.retryAfter / 1000) : undefined
-          const desc = secs ? `Inténtalo nuevamente en ~${secs}s.` : "Inténtalo nuevamente en breve."
-          setErrors({ general: `Demasiados intentos. ${desc}` })
-          toast.warning("Demasiados intentos", { description: desc })
-          return
-        }
-
-        if (result.code === "UNCONFIRMED") {
-          setUnconfirmedEmail(email)
-          setErrors({ general: "Tu correo no está confirmado. Revisa tu bandeja o reenvía el correo." })
-          toast.error("Correo no confirmado", { description: "Reenvía el correo de verificación." })
-          return
-        }
-
-        const errorMessage = result.message || "Credenciales incorrectas. Verifica tus datos."
-        setErrors({ general: errorMessage })
-        toast.error("Error al iniciar sesión", { description: "Revisa tu correo y contraseña." })
-      } catch {
-        toast.dismiss()
-        setPending(false)
-        const msg = "No se pudo conectar con el servidor. Revisa tu conexión a internet."
-        setErrors({ general: msg })
-        toast.error("Error de conexión", { description: "Inténtalo de nuevo más tarde." })
+      if (result.ok) {
+        setSuccessMessage("¡Bienvenido! Redirigiendo a tu panel…")
+        setEntering(true)
+        toast.success("Ingreso exitoso", { description: "Preparando tu sesión." })
+        
+        // Usar router.push para la redirección ya que el server action retorna sin hacer redirect()
+        setTimeout(() => {
+          const safe = sanitizeNextPath(nextPath)
+          router.push(safe || result.redirectTo || "/dashboard")
+        }, 700)
+        return
       }
+
+      setPending(false)
+
+      if (result.code === "RATE_LIMIT") {
+        const secs = result.retryAfter ? Math.ceil(result.retryAfter / 1000) : undefined
+        const desc = secs ? `Inténtalo nuevamente en ~${secs}s.` : "Inténtalo nuevamente en breve."
+        setErrors({ general: `Demasiados intentos. ${desc}` })
+        toast.warning("Demasiados intentos", { description: desc })
+        return
+      }
+
+      if (result.code === "UNCONFIRMED") {
+        setUnconfirmedEmail(email)
+        setErrors({ general: "Tu correo no está confirmado. Revisa tu bandeja o reenvía el correo." })
+        toast.error("Correo no confirmado", { description: "Reenvía el correo de verificación." })
+        return
+      }
+
+      const errorMessage = result.message || "Credenciales incorrectas. Verifica tus datos."
+      setErrors({ general: errorMessage })
+      toast.error("Error al iniciar sesión", { description: "Revisa tu correo y contraseña." })
     },
     [lastSubmitTime, validateField, router, nextPath]
   )
@@ -320,6 +313,15 @@ const ProfessionalLoginForm = ({ nextPath, initialErrorCode }: ProfessionalLogin
     toast.dismiss()
     if (res.ok) toast.success("Correo enviado", { description: "Revisa tu bandeja y spam." })
     else toast.error("No se pudo reenviar", { description: "Inténtalo más tarde." })
+  }
+
+  const handleLogout = async () => {
+    const result = await logout()
+    if (result.ok) {
+      router.push('/login')
+    } else {
+      toast.error("Error al cerrar sesión", { description: result.message })
+    }
   }
 
   return (
@@ -431,8 +433,6 @@ const ProfessionalLoginForm = ({ nextPath, initialErrorCode }: ProfessionalLogin
                 </div>
               )}
 
-              {/* (CTA de cerrar sesión movida fuera del <form> para evitar anidamiento de forms) */}
-
               {unconfirmedEmail && (
                 <div className="p-3 bg-amber-900/30 border border-amber-500/30 rounded-lg text-sm text-amber-200 flex items-start gap-2.5">
                   <MailCheck className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -461,15 +461,17 @@ const ProfessionalLoginForm = ({ nextPath, initialErrorCode }: ProfessionalLogin
               </div>
             </form>
 
-            {/* CTA para cerrar sesión si el usuario llegó con error de permisos (fuera del form) */}
+            {/* CTA para cerrar sesión si el usuario llegó con error de permisos */}
             {initialErrorCode && ["forbidden", "access_denied"].includes(initialErrorCode.toLowerCase()) && (
               <div className="mt-4 p-3 bg-slate-800/60 border border-slate-700 rounded-lg text-sm text-slate-300 flex items-center justify-between gap-3">
                 <span>¿Quieres cambiar de cuenta?</span>
-                <form action={logoutAction}>
-                  <button type="submit" className="px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600 border border-slate-600">
-                    Cerrar sesión
-                  </button>
-                </form>
+                <button 
+                  type="button"
+                  onClick={handleLogout}
+                  className="px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600 border border-slate-600"
+                >
+                  Cerrar sesión
+                </button>
               </div>
             )}
 
