@@ -2,6 +2,8 @@
 // Utilidades centralizadas para formateo y conversión de fechas usando la zona horaria de la clínica
 
 import { CLINIC_TIMEZONE } from '@/lib/clinic-schedule';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
+import { addDays } from 'date-fns'
 
 function toDate(input: Date | string): Date {
   return input instanceof Date ? input : new Date(input);
@@ -88,6 +90,33 @@ export function clinicDayId(date: Date | string, timeZone: string = CLINIC_TIMEZ
   const month = parts.find(p => p.type === 'month')?.value ?? '00';
   const day = parts.find(p => p.type === 'day')?.value ?? '00';
   return `${year}-${month}-${day}`;
+}
+
+// ===================== Helpers de rango/agrupación por día en zona clínica =====================
+// YYYY-MM-DD del instante en la zona de la clínica
+export function clinicYmd(date: Date = new Date(), timeZone: string = CLINIC_TIMEZONE): string {
+  return formatInTimeZone(date, timeZone, 'yyyy-MM-dd')
+}
+
+// UTC de la medianoche local en la clínica para un YYYY-MM-DD o Date dado
+export function clinicStartOfDayUtc(ymdOrDate: string | Date, timeZone: string = CLINIC_TIMEZONE): Date {
+  const ymd = typeof ymdOrDate === 'string' ? ymdOrDate : clinicYmd(ymdOrDate, timeZone)
+  return fromZonedTime(`${ymd}T00:00:00.000`, timeZone)
+}
+
+// UTC de la medianoche local tras sumar N días locales desde un YYYY-MM-DD base
+export function addClinicDaysAsUtcStart(ymdStart: string, days: number, timeZone: string = CLINIC_TIMEZONE): Date {
+  const startUtc = clinicStartOfDayUtc(ymdStart, timeZone)
+  const shifted = addDays(startUtc, days)
+  const ymdShifted = clinicYmd(shifted, timeZone)
+  return clinicStartOfDayUtc(ymdShifted, timeZone)
+}
+
+// Clave de agrupación en zona clínica (para series temporales)
+export function clinicDateKey(date: Date, groupBy: 'day' | 'week' | 'month', timeZone: string = CLINIC_TIMEZONE): string {
+  if (groupBy === 'day') return formatInTimeZone(date, timeZone, 'yyyy-MM-dd')
+  if (groupBy === 'week') return formatInTimeZone(date, timeZone, "RRRR-'W'II") // ISO week
+  return formatInTimeZone(date, timeZone, 'yyyy-MM') // month
 }
 
 // Formato "dd/MM/yyyy" en zona clínica

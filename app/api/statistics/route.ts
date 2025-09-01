@@ -37,13 +37,28 @@ export async function GET(req: Request) {
     const timings: Record<string, number> = {};
     const errors: Record<string, string | undefined> = {};
 
-    const getErrMsg = (err: any): string | undefined =>
-      typeof err === 'string' ? err : err?.message ?? undefined;
+    const getErrMsg = (err: unknown): string | undefined => {
+      if (typeof err === 'string') return err;
+      if (err && typeof err === 'object' && 'message' in err) {
+        const m = (err as { message?: unknown }).message;
+        return typeof m === 'string' ? m : undefined;
+      }
+      return undefined;
+    };
 
-    const fetchClinical = async (): Promise<RpcResult<any>> => {
+    // Minimal interface to call RPCs not present in generated Database types
+    type RpcClient = {
+      rpc<T, A extends Record<string, unknown> = Record<string, never>>(
+        fn: string,
+        args?: A
+      ): Promise<{ data: T | null; error: { message?: string; code?: string; details?: string } | null }>
+    };
+    const rpcClient = supabase as unknown as RpcClient;
+
+    const fetchClinical = async (): Promise<RpcResult<unknown>> => {
       console.log('🏥 [/api/statistics] Llamando RPC: get_clinical_profile');
       const t0 = Date.now();
-      const { data, error } = await supabase.rpc('get_clinical_profile');
+      const { data, error } = await rpcClient.rpc<unknown, Record<string, never>>('get_clinical_profile');
       timings.clinical = Date.now() - t0;
       console.log('🏥 [/api/statistics] RPC get_clinical_profile completado:', {
         timing: `${timings.clinical}ms`,
@@ -61,13 +76,13 @@ export async function GET(req: Request) {
         errors.clinical = msg;
         return { data: null, error: msg };
       }
-      return { data: data as any };
+      return { data };
     };
 
-    const fetchDemographic = async (): Promise<RpcResult<any>> => {
+    const fetchDemographic = async (): Promise<RpcResult<unknown>> => {
       console.log('👥 [/api/statistics] Llamando RPC: get_demographic_profile');
       const t0 = Date.now();
-      const { data, error } = await supabase.rpc('get_demographic_profile');
+      const { data, error } = await rpcClient.rpc<unknown, Record<string, never>>('get_demographic_profile');
       timings.demographic = Date.now() - t0;
       console.log('👥 [/api/statistics] RPC get_demographic_profile completado:', {
         timing: `${timings.demographic}ms`,
@@ -85,13 +100,13 @@ export async function GET(req: Request) {
         errors.demographic = msg;
         return { data: null, error: msg };
       }
-      return { data: data as any };
+      return { data };
     };
 
-    const fetchOperational = async (): Promise<RpcResult<any>> => {
+    const fetchOperational = async (): Promise<RpcResult<unknown>> => {
       console.log('📈 [/api/statistics] Llamando RPC: get_operational_metrics');
       const t0 = Date.now();
-      const { data, error } = await supabase.rpc('get_operational_metrics');
+      const { data, error } = await rpcClient.rpc<unknown, Record<string, never>>('get_operational_metrics');
       timings.operational = Date.now() - t0;
       console.log('📈 [/api/statistics] RPC get_operational_metrics completado:', {
         timing: `${timings.operational}ms`,
@@ -109,7 +124,7 @@ export async function GET(req: Request) {
         errors.operational = msg;
         return { data: null, error: msg };
       }
-      return { data: data as any };
+      return { data };
     };
 
     console.log('🔄 [/api/statistics] Ejecutando RPCs en paralelo...');
@@ -213,7 +228,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json(parsed.data, { headers: { ...cacheHeaders } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ [/api/statistics] error:', error);
     return jsonError(500, 'Error aggregating statistics');
   }

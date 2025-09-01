@@ -4,11 +4,10 @@ import React, { useState, useCallback, useMemo, memo } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 // Date handling
-import { getMxDayBounds, mxNow } from '@/utils/datetime';
 import { cn } from '@/lib/utils';
-import { useClinic } from '@/contexts/clinic-data-provider';
-import type { Patient } from '@/lib/types';
 import { AppointmentStatusEnum } from '@/lib/types';
+import type { AppointmentStatus } from '@/lib/types';
+import { useAdmissionAppointments } from '@/hooks/use-admission-appointments';
 
 // UI Components
 import { Button } from '@/components/ui/button';
@@ -167,8 +166,8 @@ AdmissionHeader.displayName = 'AdmissionHeader';
 const SearchAndFilters = memo<{
   search: string;
   onSearchChange: (value: string) => void;
-  statusFilter: string;
-  onStatusChange: (value: string) => void;
+  statusFilter: 'all' | AppointmentStatus;
+  onStatusChange: (value: 'all' | AppointmentStatus) => void;
   isLoading: boolean;
 }>(({ search, onSearchChange, statusFilter, onStatusChange, isLoading }) => {
   const [localSearch, setLocalSearch] = useState(search);
@@ -201,7 +200,7 @@ const SearchAndFilters = memo<{
         )}
       </div>
       
-      <Select value={statusFilter} onValueChange={onStatusChange}>
+      <Select value={statusFilter} onValueChange={(v) => onStatusChange(v as 'all' | AppointmentStatus)}>
         <SelectTrigger className="w-full sm:w-[180px] bg-white dark:bg-gray-800">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-4 w-4" />
@@ -273,87 +272,15 @@ const AppointmentsGrid = memo<{
 });
 AppointmentsGrid.displayName = 'AppointmentsGrid';
 
-// ==================== CUSTOM HOOK ====================
-const useAppointmentData = (search: string, statusFilter: string) => {
-  const { allAppointments, allPatients, isLoading, refetch, error } = useClinic();
-
-  const { classified, rescheduledCount } = useMemo(() => {
-    const result = { today: [], future: [], past: [] } as Record<TabType, AppointmentWithPatient[]>;
-    let rescheduled = 0;
-
-    if (!allAppointments || !allPatients) {
-      return { classified: result, rescheduledCount: 0 };
-    }
-
-    const patientMap = new Map(allPatients.map(p => [p.id, p]));
-    const searchLower = search.toLowerCase();
-    const now = mxNow();
-    const { startUtc, endUtc } = getMxDayBounds(now);
-
-    for (const apt of allAppointments) {
-      const patient = patientMap.get(apt.patient_id);
-      if (!patient) continue;
-
-      const matchesSearch = !search || (
-        patient.nombre?.toLowerCase().includes(searchLower) ||
-        patient.apellidos?.toLowerCase().includes(searchLower) ||
-        patient.telefono?.includes(search)
-      );
-      if (!matchesSearch) continue;
-
-      // Identificar reagendadas pero no mostrarlas en las listas
-      if (apt.estado_cita === AppointmentStatusEnum.REAGENDADA) {
-        rescheduled += 1;
-        continue;
-      }
-
-      // Filtro de estado solo para no-reagendadas
-      if (statusFilter !== 'all' && apt.estado_cita !== statusFilter) continue;
-
-      const fullAppointment = { ...apt, patients: patient } as AppointmentWithPatient;
-      const aptDate = new Date(apt.fecha_hora_cita);
-
-      // Clasificación temporal según día de CDMX (comparando en UTC usando los límites del día en CDMX)
-      if (aptDate >= startUtc && aptDate <= endUtc) {
-        result.today.push(fullAppointment);
-      } else if (aptDate > endUtc) {
-        result.future.push(fullAppointment);
-      } else {
-        result.past.push(fullAppointment);
-      }
-    }
-
-    // Ordenar
-    result.today.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
-    result.future.sort((a, b) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime());
-    result.past.sort((a, b) => new Date(b.fecha_hora_cita).getTime() - new Date(a.fecha_hora_cita).getTime());
-
-    return { classified: result, rescheduledCount: rescheduled };
-  }, [allAppointments, allPatients, search, statusFilter]);
-
-  const classifiedAppointments = classified;
-
-  const stats = useMemo(() => ({
-    today: classifiedAppointments.today.length,
-    pending: classifiedAppointments.today.filter(a => 
-      a.estado_cita === AppointmentStatusEnum.PROGRAMADA ||
-      a.estado_cita === AppointmentStatusEnum.CONFIRMADA
-    ).length,
-    completed: classifiedAppointments.today.filter(a => 
-      a.estado_cita === AppointmentStatusEnum.COMPLETADA
-    ).length,
-  }), [classifiedAppointments]);
-
-  return { appointments: classifiedAppointments, stats, isLoading, error, refetch, rescheduledCount };
-};
-
 // ==================== MAIN COMPONENT ====================
 const PatientAdmission = () => {
   const [activeTab, setActiveTab] = useState<TabType>('today');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | AppointmentStatus>('all');
 
-  const { appointments, stats, isLoading, error, refetch, rescheduledCount } = useAppointmentData(search, statusFilter);
+  const { appointments, stats, isLoading, error, refetch, rescheduledCount } = useAdmissionAppointments({ search, status: statusFilter });
+
+  const hasError = Boolean(error);
 
   const handleAction = useCallback(async (action: AdmissionAction, appointmentId: string) => {
     toast.success('Acción completada correctamente');
@@ -374,7 +301,7 @@ const PatientAdmission = () => {
         stats={stats}
       />
       
-      {error && (
+      {hasError && (
         <Alert variant="destructive" className="mb-6">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>

@@ -39,9 +39,9 @@ async function fetchProfile(userId: string) {
 async function fetchUserRole(userId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("user_roles")
+    .from("profiles")
     .select("role")
-    .eq("user_id", userId)
+    .eq("id", userId)
     .single();
   if (error) return null as string | null;
   return (data?.role as string | null) ?? null;
@@ -50,7 +50,7 @@ async function fetchUserRole(userId: string) {
 export default async function ProfileCard({ userId, email: emailProp }: { userId: string; email?: string | null }) {
   // Fetch profile (name, avatar, optional role)
   const profile = await fetchProfile(userId);
-  // Prefer role from user_roles; fallback to profiles.role if not set
+  // Obtener rol desde `profiles.role` (siempre la fuente de verdad)
   const role = (await fetchUserRole(userId)) ?? profile.role;
 
   // Email: prefer provided from caller; otherwise retrieve from auth

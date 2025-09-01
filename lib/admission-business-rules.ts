@@ -13,6 +13,7 @@ import {
 import { z } from 'zod';
 import { ZAppointmentStatus } from '@/lib/validation/enums';
 import { AppointmentStatusEnum, PatientStatusEnum } from '@/lib/types';
+import type { PatientStatus } from '@/lib/types';
 import { mxNow, formatMx } from '@/utils/datetime';
 
 export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
@@ -479,7 +480,7 @@ export function validatePatientStatusChange(
 export function planUpdateOnAppointmentCompleted(
   current?: string | null,
   appointmentDateTimeISO?: string,
-): { update: { fecha_ultima_consulta: string; estado_paciente?: string }; changed: boolean; reason?: string } {
+): { update: { fecha_ultima_consulta: string; estado_paciente?: PatientStatus }; changed: boolean; reason?: string } {
   const datePart = (() => {
     const base = appointmentDateTimeISO && isValid(parseISO(appointmentDateTimeISO))
       ? parseISO(appointmentDateTimeISO)
@@ -492,7 +493,7 @@ export function planUpdateOnAppointmentCompleted(
   return {
     update: {
       fecha_ultima_consulta: datePart,
-      ...(shouldSetFollowUp ? { estado_paciente: PatientStatusEnum.EN_SEGUIMIENTO } : {}),
+      ...(shouldSetFollowUp ? { estado_paciente: PatientStatusEnum.EN_SEGUIMIENTO as PatientStatus } : {}),
     },
     changed: shouldSetFollowUp,
     reason: shouldSetFollowUp

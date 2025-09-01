@@ -22,6 +22,7 @@ import {
   ZDiagnosisDb 
 } from '@/lib/validation/enums';
 import { AppointmentStatusEnum } from '@/lib/types';
+import type { AppError } from '@/lib/errors';
 
 interface PatientModalProps {
   trigger: React.ReactNode;
@@ -156,9 +157,54 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
         // Lead state removed
         onSuccess?.();
       },
-      onError: (error: any) => {
-        const message = error?.message || 'Error al registrar';
-        if (message.includes('telefono')) {
+      onError: (error: AppError) => {
+        const payload: any = (error?.details as any) ?? {};
+        const code: string | undefined =
+          typeof payload?.code === 'string'
+            ? (payload.code as string).toUpperCase()
+            : (typeof error?.code === 'string' ? (error.code as string).toUpperCase() : undefined);
+        const validationErrors: Array<{ field: string; message: string; code?: string }> | undefined =
+          Array.isArray(payload?.validation_errors) ? payload.validation_errors : undefined;
+
+        // Map server-side validation errors to form fields
+        if (validationErrors?.length) {
+          for (const ve of validationErrors) {
+            const field = ve.field;
+            const message = ve.message || 'Dato inválido';
+            switch (field) {
+              case 'nombre':
+              case 'apellidos':
+              case 'edad':
+              case 'genero':
+              case 'telefono':
+              case 'email':
+              case 'diagnostico_principal':
+                form.setError(field as any, { message });
+                break;
+              case 'fecha_hora_cita':
+                // Mapeo de campo del servidor a UI
+                form.setError('hora', { message });
+                break;
+              default:
+                break;
+            }
+          }
+        }
+
+        // Conflictos de agenda
+        if (error.status === 409 && code === 'SCHEDULE_CONFLICT') {
+          form.setError('hora', { message: error.message || 'Conflicto de horario' });
+        }
+
+        // Paciente duplicado
+        if (error.status === 409 && code === 'DUPLICATE_PATIENT') {
+          form.setError('nombre', { message: 'Posible paciente duplicado' });
+          form.setError('apellidos', { message: 'Verifique los datos: posible duplicado' });
+        }
+
+        // Fallback: detección por mensaje de teléfono duplicado
+        const msg = error?.message || '';
+        if (msg.toLowerCase().includes('telefono')) {
           form.setError('telefono', { message: 'Teléfono ya registrado' });
         }
       },

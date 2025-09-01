@@ -3,41 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jsonError } from '@/lib/errors';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
+import { clinicYmd, clinicStartOfDayUtc, addClinicDaysAsUtcStart, clinicDateKey } from '@/lib/timezone';
 
 // Cache similar al dashboard
 const CACHE_HEADERS = {
   'Cache-Control': 'max-age=120, s-maxage=300, stale-while-revalidate=900',
 };
 
-function parseDateOnly(s: string): Date {
-  const [y, m, d] = s.split('-').map((v) => parseInt(v, 10));
-  return new Date(y, (m || 1) - 1, d || 1);
-}
-
-function startOfDayLocal(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-}
-
-function endOfDayLocal(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-}
-
-function dateKey(d: Date, groupBy: 'day'|'week'|'month'): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  if (groupBy === 'day') return `${y}-${m}-${day}`;
-  if (groupBy === 'week') {
-    // ISO week approx: use Thursday week rule
-    const tmp = new Date(d);
-    tmp.setHours(0,0,0,0);
-    tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
-    const week1 = new Date(tmp.getFullYear(), 0, 4);
-    const w = 1 + Math.round(((tmp.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
-    return `${tmp.getFullYear()}-W${String(w).padStart(2,'0')}`;
-  }
-  return `${y}-${m}`; // month
-}
+// ========== Helpers centralizados de zona horaria de la clínica (lib/timezone.ts) ==========
 
 // Helper para conteos de arrays (strings)
 function countValues(values: (string|null|undefined)[], opts?: { normalize?: boolean }) {
@@ -116,9 +89,14 @@ export async function GET(request: NextRequest) {
     const groupBy = (searchParams.get('groupBy') as 'day'|'week'|'month') || 'month';
 
     const now = new Date();
-    const defaultStart = new Date(now.getTime() - 89 * 24 * 60 * 60 * 1000); // 90 días
-    const start = startOfDayLocal(startDateParam ? parseDateOnly(startDateParam) : defaultStart);
-    const end = endOfDayLocal(endDateParam ? parseDateOnly(endDateParam) : now);
+    // Construcción de límites [gte, lt) usando medianoches locales
+    const defaultEndYmd = clinicYmd(now);
+    const endYmd = endDateParam || defaultEndYmd;
+    const defaultStartUtc = addClinicDaysAsUtcStart(endYmd, -89); // 90 días incluyendo hoy
+    const defaultStartYmd = clinicYmd(defaultStartUtc);
+    const startYmd = startDateParam || defaultStartYmd;
+    const start = clinicStartOfDayUtc(startYmd);
+    const endExclusive = addClinicDaysAsUtcStart(endYmd, 1);
 
     const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : await createClient();
 
@@ -146,7 +124,7 @@ export async function GET(request: NextRequest) {
         estudios_medicos_previos
       `)
       .gte('completed_at', start.toISOString())
-      .lte('completed_at', end.toISOString());
+      .lt('completed_at', endExclusive.toISOString());
 
     if (error) {
       console.error('[Survey Stats API] DB error:', error);
@@ -184,7 +162,7 @@ export async function GET(request: NextRequest) {
     for (const r of rows as any[]) {
       const d = r.completed_at ? new Date(r.completed_at) : null;
       if (!d || isNaN(d.getTime())) continue;
-      const key = dateKey(d, groupBy);
+      const key = clinicDateKey(d, groupBy);
       const cur = seriesMap.get(key) || { responses: 0, avg_pain_sum: 0, avg_pain_n: 0 };
       cur.responses += 1;
       if (typeof r.intensidad_dolor_actual === 'number') {
@@ -203,8 +181,8 @@ export async function GET(request: NextRequest) {
         avg_pain: avgPain,
         prev_diagnosis_rate: prevDiagRate,
         period: {
-          startDate: start.toISOString().split('T')[0],
-          endDate: end.toISOString().split('T')[0],
+          startDate: startYmd,
+          endDate: endYmd,
           groupBy,
         },
       },

@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 interface SurveyTemplate {
   id: number;
   title: string;
-  description: string;
+  description: string | null;
 }
 
 // ==================== HOOK CENTRALIZADO ====================

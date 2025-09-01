@@ -1,4 +1,5 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/types/database.types'
 
 // WARNING: This client uses the service role key and MUST only be used on the server.
 // Do not import this file in any client-side bundle.
@@ -13,7 +14,7 @@ export function createAdminClient() {
     throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY env var')
   }
 
-  return createSupabaseClient(url, serviceRoleKey, {
+  return createSupabaseClient<Database>(url, serviceRoleKey, {
     auth: {
       persistSession: false
     }

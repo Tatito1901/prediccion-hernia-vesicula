@@ -74,6 +74,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import type { Patient } from '@/lib/types';
 import { useClinic } from '@/contexts/clinic-data-provider';
 import { AppointmentStatusEnum } from '@/lib/types';
+import type { AppError } from '@/lib/errors';
 
 // Constants - moved outside component for better performance
 const TIME_SLOTS = Array.from({ length: 12 }, (_, i) => {
@@ -529,7 +530,57 @@ const NewPatientForm: React.FC<NewPatientFormProps> = ({
       setSelectedRecord(null);
       onSuccess?.();
     } catch (error) {
-      console.error('Submit error:', error);
+      const appErr = error as AppError;
+      const payload: any = (appErr?.details as any) ?? {};
+      const code: string | undefined =
+        typeof payload?.code === 'string'
+          ? (payload.code as string).toUpperCase()
+          : (typeof (appErr as any)?.code === 'string' ? ((appErr as any).code as string).toUpperCase() : undefined);
+      const validationErrors: Array<{ field: string; message: string; code?: string }> | undefined =
+        Array.isArray(payload?.validation_errors) ? payload.validation_errors : undefined;
+
+      // Map server-side validation errors to our form fields
+      if (validationErrors?.length) {
+        for (const ve of validationErrors) {
+          const field = ve.field;
+          const message = ve.message || 'Dato inválido';
+          switch (field) {
+            case 'nombre':
+            case 'apellidos':
+            case 'edad':
+            case 'genero':
+            case 'telefono':
+            case 'email':
+            case 'diagnostico_principal':
+            case 'probabilidad_cirugia':
+              form.setError(field as any, { message });
+              break;
+            case 'fecha_hora_cita':
+              // El backend valida la fecha+hora combinada; en UI mostramos el error en hora
+              form.setError('horaConsulta' as any, { message });
+              break;
+            default:
+              break;
+          }
+        }
+      }
+
+      // Conflicto de agenda
+      if (appErr?.status === 409 && code === 'SCHEDULE_CONFLICT') {
+        form.setError('horaConsulta' as any, { message: appErr.message || 'Conflicto de horario' });
+      }
+
+      // Paciente duplicado
+      if (appErr?.status === 409 && code === 'DUPLICATE_PATIENT') {
+        form.setError('nombre' as any, { message: 'Posible paciente duplicado' });
+        form.setError('apellidos' as any, { message: 'Verifique los datos: posible duplicado' });
+      }
+
+      // Fallback: teléfono duplicado detectado por mensaje
+      const msg = (appErr?.message || '').toLowerCase();
+      if (msg.includes('telefono') || msg.includes('patients_telefono_key')) {
+        form.setError('telefono' as any, { message: 'Teléfono ya registrado' });
+      }
     }
   };
 

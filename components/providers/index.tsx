@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@tanstack/react-query';
-import { ClinicDataProvider } from '@/contexts/clinic-data-provider';
 import { notifyError } from '@/lib/client-errors';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -38,9 +37,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       <QueryClientProvider client={queryClient}>
-        <ClinicDataProvider>
-          {children}
-        </ClinicDataProvider>
+        {children}
       </QueryClientProvider>
     </ThemeProvider>
   );

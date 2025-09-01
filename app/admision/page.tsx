@@ -7,7 +7,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { CalendarIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-breakpoint"
-import { ClinicDataProvider } from "@/contexts/clinic-data-provider"
 
 // ──────────────────────────────────────────────────────────
 //  Componente de Admisión - Carga Diferida
@@ -178,24 +177,22 @@ export default function AdmisionPage() {
   const isMobile = useIsMobile()
 
   return (
-    <ClinicDataProvider>
-      <div className={cn(
-        "animate-in fade-in duration-300",
-        isMobile ? "px-2 space-y-4" : "px-0 space-y-6"
-      )}>
-        <PageHeader />
+    <div className={cn(
+      "animate-in fade-in duration-300",
+      isMobile ? "px-2 space-y-4" : "px-0 space-y-6"
+    )}>
+      <PageHeader />
 
-        <Card className="border shadow-sm">
-          <CardContent className={cn(
-            "transition-all duration-300 ease-in-out",
-            isMobile ? "p-3" : "p-4 lg:p-6"
-          )}>
-            <Suspense fallback={<AdmissionLoadingSkeleton />}>
-              <AdmissionContent />
-            </Suspense>
-          </CardContent>
-        </Card>
-      </div>
-    </ClinicDataProvider>
+      <Card className="border shadow-sm">
+        <CardContent className={cn(
+          "transition-all duration-300 ease-in-out",
+          isMobile ? "p-3" : "p-4 lg:p-6"
+        )}>
+          <Suspense fallback={<AdmissionLoadingSkeleton />}>
+            <AdmissionContent />
+          </Suspense>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

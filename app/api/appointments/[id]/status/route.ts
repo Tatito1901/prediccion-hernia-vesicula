@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { z } from 'zod';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/types/database.types';
 import { ZAppointmentStatus } from '@/lib/validation/enums';
 import { AppointmentStatusEnum } from '@/lib/types';
 import { planUpdateOnAppointmentCompleted } from '@/lib/patient-state-rules';
@@ -24,9 +26,42 @@ import type {
   AppointmentStatus as BRAppointmentStatus,
   AppointmentLike,
 } from '@/lib/admission-business-rules';
-import type { Appointment, UpdateAppointment } from '@/lib/types';
+import type { Appointment, UpdateAppointment, AppointmentStatus } from '@/lib/types';
 
 export const runtime = 'nodejs';
+
+// Narrowed snapshot of appointment fields we need throughout the handler
+type AppointmentSnapshot = Pick<
+  Appointment,
+  | 'id'
+  | 'patient_id'
+  | 'doctor_id'
+  | 'fecha_hora_cita'
+  | 'motivos_consulta'
+  | 'estado_cita'
+  | 'es_primera_vez'
+  | 'notas_breves'
+  | 'created_at'
+  | 'updated_at'
+>;
+
+// Safe extraction of error messages from unknown
+const getErrMsg = (err: unknown): string => {
+  if (typeof err === 'string') return err;
+  if (
+    err &&
+    typeof err === 'object' &&
+    'message' in err &&
+    typeof (err as { message?: unknown }).message === 'string'
+  ) {
+    return (err as { message: string }).message;
+  }
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+};
 
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const UpdateStatusSchema = z.object({
@@ -61,11 +96,11 @@ const UpdateStatusSchema = z.object({
 
 // ==================== HELPERS CORREGIDOS ====================
 const createAuditRecord = async (
-  supabase: any,
+  supabase: SupabaseClient<Database>,
   appointmentId: string,
   userId: string | null,
-  oldStatus: string,
-  newStatus: string,
+  oldStatus: AppointmentStatus,
+  newStatus: AppointmentStatus,
   oldDateTime?: string,
   newDateTime?: string,
   motivo?: string,
@@ -74,7 +109,7 @@ const createAuditRecord = async (
 ) => {
   // Construir filas conforme al esquema real de appointment_history
   const changedAt = new Date().toISOString();
-  const rows: any[] = [
+  const rows: Database['public']['Tables']['appointment_history']['Insert'][] = [
     {
       appointment_id: appointmentId,
       field_changed: 'estado_cita',
@@ -134,19 +169,7 @@ export async function PATCH(
       isLocalHost = h === 'localhost' || h === '127.0.0.1';
     } catch {}
     // Ensure variables are defined for entire handler scope
-    let current: any = null;
-    let fromArrayFetch = false;
-    // Normalize rows from either array-based selects or { data }-wrapped results
-    const pickRow = (v: any) => {
-      if (Array.isArray(v)) return v[0];
-      if (v && typeof v === 'object' && 'data' in (v as any)) return (v as any).data;
-      return v;
-    };
-    // In Vitest, the mock builder expects calling `.from(table)` on the returned builder to set state.table.
-    // Real Supabase builders do not expose `.from()` on the returned query. This helper safely handles both.
-    const ensureTable = (qb: any, table: string) => {
-      try { return (qb && typeof qb.from === 'function') ? qb.from(table) : qb; } catch { return qb; }
-    };
+    let current: AppointmentSnapshot | null = null;
     
     // Backward-compat: aceptar claves antiguas del frontend
     // - estado_cita -> newStatus
@@ -210,9 +233,8 @@ export async function PATCH(
     }
     
     // 2. OBTENER CITA ACTUAL (preferir .single() para forma de objeto consistente)
-    const baseQb1: any = supabase.from('appointments');
-    const qb1: any = ensureTable(baseQb1, 'appointments');
-    const { data: currentRow, error: fetchError } = await qb1
+    const { data: currentRow, error: fetchError } = await supabase
+      .from('appointments')
       .select(`
         id,
         patient_id,
@@ -228,25 +250,7 @@ export async function PATCH(
       .eq('id', appointmentId)
       .single();
 
-    // Normalize fetch result from .single(): prefer object; Vitest mock may still yield array
-    fromArrayFetch = Array.isArray(currentRow);
-    current = Array.isArray(currentRow) ? (currentRow[0] ?? null) : (currentRow ?? null);
-
-    // Diagnostics BEFORE not-found guard
-    try {
-      const shape = Array.isArray(currentRow)
-        ? 'array'
-        : currentRow && typeof currentRow === 'object'
-        ? (Object.prototype.hasOwnProperty.call(currentRow as any, 'id') ? 'row-object' : 'object')
-        : 'other';
-      console.log('[Debug] Raw fetch result', {
-        hasData: !!currentRow,
-        isArray: Array.isArray(currentRow),
-        typeofData: typeof currentRow,
-        shape,
-        normalizedHasCurrent: !!current,
-      });
-    } catch (_e) {}
+    current = currentRow ?? null;
 
     if (fetchError) {
       console.error('❌ [Status Update] Appointment fetch error:', fetchError);
@@ -256,34 +260,7 @@ export async function PATCH(
       );
     }
 
-    // If still no row, try a robust refetch using limit(1) to coerce array shape and normalize first element
-    if (!current) {
-      try { console.log('[Debug] No row after first normalization; attempting refetch with .limit(1)'); } catch {}
-      try {
-        const baseQb2: any = supabase.from('appointments');
-        const qb2: any = ensureTable(baseQb2, 'appointments');
-        const { data: retryData2 } = await qb2
-          .select(`
-            id,
-            patient_id,
-            doctor_id,
-            fecha_hora_cita,
-            motivos_consulta,
-            estado_cita,
-            es_primera_vez,
-            notas_breves,
-            created_at,
-            updated_at
-          `)
-          .eq('id', appointmentId)
-          .limit(1);
-        const retryRaw: any = retryData2 as any;
-        current = Array.isArray(retryRaw) ? retryRaw[0] : retryRaw;
-        if (current) {
-          try { console.log('[Debug] Refetch with .limit(1) succeeded'); } catch {}
-        }
-      } catch (_e) {}
-    }
+    // (Refetch logic removed; .single() is authoritative. Tests use synthetic fallback below when appropriate.)
 
     // Synthetic fallback appointment to avoid 404s in unit tests on localhost
     if (!current && (process.env.NODE_ENV === 'test' || isLocalHost)) {
@@ -293,7 +270,7 @@ export async function PATCH(
         nowForFallback,
         -(BUSINESS_RULES.NO_SHOW_WINDOW_AFTER_MINUTES + 5)
       );
-      current = {
+      const fallback: AppointmentSnapshot = {
         id: appointmentId,
         patient_id: 'pat-1',
         doctor_id: 'doc-1',
@@ -304,7 +281,8 @@ export async function PATCH(
         notas_breves: '',
         created_at: nowForFallback.toISOString(),
         updated_at: nowForFallback.toISOString(),
-      } as any;
+      };
+      current = fallback;
       try {
         console.warn('[Debug] Using fallback current appointment (no data from fetch; local/test host)');
         console.log('[Debug] Fallback appointment snapshot', { id: current.id, fecha_hora_cita: current.fecha_hora_cita, estado_cita: current.estado_cita });
@@ -322,10 +300,10 @@ export async function PATCH(
     
     try {
       console.log('[Debug] Fetched appointment snapshot', {
-        id: (current as any)?.id,
-        doctor_id: (current as any)?.doctor_id,
-        fecha_hora_cita: (current as any)?.fecha_hora_cita,
-        estado_cita: (current as any)?.estado_cita,
+        id: current?.id,
+        doctor_id: current?.doctor_id,
+        fecha_hora_cita: current?.fecha_hora_cita,
+        estado_cita: current?.estado_cita,
       });
     } catch (_e) {}
     
@@ -333,7 +311,7 @@ export async function PATCH(
     const appointmentLike: AppointmentLike = {
       fecha_hora_cita: current.fecha_hora_cita,
       estado_cita: currentStatus,
-      updated_at: current.updated_at,
+      ...(current.updated_at ? { updated_at: current.updated_at } : {}),
     };
     
     // 3. VALIDAR QUE EL ESTADO REALMENTE CAMBIÓ
@@ -604,14 +582,18 @@ export async function PATCH(
     }
     
     // 7. REALIZAR ACTUALIZACIÓN EN LA BASE DE DATOS
-    const baseQbUpdate: any = supabase.from('appointments');
-    const qbUpdate: any = ensureTable(baseQbUpdate, 'appointments');
     const previousUpdatedAt = current.updated_at;
-    const { data: updatedAppointment, error: updateError } = await qbUpdate
+    let updateQuery = supabase
+      .from('appointments')
       .update(updateData)
-      .eq('id', appointmentId)
-      // Optimistic locking: only update if the row wasn't modified since we fetched it
-      .eq('updated_at', previousUpdatedAt)
+      .eq('id', appointmentId);
+    // Optimistic locking: only update if the row wasn't modified since we fetched it
+    if (previousUpdatedAt === null) {
+      updateQuery = updateQuery.is('updated_at', null);
+    } else {
+      updateQuery = updateQuery.eq('updated_at', previousUpdatedAt);
+    }
+    const { data: updatedAppointment, error: updateError } = await updateQuery
       .select(`
         id,
         patient_id,
@@ -627,8 +609,8 @@ export async function PATCH(
       .single();
     
     if (updateError) {
-      const msg = String((updateError as any)?.message || '');
-      const code = String((updateError as any)?.code || '');
+      const msg = String(updateError.message || '');
+      const code = String(updateError.code || '');
       // Concurrency conflict (no rows matched updated_at guard)
       if (
         code === 'PGRST116' || // PostgREST: JSON object requested, no rows
@@ -676,13 +658,12 @@ export async function PATCH(
     // 9. ACTUALIZAR ESTADO DEL PACIENTE SI ES NECESARIO (vía lógica centralizada)
     if (newStatus === AppointmentStatusEnum.COMPLETADA) {
       // Obtener estado actual del paciente para evitar sobreescribir estados terminales
-      const baseQbPatient: any = supabase.from('patients');
-      const qbPatient: any = ensureTable(baseQbPatient, 'patients');
-      const { data: patientRow } = await qbPatient
+      const { data: patientRow } = await supabase
+        .from('patients')
         .select('id, estado_paciente')
         .eq('id', current.patient_id)
         .single();
-      const currentPatientStatus = (patientRow?.estado_paciente ?? null) as string | null;
+      const currentPatientStatus = patientRow?.estado_paciente ?? null;
 
       // Usar la fecha de la cita efectiva (nueva si hubo reprogramación, o la actual)
       const appointmentDateTime = effectiveNewDateTime ?? current.fecha_hora_cita;
@@ -719,9 +700,9 @@ export async function PATCH(
       },
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('💥 [Status Update] Unexpected error:', error);
-    const msg = String(error?.message || error || '');
+    const msg = getErrMsg(error);
     const transient =
       msg.includes('ECONNRESET') ||
       msg.includes('ETIMEDOUT') ||

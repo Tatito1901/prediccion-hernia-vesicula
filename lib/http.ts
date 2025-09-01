@@ -36,7 +36,9 @@ export async function fetchJson<T = unknown>(input: RequestInfo | URL, init?: Re
           if (res.status >= 500) return 'server';
           return 'unknown';
         })(),
-        details: payload?.details,
+        // Expose the full payload so callers can read fields like
+        // validation_errors, suggested_actions, and any custom details.
+        details: payload ?? undefined,
       };
       throw err;
     }

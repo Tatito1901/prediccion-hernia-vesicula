@@ -116,8 +116,7 @@ A continuación se listan los endpoints disponibles bajo `app/api/`, con sus mé
     - Parámetros: `startDate`, `endDate` (YYYY-MM-DD). Series agregadas para gráficos.
   - `GET /api/statistics`
     - Agregados (clínicos/demográficos/operativos) vía RPCs con caché.
-  - `GET /api/statistics/patients`
-    - Totales y distribuciones (estado_paciente, género) para pacientes.
+  - Notas: Totales y distribuciones de pacientes (estado_paciente, género, etc.) están incluidas en el endpoint unificado anterior.
 
 - __Perfil__
   - `PATCH /api/profile/avatar`
@@ -165,7 +164,7 @@ A continuación se listan los endpoints disponibles bajo `app/api/`, con sus mé
 - __ALLOWED_EMAIL_DOMAINS__
   - Uso: restricción de dominios permitidos en auth (`components/auth/actions.ts`). CSV.
 - __ALLOWED_ROLES__
-  - Uso: roles permitidos en auth (`components/auth/actions.ts`). CSV; default: `admin,doctor,nurse`.
+  - Uso: roles permitidos en auth (`components/auth/actions.ts`). CSV; default: `admin,doctor,asistente`.
 - __ENFORCE_PATIENT_BIRTHDATE__
   - Uso: obliga `fecha_nacimiento` al crear paciente (`app/api/patients/route.ts`). Valores: `true|false`.
 
@@ -197,7 +196,7 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIs...  # No exponer públicamente
 
 CLINIC_TIMEZONE=America/Mexico_City
 ALLOWED_EMAIL_DOMAINS=example.com,clinic.mx
-ALLOWED_ROLES=admin,doctor,nurse
+ALLOWED_ROLES=admin,doctor,asistente
 ENFORCE_PATIENT_BIRTHDATE=true
 NEXT_PUBLIC_DEBUG_API=false
 ```

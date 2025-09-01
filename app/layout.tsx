@@ -93,9 +93,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Clínica Médica" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         
-        {/* Prefetch estratégico */}
-        <link rel="prefetch" href="/dashboard" />
-        <link rel="prefetch" href="/pacientes" />
+        {/* Prefetch de rutas protegidas deshabilitado para evitar redirecciones/errores antes de login */}
         
         {/* Preconnect para recursos externos */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />

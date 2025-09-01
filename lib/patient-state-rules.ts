@@ -9,6 +9,7 @@ import {
   validatePatientStatusChange as CORE_validatePatientStatusChange,
   planUpdateOnAppointmentCompleted as CORE_planUpdateOnAppointmentCompleted,
 } from '@/lib/admission-business-rules'
+import type { PatientStatus } from '@/lib/types'
 
 export type { TerminalPatientStatus, PatientTransitionCode }
 
@@ -57,6 +58,6 @@ export function validatePatientStatusChange(
 export function planUpdateOnAppointmentCompleted(
   current?: string | null,
   appointmentDateTimeISO?: string,
-): { update: { fecha_ultima_consulta: string; estado_paciente?: string }; changed: boolean; reason?: string } {
+): { update: { fecha_ultima_consulta: string; estado_paciente?: PatientStatus }; changed: boolean; reason?: string } {
   return CORE_planUpdateOnAppointmentCompleted(current, appointmentDateTimeISO)
 }

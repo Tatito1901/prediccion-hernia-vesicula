@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { createClient } from '@/utils/supabase/server'
 import { ADMISSION_BUSINESS_RULES } from '@/lib/admission-business-rules'
 import { createApiResponse, createApiError } from '@/lib/api-response-types'
-import { AppointmentStatusEnum } from '@/lib/types'
+import { AppointmentStatusEnum, ZDiagnosisDb } from '@/lib/types'
+import type { NewPatient, NewAppointment, DiagnosisEnum } from '@/lib/types'
 
 export const runtime = 'nodejs'
 
@@ -30,9 +31,9 @@ const emptyToUndefined = <T extends Record<string, any>>(obj: T): T => {
 const AdmissionSchema = z.object({
   nombre: z.string().min(2),
   apellidos: z.string().min(2),
-  diagnostico_principal: z.string().min(1),
+  diagnostico_principal: ZDiagnosisDb,
   fecha_hora_cita: z.string().refine(isIsoDate, 'fecha_hora_cita debe ser ISO 8601'),
-  motivos_consulta: z.array(z.string().min(1)).min(1),
+  motivos_consulta: z.array(ZDiagnosisDb).min(1),
   diagnostico_principal_detalle: z.string().optional(),
   telefono: z
     .string()
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Insertar paciente
-    const patientInsert = {
+    const patientInsert: NewPatient = {
       nombre: payload.nombre,
       apellidos: payload.apellidos,
       telefono: payload.telefono,
@@ -144,9 +145,7 @@ export async function POST(req: NextRequest) {
       numero_expediente: payload.numero_expediente,
       seguro_medico: payload.seguro_medico,
       comentarios_registro: payload.comentarios_registro,
-      diagnostico_principal: payload.diagnostico_principal,
-      diagnostico_principal_detalle: payload.diagnostico_principal_detalle,
-      probabilidad_cirugia: payload.probabilidad_cirugia,
+      diagnostico_principal: payload.diagnostico_principal as DiagnosisEnum,
       contacto_emergencia_nombre: payload.contacto_emergencia_nombre,
       contacto_emergencia_telefono: payload.contacto_emergencia_telefono,
       creation_source: payload.creation_source,
@@ -170,13 +169,15 @@ export async function POST(req: NextRequest) {
     const patient_id = patientData!.id as string
 
     // Insertar cita
-    const appointmentInsert = {
+    const appointmentInsert: NewAppointment = {
       patient_id,
-      doctor_id: payload.doctor_id,
+      doctor_id: payload.doctor_id ?? null,
       fecha_hora_cita: payload.fecha_hora_cita,
-      motivos_consulta: payload.motivos_consulta,
+      motivos_consulta: payload.motivos_consulta as DiagnosisEnum[],
       estado_cita: AppointmentStatusEnum.PROGRAMADA,
       agendado_por: payload.creado_por_id,
+      probabilidad_cirugia_inicial: payload.probabilidad_cirugia ?? null,
+      descripcion_motivos: payload.diagnostico_principal_detalle,
     }
 
     const { data: apptData, error: apptError } = await supabase

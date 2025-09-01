@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { startOfDay, endOfDay, addDays } from 'date-fns'
+import { clinicYmd, clinicStartOfDayUtc, addClinicDaysAsUtcStart } from '@/lib/timezone'
 import { z } from 'zod'
+import { ZDiagnosisDb, ZAppointmentStatus } from '@/lib/validation/enums'
+import type { NewAppointment } from '@/lib/types'
 
 export const runtime = 'nodejs'
 
@@ -14,32 +16,41 @@ const validatePagination = (page?: string | null, pageSize?: string | null) => {
 }
 
 const buildDateRange = (dateFilter: string, startDate?: string | null, endDate?: string | null) => {
-  const today = new Date()
-  const todayStart = startOfDay(today)
-  const todayEnd = endOfDay(today)
+  const todayYmd = clinicYmd(new Date())
+  const todayStartUtc = clinicStartOfDayUtc(todayYmd)
+
   switch (dateFilter) {
     case 'all':
       // Return empty object to get all appointments
       return {}
-    case 'today':
-      return { gte: todayStart.toISOString(), lt: todayEnd.toISOString() }
-    case 'week':
-      // Next 7 days
-      return { gte: todayStart.toISOString(), lt: addDays(todayStart, 7).toISOString() }
-    case 'month':
-      // Next 30 days
-      return { gte: todayStart.toISOString(), lt: addDays(todayStart, 30).toISOString() }
-    case 'future':
-      return { gte: addDays(todayStart, 1).toISOString() }
+    case 'today': {
+      const tomorrowStartUtc = addClinicDaysAsUtcStart(todayYmd, 1)
+      return { gte: todayStartUtc.toISOString(), lt: tomorrowStartUtc.toISOString() }
+    }
+    case 'week': {
+      const weekEndUtc = addClinicDaysAsUtcStart(todayYmd, 7)
+      return { gte: todayStartUtc.toISOString(), lt: weekEndUtc.toISOString() }
+    }
+    case 'month': {
+      const monthEndUtc = addClinicDaysAsUtcStart(todayYmd, 30)
+      return { gte: todayStartUtc.toISOString(), lt: monthEndUtc.toISOString() }
+    }
+    case 'future': {
+      const tomorrowStartUtc = addClinicDaysAsUtcStart(todayYmd, 1)
+      return { gte: tomorrowStartUtc.toISOString() }
+    }
     case 'past':
-      return { lt: todayStart.toISOString() }
-    case 'range':
-      return {
-        gte: startDate ? new Date(startDate).toISOString() : undefined,
-        lt: endDate ? new Date(endDate).toISOString() : undefined,
-      }
-    default:
-      return { gte: todayStart.toISOString(), lt: todayEnd.toISOString() }
+      return { lt: todayStartUtc.toISOString() }
+    case 'range': {
+      const gte = startDate ? clinicStartOfDayUtc(startDate).toISOString() : undefined
+      // Use exclusive upper bound at the start of the day AFTER the provided end date
+      const lt = endDate ? addClinicDaysAsUtcStart(endDate, 1).toISOString() : undefined
+      return { gte, lt }
+    }
+    default: {
+      const tomorrowStartUtc = addClinicDaysAsUtcStart(todayYmd, 1)
+      return { gte: todayStartUtc.toISOString(), lt: tomorrowStartUtc.toISOString() }
+    }
   }
 }
 
@@ -51,10 +62,9 @@ const buildSearchFilter = (q: string) => {
 }
 
 const getCounts = async (supabase: any) => {
-  const today = new Date()
-  const todayStart = startOfDay(today).toISOString()
-  const todayEnd = endOfDay(today).toISOString()
-  const futureStart = addDays(startOfDay(today), 1).toISOString()
+  const todayYmd = clinicYmd(new Date())
+  const todayStart = clinicStartOfDayUtc(todayYmd)
+  const tomorrowStart = addClinicDaysAsUtcStart(todayYmd, 1)
   const { data, error } = await supabase
     .from('appointments')
     .select('fecha_hora_cita, estado_cita')
@@ -64,9 +74,9 @@ const getCounts = async (supabase: any) => {
   let past_count = 0
   for (const a of data || []) {
     const d = new Date(a.fecha_hora_cita)
-    if (d >= new Date(todayStart) && d < new Date(todayEnd)) today_count++
-    else if (d >= new Date(futureStart)) future_count++
-    else if (d < new Date(todayStart)) past_count++
+    if (d >= todayStart && d < tomorrowStart) today_count++
+    else if (d >= tomorrowStart) future_count++
+    else if (d < todayStart) past_count++
   }
   return { today_count, future_count, past_count, total_appointments: today_count + future_count + past_count }
 }
@@ -189,8 +199,8 @@ export async function GET(req: NextRequest) {
 const CreateAppointmentSchema = z.object({
   patient_id: z.string().uuid(),
   fecha_hora_cita: z.string(),
-  motivos_consulta: z.array(z.string().min(1)).min(1),
-  estado_cita: z.string().optional(),
+  motivos_consulta: z.array(ZDiagnosisDb).min(1),
+  estado_cita: ZAppointmentStatus.optional(),
   doctor_id: z.string().uuid().optional().nullable(),
   notas_breves: z.string().optional(),
   es_primera_vez: z.boolean().optional(),
@@ -204,6 +214,15 @@ export async function POST(req: NextRequest) {
   }
   const supabase = await createAdminClient()
   const payload = parse.data
+  const insertPayload: NewAppointment = {
+    patient_id: payload.patient_id,
+    fecha_hora_cita: payload.fecha_hora_cita,
+    motivos_consulta: payload.motivos_consulta,
+    estado_cita: payload.estado_cita ?? 'PROGRAMADA',
+    doctor_id: payload.doctor_id ?? null,
+    notas_breves: payload.notas_breves,
+    es_primera_vez: payload.es_primera_vez ?? false,
+  }
   // Conflicto simple por doctor/fecha
   if (payload.doctor_id) {
     const { data: conflict } = await supabase
@@ -219,15 +238,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('appointments')
-    .insert({
-      patient_id: payload.patient_id,
-      fecha_hora_cita: payload.fecha_hora_cita,
-      motivos_consulta: payload.motivos_consulta,
-      estado_cita: payload.estado_cita || 'PROGRAMADA',
-      doctor_id: payload.doctor_id ?? null,
-      notas_breves: payload.notas_breves,
-      es_primera_vez: payload.es_primera_vez ?? false,
-    })
+    .insert(insertPayload)
     .select(`
       id,
       patient_id,
