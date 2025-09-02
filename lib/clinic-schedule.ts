@@ -426,3 +426,37 @@ export const canTransitionToStatus = (
   }
   return { valid: true };
 };
+
+// ==================== Utilidades de generación de horarios (para UI) ====================
+
+export function generateTimeSlots(options?: {
+  startHour?: number;
+  endHour?: number;
+  stepMinutes?: number;
+  includeLunch?: boolean;
+  baseDate?: Date;
+  tz?: string;
+}): Array<{ value: string; label: string }> {
+  const {
+    startHour = CLINIC_SCHEDULE.START_HOUR,
+    endHour = CLINIC_SCHEDULE.END_HOUR,
+    stepMinutes = CLINIC_SCHEDULE.SLOT_DURATION_MINUTES,
+    includeLunch = true,
+    baseDate = new Date(),
+  } = options || {};
+
+  const slots: Array<{ value: string; label: string }> = [];
+  for (let h = startHour; h < endHour; h++) {
+    for (let m = 0; m < 60; m += stepMinutes) {
+      const dt = new Date(baseDate);
+      dt.setHours(h, m, 0, 0);
+      // Opcionalmente excluir horario de comida (12:00-12:59)
+      if (!includeLunch && isLunchTime(dt)) continue;
+
+      const hh = String(h).padStart(2, '0');
+      const mm = String(m).padStart(2, '0');
+      slots.push({ value: `${hh}:${mm}`, label: `${hh}:${mm}` });
+    }
+  }
+  return slots;
+}

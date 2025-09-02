@@ -330,6 +330,18 @@ Recomendaciones:
 - __Recomendación__
   - Activa estas banderas sólo en desarrollo. Deshabilítalas en producción.
 
+## Nota de Cambio: Remoción de "Edad" en UI de Pacientes
+
+Con el fin de simplificar la interfaz y evitar mostrar la edad, se eliminaron todas las referencias visuales al campo "Edad" en las superficies de pacientes. No se realizaron cambios en los tipos/BD (edad sigue siendo opcional a nivel de datos), únicamente en la presentación.
+
+- Componentes actualizados:
+  - `components/patient-admision/patient-card.tsx`: se removió el badge de edad.
+  - `components/patients/patient-details-dialog.tsx`: se eliminaron el InfoItem "Edad", el cálculo de edad y el indicador "Edad avanzada".
+  - `components/patients/patient-table.tsx`: se quitó la columna "Edad" (desktop y móvil/virtualizada) y su ordenamiento asociado.
+
+- Alcance: solo UI. No hay cambios en APIs, validaciones o esquemas de datos.
+- Pruebas: la suite existente pasa sin modificaciones.
+
 ## 4. Estado Actual
 
 ✅ **Completado:**

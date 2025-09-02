@@ -324,16 +324,6 @@ const PatientRow = memo(({
         </div>
       </TableCell>
 
-      <TableCell className="text-center">
-        {patient.edad ? (
-          <Badge className="bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
-            {patient.edad} años
-          </Badge>
-        ) : (
-          <span className="text-slate-400 dark:text-slate-500 text-sm">—</span>
-        )}
-      </TableCell>
-
       <TableCell>
         <Badge className={cn(
           "border font-medium",
@@ -498,7 +488,7 @@ const VirtualPatientRow = memo(({
 
   return (
     <div 
-      className="grid grid-cols-[2fr_90px_2fr_1.5fr_1fr_1fr_80px] items-center gap-2 px-2 border-b border-slate-200 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50"
+      className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_80px] items-center gap-2 px-2 border-b border-slate-200 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50"
       style={{ height: ROW_HEIGHT }}
       onClick={() => onSelectPatient(patient)}
     >
@@ -517,17 +507,6 @@ const VirtualPatientRow = memo(({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Edad */}
-      <div className="py-2 text-center">
-        {patient.edad ? (
-          <Badge className="bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
-            {patient.edad} años
-          </Badge>
-        ) : (
-          <span className="text-slate-400 dark:text-slate-500 text-sm">—</span>
-        )}
       </div>
 
       {/* Diagnóstico */}
@@ -696,14 +675,6 @@ const PatientTable: React.FC<PatientTableProps> = ({
                 Paciente
               </SortableHeader>
               <SortableHeader 
-                sortKey="edad" 
-                currentSort={sortConfig} 
-                onSort={handleSort} 
-                className="text-center"
-              >
-                Edad
-              </SortableHeader>
-              <SortableHeader 
                 sortKey="displayDiagnostico" 
                 currentSort={sortConfig} 
                 onSort={handleSort} 
@@ -742,7 +713,7 @@ const PatientTable: React.FC<PatientTableProps> = ({
           <TableBody>
             {sortedPatients.length >= VIRTUALIZE_THRESHOLD ? (
               <TableRow className="border-none">
-                <TableCell colSpan={7} className="p-0">
+                <TableCell colSpan={6} className="p-0">
                   <div style={{ height: VLIST_HEIGHT }}>
                     <List
                       height={VLIST_HEIGHT}

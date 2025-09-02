@@ -1,4 +1,4 @@
-import { useState, memo, useCallback, useMemo } from "react"
+import { useState, memo, useCallback, useMemo, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,6 +23,8 @@ import { useCreateAppointment } from "@/hooks/use-appointments"
 import { EnrichedPatient, AppointmentStatusEnum } from "@/lib/types"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { generateTimeSlots } from "@/lib/clinic-schedule"
+import { useClinic } from "@/contexts/clinic-data-provider"
 
 // 🎨 Configuración de tema
 const THEME = {
@@ -32,22 +34,7 @@ const THEME = {
   info: "from-blue-500 to-indigo-600"
 }
 
-// ✅ Horarios disponibles optimizados
-const TIME_SLOTS = [
-  { value: "09:00", label: "9:00 AM", period: "morning" },
-  { value: "09:30", label: "9:30 AM", period: "morning" },
-  { value: "10:00", label: "10:00 AM", period: "morning" },
-  { value: "10:30", label: "10:30 AM", period: "morning" },
-  { value: "11:00", label: "11:00 AM", period: "morning" },
-  { value: "11:30", label: "11:30 AM", period: "morning" },
-  { value: "12:00", label: "12:00 PM", period: "afternoon" },
-  { value: "12:30", label: "12:30 PM", period: "afternoon" },
-  { value: "13:00", label: "1:00 PM", period: "afternoon" },
-  { value: "13:30", label: "1:30 PM", period: "afternoon" },
-  { value: "14:00", label: "2:00 PM", period: "afternoon" },
-  { value: "14:30", label: "2:30 PM", period: "afternoon" },
-  { value: "15:00", label: "3:00 PM", period: "afternoon" }
-] as const
+// Horarios se generarán dinámicamente desde la agenda centralizada
 
 // ✅ Cache para formateo
 const dateDisplayCache = new Map<string, string>()
@@ -87,6 +74,7 @@ const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({
   onClose 
 }: ScheduleAppointmentDialogProps) {
   const { mutateAsync: addAppointment, isPending } = useCreateAppointment()
+  const { fetchSpecificAppointments } = useClinic()
   
   // Estado inicial optimizado
   const initialDate = useMemo(() => {
@@ -103,6 +91,56 @@ const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({
   
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [touched, setTouched] = useState<Record<string, boolean>>({})
+  const [occupiedTimes, setOccupiedTimes] = useState<Set<string>>(new Set())
+
+  // Generar horarios dinámicamente (excluyendo comida)
+  const timeSlots = useMemo(() => (
+    generateTimeSlots({ baseDate: formData.fechaConsulta, includeLunch: false })
+  ), [formData.fechaConsulta])
+
+  // Cargar horarios ocupados para la fecha seleccionada
+  useEffect(() => {
+    if (!formData.fechaConsulta) {
+      setOccupiedTimes(new Set())
+      return
+    }
+
+    const controller = new AbortController()
+    const load = async () => {
+      const dateStr = format(formData.fechaConsulta, "yyyy-MM-dd")
+      try {
+        const res = await fetchSpecificAppointments({
+          dateFilter: 'range',
+          startDate: dateStr,
+          endDate: dateStr,
+          pageSize: 100,
+          signal: controller.signal,
+        })
+        const blocking = [
+          AppointmentStatusEnum.PROGRAMADA,
+          AppointmentStatusEnum.CONFIRMADA,
+          AppointmentStatusEnum.PRESENTE,
+        ]
+        const occ = new Set<string>()
+        res.data?.forEach((apt: any) => {
+          if (blocking.includes(apt.estado_cita)) {
+            const tt = format(new Date(apt.fecha_hora_cita), 'HH:mm')
+            occ.add(tt)
+          }
+        })
+        setOccupiedTimes(occ)
+      } catch (err) {
+        const aborted = controller.signal.aborted || (err instanceof Error && err.name === 'AbortError')
+        if (!aborted) console.error('Error loading appointments:', err)
+      }
+    }
+    load()
+    return () => { try { controller.abort() } catch {} }
+  }, [formData.fechaConsulta, fetchSpecificAppointments])
+
+  // Agrupar visualmente por mañana/tarde
+  const morningSlots = useMemo(() => timeSlots.filter(s => Number(s.value.split(':')[0]) < 12), [timeSlots])
+  const afternoonSlots = useMemo(() => timeSlots.filter(s => Number(s.value.split(':')[0]) >= 12), [timeSlots])
 
   // ✅ Validación optimizada
   const validateField = useCallback((field: keyof FormState, value: any): string | null => {
@@ -320,10 +358,11 @@ const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({
                 <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
                   Mañana
                 </div>
-                {TIME_SLOTS.filter(slot => slot.period === 'morning').map((slot) => (
+                {morningSlots.map((slot) => (
                   <SelectItem 
                     key={slot.value} 
                     value={slot.value}
+                    disabled={occupiedTimes.has(slot.value)}
                     className="pl-4"
                   >
                     <span className="flex items-center gap-2">
@@ -335,10 +374,11 @@ const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({
                 <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
                   Tarde
                 </div>
-                {TIME_SLOTS.filter(slot => slot.period === 'afternoon').map((slot) => (
+                {afternoonSlots.map((slot) => (
                   <SelectItem 
                     key={slot.value} 
                     value={slot.value}
+                    disabled={occupiedTimes.has(slot.value)}
                     className="pl-4"
                   >
                     <span className="flex items-center gap-2">

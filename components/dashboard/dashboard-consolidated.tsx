@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo, useCallback } from 'react';
+import React, { useState, memo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { 
   Stethoscope, 
@@ -13,10 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-import { useClinic } from '@/contexts/clinic-data-provider';
-import type { Appointment, Patient } from '@/lib/types';
-import { AppointmentStatusEnum, PatientStatusEnum } from '@/lib/types';
-import { clinicDayId, formatClinicShortDate } from '@/lib/timezone';
+import { useDashboardMetrics } from '@/hooks/use-dashboard-metrics';
 
 // Tipos y enums importados desde '@/lib/types' para evitar duplicación
 
@@ -57,110 +54,12 @@ const TREND_COLORS = {
   neutral: 'text-gray-500 dark:text-gray-400'
 } as const;
 
-// Hook de lógica optimizado
-const useOptimizedMetrics = (
-  appointments: Appointment[] | undefined,
-  patients: Patient[] | undefined,
-  period: Period
-): Metrics => {
-  return useMemo(() => {
-    const defaultMetrics: Metrics = {
-      primary: { 
-        todayConsultations: 0, 
-        totalPatients: patients?.length ?? 0, 
-        occupancyRate: 0 
-      },
-      clinical: { operatedPatients: 0 },
-      chartData: [],
-      periodComparison: { changePercent: 0 },
-    };
-
-    if (!appointments?.length || !patients?.length) {
-      return defaultMetrics;
-    }
-
-    const now = new Date();
-    const todayStartTimestamp = new Date(now).setHours(0, 0, 0, 0);
-    const periodDays = { '7d': 7, '30d': 30, '90d': 90 }[period];
-    // inicio del período al inicio del día (periodDays - 1 días atrás) para incluir hoy
-    const periodStart = new Date(new Date(todayStartTimestamp));
-    periodStart.setDate(periodStart.getDate() - (periodDays - 1));
-    const previousPeriodStart = new Date(periodStart);
-    previousPeriodStart.setDate(previousPeriodStart.getDate() - periodDays);
-
-    let todayConsultations = 0;
-    let currentPeriodTotal = 0;
-    let previousPeriodTotal = 0;
-
-    // Inicializar datos diarios para el rango seleccionado
-    const dailyData = new Map<string, { consultas: number; cirugias: number; label: string }>();
-    for (let i = periodDays - 1; i >= 0; i--) {
-      const d = new Date(todayStartTimestamp);
-      d.setDate(d.getDate() - i);
-      const dayKey = clinicDayId(d);
-      dailyData.set(dayKey, { consultas: 0, cirugias: 0, label: formatClinicShortDate(d) });
-    }
-
-    // Procesar citas
-    for (const apt of appointments) {
-      const aptDate = new Date(apt.fecha_hora_cita);
-      const aptTimestamp = aptDate.getTime();
-
-      if (aptTimestamp >= todayStartTimestamp) {
-        todayConsultations++;
-      }
-
-      if (aptDate >= periodStart) {
-        currentPeriodTotal++;
-      } else if (aptDate >= previousPeriodStart) {
-        previousPeriodTotal++;
-      }
-
-      // Agregar a buckets diarios dentro del período actual
-      if (aptDate >= periodStart && apt.estado_cita === AppointmentStatusEnum.COMPLETADA) {
-        const dayKey = clinicDayId(aptDate);
-        const entry = dailyData.get(dayKey);
-        if (entry) {
-          entry.consultas++;
-          const isSurgery = apt.motivos_consulta.some(m => 
-            m.toLowerCase().includes('ciru') || m.toLowerCase().includes('operac')
-          );
-          if (isSurgery) {
-            entry.cirugias++;
-          }
-        }
-      }
-    }
-
-    const operatedPatients = patients.reduce((acc, p) => 
-      p.estado_paciente === PatientStatusEnum.OPERADO ? acc + 1 : acc, 0
-    );
-
-    const changePercent = previousPeriodTotal > 0
-      ? Math.round(((currentPeriodTotal - previousPeriodTotal) / previousPeriodTotal) * 100)
-      : (currentPeriodTotal > 0 ? 100 : 0);
-
-    const chartData: ChartData[] = Array.from(dailyData.values()).map(d => ({
-      label: d.label,
-      consultas: d.consultas,
-      cirugias: d.cirugias,
-    }));
-
-    // Calcular tasa de ocupación basada en consultas del día
-    const targetDailyConsultations = 20; // Meta de consultas diarias
-    const occupancyRate = Math.min(100, Math.round((todayConsultations / targetDailyConsultations) * 100));
-
-    return {
-      primary: { 
-        todayConsultations, 
-        totalPatients: patients.length, 
-        occupancyRate 
-      },
-      clinical: { operatedPatients },
-      chartData,
-      periodComparison: { changePercent }
-    };
-  }, [appointments, patients, period]);
+// Métricas por defecto para estados de carga/error
+const defaultMetrics: Metrics = {
+  primary: { todayConsultations: 0, totalPatients: 0, occupancyRate: 0 },
+  clinical: { operatedPatients: 0 },
+  chartData: [],
+  periodComparison: { changePercent: 0 },
 };
 
 // Componente MetricCard optimizado
@@ -280,7 +179,7 @@ const DashboardHeader = memo<DashboardHeaderProps>(({
         ))}
       </div>
       <button 
-        onClick={handleRefresh} 
+        onClick={() => handleRefresh()} 
         disabled={isLoading} 
         aria-label="Actualizar datos" 
         className="p-2 sm:p-2.5 rounded-lg bg-slate-100 dark:bg-gray-800 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -357,13 +256,8 @@ const ProcedureChart = dynamic(() => import('../charts/procedure-chart'), {
 // Componente principal
 export default function DashboardEnhanced() {
   const [period, setPeriod] = useState<Period>('30d');
-  const clinic = useClinic();
-  const allAppointments = clinic.allAppointments as Appointment[];
-  const allPatients = clinic.allPatients as Patient[];
-  const isLoading = (clinic as any).isLoading ?? clinic.loading ?? false;
-  const { error, refetch } = clinic as { error: Error | null; refetch: () => void };
-  
-  const metrics = useOptimizedMetrics(allAppointments, allPatients, period);
+  const { data, isLoading, error, refetch } = useDashboardMetrics(period);
+  const metrics = (data ?? defaultMetrics) as Metrics;
 
   const getTrend = useCallback((value: number): Trend => {
     if (value > 2) return 'up';
@@ -384,7 +278,7 @@ export default function DashboardEnhanced() {
             {error.message}
           </p>
           <button 
-            onClick={refetch} 
+            onClick={() => refetch()} 
             className="mt-4 px-4 py-2 bg-rose-600 dark:bg-rose-700 text-white rounded-md hover:bg-rose-700 dark:hover:bg-rose-600 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
             aria-label="Reintentar carga de datos"
           >

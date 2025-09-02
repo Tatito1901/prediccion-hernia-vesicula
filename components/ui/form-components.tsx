@@ -31,8 +31,9 @@ export function TextField<T extends FieldValues>(props: {
   type?: React.ComponentProps<typeof Input>['type'];
   description?: string;
   className?: string;
+  inputProps?: React.ComponentProps<typeof Input>;
 }) {
-  const { form, name, label, placeholder, type = 'text', description, className } = props;
+  const { form, name, label, placeholder, type = 'text', description, className, inputProps } = props;
   return (
     <FormField
       control={form.control}
@@ -41,7 +42,7 @@ export function TextField<T extends FieldValues>(props: {
         <FormItem className={className}>
           <FormLabel>{label}</FormLabel>
           <FormControl>
-            <Input type={type} placeholder={placeholder} {...field} />
+            <Input type={type} placeholder={placeholder} {...inputProps} {...field} />
           </FormControl>
           {description ? <FormDescription>{description}</FormDescription> : null}
           <FormMessage />
@@ -98,8 +99,9 @@ export function PhoneField<T extends FieldValues>(props: {
   label: string;
   placeholder?: string;
   description?: string;
+  inputProps?: React.ComponentProps<typeof Input>;
 }) {
-  const { form, name, label, placeholder = '555-123-4567', description } = props;
+  const { form, name, label, placeholder = '555-123-4567', description, inputProps } = props;
   return (
     <FormField
       control={form.control}
@@ -110,8 +112,14 @@ export function PhoneField<T extends FieldValues>(props: {
           <FormControl>
             <Input
               placeholder={placeholder}
+              {...inputProps}
               {...field}
-              onChange={(e) => field.onChange(formatPhoneNumber(e.target.value))}
+              onChange={(e) => {
+                // Call any external onChange first, then apply formatting to RHF field
+                inputProps?.onChange?.(e as React.ChangeEvent<HTMLInputElement>);
+                const target = e.target as HTMLInputElement;
+                field.onChange(formatPhoneNumber(target.value));
+              }}
             />
           </FormControl>
           {description ? <FormDescription>{description}</FormDescription> : null}
@@ -128,8 +136,9 @@ export function EmailField<T extends FieldValues>(props: {
   label: string;
   placeholder?: string;
   description?: string;
+  inputProps?: React.ComponentProps<typeof Input>;
 }) {
-  const { form, name, label, placeholder = 'correo@ejemplo.com', description } = props;
+  const { form, name, label, placeholder = 'correo@ejemplo.com', description, inputProps } = props;
   return (
     <FormField
       control={form.control}
@@ -138,7 +147,7 @@ export function EmailField<T extends FieldValues>(props: {
         <FormItem>
           <FormLabel>{label}</FormLabel>
           <FormControl>
-            <Input type="email" placeholder={placeholder} {...field} />
+            <Input type="email" placeholder={placeholder} {...inputProps} {...field} />
           </FormControl>
           {description ? <FormDescription>{description}</FormDescription> : null}
           <FormMessage />

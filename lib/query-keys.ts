@@ -72,6 +72,9 @@ export const queryKeys = {
   dashboard: {
     all: ['dashboard'] as const,
     
+    // Métricas consolidadas del dashboard (API unificada)
+    metrics: (period: '7d' | '30d' | '90d' = '30d') => ['dashboard', 'metrics', { period }] as const,
+    
     // Tendencias históricas
     trends: (period?: string) => ['dashboard', 'trends', period] as const,
     

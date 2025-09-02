@@ -403,13 +403,9 @@ export const PatientCard = memo<PatientCardProps>(({
                     <span className="font-medium">{dateTime.time}</span>
                   </div>
 
-                  {/* Badges adicionales (edad, diagnóstico) */}
+                  {/* Badges adicionales (diagnóstico) */}
                   <div className="flex flex-wrap items-center gap-2">
-                    {typeof patient?.edad === 'number' && (
-                      <Badge variant="secondary" className="text-[10px] sm:text-xs">
-                        {patient.edad} años
-                      </Badge>
-                    )}
+                    
                     {patient?.diagnostico_principal && (
                       <Badge variant="outline" className="text-[10px] sm:text-xs max-w-[240px] truncate">
                         Dx: {dxLabel}

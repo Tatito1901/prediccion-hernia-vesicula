@@ -114,7 +114,6 @@ export interface AdmissionPayload {
   apellidos: string;
   telefono?: string;
   email?: string;
-  edad?: number;
   genero?: 'Masculino' | 'Femenino' | 'Otro';
   fecha_nacimiento?: string;
   ciudad?: string;

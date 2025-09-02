@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { EnrichedPatient, PatientStatusEnum } from "@/lib/types"
-import { format, differenceInYears, parseISO, isValid } from "date-fns"
+import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { useIsLargeScreen, useIsMobile } from "@/hooks/use-breakpoint"
 import EmptyState from "@/components/ui/empty-state"
@@ -131,28 +131,10 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
     const status = patient.estado_paciente ?? PatientStatusEnum.POTENCIAL
     const statusConfig = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG[PatientStatusEnum.INACTIVO]
     
-    let computedAge: number | null = null
-    if (patient.fecha_nacimiento) {
-      try {
-        const dob = parseISO(patient.fecha_nacimiento)
-        if (isValid(dob)) {
-          computedAge = differenceInYears(new Date(), dob)
-        }
-      } catch {}
-    }
-    
-    const ageDisplay = typeof patient.edad === "number" && !isNaN(patient.edad)
-      ? `${patient.edad} años`
-      : computedAge !== null
-        ? `${computedAge} años`
-        : "No disponible"
-    
     return {
       fullName,
       status,
       statusConfig,
-      ageDisplay,
-      computedAge,
       formattedRegistrationDate: formatCachedDate(patient.fecha_registro, "d MMM yyyy"),
       formattedDiagnosticDate: formatCachedDate(patient.fecha_registro, "d MMMM yyyy")
     }
@@ -259,11 +241,6 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0 space-y-1 bg-white dark:bg-slate-950">
-                    <InfoItem 
-                      icon={User} 
-                      label="Edad" 
-                      value={patientData.ageDisplay}
-                    />
                     
                     {patient.telefono && (
                       <>
@@ -346,12 +323,7 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
                             Seguimiento
                           </Badge>
                         )}
-                        {((typeof patient.edad === 'number' && patient.edad > 60) || 
-                          (patientData.computedAge !== null && patientData.computedAge > 60)) && (
-                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-                            Edad avanzada
-                          </Badge>
-                        )}
+                        
                         {patient.displayDiagnostico && 
                          normalizeKey(patient.displayDiagnostico).includes("RECIDIVANTE") && (
                           <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300">

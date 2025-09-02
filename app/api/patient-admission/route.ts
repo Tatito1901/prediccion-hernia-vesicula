@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/utils/supabase/server'
-import { ADMISSION_BUSINESS_RULES } from '@/lib/admission-business-rules'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { createApiResponse, createApiError } from '@/lib/api-response-types'
-import { AppointmentStatusEnum, ZDiagnosisDb } from '@/lib/types'
-import type { NewPatient, NewAppointment, DiagnosisEnum } from '@/lib/types'
+import { ZDiagnosisDb } from '@/lib/types'
 
 export const runtime = 'nodejs'
 
@@ -40,7 +39,6 @@ const AdmissionSchema = z.object({
     .regex(/^[0-9+\-\s()]{10,15}$/i, 'Teléfono inválido')
     .optional(),
   email: z.string().email().optional(),
-  edad: z.number().int().min(0).max(120).optional(),
   genero: z.enum(['Masculino', 'Femenino', 'Otro']).optional(),
   fecha_nacimiento: z.string().optional(),
   ciudad: z.string().optional(),
@@ -130,81 +128,69 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Insertar paciente
-    const patientInsert: NewPatient = {
-      nombre: payload.nombre,
-      apellidos: payload.apellidos,
-      telefono: payload.telefono,
-      email: payload.email,
-      edad: payload.edad,
-      genero: payload.genero,
-      fecha_nacimiento: payload.fecha_nacimiento,
-      ciudad: payload.ciudad,
-      estado: payload.estado,
-      antecedentes_medicos: payload.antecedentes_medicos,
-      numero_expediente: payload.numero_expediente,
-      seguro_medico: payload.seguro_medico,
-      comentarios_registro: payload.comentarios_registro,
-      diagnostico_principal: payload.diagnostico_principal as DiagnosisEnum,
-      contacto_emergencia_nombre: payload.contacto_emergencia_nombre,
-      contacto_emergencia_telefono: payload.contacto_emergencia_telefono,
-      creation_source: payload.creation_source,
+    // Crear paciente + cita de forma atómica vía RPC transaccional
+    const admin = createAdminClient()
+
+    const p_motivo_cita = (
+      (payload.diagnostico_principal_detalle && payload.diagnostico_principal_detalle.trim()) ||
+      (Array.isArray(payload.motivos_consulta) && payload.motivos_consulta.length > 0
+        ? payload.motivos_consulta.join(', ')
+        : payload.diagnostico_principal)
+    ) as string
+
+    // Construcción de argumentos para RPC (incluyendo edad requerida por la función SQL)
+    const p_edad_calculada = (() => {
+      const dob = payload.fecha_nacimiento;
+      if (!dob) return 0;
+      const birth = new Date(dob);
+      if (Number.isNaN(birth.getTime())) return 0;
+      const diffMs = Date.now() - birth.getTime();
+      const years = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+      return Math.max(0, years);
+    })();
+
+    const rpcArgs: any = {
+      p_nombre: payload.nombre,
+      p_apellidos: payload.apellidos,
+      p_telefono: payload.telefono ?? '',
+      p_email: payload.email ?? '',
+      p_edad: p_edad_calculada,
+      p_diagnostico_principal: payload.diagnostico_principal,
+      p_comentarios_registro: payload.comentarios_registro ?? '',
+      p_probabilidad_cirugia: payload.probabilidad_cirugia ?? 0,
+      p_fecha_hora_cita: payload.fecha_hora_cita,
+      p_motivo_cita,
+      p_doctor_id: payload.doctor_id ?? undefined,
+      p_creado_por_id: payload.creado_por_id ?? undefined,
     }
 
-    const { data: patientData, error: patientError } = await supabase
-      .from('patients')
-      .insert(patientInsert)
-      .select('id')
-      .single()
+    const { data: rpcData, error: rpcError } = await admin.rpc('create_patient_and_appointment', rpcArgs)
 
-    if (patientError) {
-      // Duplicado por teléfono u otros constraints
-      const errorResponse = createApiError(patientError.message, {
-        code: 'PATIENT_CREATION_ERROR',
-        details: { supabase_error: patientError }
-      });
-      return NextResponse.json(errorResponse, { status: 400 });
+    if (rpcError) {
+      const errorResponse = createApiError(rpcError.message, {
+        code: 'ADMISSION_RPC_ERROR',
+        details: { supabase_error: rpcError }
+      })
+      return NextResponse.json(errorResponse, { status: 400 })
     }
 
-    const patient_id = patientData!.id as string
-
-    // Insertar cita
-    const appointmentInsert: NewAppointment = {
-      patient_id,
-      doctor_id: payload.doctor_id ?? null,
-      fecha_hora_cita: payload.fecha_hora_cita,
-      motivos_consulta: payload.motivos_consulta as DiagnosisEnum[],
-      estado_cita: AppointmentStatusEnum.PROGRAMADA,
-      agendado_por: payload.creado_por_id,
-      probabilidad_cirugia_inicial: payload.probabilidad_cirugia ?? null,
-      descripcion_motivos: payload.diagnostico_principal_detalle,
-    }
-
-    const { data: apptData, error: apptError } = await supabase
-      .from('appointments')
-      .insert(appointmentInsert)
-      .select('id')
-      .single()
-
-    if (apptError) {
-      // rollback básico
-      await supabase.from('patients').delete().eq('id', patient_id)
-      const errorResponse = createApiError(apptError.message, {
-        code: 'APPOINTMENT_CREATION_ERROR',
-        details: { supabase_error: apptError, patient_id }
-      });
-      return NextResponse.json(errorResponse, { status: 400 });
+    const result = rpcData && rpcData[0]
+    if (!result || !result.success) {
+      const errorResponse = createApiError(result?.message || 'No se pudo completar la admisión', {
+        code: 'ADMISSION_FAILED'
+      })
+      return NextResponse.json(errorResponse, { status: 400 })
     }
 
     const successResponse = createApiResponse({
-      patient_id,
-      appointment_id: apptData!.id as string,
+      patient_id: result.created_patient_id,
+      appointment_id: result.created_appointment_id,
       next_steps: ['confirmar_cita', 'enviar_recordatorio'],
     }, {
       message: 'Admisión creada exitosamente'
-    });
-    
-    return NextResponse.json(successResponse, { status: 201 });
+    })
+
+    return NextResponse.json(successResponse, { status: 201 })
   } catch (error: any) {
     const errorResponse = createApiError(error?.message || 'Error interno del servidor', {
       code: 'INTERNAL_SERVER_ERROR',
