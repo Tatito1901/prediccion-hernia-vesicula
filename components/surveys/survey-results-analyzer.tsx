@@ -53,9 +53,15 @@ import {
 } from "lucide-react"
 // ❌ ELIMINADO: import { usePatient } - Ya no es necesario, recibimos datos vía props
 import { useCreateAppointment } from '@/hooks/use-appointments';
-// TODO: [Refactor] The helper file was not found. The logic for these functions needs to be restored.
-// import { calculateConversionScore, generateInsights, generateRecommendationCategories } from "@/lib/utils/survey-analyzer-helpers"
-import { AppointmentStatusEnum, type Patient, type PatientSurveyData } from "@/lib/types"
+import { usePatientSurvey } from '@/hooks/use-patient-survey';
+import { AppointmentStatusEnum, type Appointment, type Patient, type PatientSurveyData } from '@/lib/types';
+import { 
+  calculateConversionScore, 
+  generateInsights, 
+  generateRecommendationCategories,
+  calculateSurgeryProbability,
+  calculateBenefitRiskRatio
+} from "@/lib/utils/survey-analyzer-helpers"
 
 // Define the structure for conversion insights
 export interface ConversionInsight {
@@ -97,43 +103,23 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
   // AHORA: Ya no hay fetching aquí. `patientData` se usa directamente.
   const createAppointment = useCreateAppointment();
 
-  // TODO: [Refactor] Survey data needs to be fetched separately for this patient.
-  const surveyData: PatientSurveyData | null = null; 
+  // Fetch survey data for this patient
+  const { data: surveyData, isLoading: surveyLoading } = usePatientSurvey(patientData.id); 
 
   const [modelError, setModelError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState("resumen");
+  const [activeTab, setActiveTab] = useState('analysis')
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
 
   const analysisResult = useMemo(() => {
     if (!patientData || !surveyData) return null;
 
-    const surgeryProbability = 0.75; // Mocked
-    
-    // TODO: [Refactor] Restore this logic once the helper file is found.
-    const conversionScore = 0;
-    const insights: ConversionInsight[] = [];
-    const recommendationCategories: RecommendationCategory[] = [];
+    // Usar las funciones auxiliares reales en lugar de valores mockeados
+    const surgeryProbability = calculateSurgeryProbability(patientData, surveyData);
+    const conversionScore = calculateConversionScore(patientData, surveyData);
+    const insights = generateInsights(patientData, surveyData);
+    const recommendationCategories = generateRecommendationCategories(patientData, surveyData, surgeryProbability);
     const persuasivePoints = generatePersuasivePoints(patientData, surveyData);
-
-    // TODO: [Refactor] This logic is based on the old, flat survey structure.
-    // It needs to be rewritten to use the normalized `surveyData.answers` array.
-    /*
-    const calculateBenefitScore = (survey: PatientSurveyData) => {
-      const severityScore = survey.severidadSintomasActuales === "severa" ? 3 : (survey.severidadSintomasActuales === "moderada" ? 2 : 1)
-      const impactScore = survey.afectacionActividadesDiarias === "mucho" ? 3 : (survey.afectacionActividadesDiarias === "moderadamente" ? 2 : 1)
-      return (severityScore + impactScore) * 10
-    }
-
-    const calculateRiskScore = (survey: PatientSurveyData) => {
-      let score = 0
-      score += (survey.condicionesMedicasCronicas?.length || 0) * 5
-      return score || 1
-    }
-
-    const benefitScore = calculateBenefitScore(surveyData);
-    const riskScore = calculateRiskScore(surveyData);
-    const benefitRiskRatio = benefitScore / riskScore;
-    */
-    const benefitRiskRatio = 0;
+    const benefitRiskRatio = calculateBenefitRiskRatio(patientData, surveyData);
 
     return {
       surgeryProbability,
@@ -144,6 +130,29 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
       benefitRiskRatio
     }
   }, [patientData, surveyData]);
+
+  // Show loading state while fetching survey data
+  if (surveyLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Cargando datos de encuesta...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show message if no survey data available
+  if (!surveyData || !analysisResult) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <p className="text-muted-foreground">No hay datos de encuesta disponibles para este paciente.</p>
+        </div>
+      </div>
+    );
+  }
 
   // ❌ ELIMINADO: useEffect para patientError - Ya no es necesario porque no hay fetching
 
@@ -168,14 +177,78 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
     // queryClient.invalidateQueries(patientKeys.detail(patient_id)); // If you have queryClient access
   }
 
-  // TODO: [Refactor] This logic needs to be rewritten to use the new normalized survey data structure.
   function generatePersuasivePoints(patient: Patient, survey: PatientSurveyData | null): PersuasivePoint[] {
     const points: PersuasivePoint[] = []
-    if (!survey) return points
+    if (!survey || !survey.answers) return points
 
-    // Example of how to access new data structure (to be implemented)
-    // const painSeverityAnswer = survey.answers.find(a => a.question?.text === 'Severidad de los síntomas');
-    // if (painSeverityAnswer?.answer_text === 'severa') { ... }
+    // Analizar respuestas para generar puntos persuasivos
+    const severityAnswer = survey.answers.find((a: any) => 
+      a.question?.text?.toLowerCase().includes('severidad')
+    )
+    const impactAnswer = survey.answers.find((a: any) => 
+      a.question?.text?.toLowerCase().includes('actividad')
+    )
+    const durationAnswer = survey.answers.find((a: any) => 
+      a.question?.text?.toLowerCase().includes('tiempo')
+    )
+
+    // Punto clínico sobre severidad
+    if (severityAnswer?.answer_text?.toLowerCase().includes('severo')) {
+      points.push({
+        id: 'clinical-severity',
+        title: 'Alivio Significativo del Dolor',
+        description: 'La cirugía puede proporcionar alivio duradero de sus síntomas severos',
+        icon: Heart,
+        category: 'clinical',
+        strength: 'high'
+      })
+    }
+
+    // Punto sobre calidad de vida
+    if (impactAnswer?.answer_text?.toLowerCase().includes('mucho')) {
+      points.push({
+        id: 'quality-life',
+        title: 'Recuperación de Calidad de Vida',
+        description: 'Podrá retomar sus actividades diarias sin limitaciones',
+        icon: Activity,
+        category: 'quality',
+        strength: 'high'
+      })
+    }
+
+    // Punto sobre tiempo de padecimiento
+    if (durationAnswer?.answer_text?.toLowerCase().includes('año')) {
+      points.push({
+        id: 'chronic-relief',
+        title: 'Fin al Padecimiento Crónico',
+        description: 'No tiene que seguir viviendo con dolor después de tanto tiempo',
+        icon: Shield,
+        category: 'emotional',
+        strength: 'medium'
+      })
+    }
+
+    // Punto sobre seguridad del procedimiento
+    points.push({
+      id: 'procedure-safety',
+      title: 'Procedimiento Seguro y Probado',
+      description: 'Técnicas modernas con alta tasa de éxito y rápida recuperación',
+      icon: Stethoscope,
+      category: 'clinical',
+      strength: 'medium'
+    })
+
+    // Punto económico si es relevante
+    if (patient.edad && patient.edad < 65) {
+      points.push({
+        id: 'economic-benefit',
+        title: 'Retorno a Productividad',
+        description: 'Recuperación completa le permitirá volver a sus actividades laborales',
+        icon: DollarSign,
+        category: 'financial',
+        strength: 'medium'
+      })
+    }
 
     return points;
   }

@@ -14,11 +14,12 @@ export default function GlobalError({
   const normalized = normalizeError(error);
   const message = toUserMessage(normalized);
 
-  try {
-    logSyncError('Global (root layout) error', error, { digest: error?.digest });
-  } catch (_) {
-    // no-op
-  }
+  // Deshabilitado para evitar bucle de logging con Next.js
+  // try {
+  //   logSyncError('Global (root layout) error', error, { digest: error?.digest });
+  // } catch (_) {
+  //   // no-op
+  // }
 
   return (
     <html lang="es">

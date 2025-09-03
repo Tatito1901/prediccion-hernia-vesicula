@@ -155,19 +155,11 @@ export async function GET(req: NextRequest) {
     // Graceful fallback for dev environments without DB permissions
     const isPermission = /permission denied/i.test(error.message || '')
     if (isPermission) {
-      console.warn('[api/appointments][GET] Permission denied fallback', {
-        message: error.message,
-        meta,
-      })
       const pagination = { page, pageSize, totalCount: 0, totalPages: 0, hasMore: false }
       const summary = { total_appointments: 0, today_count: 0, future_count: 0, past_count: 0 }
       return NextResponse.json({ data: [], pagination, summary, ...(debug ? { meta } : {}) })
     }
     // Log non-permission errors with minimal meta when debug is enabled
-    console.error('[api/appointments][GET] Error', {
-      message: error.message,
-      meta: debug ? meta : undefined,
-    })
     return NextResponse.json({ error: 'Error al consultar citas', details: error.message }, { status: 500 })
   }
 

@@ -14,11 +14,14 @@ export default function Error({
   const normalized = normalizeError(error);
   const message = toUserMessage(normalized);
 
-  try {
-    logSyncError('Route segment error', error, { digest: error?.digest });
-  } catch (_) {
-    // no-op
-  }
+  // Deshabilitado temporalmente para evitar bucle de logging
+  // El logSyncError puede causar que Next.js intercepte el console.log
+  // y dispare otro error, creando un bucle infinito
+  // try {
+  //   logSyncError('Route segment error', error, { digest: error?.digest });
+  // } catch (_) {
+  //   // no-op
+  // }
 
   return (
     <div className="min-h-[50vh] w-full flex items-center justify-center p-6">

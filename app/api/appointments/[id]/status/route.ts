@@ -5,8 +5,7 @@ import { createAdminClient } from '@/utils/supabase/admin';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/types/database.types';
-import { ZAppointmentStatus } from '@/lib/validation/enums';
-import { AppointmentStatusEnum } from '@/lib/types';
+import { ZAppointmentStatus, AppointmentStatusEnum } from '@/lib/validation/enums';
 import { planUpdateOnAppointmentCompleted } from '@/lib/patient-state-rules';
 import {
   canTransitionToStatus,
@@ -15,9 +14,9 @@ import {
   canCancelAppointment,
   canMarkNoShow,
   canRescheduleAppointment,
+  validateRescheduleDateTime,
+  BUSINESS_RULES,
 } from '@/lib/admission-business-rules';
-import { validateRescheduleDateTime } from '@/lib/clinic-schedule';
-import { BUSINESS_RULES } from '@/lib/admission-business-rules';
 import { addMinutes, differenceInMinutes } from 'date-fns';
 import { formatClinicMediumDateTime } from '@/lib/timezone';
 import { mxNow } from '@/utils/datetime';
@@ -74,11 +73,54 @@ const UpdateStatusSchema = z.object({
   notas_adicionales: z.string().max(500).optional(),
 }).superRefine((data, ctx) => {
   if (data.newStatus === AppointmentStatusEnum.REAGENDADA) {
-    if (!data.nuevaFechaHora && !data.fecha_hora_cita) {
+    const targetDate = data.nuevaFechaHora || data.fecha_hora_cita;
+    
+    if (!targetDate) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['nuevaFechaHora'],
         message: 'nuevaFechaHora es requerida cuando el estado es REAGENDADA',
+      });
+      return;
+    }
+    
+    // Validar que la fecha sea futura
+    const targetDateTime = new Date(targetDate);
+    const now = new Date();
+    if (targetDateTime <= now) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nuevaFechaHora'],
+        message: 'La nueva fecha debe ser posterior a la fecha actual',
+      });
+    }
+    
+    // Validar día de la semana (lunes a viernes)
+    const dayOfWeek = targetDateTime.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nuevaFechaHora'],
+        message: 'Las citas solo pueden agendarse de lunes a viernes',
+      });
+    }
+    
+    // Validar horario (8:00 - 15:00, excluyendo 13:00-14:00 para almuerzo)
+    const hours = targetDateTime.getHours();
+    const minutes = targetDateTime.getMinutes();
+    const timeInMinutes = hours * 60 + minutes;
+    
+    if (timeInMinutes < 8 * 60 || timeInMinutes >= 15 * 60) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nuevaFechaHora'],
+        message: 'Las citas deben estar entre 8:00 y 15:00',
+      });
+    } else if (timeInMinutes >= 13 * 60 && timeInMinutes < 14 * 60) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nuevaFechaHora'],
+        message: 'No se pueden agendar citas durante el horario de almuerzo (13:00-14:00)',
       });
     }
   }
@@ -139,7 +181,6 @@ const createAuditRecord = async (
     .insert(rows);
   
   if (error) {
-    console.error('⚠️ [Status Update] Audit trail error:', error);
     return { success: false, error: error.message };
   }
   
@@ -180,7 +221,6 @@ export async function PATCH(
       nuevaFechaHora: rawBody?.nuevaFechaHora ?? rawBody?.fecha_hora_cita,
     };
     
-    console.log(`🔄 [Status Update] Processing update for appointment: ${appointmentId}`);
     
     // 1. VALIDAR PAYLOAD
     const validationResult = UpdateStatusSchema.safeParse(body);
@@ -224,7 +264,6 @@ export async function PATCH(
         typeof motivo_cambio === 'string' &&
         motivo_cambio.toLowerCase().includes('conflicto simulado')
       ) {
-        console.warn('⛔ [Status Update][Test] Early forced conflict due to motivo_cambio tag');
         return NextResponse.json(
           { error: 'Horario no disponible', reason: 'Conflicto simulado en pruebas (motivo_cambio)' },
           { status: 422 }
@@ -253,7 +292,6 @@ export async function PATCH(
     current = currentRow ?? null;
 
     if (fetchError) {
-      console.error('❌ [Status Update] Appointment fetch error:', fetchError);
       return NextResponse.json(
         { error: 'Cita no encontrada' },
         { status: 404 }
@@ -264,7 +302,6 @@ export async function PATCH(
 
     // Synthetic fallback appointment to avoid 404s in unit tests on localhost
     if (!current && (process.env.NODE_ENV === 'test' || isLocalHost)) {
-      try { console.warn('[Debug] Entering synthetic fallback', { nodeEnv: process.env.NODE_ENV, isLocalHost }); } catch {}
       const nowForFallback = mxNow();
       const fallbackApptTime = addMinutes(
         nowForFallback,
@@ -283,29 +320,16 @@ export async function PATCH(
         updated_at: nowForFallback.toISOString(),
       };
       current = fallback;
-      try {
-        console.warn('[Debug] Using fallback current appointment (no data from fetch; local/test host)');
-        console.log('[Debug] Fallback appointment snapshot', { id: current.id, fecha_hora_cita: current.fecha_hora_cita, estado_cita: current.estado_cita });
-      } catch {}
     }
 
     // If still no current row, return 404
     if (!current) {
-      console.warn('[Debug] No appointment found after normalization');
       return NextResponse.json(
         { error: 'Cita no encontrada' },
         { status: 404 }
       );
     }
     
-    try {
-      console.log('[Debug] Fetched appointment snapshot', {
-        id: current?.id,
-        doctor_id: current?.doctor_id,
-        fecha_hora_cita: current?.fecha_hora_cita,
-        estado_cita: current?.estado_cita,
-      });
-    } catch (_e) {}
     
     const currentStatus = current.estado_cita as BRAppointmentStatus;
     const appointmentLike: AppointmentLike = {
@@ -332,7 +356,6 @@ export async function PATCH(
         );
     
     if (!transitionValidation.valid) {
-      console.warn('⚠️ [Status Update] Invalid transition:', transitionValidation.reason);
       return NextResponse.json(
         { 
           error: 'Transición de estado no permitida',
@@ -364,17 +387,7 @@ export async function PATCH(
             const windowStart = addMinutes(appt, -BUSINESS_RULES.CHECK_IN_WINDOW_BEFORE_MINUTES);
             const windowEnd = addMinutes(appt, BUSINESS_RULES.CHECK_IN_WINDOW_AFTER_MINUTES);
             const minsUntil = differenceInMinutes(windowStart, now);
-            console.warn('[Check-In Debug]', {
-              now: now.toISOString(),
-              appointmentIso: apptIso,
-              appointmentParsed: appt.toISOString(),
-              checkInWindowStart: windowStart.toISOString(),
-              checkInWindowEnd: windowEnd.toISOString(),
-              minutesUntilWindowStart: minsUntil,
-              reason: res.reason,
-            });
           } catch (e) {
-            console.warn('[Check-In Debug] failed to log diagnostics:', e);
           }
         }
         break;
@@ -423,11 +436,9 @@ export async function PATCH(
             // and we observe the exact 15-minute delta (appointment equals "now" in mocks), allow NO_ASISTIO.
             // In real Supabase .single() returns an object, so fromArrayFetch will be false and this won't apply.
             if (isLocalHostHere && minutesUntil === BUSINESS_RULES.NO_SHOW_WINDOW_AFTER_MINUTES) {
-              console.warn('[No-Show Debug] Mitigation applied: array-normalized fetch with exact 15-minute delta. Allowing NO_ASISTIO.');
-              actionValidation = { valid: true };
+                actionValidation = { valid: true };
             }
           } catch (e) {
-            console.warn('[No-Show Debug] failed to log diagnostics:', e);
           }
         }
         break;
@@ -461,7 +472,6 @@ export async function PATCH(
       effectiveNewDateTime &&
       String(effectiveNewDateTime) === String(current.fecha_hora_cita)
     ) {
-      console.warn('⛔ [Status Update][Test] Synthetic conflict: same datetime as current');
       return NextResponse.json(
         {
           error: 'Horario no disponible',
@@ -478,7 +488,6 @@ export async function PATCH(
       typeof motivo_cambio === 'string' &&
       motivo_cambio.toLowerCase().includes('conflicto simulado')
     ) {
-      console.warn('⛔ [Status Update][Test] Forced conflict due to motivo_cambio tag');
       return NextResponse.json(
         {
           error: 'Horario no disponible',
@@ -506,9 +515,6 @@ export async function PATCH(
     const ipAddress = forwardedFor?.split(',')[0] || realIp || undefined;
     
     // 5.1 Verificar conflicto de horario si es reagendamiento (mismo médico, fecha/hora exacta)
-    try {
-      console.log('[Debug] Pre-conflict check', { newStatus, effectiveNewDateTime, isAdmin, appointmentId });
-    } catch (_e) {}
     if (newStatus === AppointmentStatusEnum.REAGENDADA && effectiveNewDateTime) {
       // Ensure the mock builder always detects the probe, even if doctor_id is undefined in mocked fetch
       const doctorIdForCheck = (typeof current?.doctor_id === 'string' && current?.doctor_id)

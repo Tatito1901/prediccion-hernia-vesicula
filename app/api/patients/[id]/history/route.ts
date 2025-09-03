@@ -27,7 +27,6 @@ export async function GET(
     const offset = parseInt(searchParams.get('offset') || '0');
     const includeHistory = searchParams.get('includeHistory') === 'true';
 
-    console.log(`[API] Obteniendo historial del paciente: ${patientId}`);
 
     // 1. OBTENER DATOS DEL PACIENTE (solo columnas existentes en el esquema actual)
     const { data: patient, error: patientError } = await supabase
@@ -50,7 +49,6 @@ export async function GET(
 
     const patientFound = !patientError && !!patient;
     if (!patientFound) {
-      console.warn('[API] Paciente no encontrado, devolviendo historial parcial. Detalle:', patientError?.message || patientError);
     }
     // Construir safePatient temprano para usar en estadísticas y respuesta
     const safePatient = patientFound ? patient : {
@@ -85,7 +83,6 @@ export async function GET(
       .range(offset, offset + limit - 1);
 
     if (appointmentsError) {
-      console.error('[API] Error al obtener citas:', appointmentsError);
       return NextResponse.json(
         { error: 'Error al obtener el historial de citas' }, 
         { status: 500 }
@@ -246,12 +243,10 @@ export async function GET(
       }
     };
 
-    console.log(`[API] Historial obtenido: ${appointments?.length || 0} citas, ${surveys?.length || 0} encuestas para paciente ${patientId}`);
 
     return NextResponse.json(response);
 
   } catch (error: any) {
-    console.error('[API] Error en obtención de historial:', error);
     return NextResponse.json(
       { error: 'Error interno del servidor', details: error.message }, 
       { status: 500 }

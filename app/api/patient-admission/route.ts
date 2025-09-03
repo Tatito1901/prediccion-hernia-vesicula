@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createApiResponse, createApiError } from '@/lib/api-response-types'
-import { ZDiagnosisDb } from '@/lib/types'
+import { ZDiagnosisDb } from '@/lib/validation/enums'
 
 export const runtime = 'nodejs'
 

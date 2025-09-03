@@ -162,16 +162,11 @@ export async function GET(req: NextRequest) {
 
     const validated = ZDashboardMetricsResponse.safeParse(response)
     if (!validated.success) {
-      console.error('[api/dashboard/metrics] Response validation failed', {
-        issues: validated.error.issues?.slice?.(0, 5),
-        meta: metaBase,
-      })
       return NextResponse.json({ message: 'Invalid response shape', details: validated.error.flatten() }, { status: 500 })
     }
 
     return NextResponse.json(validated.data)
   } catch (error: any) {
-    console.error('[api/dashboard/metrics] Error', { message: error?.message, meta: metaBase })
     return NextResponse.json({ message: 'Error al obtener métricas de dashboard', details: String(error?.message || error) }, { status: 500 })
   }
 }

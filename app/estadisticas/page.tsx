@@ -37,18 +37,6 @@ const EstadisticasContent = () => {
   // Backend unified statistics (RPC via /api/statistics)
   const analytics = useAnalyticsData();
 
-  // 🐛 DEBUG: Log loading states to verify they're triggered
-  useEffect(() => {
-    console.log('[DEBUG] Loading states:', {
-      clinic: { isLoading, error: !!error },
-      analytics: { 
-        isLoading: analytics.isLoading, 
-        isFetching: analytics.isFetching, 
-        error: !!analytics.error 
-      },
-      timestamp: new Date().toLocaleTimeString()
-    });
-  }, [isLoading, analytics.isLoading, analytics.isFetching, error, analytics.error]);
 
   const [filters, setFilters] = useState<Filters>(INITIAL_FILTERS);
   const [activeSection, setActiveSection] = useState<'overview' | 'appointments' | 'surveys'>('overview');
@@ -294,17 +282,6 @@ const EstadisticasContent = () => {
       {/* Contenido según la sección activa */}
       {activeSection === 'overview' && (
         <div className="space-y-6">
-          {/* 🐛 DEBUG: Always visible skeleton for testing */}
-          <div>
-            <h2 className="text-lg font-semibold mb-4">🐛 TEST: Always Visible Skeleton</h2>
-            <MetricsGrid 
-              metrics={[]} 
-              isLoading={true} 
-              columns={4} 
-              variant="detailed"
-            />
-          </div>
-
           {/* Métricas principales */}
           <div>
             <h2 className="text-lg font-semibold mb-4">Resumen General</h2>

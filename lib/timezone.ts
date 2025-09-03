@@ -1,7 +1,7 @@
 // lib/timezone.ts
 // Utilidades centralizadas para formateo y conversión de fechas usando la zona horaria de la clínica
 
-import { CLINIC_TIMEZONE } from '@/lib/clinic-schedule';
+import { CLINIC_TIMEZONE } from '@/lib/admission-business-rules';
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 import { addDays } from 'date-fns'
 

@@ -83,11 +83,15 @@ const isLunchTime = (date: Date): boolean => {
   return scheduleIsLunchTime(date);
 };
 
-const wasRecentlyUpdated = (appointment: AppointmentLike, minutes: number = BUSINESS_RULES.RAPID_CHANGE_COOLDOWN_MINUTES): boolean => {
+const wasRecentlyUpdated = (
+  appointment: AppointmentLike,
+  referenceTime: Date,
+  minutes: number = BUSINESS_RULES.RAPID_CHANGE_COOLDOWN_MINUTES
+): boolean => {
   const tsRaw = appointment.updated_at ? parseISO(appointment.updated_at) : null;
   const ts = tsRaw && isValid(tsRaw) ? tsRaw : null;
   if (!ts) return false;
-  return differenceInMinutes(mxNow(), ts) < minutes;
+  return differenceInMinutes(referenceTime, ts) < minutes;
 };
 
 // ==================== VALIDADORES ESPECÍFICOS POR ACCIÓN ====================
@@ -136,8 +140,8 @@ export const canCheckIn = (
       return { valid: true };
     },
     // Cambios recientes
-    ({ appointment }) => {
-      if (wasRecentlyUpdated(appointment)) {
+    ({ appointment, now }) => {
+      if (wasRecentlyUpdated(appointment, now)) {
         return { valid: false, reason: 'Espere unos momentos antes de realizar otra acción' };
       }
       return { valid: true };

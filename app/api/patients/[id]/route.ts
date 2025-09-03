@@ -33,7 +33,6 @@ export async function GET(
           { status: 404 }
         );
       }
-      console.error('Error fetching patient:', error);
       return NextResponse.json(
         createApiError('Error al obtener el paciente', { details: error.message, code: 'INTERNAL_ERROR' }),
         { status: 500 }
@@ -43,7 +42,6 @@ export async function GET(
     return NextResponse.json(createApiResponse(patient));
 
   } catch (error: any) {
-    console.error('Error in GET /api/patients/[id]:', error);
     return NextResponse.json(
       createApiError('Error interno del servidor', { details: error.message, code: 'INTERNAL_ERROR' }),
       { status: 500 }
@@ -82,7 +80,6 @@ export async function PATCH(
           { status: 404 }
         );
       }
-      console.error('Error checking patient existence:', fetchError);
       return NextResponse.json(
         createApiError('Error al verificar el paciente', { details: fetchError.message, code: 'INTERNAL_ERROR' }),
         { status: 500 }
@@ -128,7 +125,6 @@ export async function PATCH(
       .single();
 
     if (updateError) {
-      console.error('Error updating patient:', updateError);
       return NextResponse.json(
         createApiError('Error al actualizar el paciente', { details: updateError.message, code: 'INTERNAL_ERROR' }),
         { status: 500 }
@@ -138,7 +134,6 @@ export async function PATCH(
     return NextResponse.json(createApiResponse(updatedPatient));
 
   } catch (error: any) {
-    console.error('Error in PATCH /api/patients/[id]:', error);
     return NextResponse.json(
       createApiError('Error interno del servidor', { details: error.message, code: 'INTERNAL_ERROR' }),
       { status: 500 }
@@ -169,7 +164,6 @@ export async function DELETE(
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting patient:', error);
       return NextResponse.json(
         createApiError('Error al eliminar el paciente', { details: error.message, code: 'INTERNAL_ERROR' }),
         { status: 500 }
@@ -179,7 +173,6 @@ export async function DELETE(
     return NextResponse.json(createApiResponse({ id }, { message: 'Paciente eliminado exitosamente' }));
 
   } catch (error: any) {
-    console.error('Error in DELETE /api/patients/[id]:', error);
     return NextResponse.json(
       createApiError('Error interno del servidor', { details: error.message, code: 'INTERNAL_ERROR' }),
       { status: 500 }

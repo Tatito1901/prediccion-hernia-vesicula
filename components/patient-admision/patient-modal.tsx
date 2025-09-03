@@ -1,15 +1,21 @@
 // components/patient-admission/patient-modal.tsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { TextField, PhoneField, EmailField, GenderSelectField, DiagnosisSelectField, DatePickerField, TimeSelectField } from '@/components/ui/form-components';
+import {
+  TextField, PhoneField, EmailField, GenderSelectField,
+  DiagnosisSelectField, DatePickerField, TimeSelectField
+} from '@/components/ui/form-components';
 import { Form } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { addDays, format, isBefore, isSunday, startOfDay } from 'date-fns';
+import {
+  addDays, format, isSunday, startOfDay, isWithinInterval
+} from 'date-fns';
 import { User2, CalendarIcon, Loader2, Stethoscope, CheckCircle2 } from 'lucide-react';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import { useClinic } from '@/contexts/clinic-data-provider';
@@ -25,14 +31,16 @@ interface PatientModalProps {
   onSuccess?: () => void;
 }
 
-// Constantes hoisted para evitar recreaciones en cada render
+// ────────────────────────────────────────────────────────────────────────────
+// Constantes
+// ────────────────────────────────────────────────────────────────────────────
 const BLOCKING_STATUSES: AppointmentStatus[] = [
   AppointmentStatusEnum.PROGRAMADA,
   AppointmentStatusEnum.CONFIRMADA,
   AppointmentStatusEnum.PRESENTE,
 ];
 
-// Schema de validación con Zod
+// Validación
 const QuickAdmissionSchema = z.object({
   nombre: z.string().min(2, 'Mínimo 2 caracteres'),
   apellidos: z.string().min(2, 'Mínimo 2 caracteres'),
@@ -46,13 +54,24 @@ const QuickAdmissionSchema = z.object({
 
 type FormData = z.infer<typeof QuickAdmissionSchema>;
 
-// Función helper para validar fechas permitidas en el calendario
+type ClinicAppointment = {
+  estado_cita: AppointmentStatus;
+  fecha_hora_cita: string; // ISO
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Utilidades
+// ────────────────────────────────────────────────────────────────────────────
 const isValidDate = (date: Date): boolean => {
   const today = startOfDay(new Date());
   const maxDate = addDays(today, 90);
-  return !isBefore(date, today) && !isBefore(maxDate, date) && !isSunday(date);
+  if (isSunday(date)) return false;
+  return isWithinInterval(date, { start: today, end: maxDate });
 };
 
+// ────────────────────────────────────────────────────────────────────────────
+// Componente
+// ────────────────────────────────────────────────────────────────────────────
 export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
   const [open, setOpen] = useState(false);
   const { fetchSpecificAppointments } = useClinic();
@@ -73,25 +92,40 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
     },
   });
 
-  const selectedDate = form.watch('fecha');
-  const [occupiedTimes, setOccupiedTimes] = useState<Set<string>>(new Set());
+  // Enfoque inicial al abrir
+  const nombreInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Genera los slots de tiempo disponibles, memoizado para rendimiento
-  const timeSlots = useMemo(
-    () => generateTimeSlots({ baseDate: selectedDate || new Date(), includeLunch: false }),
+  // Observa la fecha seleccionada
+  const selectedDate = form.watch('fecha');
+  const dateStr = useMemo(
+    () => (selectedDate ? format(selectedDate, 'yyyy-MM-dd') : undefined),
     [selectedDate]
   );
 
-  // Efecto para buscar los horarios ocupados cuando cambia la fecha seleccionada
+  const [occupiedTimes, setOccupiedTimes] = useState<Set<string>>(() => new Set());
+
+  // Memoriza props de inputs para evitar recreaciones
+  const givenNameProps = useMemo(() => ({ autoComplete: 'given-name', autoFocus: true, ref: nombreInputRef }), []);
+  const familyNameProps = useMemo(() => ({ autoComplete: 'family-name' }), []);
+  const telProps = useMemo(() => ({ autoComplete: 'tel' }), []);
+  const emailProps = useMemo(() => ({ autoComplete: 'email' }), []);
+
+  // Slots de tiempo: sólo generar si hay fecha
+  const timeSlots = useMemo(() => {
+    if (!selectedDate) return [];
+    return generateTimeSlots({ baseDate: selectedDate, includeLunch: false });
+  }, [selectedDate]);
+
+  // Carga de horarios ocupados (por día) con AbortController y guardas
   useEffect(() => {
-    if (!selectedDate) {
-      setOccupiedTimes(new Set());
+    if (!dateStr) {
+      setOccupiedTimes(prev => (prev.size ? new Set() : prev));
       return;
     }
 
     const controller = new AbortController();
-    const loadAppointments = async () => {
-      const dateStr = selectedDate.toISOString().split('T')[0];
+
+    (async () => {
       try {
         const res = await fetchSpecificAppointments({
           dateFilter: 'range',
@@ -103,33 +137,34 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
 
         if (controller.signal.aborted) return;
 
-        const occupied = new Set<string>();
-        res.data?.forEach((apt: any) => {
+        const next = new Set<string>();
+        (res.data as ClinicAppointment[] | undefined)?.forEach((apt) => {
           if (BLOCKING_STATUSES.includes(apt.estado_cita)) {
-            const time = format(new Date(apt.fecha_hora_cita), 'HH:mm');
-            occupied.add(time);
+            next.add(format(new Date(apt.fecha_hora_cita), 'HH:mm'));
           }
         });
-        setOccupiedTimes(occupied);
+
+        // Solo setea si cambió
+        setOccupiedTimes((prev) => {
+          if (prev.size === next.size && [...prev].every(t => next.has(t))) return prev;
+          return next;
+        });
       } catch (err) {
         if (!controller.signal.aborted) {
+          // Opcional: toast no intrusivo
+          // toast.error('No se pudieron cargar horarios ocupados');
           console.error('Error cargando las citas:', err);
         }
       }
-    };
+    })();
 
-    loadAppointments();
-    
-    // Función de limpieza para cancelar la petición si el componente se desmonta
-    return () => {
-      controller.abort();
-    };
-  }, [selectedDate, fetchSpecificAppointments]);
-  
-  // Lógica de envío del formulario, envuelta en useCallback
+    return () => controller.abort();
+  }, [dateStr, fetchSpecificAppointments]);
+
+  // Submit
   const onSubmit = useCallback((values: FormData) => {
     const [hours, minutes] = values.hora.split(':').map(Number);
-    const yyyyMmDd = format(values.fecha, 'yyyy-MM-dd');
+    const yyyyMmDd = format(values.fecha, 'yyyy-MM-dd'); // local, evita UTC shift
     const fechaIso = mxLocalPartsToUtcIso(yyyyMmDd, hours, minutes);
 
     admitPatient(
@@ -151,11 +186,12 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
           onSuccess?.();
         },
         onError: (error: AppError) => {
-          const payload: any = (error?.details as any) ?? {};
+          const payload: any = error?.details ?? {};
           const code: string | undefined =
             typeof payload?.code === 'string'
-              ? (payload.code as string).toUpperCase()
-              : (typeof error?.code === 'string' ? (error.code as string).toUpperCase() : undefined);
+              ? payload.code.toUpperCase()
+              : (typeof (error as any)?.code === 'string' ? (error as any).code.toUpperCase() : undefined);
+
           const validationErrors:
             | Array<{ field: string; message: string; code?: string }>
             | undefined = Array.isArray(payload?.validation_errors) ? payload.validation_errors : undefined;
@@ -175,8 +211,6 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
                   break;
                 case 'fecha_hora_cita':
                   form.setError('hora', { message });
-                  break;
-                default:
                   break;
               }
             }
@@ -203,24 +237,37 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
       }
     );
   }, [admitPatient, form, onSuccess]);
-  
-  // Determina si todos los horarios están deshabilitados
+
   const allDisabled = useMemo(
     () => timeSlots.length > 0 && timeSlots.every((slot) => occupiedTimes.has(slot.value)),
     [timeSlots, occupiedTimes]
   );
 
+  const timeDescId = 'time-field-description';
+
+  // Reset al cerrar (sin conservar datos parciales del intento previo)
+  const handleOpenChange = useCallback((v: boolean) => {
+    setOpen(v);
+    if (!v) {
+      form.reset();
+      setOccupiedTimes(prev => (prev.size ? new Set() : prev));
+    } else {
+      // enfoque suave en nombre cuando abre
+      setTimeout(() => nombreInputRef.current?.focus(), 50);
+    }
+  }, [form]);
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
 
-      <DialogContent className="sm:max-w-2xl w-[min(100vw-2rem,42rem)] max-h-[90vh] p-0 overflow-hidden">
-        <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-sky-50 to-teal-50 dark:from-sky-950/20 dark:to-teal-950/20">
-          <DialogTitle className="flex items-center gap-3">
-            <span className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-              <User2 className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+      <DialogContent className="w-[min(100vw-2rem,44rem)] sm:max-w-xl md:max-w-2xl max-h-[90vh] p-0 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b bg-white dark:bg-zinc-900">
+          <DialogTitle className="flex items-center gap-3 text-base sm:text-lg">
+            <span className="p-2 bg-white dark:bg-zinc-800 rounded-lg shadow-sm">
+              <User2 className="h-5 w-5 text-sky-700 dark:text-sky-400" />
             </span>
-            Registro Rápido de Paciente
+            <span className="font-semibold">Registro rápido de paciente</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -229,39 +276,39 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <fieldset className="space-y-4">
-                  <legend className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-2">
+                  <legend className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
                     <User2 className="h-4 w-4" />
-                    Datos Personales
+                    Datos personales
                   </legend>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <TextField form={form} name="nombre" label="Nombre *" inputProps={{ autoComplete: 'given-name', autoFocus: true }} />
-                    <TextField form={form} name="apellidos" label="Apellidos *" inputProps={{ autoComplete: 'family-name' }} />
+                    <TextField form={form} name="nombre" label="Nombre *" inputProps={givenNameProps} />
+                    <TextField form={form} name="apellidos" label="Apellidos *" inputProps={familyNameProps} />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <GenderSelectField form={form} name="genero" label="Género *" options={['Masculino', 'Femenino']} />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <PhoneField form={form} name="telefono" label="Teléfono *" inputProps={{ autoComplete: 'tel' }} />
-                    <EmailField form={form} name="email" label="Email" inputProps={{ autoComplete: 'email' }} />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:col-span-1">
+                      <PhoneField form={form} name="telefono" label="Teléfono *" inputProps={telProps} />
+                      <EmailField form={form} name="email" label="Email" inputProps={emailProps} />
+                    </div>
                   </div>
                 </fieldset>
 
                 <Separator />
 
                 <fieldset className="space-y-4">
-                  <legend className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-2">
+                  <legend className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
                     <Stethoscope className="h-4 w-4" />
-                    Información Médica
+                    Información médica
                   </legend>
-                  <DiagnosisSelectField form={form} name="diagnostico_principal" label="Diagnóstico Principal *" />
+                  <DiagnosisSelectField form={form} name="diagnostico_principal" label="Diagnóstico principal *" />
                 </fieldset>
 
                 <Separator />
 
                 <fieldset className="space-y-4">
-                  <legend className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-2">
+                  <legend className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
                     <CalendarIcon className="h-4 w-4" />
-                    Programar Cita
+                    Programar cita
                   </legend>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <DatePickerField
@@ -276,22 +323,37 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
                       label="Hora *"
                       timeSlots={timeSlots}
                       occupiedTimes={occupiedTimes}
-                      disabled={!form.watch('fecha') || allDisabled}
+                      disabled={!selectedDate || allDisabled}
                       description={allDisabled ? 'No hay horarios disponibles' : 'Horarios de la clínica'}
-                      ariaDescribedBy="time-description"
+                      describedById={timeDescId}
                     />
                   </div>
+                  <p id={timeDescId} className="text-xs text-muted-foreground">
+                    {(allDisabled && selectedDate) ? 'No hay horarios disponibles para esta fecha' : 'Selecciona un horario disponible'}
+                  </p>
                 </fieldset>
-                
-                <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1" disabled={isPending}>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={isPending} aria-busy={isPending} className="flex-1 bg-sky-600 hover:bg-sky-700">
+                  <Button
+                    type="submit"
+                    disabled={isPending}
+                    aria-busy={isPending}
+                    aria-live="polite"
+                    className="flex-1 bg-sky-700 hover:bg-sky-800 text-white"
+                  >
                     {isPending ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Registrando...</>
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Registrando…
+                      </>
                     ) : (
-                      <><CheckCircle2 className="mr-2 h-4 w-4" /> Registrar Paciente</>
+                      <>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        Registrar paciente
+                      </>
                     )}
                   </Button>
                 </div>

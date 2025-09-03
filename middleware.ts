@@ -4,7 +4,11 @@ import type { NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
 // Rutas públicas que no requieren autenticación
-const PUBLIC_ROUTES = ['/login', '/reset-password', '/auth/callback', '/auth/confirm']
+const IS_DEV = process.env.NODE_ENV !== 'production'
+// En desarrollo permitimos acceder a /admision y /survey sin autenticación para facilitar pruebas manuales
+const PUBLIC_ROUTES = IS_DEV
+  ? ['/login', '/reset-password', '/auth/callback', '/auth/confirm', '/admision', '/survey']
+  : ['/login', '/reset-password', '/auth/callback', '/auth/confirm']
 const API_ROUTES = ['/api/', '/_next/', '/favicon.ico']
 
 // Cache de sesiones en edge runtime (con TTL corto)

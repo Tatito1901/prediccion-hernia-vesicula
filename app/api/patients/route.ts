@@ -27,11 +27,6 @@ export async function GET(request: Request) {
       ? createAdminClient()
       : await createServerClient();
     // Debug: confirm which client path is used and env presence
-    console.log('🔐 [/api/patients][GET] client:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'admin' : 'server', {
-      hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-      hasAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-      hasService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
-    });
     const { searchParams } = new URL(request.url);
 
     // 1. Recolectar y sanitizar parámetros de la URL
@@ -73,7 +68,6 @@ export async function GET(request: Request) {
       const norm = byKey || estado.toLowerCase();
 
       if (!allowedValues.includes(norm)) {
-        console.warn('[patients][GET] Invalid estado received:', estado);
         const errorResponse = createApiError('Parámetro estado inválido', {
           code: 'INVALID_PARAM',
           details: { received: estado, allowed: allowedValues },
@@ -120,10 +114,6 @@ export async function GET(request: Request) {
     if (error) {
       const isPermission = /permission denied/i.test(error.message || '');
       if (isPermission) {
-        console.warn('[/api/patients][GET] Permission denied fallback', {
-          message: error.message,
-          meta,
-        });
         const pagination = { page, pageSize, totalCount: 0, totalPages: 0, hasMore: false };
         const stats = page === 1
           ? { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0, statusStats: { all: 0 } }
@@ -136,7 +126,6 @@ export async function GET(request: Request) {
         return NextResponse.json(successResponse, { headers: cacheConfig });
       }
       // Log non-permission errors with minimal meta when debug is enabled
-      console.error('[/api/patients][GET] Error', { message: error.message, meta: debug ? meta : undefined });
       const errorResponse = createApiError('Error al obtener pacientes', {
         code: 'FETCH_ERROR',
         details: { message: error.message },
@@ -160,7 +149,6 @@ export async function GET(request: Request) {
           .order('assigned_at', { ascending: false });
 
         if (assignedError) {
-          console.warn('[/api/patients] No se pudo obtener assigned_surveys:', assignedError.message);
         } else if (assigned) {
           for (const s of assigned) {
             // Conservar solo la más reciente por paciente (ya vienen ordenadas desc)
@@ -171,7 +159,6 @@ export async function GET(request: Request) {
         }
       }
     } catch (e: any) {
-      console.warn('[/api/patients] Error no crítico al enriquecer encuestas:', e?.message || e);
     }
 
     const enrichedPatients = patients?.map((patient: any) => {
@@ -202,7 +189,6 @@ export async function GET(request: Request) {
         .select('estado_paciente')
         .not('estado_paciente', 'is', null);
       if (statsErr) {
-        console.warn('[/api/patients][GET] No se pudo obtener estadísticas:', statsErr.message);
       }
 
       const statusStats = (statsData || []).reduce((acc: Record<string, number>, patient: any) => {
@@ -261,7 +247,6 @@ export async function GET(request: Request) {
     return NextResponse.json(successResponse, { headers: cacheConfig });
 
   } catch (error: any) {
-    console.error('Error in patients API route (GET):', error);
     const errorResponse = createApiError('Error al obtener pacientes', {
       code: 'INTERNAL_SERVER_ERROR',
       details: { message: error?.message },
@@ -319,7 +304,6 @@ export async function POST(request: Request) {
         .limit(1);
 
       if (dupErr) {
-        console.warn('[/api/patients][POST] No se pudo verificar duplicados:', dupErr.message);
       } else if (existing && existing.length > 0) {
         const errorResponse = createApiError('Paciente duplicado', {
           code: 'DUPLICATE_PATIENT',
@@ -331,7 +315,6 @@ export async function POST(request: Request) {
     } else {
       // Nota: sin fecha de nacimiento no podemos aplicar regla de unicidad fuerte.
       // Se mantiene compatibilidad y se registra un warning de diagnóstico.
-      console.warn('[/api/patients][POST] Creación sin fecha_nacimiento; no se aplica verificación de duplicados por identidad.');
     }
 
     // 3. Preparar datos del paciente (incluir fecha_nacimiento y edad coherente si aplica)
@@ -395,7 +378,6 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      console.error('Error creating patient:', error);
       const code = (error as any)?.code;
       const msg = (error as any)?.message || '';
       const detailsMsg = (error as any)?.details || '';
@@ -422,7 +404,6 @@ export async function POST(request: Request) {
     return NextResponse.json(successResponse, { status: 201 });
 
   } catch (error: any) {
-    console.error('Error in patients API route (POST):', error);
     const errorResponse = createApiError('Error al crear paciente', {
       code: 'INTERNAL_SERVER_ERROR',
       details: { message: error?.message },

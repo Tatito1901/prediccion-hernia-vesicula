@@ -61,7 +61,7 @@ const prettifyEnumLabel = (v?: string) => (v ? toTitleCaseEs(v.replace(/_/g, ' '
 
 // Lazy loading optimizado
 const RescheduleDatePicker = dynamic(
-  () => import('./patient-admission-reschedule').then(m => m.RescheduleDatePicker),
+  () => import('./patient-admission-reschedule'),
   { ssr: false }
 );
 
@@ -412,7 +412,6 @@ export const PatientCard = memo<PatientCardProps>(({
                       </Badge>
                     )}
                   </div>
-
                   {prettyMotivos.length > 0 && (
                     <div className="flex items-start gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                       <Stethoscope className="h-4 w-4 mt-0.5" />

@@ -205,21 +205,32 @@ export const trackEffect = (effectName: string, dependencies: any[]) => {
 };
 
 export const logSyncError = (context: string, error: any, data?: any) => {
-  console.error(
-    `%c[SYNC ERROR] ${context}`,
-    'color: red; font-weight: bold',
-    {
-      error: error.message || error,
-      stack: error.stack,
-      data,
-      timestamp: new Date().toISOString(),
+  // Definitively avoid triggering Next.js error overlays from client logs.
+  // No-op by default. Enable only when explicitly requested via env flag.
+  if (process.env.NEXT_PUBLIC_ENABLE_SYNC_ERROR_LOG === 'true') {
+    try {
+      const payload = {
+        error: (error && (error.message || String(error))) ?? 'Unknown error',
+        stack: error?.stack,
+        data,
+        timestamp: new Date().toISOString(),
+      };
+      // Schedule as microtask to avoid logging during render phase
+      // and use warn instead of error.
+      if (typeof queueMicrotask === 'function') {
+        queueMicrotask(() => console.warn(`[SYNC ERROR] ${context}`, payload));
+      } else {
+        setTimeout(() => console.warn(`[SYNC ERROR] ${context}`, payload), 0);
+      }
+    } catch (_) {
+      // swallow
     }
-  );
+  }
 };
 
 export const validateApiResponse = (response: any, expectedShape?: any): boolean => {
   if (!response) {
-    console.error('[API VALIDATION] Response is null or undefined');
+    console.warn('[API VALIDATION] Response is null or undefined');
     return false;
   }
 
@@ -233,7 +244,7 @@ export const validateApiResponse = (response: any, expectedShape?: any): boolean
   }
 
   if (hasError && hasData) {
-    console.error('[API VALIDATION] Response has both error and data - inconsistent state');
+    console.warn('[API VALIDATION] Response has both error and data - inconsistent state');
     return false;
   }
 

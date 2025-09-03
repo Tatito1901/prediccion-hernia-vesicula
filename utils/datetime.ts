@@ -4,7 +4,7 @@
 import { formatInTimeZone, toZonedTime, fromZonedTime } from 'date-fns-tz'
 import type { Locale } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { CLINIC_TIMEZONE } from '@/lib/clinic-schedule'
+import { CLINIC_TIMEZONE } from '@/lib/admission-business-rules'
 
 export const MX_TZ = CLINIC_TIMEZONE
 

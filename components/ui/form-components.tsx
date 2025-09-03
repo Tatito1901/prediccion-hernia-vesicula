@@ -22,6 +22,20 @@ import { es } from 'date-fns/locale';
 import { cn, formatPhoneNumber } from '@/lib/utils';
 import { DIAGNOSIS_DB_VALUES, dbDiagnosisToDisplay } from '@/lib/validation/enums';
 
+// Compose multiple refs (object or callback) into a single ref setter
+function composeRefs<T>(...refs: Array<React.Ref<T> | undefined>) {
+  return (instance: T | null) => {
+    for (const ref of refs) {
+      if (!ref) continue;
+      if (typeof ref === 'function') {
+        ref(instance);
+      } else {
+        (ref as React.MutableRefObject<T | null>).current = instance;
+      }
+    }
+  };
+}
+
 // Generic text input field
 export function TextField<T extends FieldValues>(props: {
   form: UseFormReturn<T>;
@@ -38,16 +52,25 @@ export function TextField<T extends FieldValues>(props: {
     <FormField
       control={form.control}
       name={name}
-      render={({ field }) => (
-        <FormItem className={className}>
-          <FormLabel>{label}</FormLabel>
-          <FormControl>
-            <Input type={type} placeholder={placeholder} {...inputProps} {...field} />
-          </FormControl>
-          {description ? <FormDescription>{description}</FormDescription> : null}
-          <FormMessage />
-        </FormItem>
-      )}
+      render={({ field }) => {
+        const { ref: fieldRef, ...restField } = field;
+        return (
+          <FormItem className={className}>
+            <FormLabel>{label}</FormLabel>
+            <FormControl>
+              <Input
+                type={type}
+                placeholder={placeholder}
+                {...inputProps}
+                {...restField}
+                ref={composeRefs<HTMLInputElement>(inputProps?.ref as React.Ref<HTMLInputElement> | undefined, fieldRef)}
+              />
+            </FormControl>
+            {description ? <FormDescription>{description}</FormDescription> : null}
+            <FormMessage />
+          </FormItem>
+        );
+      }}
     />
   );
 }
@@ -77,11 +100,13 @@ export function NumberField<T extends FieldValues>(props: {
               min={min}
               max={max}
               placeholder={placeholder}
-              value={field.value === null || field.value === undefined ? '' : String(field.value)}
+              value={field?.value === null || field?.value === undefined ? '' : String(field.value)}
               onChange={(e) => {
                 const v = e.target.value;
                 const parsed = v === '' ? undefined : Number(v);
-                field.onChange(typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : undefined);
+                if (field?.onChange) {
+                  field.onChange(typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : undefined);
+                }
               }}
             />
           </FormControl>
@@ -118,7 +143,9 @@ export function PhoneField<T extends FieldValues>(props: {
                 // Call any external onChange first, then apply formatting to RHF field
                 inputProps?.onChange?.(e as React.ChangeEvent<HTMLInputElement>);
                 const target = e.target as HTMLInputElement;
-                field.onChange(formatPhoneNumber(target.value));
+                if (field?.onChange) {
+                  field.onChange(formatPhoneNumber(target.value));
+                }
               }}
             />
           </FormControl>
@@ -172,7 +199,7 @@ export function GenderSelectField<T extends FieldValues>(props: {
       render={({ field }) => (
         <FormItem>
           <FormLabel>{label}</FormLabel>
-          <Select onValueChange={(v) => field.onChange(v)} value={typeof field.value === 'string' ? field.value : undefined}>
+          <Select onValueChange={(v) => field?.onChange && field.onChange(v)} value={typeof field?.value === 'string' ? field.value : undefined}>
             <FormControl>
               <SelectTrigger>
                 <SelectValue placeholder={placeholder} />
@@ -208,7 +235,7 @@ export function DiagnosisSelectField<T extends FieldValues>(props: {
       render={({ field }) => (
         <FormItem>
           <FormLabel>{label}</FormLabel>
-          <Select onValueChange={(v) => field.onChange(v)} value={typeof field.value === 'string' ? field.value : undefined}>
+          <Select onValueChange={(v) => field?.onChange && field.onChange(v)} value={typeof field?.value === 'string' ? field.value : undefined}>
             <FormControl>
               <SelectTrigger>
                 <SelectValue placeholder={placeholder} />
@@ -244,7 +271,7 @@ export function DatePickerField<T extends FieldValues>(props: {
       control={form.control}
       name={name}
       render={({ field }) => {
-        const isDate = Object.prototype.toString.call(field.value) === '[object Date]';
+        const isDate = field?.value != null && field.value && Object.prototype.toString.call(field.value) === '[object Date]';
         const selectedDate: Date | undefined = isDate ? (field.value as Date) : undefined;
         return (
           <FormItem className="flex flex-col">
@@ -270,7 +297,9 @@ export function DatePickerField<T extends FieldValues>(props: {
                   mode="single"
                   selected={selectedDate}
                   onSelect={(date) => {
-                    field.onChange(date);
+                    if (field?.onChange) {
+                      field.onChange(date);
+                    }
                     onDateChange?.(date);
                   }}
                   disabled={(date) => !isValidDate(date)}
@@ -298,8 +327,9 @@ export function TimeSelectField<T extends FieldValues>(props: {
   placeholder?: string;
   description?: string;
   showOccupiedBadge?: boolean;
+  describedById?: string;
 }) {
-  const { form, name, label, timeSlots, occupiedTimes, disabled, placeholder = 'Seleccionar hora', description, showOccupiedBadge = true } = props;
+  const { form, name, label, timeSlots, occupiedTimes, disabled, placeholder = 'Seleccionar hora', description, showOccupiedBadge = true, describedById } = props;
   return (
     <FormField
       control={form.control}
@@ -307,9 +337,9 @@ export function TimeSelectField<T extends FieldValues>(props: {
       render={({ field }) => (
         <FormItem>
           <FormLabel>{label}</FormLabel>
-          <Select onValueChange={(v) => field.onChange(v)} value={typeof field.value === 'string' ? field.value : undefined} disabled={disabled}>
+          <Select onValueChange={(v) => field?.onChange && field.onChange(v)} value={typeof field?.value === 'string' ? field.value : undefined} disabled={disabled}>
             <FormControl>
-              <SelectTrigger>
+              <SelectTrigger aria-describedby={describedById}>
                 <SelectValue placeholder={placeholder} />
               </SelectTrigger>
             </FormControl>

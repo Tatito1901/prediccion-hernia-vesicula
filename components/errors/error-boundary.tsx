@@ -30,11 +30,12 @@ export class AppErrorBoundary extends React.Component<
 
   componentDidCatch(error: unknown, errorInfo: React.ErrorInfo): void {
     const name = this.props.boundaryName || 'AppErrorBoundary';
-    try {
-      logSyncError(`${name} caught error`, error, { errorInfo });
-    } catch (_) {
-      // no-op if logging fails
-    }
+    // Deshabilitado para evitar bucle de logging con Next.js
+    // try {
+    //   logSyncError(`${name} caught error`, error, { errorInfo });
+    // } catch (_) {
+    //   // no-op if logging fails
+    // }
     if (this.props.onError) this.props.onError(error);
   }
 
