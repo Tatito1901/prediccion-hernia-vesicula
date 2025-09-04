@@ -7,6 +7,7 @@ import {
   withinWorkHours as scheduleWithinWorkHours,
   isWorkDay as scheduleIsWorkDay,
   isLunchTime as scheduleIsLunchTime,
+  getWorkDaysLabel,
 } from '@/lib/clinic-schedule';
 
 // ✅ Tipos locales mínimos para evitar depender de components/* (isomórfico FE/BE)
@@ -42,14 +43,14 @@ export const BUSINESS_RULES = {
   // ✅ Prevenir cambios rápidos consecutivos
   RAPID_CHANGE_COOLDOWN_MINUTES: 2,
   
-  // ✅ Horarios de trabajo
-  WORK_START_HOUR: 8,
-  WORK_END_HOUR: 18,
+  // ✅ Horarios de trabajo (alineados con CLINIC_SCHEDULE)
+  WORK_START_HOUR: 9,
+  WORK_END_HOUR: 15,
   LUNCH_START_HOUR: 12,
   LUNCH_END_HOUR: 13,
   
-  // ✅ Configuración de días laborales
-  WORK_DAYS: [1, 2, 3, 4, 5], // Lunes a viernes
+  // ✅ Configuración de días laborales (Lunes a sábado)
+  WORK_DAYS: [1, 2, 3, 4, 5, 6], // Lunes a sábado
 } as const;
 
 // ==================== MOTOR DE REGLAS DECLARATIVO ====================
@@ -132,12 +133,29 @@ export const canCheckIn = (
       }
       return { valid: true };
     },
-    // Horario laboral
+    // Horario laboral: bloquear antes de apertura; permitir gracia post-cierre si está dentro de la ventana
     ({ now, ctx }) => {
-      if (!ctx?.allowOverride && !isWithinWorkHours(now)) {
-        return { valid: false, reason: `Check-in solo disponible durante horario laboral (${CLINIC_SCHEDULE.START_HOUR}:00 - ${CLINIC_SCHEDULE.END_HOUR}:00, L-V)` };
+      if (ctx?.allowOverride) return { valid: true };
+      const nowIsWorkDay = scheduleIsWorkDay(now);
+      const nowWithinHours = scheduleWithinWorkHours(now);
+      const apptWithinHours = isWithinWorkHours(appointmentTime);
+
+      // Día no laborable
+      if (!nowIsWorkDay) {
+        return { valid: false, reason: `Fuera de días hábiles (${getWorkDaysLabel()})` };
       }
-      return { valid: true };
+
+      // Dentro de horario laboral actual
+      if (nowWithinHours) return { valid: true };
+
+      // Fuera de horario: permitir solo si es después del cierre y dentro de la gracia posterior a la hora de la cita
+      // (la regla de ventana ya bloquea si now > checkInWindowEnd)
+      if (isAfter(now, appointmentTime) && apptWithinHours) {
+        return { valid: true };
+      }
+
+      // Antes de la apertura u otras condiciones fuera de horario
+      return { valid: false, reason: `Check-in solo disponible durante horario laboral (${CLINIC_SCHEDULE.START_HOUR}:00 - ${CLINIC_SCHEDULE.END_HOUR}:00, ${getWorkDaysLabel()})` };
     },
     // Cambios recientes
     ({ appointment, now }) => {

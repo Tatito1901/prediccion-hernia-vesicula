@@ -6,14 +6,14 @@ import { ZAppointmentStatus } from '@/lib/validation/enums';
 import { AppointmentStatusEnum } from '@/lib/types';
 
 export const CLINIC_SCHEDULE = {
-  START_HOUR: 8,
+  START_HOUR: 9,
   END_HOUR: 15, // Último slot 14:30
   LUNCH_START: 12,
   LUNCH_END: 13,
   SLOT_DURATION_MINUTES: 30,
   MAX_ADVANCE_DAYS: 60,
   RESCHEDULE_MIN_ADVANCE_HOURS: 2,
-  WORK_DAYS: [1, 2, 3, 4, 5] as const, // L-V
+  WORK_DAYS: [1, 2, 3, 4, 5, 6] as const, // L-S
 } as const;
 
 // Zona horaria de la clínica (configurable por ENV, con valor seguro por defecto)
@@ -49,6 +49,13 @@ const getZonedWeekdayIndex = (date: Date, tz: string = CLINIC_TIMEZONE): number 
   return weekdayToIndex(w);
 };
 
+// Etiqueta corta para días laborales basada en configuración (p. ej., "L-V" o "L-S")
+export function getWorkDaysLabel(): string {
+  // Si incluye sábado y excluye domingo, usar "L-S"; en caso contrario, "L-V" como predeterminado.
+  const hasSaturday = (CLINIC_SCHEDULE.WORK_DAYS as readonly number[]).includes(6 as any);
+  return hasSaturday ? 'L-S' : 'L-V';
+}
+
 export function isWorkDay(date: Date): boolean {
   const d = getZonedWeekdayIndex(date);
   return (CLINIC_SCHEDULE.WORK_DAYS as readonly number[]).includes(d as any);
@@ -79,8 +86,11 @@ export function validateRescheduleDateTime(isoString: string, now: Date = new Da
   if (isNaN(dt.getTime())) return { valid: false, reason: 'Fecha/hora inválida' };
 
   if (!isFuture(dt, now)) return { valid: false, reason: 'La nueva fecha debe ser futura' };
-  if (!isWorkDay(dt)) return { valid: false, reason: 'Solo días hábiles (L-V)' };
-  if (!withinWorkHours(dt)) return { valid: false, reason: 'Fuera de horario laboral (08:00-15:00)' };
+  if (!isWorkDay(dt)) return { valid: false, reason: `Solo días hábiles (${getWorkDaysLabel()})` };
+  {
+    const hoursLabel = `${String(CLINIC_SCHEDULE.START_HOUR).padStart(2, '0')}:00-${String(CLINIC_SCHEDULE.END_HOUR).padStart(2, '0')}:00`;
+    if (!withinWorkHours(dt)) return { valid: false, reason: `Fuera de horario laboral (${hoursLabel})` };
+  }
   if (isLunchTime(dt)) return { valid: false, reason: 'No disponible en horario de comida (12:00-13:00)' };
   if (!isValidSlot(dt)) return { valid: false, reason: 'La hora debe coincidir con intervalos de 30 minutos' };
 
@@ -175,7 +185,7 @@ export const canCheckIn = (
     // Horario laboral (respetando zona horaria de la clínica)
     ({ now, ctx }) => {
       if (!ctx?.allowOverride && !(withinWorkHours(now) && isWorkDay(now))) {
-        return { valid: false, reason: `Check-in solo disponible durante horario laboral (${CLINIC_SCHEDULE.START_HOUR}:00 - ${CLINIC_SCHEDULE.END_HOUR}:00, L-V)` };
+        return { valid: false, reason: `Check-in solo disponible durante horario laboral (${CLINIC_SCHEDULE.START_HOUR}:00 - ${CLINIC_SCHEDULE.END_HOUR}:00, ${getWorkDaysLabel()})` };
       }
       return { valid: true };
     },

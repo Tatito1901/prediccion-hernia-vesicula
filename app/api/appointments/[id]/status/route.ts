@@ -83,44 +83,13 @@ const UpdateStatusSchema = z.object({
       });
       return;
     }
-    
-    // Validar que la fecha sea futura
-    const targetDateTime = new Date(targetDate);
-    const now = new Date();
-    if (targetDateTime <= now) {
+    // Validación centralizada de agenda (días/hours, almuerzo, futuro, máximo adelanto)
+    const scheduleValidation = validateRescheduleDateTime(targetDate, mxNow());
+    if (!scheduleValidation.valid) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['nuevaFechaHora'],
-        message: 'La nueva fecha debe ser posterior a la fecha actual',
-      });
-    }
-    
-    // Validar día de la semana (lunes a viernes)
-    const dayOfWeek = targetDateTime.getDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['nuevaFechaHora'],
-        message: 'Las citas solo pueden agendarse de lunes a viernes',
-      });
-    }
-    
-    // Validar horario (8:00 - 15:00, excluyendo 13:00-14:00 para almuerzo)
-    const hours = targetDateTime.getHours();
-    const minutes = targetDateTime.getMinutes();
-    const timeInMinutes = hours * 60 + minutes;
-    
-    if (timeInMinutes < 8 * 60 || timeInMinutes >= 15 * 60) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['nuevaFechaHora'],
-        message: 'Las citas deben estar entre 8:00 y 15:00',
-      });
-    } else if (timeInMinutes >= 13 * 60 && timeInMinutes < 14 * 60) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['nuevaFechaHora'],
-        message: 'No se pueden agendar citas durante el horario de almuerzo (13:00-14:00)',
+        message: scheduleValidation.reason || 'Fecha/hora no permitida por reglas de agenda',
       });
     }
   }
@@ -229,7 +198,7 @@ export async function PATCH(
       return NextResponse.json(
         { 
           error: 'Datos inválidos',
-          details: validationResult.error.errors,
+          details: validationResult.error.issues,
         },
         { status: 400 }
       );

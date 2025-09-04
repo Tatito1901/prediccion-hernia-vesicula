@@ -1,7 +1,6 @@
 // components/patient-admission/patient-admission-reschedule.tsx
 'use client';
 import React, { memo, useCallback, useMemo, useState } from "react";
-import { format, addDays, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -31,61 +30,25 @@ import {
 import type { AppointmentWithPatient, RescheduleProps } from './admision-types';
 import { getPatientFullName } from './admision-types';
 import { useClinic } from "@/contexts/clinic-data-provider";
-import { CLINIC_SCHEDULE, CLINIC_TIMEZONE, isWorkDay, validateRescheduleDateTime, canRescheduleAppointment, BUSINESS_RULES } from '@/lib/admission-business-rules';
+import { CLINIC_SCHEDULE, isWorkDay, validateRescheduleDateTime, canRescheduleAppointment, BUSINESS_RULES } from '@/lib/admission-business-rules';
+import { formatClinicDate, formatClinicTime, clinicDayId, toClinicIsoFromDateAndTime, clinicYmd, addClinicDaysAsUtcStart } from '@/lib/timezone';
 import { AppointmentStatusEnum } from '@/lib/types';
 
 // Utilidades
 const formatAppointmentDate = (date: Date): string => {
-  return format(date, "EEEE d 'de' MMMM", { locale: es });
+  return formatClinicDate(date);
 };
 
 const isValidAppointmentDate = (date: Date): boolean => {
-  const today = startOfDay(new Date());
-  const maxDate = addDays(today, CLINIC_SCHEDULE.MAX_ADVANCE_DAYS);
-  return !isBefore(date, today) && !isBefore(maxDate, date) && isWorkDay(date);
+  // Comparar por día en zona de la clínica
+  const todayYmd = clinicYmd();
+  const selectedYmd = clinicDayId(date);
+  const maxUtcStart = addClinicDaysAsUtcStart(todayYmd, CLINIC_SCHEDULE.MAX_ADVANCE_DAYS);
+  const maxYmd = clinicYmd(maxUtcStart);
+  return selectedYmd >= todayYmd && selectedYmd <= maxYmd && isWorkDay(date);
 };
 
-// Convierte un Date a su offset (ms) para una zona horaria específica usando Intl
-const getTimeZoneOffsetMs = (date: Date, timeZone: string): number => {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const parts = dtf.formatToParts(date);
-  const map: Record<string, string> = {};
-  for (const p of parts) map[p.type] = p.value;
-  // Interpreta la fecha/hora mostrada en la zona como si fuera UTC
-  const asUTC = new Date(`${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}:${map.second}.000Z`);
-  return asUTC.getTime() - date.getTime();
-};
-
-// Construye un ISO (UTC) a partir de fecha (día) y HH:mm en la zona de la clínica sin librerías externas
-const toIsoFromDateAndTime = (date: Date, time: string): string => {
-  const [h, m] = time.split(':').map(Number);
-  // Obtener Y-M-D según la zona horaria de la clínica (no según el navegador/UTC)
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: CLINIC_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const year = Number(parts.find(p => p.type === 'year')?.value ?? '1970');
-  const month = Number(parts.find(p => p.type === 'month')?.value ?? '01');
-  const day = Number(parts.find(p => p.type === 'day')?.value ?? '01');
-  // Construir un instante base (supuesto UTC) con esos campos
-  const base = new Date(Date.UTC(year, month - 1, day, h, m, 0, 0));
-  // Calcular offset de la zona clínica para ese instante base
-  const offsetMs = getTimeZoneOffsetMs(base, CLINIC_TIMEZONE);
-  // Ajustar para obtener el verdadero instante UTC que corresponde a esa hora local de la clínica
-  const utcDate = new Date(base.getTime() - offsetMs);
-  return utcDate.toISOString();
-};
+// Conversiones centralizadas disponibles en lib/timezone
 
 // Componente de slot de tiempo mejorado
 const TimeSlot = memo<{ 
@@ -166,15 +129,15 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
       ?.filter(apt => 
         apt.id !== appointment.id && 
         activeStates.includes(apt.estado_cita as any) &&
-        format(new Date(apt.fecha_hora_cita), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
+        clinicDayId(apt.fecha_hora_cita) === clinicDayId(selectedDate)
       )
       .forEach(apt => {
-        occupiedSlots.add(format(new Date(apt.fecha_hora_cita), 'HH:mm'));
-      });
+      occupiedSlots.add(formatClinicTime(apt.fecha_hora_cita));
+    });
     
     return slots.filter(slot => {
       if (occupiedSlots.has(slot)) return false;
-      const iso = toIsoFromDateAndTime(selectedDate, slot);
+      const iso = toClinicIsoFromDateAndTime(selectedDate, slot);
       const { valid } = validateRescheduleDateTime(iso);
       return valid;
     });
@@ -183,7 +146,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
   // Validación del slot seleccionado con reglas centralizadas
   const selectedSlotValidation = useMemo(() => {
     if (!selectedDate || !selectedTime) return null;
-    const iso = toIsoFromDateAndTime(selectedDate, selectedTime);
+    const iso = toClinicIsoFromDateAndTime(selectedDate, selectedTime);
     return validateRescheduleDateTime(iso);
   }, [selectedDate, selectedTime]);
 
@@ -249,7 +212,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
               <Alert className="border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/30">
                 <CalendarIcon className="h-4 w-4" />
                 <AlertDescription className="font-medium">
-                  {format(new Date(appointment.fecha_hora_cita), "EEEE d 'de' MMMM 'a las' HH:mm", { locale: es })}
+                  {formatClinicDate(appointment.fecha_hora_cita)} a las {formatClinicTime(appointment.fecha_hora_cita)}
                 </AlertDescription>
               </Alert>
             </div>

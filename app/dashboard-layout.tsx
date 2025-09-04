@@ -1,17 +1,30 @@
 "use client"
 import type React from "react";
+import { useEffect } from "react";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
 import { useIsMobile } from "@/hooks/use-breakpoint";
 import { cn } from "@/lib/utils";
+import { useGlobalOverlay } from "@/components/providers";
 
 export default function DashboardLayout({ 
-  children 
+  children,
+  userName,
 }: { 
-  children: React.ReactNode 
+  children: React.ReactNode,
+  userName?: string,
 }) {
   const isMobile = useIsMobile();
+  const { setMessage, hide } = useGlobalOverlay();
+
+  // Al llegar al dashboard, mostrar "Bienvenido" brevemente y luego cerrar el overlay
+  useEffect(() => {
+    const msg = userName ? `Bienvenido, ${userName}` : "Bienvenido";
+    setMessage(msg);
+    const t = setTimeout(() => hide(), 800);
+    return () => clearTimeout(t);
+  }, [userName, setMessage, hide]);
 
   return (
     <ClinicDataProvider>

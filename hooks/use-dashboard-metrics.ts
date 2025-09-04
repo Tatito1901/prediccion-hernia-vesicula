@@ -11,7 +11,6 @@ export function useDashboardMetrics(period: DashboardPeriod = '30d') {
       const raw = await fetchJson<unknown>(url)
       const parsed = ZDashboardMetricsResponse.safeParse(raw)
       if (!parsed.success) {
-        // Surface first issue for easier debugging
         const first = parsed.error.issues?.[0]
         const msg = first ? `${first.path?.join('.')}: ${first.message}` : 'Invalid dashboard metrics response'
         throw new Error(msg)

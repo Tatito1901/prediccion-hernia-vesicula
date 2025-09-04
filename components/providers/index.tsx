@@ -1,9 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, createContext, useContext, useCallback } from 'react';
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@tanstack/react-query';
 import { notifyError } from '@/lib/client-errors';
+import { Loader2 } from 'lucide-react';
+
+type OverlayAPI = {
+  show: (message: string) => void;
+  hide: () => void;
+  setMessage: (message: string) => void;
+};
+
+const OverlayContext = createContext<OverlayAPI>({
+  show: () => {},
+  hide: () => {},
+  setMessage: () => {},
+});
+
+export function useGlobalOverlay() {
+  return useContext(OverlayContext);
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -29,6 +46,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     },
   }));
 
+  const [overlay, setOverlay] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
+  const show = useCallback((message: string) => setOverlay({ visible: true, message }), []);
+  const hide = useCallback(() => setOverlay((s) => ({ ...s, visible: false })), []);
+  const setMessage = useCallback((message: string) => setOverlay((s) => ({ ...s, message })), []);
+
   return (
     <ThemeProvider
       attribute="class"
@@ -36,9 +58,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
+      <OverlayContext.Provider value={{ show, hide, setMessage }}>
+        <QueryClientProvider client={queryClient}>
+          {children}
+          {overlay.visible && (
+            <div className="fixed inset-0 z-[1000] bg-slate-950/60 backdrop-blur-sm">
+              <div className="flex h-full items-center justify-center">
+                <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+                  <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
+                  <p className="mt-3 text-slate-200 font-medium">{overlay.message || 'Cargando...'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </QueryClientProvider>
+      </OverlayContext.Provider>
     </ThemeProvider>
   );
 }

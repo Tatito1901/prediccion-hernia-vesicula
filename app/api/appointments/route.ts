@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
   const raw = await req.json().catch(() => ({}))
   const parse = CreateAppointmentSchema.safeParse(raw)
   if (!parse.success) {
-    return NextResponse.json({ message: 'Datos inválidos', details: parse.error.errors }, { status: 400 })
+    return NextResponse.json({ message: 'Datos inválidos', details: parse.error.issues }, { status: 400 })
   }
   const supabase = await createAdminClient()
   const payload = parse.data

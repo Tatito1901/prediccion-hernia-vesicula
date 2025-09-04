@@ -1,7 +1,7 @@
 // utils/datetime.ts
 // Consistent Mexico City timezone helpers
 
-import { formatInTimeZone, toZonedTime, fromZonedTime } from 'date-fns-tz'
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 import type { Locale } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { CLINIC_TIMEZONE } from '@/lib/admission-business-rules'
@@ -10,7 +10,10 @@ export const MX_TZ = CLINIC_TIMEZONE
 
 // Returns a Date representing "now" but adjusted for Mexico City clock values
 export function mxNow(): Date {
-  return toZonedTime(new Date(), MX_TZ)
+  // Return the absolute current time. Use timezone-aware formatters when rendering
+  // or computing day boundaries. Using a shifted zoned Date here can break
+  // comparisons against UTC timestamps (e.g., appointment ISO strings).
+  return new Date()
 }
 
 // Get UTC bounds for the Mexico City day that contains the provided date

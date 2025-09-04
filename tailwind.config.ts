@@ -47,6 +47,14 @@ const config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // Paleta de marca (azul marino y verde)
+        brand: {
+          'navy': 'hsl(var(--brand-navy))',
+          'navy-600': 'hsl(var(--brand-navy-600))',
+          'navy-800': 'hsl(var(--brand-navy-800))',
+          'green': 'hsl(var(--brand-green))',
+          'green-600': 'hsl(var(--brand-green-600))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',

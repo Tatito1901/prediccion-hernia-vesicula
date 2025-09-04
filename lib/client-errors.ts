@@ -9,7 +9,17 @@ export interface NotifyContext {
 
 export function notifyError(err: unknown, ctx?: NotifyContext): AppError {
   const n = normalizeError(err);
-  const msg = ctx?.prefix ? `${ctx.prefix}: ${toUserMessage(n)}` : toUserMessage(n);
+  const base = toUserMessage(n);
+  // Try to append backend reason if present in the JSON payload
+  const reason = (() => {
+    try {
+      const d: any = n.details;
+      const r = typeof d?.reason === 'string' ? d.reason : undefined;
+      return r && r !== base ? r : undefined;
+    } catch { return undefined; }
+  })();
+  const full = reason ? `${base}: ${reason}` : base;
+  const msg = ctx?.prefix ? `${ctx.prefix}: ${full}` : full;
   toast.error(msg, { duration: ctx?.duration ?? 3500 });
   if (process.env.NODE_ENV !== 'production') {
     // eslint-disable-next-line no-console

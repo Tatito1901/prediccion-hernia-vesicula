@@ -1,10 +1,11 @@
 // components/auth/ProfessionalLoginForm.tsx
 "use client"
 
-import { useCallback, useState, useTransition, useId } from "react"
-import { LockKeyhole, AtSign, LogIn, Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react"
+import { useCallback, useState, useTransition, useId, useEffect, useRef } from "react"
+import { LockKeyhole, AtSign, LogIn, Eye, EyeOff, AlertCircle, Loader2, Clock } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { login, type LoginResponse } from "./actions"
+import type { LoginResponse } from "./actions"
+import { useGlobalOverlay } from "@/components/providers"
 
 // Constantes optimizadas
 const REDIRECT_DELAY = 300 // Reducido para UX más rápida
@@ -13,14 +14,14 @@ const TOAST_DURATION = 3000
 // CSS classes constantes para evitar re-computación
 const CLASSES = {
   input: {
-    base: "w-full pl-10 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500",
+    base: "w-full pl-10 pr-4 py-3 bg-brand-navy-600/40 border border-brand-navy-600/60 rounded-lg text-slate-100 placeholder-slate-400 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary",
     error: "border-red-500/50 focus:ring-red-500/30 focus:border-red-500",
     withIcon: "pr-12"
   },
   button: {
     base: "w-full py-3.5 px-6 rounded-lg font-semibold text-white transition-all duration-200 flex items-center justify-center gap-2",
-    active: "bg-teal-600 hover:bg-teal-700 shadow-lg hover:shadow-xl active:scale-[0.98]",
-    disabled: "bg-slate-700 cursor-not-allowed opacity-70"
+    active: "bg-primary hover:bg-primary/90 shadow-md hover:shadow-lg active:scale-[0.98]",
+    disabled: "bg-brand-navy-600/50 cursor-not-allowed opacity-70"
   },
   error: "p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-sm text-red-300 flex items-start gap-2.5",
   label: "block text-sm font-medium text-slate-300 mb-1.5"
@@ -29,17 +30,24 @@ const CLASSES = {
 interface ProfessionalLoginFormProps {
   nextPath?: string
   initialErrorCode?: string
+  loginAction: (formData: FormData) => Promise<LoginResponse>
 }
 
-export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: ProfessionalLoginFormProps) {
+export default function ProfessionalLoginForm({ nextPath, initialErrorCode, loginAction }: ProfessionalLoginFormProps) {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string>("")
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const formId = useId()
+  const errorId = useId()
+  const { show, hide } = useGlobalOverlay()
+  const [capsOn, setCapsOn] = useState(false)
+  const errorRef = useRef<HTMLDivElement | null>(null)
+  const [cooldownMs, setCooldownMs] = useState(0)
+  const [isRateLimited, setIsRateLimited] = useState(false)
 
-  // Pre-compute error message una sola vez
-  useState(() => {
+  // Mostrar error inicial si viene por querystring
+  useEffect(() => {
     if (!initialErrorCode) return
     const errorMessages: Record<string, string> = {
       session_expired: "Tu sesión ha expirado. Por favor, inicia sesión nuevamente.",
@@ -48,12 +56,48 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
       forbidden: "No tienes permisos para acceder."
     }
     setError(errorMessages[initialErrorCode] || "Por favor, inicia sesión para continuar.")
-  })
+  }, [initialErrorCode])
+
+  // Rate limit cooldown ticker (localStorage-backed)
+  useEffect(() => {
+    const key = "loginCooldownUntil"
+    const check = () => {
+      try {
+        const raw = localStorage.getItem(key)
+        if (!raw) {
+          setIsRateLimited(false)
+          setCooldownMs(0)
+          return
+        }
+        const until = parseInt(raw, 10)
+        const now = Date.now()
+        if (Number.isFinite(until) && until > now) {
+          setIsRateLimited(true)
+          setCooldownMs(until - now)
+        } else {
+          setIsRateLimited(false)
+          setCooldownMs(0)
+          localStorage.removeItem(key)
+        }
+      } catch {}
+    }
+    check()
+    const id = setInterval(check, 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError("")
-    
+    // Mostrar overlay global y bloquear la UI durante el proceso
+    show("Verificando credenciales...")
+    // Bloqueo mientras el cooldown esté activo
+    if (isRateLimited || cooldownMs > 0) {
+      setError(`Demasiados intentos. Espera ${Math.ceil(cooldownMs / 1000)}s.`)
+      hide()
+      return
+    }
+
     const form = e.currentTarget
     const formData = new FormData(form)
     
@@ -63,64 +107,82 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
     
     if (!email || !password) {
       setError("Por favor, completa todos los campos.")
+      // Aseguramos ocultar el overlay si la validación falla
+      hide()
       return
     }
 
     startTransition(async () => {
       // Agregar nextPath si existe
       if (nextPath) formData.set("next", nextPath)
-      
-      const result: LoginResponse = await login(formData)
-      
-      if (result.ok) {
-        // Pre-fetch dashboard para carga más rápida
-        router.prefetch(result.redirectTo)
+      try {
+        const result: LoginResponse = await loginAction(formData)
         
-        // Redirección rápida
-        setTimeout(() => {
-          router.push(result.redirectTo)
-        }, REDIRECT_DELAY)
-      } else {
-        // Manejo de errores simplificado
-        const errorMsg = result.code === "RATE_LIMIT" && result.retryAfter
-          ? `Demasiados intentos. Espera ${Math.ceil(result.retryAfter / 1000)}s.`
-          : result.message
-        setError(errorMsg)
-        
-        // Auto-limpiar error después de un tiempo
-        setTimeout(() => setError(""), TOAST_DURATION * 2)
+        if (result.ok) {
+          setIsRateLimited(false)
+          try { localStorage.removeItem("loginCooldownUntil") } catch {}
+          // Pre-fetch dashboard para carga más rápida
+          router.prefetch(result.redirectTo)
+          
+          // Opcional: ocultar overlay antes de navegar para evitar overlay persistente
+          // La limpieza final también lo garantiza
+          
+          // Redirección rápida
+          setTimeout(() => {
+            router.push(result.redirectTo)
+          }, REDIRECT_DELAY)
+        } else {
+          // Manejo de errores y cooldown
+          if (result.code === "RATE_LIMIT" && result.retryAfter) {
+            const until = Date.now() + result.retryAfter
+            setIsRateLimited(true)
+            setCooldownMs(result.retryAfter)
+            try { localStorage.setItem("loginCooldownUntil", String(until)) } catch {}
+          }
+          const errorMsg = result.code === "RATE_LIMIT" && result.retryAfter
+            ? `Demasiados intentos. Espera ${Math.ceil(result.retryAfter / 1000)}s.`
+            : result.message
+          setError(errorMsg)
+          
+          // Auto-limpiar error después de un tiempo
+          setTimeout(() => setError(""), TOAST_DURATION * 2)
+        }
+      } catch (_err) {
+        setError("Ocurrió un error inesperado. Intenta nuevamente.")
+      } finally {
+        // Failsafe: siempre ocultar el overlay al finalizar
+        hide()
       }
     })
-  }, [nextPath, router])
+  }, [nextPath, router, loginAction, hide, show, isRateLimited, cooldownMs])
+
+  // Limpieza al desmontar: asegurar que el overlay no quede visible tras navegación o errores
+  useEffect(() => {
+    return () => {
+      hide()
+    }
+  }, [hide])
+
+  // Accesibilidad: enfocar contenedor de error cuando aparece
+  useEffect(() => {
+    if (error) {
+      errorRef.current?.focus()
+    }
+  }, [error])
 
   const togglePassword = useCallback(() => setShowPassword(prev => !prev), [])
 
   return (
     <>
-      {/* Loading overlay optimizado */}
-      {isPending && (
-        <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="flex h-full items-center justify-center">
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-              <Loader2 className="mx-auto h-10 w-10 animate-spin text-teal-500" />
-              <p className="mt-3 text-slate-200 font-medium">Verificando credenciales...</p>
-            </div>
-          </div>
-        </div>
-      )}
+      
 
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 to-slate-800">
-        {/* Gradientes simplificados con CSS */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-teal-600/10 rounded-full blur-3xl" />
-        </div>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-brand-navy-800 to-brand-navy-600">
 
         <main className="w-full max-w-md relative">
-          <div className="bg-slate-900/90 backdrop-blur border border-slate-800 rounded-2xl p-8 shadow-2xl">
+          <div className="bg-brand-navy-800/80 border border-brand-navy-600 rounded-2xl p-8 shadow-xl">
             {/* Header simplificado */}
             <header className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-teal-600 mb-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-primary mb-4">
                 <span className="text-2xl font-bold text-white">CHV</span>
               </div>
               <h1 className="text-3xl font-bold text-slate-50">Clínica de Hernia y Vesícula</h1>
@@ -132,6 +194,7 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
               onSubmit={handleSubmit} 
               className="space-y-5" 
               noValidate
+              aria-busy={isPending}
             >
               {/* Honeypot mejorado */}
               <input 
@@ -159,7 +222,11 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
                     required
                     autoComplete="email"
                     autoFocus
-                    disabled={isPending}
+                    disabled={isPending || isRateLimited}
+                    inputMode="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    aria-describedby={error ? errorId : undefined}
                   />
                 </div>
               </div>
@@ -180,7 +247,11 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
                     required
                     minLength={8}
                     autoComplete="current-password"
-                    disabled={isPending}
+                    disabled={isPending || isRateLimited}
+                    aria-invalid={!!error}
+                    aria-describedby={error ? errorId : undefined}
+                    onKeyDown={(e) => setCapsOn((e as React.KeyboardEvent<HTMLInputElement>).getModifierState('CapsLock'))}
+                    onKeyUp={(e) => setCapsOn((e as React.KeyboardEvent<HTMLInputElement>).getModifierState('CapsLock'))}
                   />
                   <button
                     type="button"
@@ -192,6 +263,9 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                {capsOn && (
+                  <p className="mt-1.5 text-xs text-amber-300">Bloq Mayús activado</p>
+                )}
               </div>
 
               {/* Remember me + Forgot password */}
@@ -200,15 +274,16 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
                   <input
                     type="checkbox"
                     name="rememberMe"
-                    className="w-4 h-4 text-teal-600 bg-slate-800 border-slate-700 rounded focus:ring-2 focus:ring-teal-500/30"
-                    disabled={isPending}
+                    className="w-4 h-4 text-primary bg-brand-navy-600/40 border-brand-navy-600/60 rounded focus:ring-2 focus:ring-primary/30"
+                    disabled={isPending || isRateLimited}
                   />
                   <span className="text-sm text-slate-300">Recordar sesión</span>
                 </label>
                 <a 
                   href="/reset-password" 
                   className="text-sm text-slate-300 hover:text-white underline underline-offset-4"
-                  tabIndex={isPending ? -1 : 0}
+                  aria-disabled={isPending || isRateLimited}
+                  tabIndex={(isPending || isRateLimited) ? -1 : 0}
                 >
                   ¿Olvidaste tu contraseña?
                 </a>
@@ -216,7 +291,7 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
 
               {/* Error message */}
               {error && (
-                <div className={CLASSES.error} role="alert">
+                <div id={errorId} ref={errorRef} className={CLASSES.error} role="alert" tabIndex={-1} aria-live="assertive">
                   <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </div>
@@ -225,13 +300,19 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
               {/* Submit button */}
               <button
                 type="submit"
-                disabled={isPending}
-                className={`${CLASSES.button.base} ${isPending ? CLASSES.button.disabled : CLASSES.button.active}`}
+                disabled={isPending || isRateLimited}
+                className={`${CLASSES.button.base} ${(isPending || isRateLimited) ? CLASSES.button.disabled : CLASSES.button.active}`}
+                aria-disabled={isPending || isRateLimited}
               >
                 {isPending ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
                     <span>Verificando...</span>
+                  </>
+                ) : isRateLimited ? (
+                  <>
+                    <Clock className="w-5 h-5" />
+                    <span>Reintentar en {Math.ceil(cooldownMs / 1000)}s</span>
                   </>
                 ) : (
                   <>
@@ -242,7 +323,7 @@ export default function ProfessionalLoginForm({ nextPath, initialErrorCode }: Pr
               </button>
             </form>
 
-            <footer className="mt-8 pt-6 border-t border-slate-800 text-center">
+            <footer className="mt-8 pt-6 border-t border-brand-navy-600 text-center">
               <p className="text-xs text-slate-500">
                 © {new Date().getFullYear()} Clínica de Hernia y Vesícula. Todos los derechos reservados.
               </p>

@@ -2,24 +2,49 @@
 
 // Single source of truth for database types
 import type { Database } from './database.types';
-// Import centralized compatibility enums generated from DB constants and re-export explicitly
-import {
-  AppointmentStatusEnum as _AppointmentStatusEnum,
-  PatientStatusEnum as _PatientStatusEnum,
-  UserRoleEnum as _UserRoleEnum,
-} from '@/lib/validation/enums';
+import type { AppointmentStatus, PatientStatus } from '@/lib/constants';
 
-export const AppointmentStatusEnum = _AppointmentStatusEnum;
-export const PatientStatusEnum = _PatientStatusEnum;
-export const UserRoleEnum = _UserRoleEnum;
-
-// Re-export validation schemas and helpers so consumers can import from '@/lib/types'
+// Re-export ALL constants from centralized source
 export {
+  // Enums
+  AppointmentStatusEnum,
+  PatientStatusEnum,
+  UserRoleEnum,
+  SurveyStatusEnum,
+  ArrivalStatusEnum,
+  SurgicalDecisionEnum,
+  PatientSourceEnum,
+  // Types
+  type AppointmentStatus,
+  type PatientStatus,
+  type UserRole,
+  type SurveyStatus,
+  type ArrivalStatus,
+  type SurgicalDecision,
+  type PatientSource,
+  type DbDiagnosis,
+  type DiagnosisType,
+  type AdmissionAction,
+  type TabType,
+  // Schemas
   ZAppointmentStatus,
   ZDiagnosisDb,
+  // Functions
   dbDiagnosisToDisplay,
+  getStatusConfig,
+  getPatientStatusConfig,
+  canPerformAction,
+  // Constants
   DIAGNOSIS_DB_VALUES,
-} from '@/lib/validation/enums';
+  APPOINTMENT_STATUS_CONFIG,
+  PATIENT_STATUS_CONFIG,
+  ACTION_TO_STATUS_MAP,
+} from '@/lib/constants';
+
+// Function moved after imports
+export const isPresent = (status: AppointmentStatus): boolean => {
+  return status === 'PRESENTE';
+};
 
 // Re-export statistics validation schemas and their inferred types
 export {
@@ -36,8 +61,8 @@ export type { LabelCount, StatisticsResponse } from '@/lib/validation/statistics
 export { Constants } from './database.types';
 
 // --- Row Types (for reading data) ---
-export type Patient = Database['public']['Tables']['patients']['Row'];
-export type Appointment = Database['public']['Tables']['appointments']['Row'];
+export type BasePatient = Database['public']['Tables']['patients']['Row'];
+export type BaseAppointment = Database['public']['Tables']['appointments']['Row'];
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type AssignedSurvey = Database['public']['Tables']['assigned_surveys']['Row'];
 export type SurveyResponse = Database['public']['Tables']['survey_responses']['Row'];
@@ -48,6 +73,18 @@ export type AiPrediction = Database['public']['Tables']['ai_predictions']['Row']
 export type AppointmentHistory = Database['public']['Tables']['appointment_history']['Row'];
 export type DoctorFeedback = Database['public']['Tables']['doctor_feedback']['Row'];
 export type SystemMetric = Database['public']['Tables']['system_metrics']['Row'];
+
+// --- Extended Types Combining Base with Relations ---
+export interface Patient extends BasePatient {
+  appointments?: Appointment[];
+  survey_responses?: SurveyResponse[];
+  ai_predictions?: AiPrediction[];
+}
+
+export interface Appointment extends BaseAppointment {
+  patient?: Patient;
+  status: AppointmentStatus;
+}
 
 // --- Extended Types with Joined Relations ---
 
@@ -87,14 +124,12 @@ export type UpdateAppointment = Database['public']['Tables']['appointments']['Up
 export type UpdateProfile = Database['public']['Tables']['profiles']['Update'];
 export type UpdateAiPrediction = Database['public']['Tables']['ai_predictions']['Update'];
 
-// --- Enums as String Literal Types ---
-export type PatientStatus = Database['public']['Enums']['patient_status_enum'];
+// --- Enums as String Literal Types (from Database) ---
+// Note: These are now imported from @/lib/constants
 export type DiagnosisEnum = Database['public']['Enums']['diagnosis_enum'];
-export type AppointmentStatus = Database['public']['Enums']['appointment_status_enum'];
-export type UserRole = Database['public']['Enums']['user_role_enum'];
 
 // --- NEW ENUMS FROM UPDATED SCHEMA ---
-export type SurgicalDecision = Database['public']['Enums']['surgical_decision_enum'];
+// SurgicalDecision is now imported from @/lib/constants
 export type MarketingSource = Database['public']['Enums']['patient_source_enum'];
 
 // PatientStatusEnum ahora se re-exporta desde '@/lib/validation/enums'
@@ -215,7 +250,7 @@ export type PatientSurveyData = {
 /**
  * @deprecated Usar el tipo `Appointment` y transformar los datos en el componente si es necesario.
  */
-export interface AppointmentData {
+export interface LegacyAppointment {
   id: string;
   patientId: string;
   paciente: string;

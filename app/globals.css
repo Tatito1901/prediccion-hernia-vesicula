@@ -19,10 +19,10 @@
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 210 100% 47%;
+    --ring: 158 60% 44%;
 
     /* Colores principales */
-    --primary: 210 100% 47%;
+    --primary: 158 60% 44%;
     --primary-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
@@ -42,6 +42,13 @@
     --medical-foreground: 210 40% 98%;
     --medical-light: 210 100% 94%;
     --medical-dark: 210 100% 35%;
+
+    /* Paleta de marca (Navy + Green) */
+    --brand-navy: 222 61% 18%;
+    --brand-navy-600: 222 61% 26%;
+    --brand-navy-800: 222 61% 12%;
+    --brand-green: 158 60% 44%;
+    --brand-green-600: 158 60% 38%;
 
     /* Estados */
     --success: 142 71% 45%;
@@ -109,10 +116,10 @@
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 210 100% 60%;
+    --ring: 158 55% 48%;
 
     /* Principales */
-    --primary: 210 100% 60%;
+    --primary: 158 55% 48%;
     --primary-foreground: 222.2 47.4% 11.2%;
 
     --secondary: 217.2 32.6% 17.5%;
@@ -132,6 +139,13 @@
     --medical-foreground: 222.2 47.4% 11.2%;
     --medical-light: 210 100% 70%;
     --medical-dark: 210 100% 50%;
+
+    /* Paleta de marca (Navy + Green) */
+    --brand-navy: 222 61% 10%;
+    --brand-navy-600: 222 61% 16%;
+    --brand-navy-800: 222 61% 6%;
+    --brand-green: 158 55% 48%;
+    --brand-green-600: 158 55% 42%;
 
     /* Estados */
     --success: 142 71% 55%;

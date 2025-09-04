@@ -18,6 +18,7 @@ import {
   normalizePatientStatus,
   validatePatientStatusChange,
   planUpdateOnAppointmentCompleted,
+  validateRescheduleDateTime,
 } from '@/lib/admission-business-rules'
 
 import { AppointmentStatusEnum, PatientStatusEnum } from '@/lib/types'
@@ -59,6 +60,26 @@ describe('Admission Business Rules - Action Validators', () => {
     expect(res.reason).toMatch(/Check-in disponible en/i)
   })
 
+describe('Clinic schedule coverage (Saturday)', () => {
+  // 2025-01-18 is Saturday
+  const DAY_SAT = '2025-01-18'
+  const toZSat = (hh: number, mm: number = 0) => new Date(`${DAY_SAT}T${String(hh + 6).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00.000Z`)
+  const apptIsoAtLocalSat = (hh: number, mm: number = 0) => new Date(`${DAY_SAT}T${String(hh + 6).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00.000Z`).toISOString()
+
+  it('Saturday is a work day: check-in valid within window and hours', () => {
+    const appt = makeAppointment(apptIsoAtLocalSat(10, 0), 'CONFIRMADA')
+    const now = toZSat(9, 40) // 09:40 local, within window and work hours
+    const res = canCheckIn(appt, now)
+    expect(res.valid).toBe(true)
+  })
+
+  it('validateRescheduleDateTime accepts Saturday within hours', () => {
+    const iso = apptIsoAtLocalSat(9, 0)
+    const res = validateRescheduleDateTime(iso, toZSat(8, 0))
+    expect(res.valid).toBe(true)
+  })
+})
+
   it('canCheckIn: true within window and work hours', () => {
     const appt = makeAppointment(apptIsoAtLocal(10, 0), 'CONFIRMADA')
     const now = toZ(9, 40) // 09:40 local (window 09:30 - 10:15)
@@ -75,9 +96,9 @@ describe('Admission Business Rules - Action Validators', () => {
   })
 
   it('canCheckIn: false if within window but outside work hours', () => {
-    // Appointment at 08:00 local -> check-in window starts 07:30 local (outside work hours)
-    const appt = makeAppointment(apptIsoAtLocal(8, 0), 'PROGRAMADA')
-    const now = toZ(7, 45) // 07:45 local (within window, but < 08:00 work start)
+    // Appointment at 09:00 local -> check-in window starts 08:30 local (outside work hours)
+    const appt = makeAppointment(apptIsoAtLocal(9, 0), 'PROGRAMADA')
+    const now = toZ(8, 45) // 08:45 local (within window, but < 09:00 work start)
     const res = canCheckIn(appt, now)
     expect(res.valid).toBe(false)
     expect(res.reason).toMatch(/horario laboral/i)

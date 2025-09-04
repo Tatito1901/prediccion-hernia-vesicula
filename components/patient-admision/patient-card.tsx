@@ -3,7 +3,7 @@
 import React, { memo, useMemo, useCallback, useState } from "react";
 import dynamic from 'next/dynamic';
 import { isValid, parseISO } from 'date-fns';
-import { formatMx, isMxToday, mxLocalPartsToUtcIso } from '@/utils/datetime';
+import { formatMx, isMxToday, mxLocalPartsToUtcIso, mxNow } from '@/utils/datetime';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,19 +17,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   Clock,
   Calendar,
-  User2,
   Phone,
   Mail,
   MoreVertical,
@@ -42,6 +31,8 @@ import {
   Stethoscope,
   ChevronDown,
 } from "lucide-react";
+import ConfirmActionDialog from "./patient-card/confirm-action-dialog";
+import CheckInInfoDialog from "./patient-card/checkin-info-dialog";
 import { cn } from "@/lib/utils";
 
 import { AppointmentStatusEnum } from '@/lib/types';
@@ -66,7 +57,7 @@ const RescheduleDatePicker = dynamic(
 );
 
 const PatientHistoryModal = dynamic(
-  () => import('./patient-history-modal'),
+  () => import('@/components/patients/patient-history-modal'),
   { ssr: false }
 );
 
@@ -143,7 +134,11 @@ export const PatientCard = memo<PatientCardProps>(({
   const patient = useMemo(() => appointment.patients, [appointment.patients]);
   const statusConfig = useMemo(() => getStatusConfig(appointment.estado_cita), [appointment.estado_cita]);
   const fullName = useMemo(() => getPatientFullName(patient), [patient]);
-  const dxLabel = useMemo(() => prettifyEnumLabel(String(patient?.diagnostico_principal || '')), [patient?.diagnostico_principal]);
+  const dxLabel = useMemo(() => {
+    // Compute only when expanded to reduce work for collapsed cards
+    if (!open) return '';
+    return prettifyEnumLabel(String(patient?.diagnostico_principal || ''));
+  }, [open, patient?.diagnostico_principal]);
   
   const initials = useMemo(() => {
     const n = patient?.nombre?.[0] || '';
@@ -156,7 +151,7 @@ export const PatientCard = memo<PatientCardProps>(({
       const date = parseISO(appointment.fecha_hora_cita);
       if (!isValid(date)) return null;
       
-      const now = new Date();
+      const now = mxNow();
       const isToday = isMxToday(appointment.fecha_hora_cita);
       const isPast = date < now;
       
@@ -180,7 +175,7 @@ export const PatientCard = memo<PatientCardProps>(({
       if (!isValid(appt)) return { state: 'unknown' as const };
       const start = new Date(appt.getTime() - 30 * 60 * 1000); // 30 min antes
       const end = new Date(appt.getTime() + 15 * 60 * 1000);   // 15 min después
-      const now = new Date();
+      const now = mxNow();
       if (now < start) {
         const minutes = Math.ceil((start.getTime() - now.getTime()) / 60000);
         return { state: 'tooEarly' as const, minutes, start, end, appt };
@@ -209,8 +204,15 @@ export const PatientCard = memo<PatientCardProps>(({
     availableActions.find(a => a === 'checkIn' || a === 'complete'),
     [availableActions]
   );
+  const secondaryActions = useMemo(() => 
+    availableActions.filter(a => a !== primaryAction),
+    [availableActions, primaryAction]
+  );
+  const contentId = useMemo(() => `patient-card-content-${appointment.id}`, [appointment.id]);
 
   const prettyMotivos = useMemo(() => {
+    // Compute only when expanded to avoid unnecessary work in list views
+    if (!open) return [] as string[];
     const base = new Set<string>();
     const dxNorm = (dxLabel || '').toLowerCase().replace(/\s+/g, '');
     const items = (appointment.motivos_consulta || []).map(m => prettifyEnumLabel(String(m)) || '').filter(Boolean);
@@ -223,7 +225,7 @@ export const PatientCard = memo<PatientCardProps>(({
       }
     }
     return dedup;
-  }, [appointment.motivos_consulta, dxLabel]);
+  }, [open, appointment.motivos_consulta, dxLabel]);
 
   const handleAction = useCallback(async (action: AdmissionAction) => {
     if (action === 'reschedule') {
@@ -309,27 +311,24 @@ export const PatientCard = memo<PatientCardProps>(({
         dateTime.isToday && "ring-2 ring-sky-500/20",
         className
       )}>
-        {/* Indicador de "Hoy" elegante */}
-        {dateTime.isToday && (
-          <div className="absolute top-3 right-3 z-10">
-            <Badge className="bg-sky-500 text-white border-0 text-xs font-medium">
-              HOY
-            </Badge>
-          </div>
-        )}
         <CardContent className="p-3 sm:p-4">
           <Collapsible open={open} onOpenChange={setOpen}>
             {/* Header compacto con Trigger en el lado izquierdo */}
             <div className="flex items-start justify-between gap-2">
               <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-3 min-w-0 flex-1 text-left">
+                <button
+                  className="flex items-center gap-3 min-w-0 flex-1 text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                  aria-expanded={open}
+                  aria-controls={contentId}
+                  aria-label={`Ver detalles de ${fullName}`}
+                >
                   <Avatar className="h-9 w-9 shrink-0 ring-1 ring-black/5 dark:ring-white/10">
                     <AvatarFallback className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
                       {initials}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-[15px] sm:text-base text-gray-900 dark:text-gray-100 truncate">
+                    <h3 className="font-semibold text-[15px] sm:text-base text-gray-900 dark:text-gray-100 truncate" title={fullName}>
                       {fullName}
                     </h3>
                     <div className="flex flex-wrap items-center gap-2 mt-0.5">
@@ -344,6 +343,11 @@ export const PatientCard = memo<PatientCardProps>(({
                           1ª vez
                         </Badge>
                       )}
+                      {dateTime.isToday && (
+                        <Badge className="bg-sky-500 text-white border-0 text-[10px] sm:text-xs font-medium">
+                          HOY
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <ChevronDown className={cn("h-4 w-4 text-gray-500 transition-transform", open && "rotate-180")} />
@@ -352,9 +356,15 @@ export const PatientCard = memo<PatientCardProps>(({
 
               {/* Hora y menú de acciones */}
               <div className="flex items-center gap-2">
-                <div className="hidden sm:flex items-center gap-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span className="font-medium">{dateTime.time}</span>
+                <div className="flex items-center">
+                  <span
+                    className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300 shadow-sm"
+                    title={dateTime.fullDate}
+                    aria-label={`Hora de la cita: ${dateTime.time}`}
+                  >
+                    <Clock className="h-3.5 w-3.5 mr-1.5" />
+                    {dateTime.time}
+                  </span>
                 </div>
                 {!disableActions && availableActions.length > 0 && (
                   <DropdownMenu>
@@ -362,14 +372,15 @@ export const PatientCard = memo<PatientCardProps>(({
                       <Button 
                         variant="ghost" 
                         size="icon"
-                        className="h-8 w-8 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        className="h-8 w-8 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                        aria-label="Más opciones de la cita"
                         disabled={isPending}
                       >
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
-                      {availableActions.filter(a => a !== primaryAction).map((action, index) => {
+                      {secondaryActions.map((action, index) => {
                         const config = ACTION_CONFIG[action];
                         return (
                           <React.Fragment key={action}>
@@ -391,7 +402,7 @@ export const PatientCard = memo<PatientCardProps>(({
             </div>
 
             {/* Contenido expandible */}
-            <CollapsibleContent>
+            <CollapsibleContent id={contentId}>
               <div className="mt-3 md:grid md:grid-cols-6 md:gap-4">
                 {/* Información de la cita, motivos y contacto */}
                 <div className="md:col-span-4 space-y-2 mb-3 md:mb-0">
@@ -427,6 +438,7 @@ export const PatientCard = memo<PatientCardProps>(({
                       <a 
                         href={`tel:${patient.telefono}`}
                         className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                        aria-label={`Llamar al paciente ${fullName}`}
                       >
                         <Phone className="h-4 w-4" />
                         <span>{patient.telefono}</span>
@@ -436,6 +448,7 @@ export const PatientCard = memo<PatientCardProps>(({
                       <a 
                         href={`mailto:${patient.email}`}
                         className="hidden sm:flex items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                        aria-label={`Enviar correo a ${patient.email}`}
                       >
                         <Mail className="h-4 w-4" />
                         <span className="truncate max-w-[180px]">{patient.email}</span>
@@ -454,6 +467,8 @@ export const PatientCard = memo<PatientCardProps>(({
                         "w-full gap-2 font-medium",
                         ACTION_CONFIG[primaryAction].className
                       )}
+                      aria-label={ACTION_CONFIG[primaryAction].label}
+                      title={ACTION_CONFIG[primaryAction].title}
                     >
                       {isPending ? (
                         <>
@@ -488,91 +503,31 @@ export const PatientCard = memo<PatientCardProps>(({
       </Card>
 
       {/* Diálogo de confirmación */}
-      <AlertDialog open={!!confirmDialog} onOpenChange={(open) => !open && setConfirmDialog(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirmDialog && ACTION_CONFIG[confirmDialog].title}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <span className="block font-medium text-foreground">{fullName}</span>
-              <span className="block">{confirmDialog && ACTION_CONFIG[confirmDialog].description}</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleConfirm} 
-              disabled={isPending}
-              className={confirmDialog && ACTION_CONFIG[confirmDialog].variant === 'destructive' ? 
-                'bg-red-600 hover:bg-red-700' : ''
-              }
-            >
-              {isPending ? 'Procesando...' : 'Confirmar'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmActionDialog
+        open={!!confirmDialog}
+        onOpenChange={(open) => !open && setConfirmDialog(null)}
+        title={confirmDialog ? ACTION_CONFIG[confirmDialog].title : ""}
+        description={confirmDialog ? ACTION_CONFIG[confirmDialog].description : undefined}
+        fullName={fullName}
+        isPending={isPending}
+        variant={confirmDialog ? ACTION_CONFIG[confirmDialog].variant : undefined}
+        onConfirm={handleConfirm}
+      />
 
       {/* Diálogo informativo (check-in fuera de ventana) */}
-      <AlertDialog open={!!infoDialog} onOpenChange={(open) => !open && setInfoDialog(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              {infoDialog?.kind === 'tooEarly' ? (
-                <>
-                  <Clock className="h-4 w-4 text-sky-600" />
-                  Check-in aún no disponible
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  Ventana de check-in expirada
-                </>
-              )}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <span className="block font-medium text-foreground">{fullName}</span>
-              {infoDialog?.kind === 'tooEarly' && (
-                <span className="block">
-                  El check-in se habilita 30 minutos antes de la cita
-                  {checkInUi.start && (
-                    <>
-                      {" "}(desde {formatMx(checkInUi.start, 'HH:mm')}
-                      {typeof checkInUi.minutes === 'number' && `, faltan ${checkInUi.minutes} min`} ).
-                    </>
-                  )}
-                </span>
-              )}
-              {infoDialog?.kind === 'expired' && (
-                <span className="block">
-                  La ventana de check-in cerró{checkInUi.end && <> a las {formatMx(checkInUi.end, 'HH:mm')}</>}.
-                  Puedes marcar <strong>No Asistió</strong> o <strong>Reagendar</strong>.
-                </span>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2">
-            {infoDialog?.kind === 'expired' && availableActions.includes('noShow') && (
-              <Button 
-                variant="destructive" 
-                onClick={() => { setInfoDialog(null); handleAction('noShow'); }}
-              >
-                No Asistió
-              </Button>
-            )}
-            {availableActions.includes('reschedule') && (
-              <Button 
-                variant="outline" 
-                onClick={() => { setInfoDialog(null); handleAction('reschedule'); }}
-              >
-                Reagendar
-              </Button>
-            )}
-            <AlertDialogCancel>Cerrar</AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CheckInInfoDialog
+        open={!!infoDialog}
+        kind={infoDialog?.kind || 'tooEarly'}
+        fullName={fullName}
+        minutes={typeof checkInUi.minutes === 'number' ? checkInUi.minutes : undefined}
+        start={checkInUi.start}
+        end={checkInUi.end}
+        canNoShow={availableActions.includes('noShow')}
+        canReschedule={availableActions.includes('reschedule')}
+        onNoShow={() => { setInfoDialog(null); handleAction('noShow'); }}
+        onReschedule={() => { setInfoDialog(null); handleAction('reschedule'); }}
+        onClose={() => setInfoDialog(null)}
+      />
 
       {/* Modales */}
       {showReschedule && (

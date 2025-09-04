@@ -7,9 +7,15 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 const IS_DEV = process.env.NODE_ENV !== 'production'
 // En desarrollo permitimos acceder a /admision y /survey sin autenticación para facilitar pruebas manuales
 const PUBLIC_ROUTES = IS_DEV
-  ? ['/login', '/reset-password', '/auth/callback', '/auth/confirm', '/admision', '/survey']
-  : ['/login', '/reset-password', '/auth/callback', '/auth/confirm']
-const API_ROUTES = ['/api/', '/_next/', '/favicon.ico']
+  ? ['/', '/login', '/reset-password', '/auth/callback', '/auth/confirm', '/admision', '/survey', '/encuesta']
+  : ['/', '/login', '/reset-password', '/auth/callback', '/auth/confirm', '/encuesta']
+const API_ROUTES = ['/api/', '/_next/', '/_actions', '/favicon.ico', '/manifest.json']
+
+// Determina si una ruta es pública, tratando '/' como coincidencia exacta
+function isPublicRoute(pathname: string): boolean {
+  if (pathname === '/') return true
+  return PUBLIC_ROUTES.some(route => route !== '/' && pathname.startsWith(route))
+}
 
 // Cache de sesiones en edge runtime (con TTL corto)
 const sessionCache = new Map<string, { expires: number; hasSession: boolean }>()
@@ -31,9 +37,11 @@ export async function middleware(request: NextRequest) {
   })
 
   // Configurar cliente Supabase para edge runtime
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         get(name: string) {
@@ -108,9 +116,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // Rutas públicas
-  if (PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
+  if (isPublicRoute(pathname)) {
     // Si hay sesión válida y está en login, redirigir a dashboard
-    if (hasValidSession && pathname === '/login') {
+    if (hasValidSession && (pathname === '/' || pathname === '/login')) {
       const dashboardUrl = new URL('/dashboard', request.url)
       
       // Preservar el next param si existe
@@ -126,7 +134,7 @@ export async function middleware(request: NextRequest) {
 
   // Rutas protegidas - requieren autenticación
   if (!hasValidSession) {
-    const loginUrl = new URL('/login', request.url)
+    const loginUrl = new URL('/', request.url)
     
     // Guardar la ruta original para redirigir después del login
     if (pathname !== '/' && pathname !== '/dashboard') {
@@ -185,9 +193,10 @@ export const config = {
      * Match all request paths except:
      * - _next/static (static files)
      * - _next/image (image optimization files)
+     * - _actions (server actions endpoint)
      * - favicon.ico (favicon file)
      * - public folder
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|_actions|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

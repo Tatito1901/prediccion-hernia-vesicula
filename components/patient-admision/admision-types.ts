@@ -2,28 +2,27 @@
 // TIPOS OPTIMIZADOS PARA EL FLUJO DE ADMISIÓN - CLÍNICA HERNIA Y VESÍCULA
 
 import { z } from 'zod';
-import { AppointmentStatusEnum } from '@/lib/types';
-import type { UserRole as DbUserRole, PatientStatus } from '@/lib/types';
 import { 
-  ZAppointmentStatus, 
-  ZDiagnosisDb, 
-  type DbDiagnosis 
-} from '@/lib/validation/enums';
+  AppointmentStatusEnum,
+  PatientStatus,
+  APPOINTMENT_STATUS_CONFIG,
+  type AdmissionAction,
+  ACTION_TO_STATUS_MAP,
+  canPerformAction as _canPerformAction,
+  ZAppointmentStatus,
+  ZDiagnosisDb,
+  type DbDiagnosis
+} from '@/lib/constants';
 
 // ==================== TIPOS BASE ====================
 export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
 
 export type DiagnosisType = DbDiagnosis;
-export type UserRole = DbUserRole;
+// UserRole is imported from @/lib/constants
 export type { PatientStatus };
 
-export type AdmissionAction = 
-  | 'checkIn'
-  | 'complete'
-  | 'cancel'
-  | 'noShow'
-  | 'reschedule'
-  | 'viewHistory';
+// Re-exported from centralized source
+export type { AdmissionAction } from '@/lib/constants';
 
 export type TabType = 'today' | 'future' | 'past';
 
@@ -164,88 +163,12 @@ export interface RescheduleProps {
 }
 
 // ==================== CONFIGURACIÓN VISUAL ====================
-export const APPOINTMENT_STATUS_CONFIG = {
-  [AppointmentStatusEnum.PROGRAMADA]: {
-    label: 'Programada',
-    color: 'sky',
-    bgClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300',
-    textClass: 'text-sky-700 dark:text-sky-300',
-    borderClass: 'border-sky-400 dark:border-sky-600',
-    ringClass: 'ring-sky-100 dark:ring-sky-900/30',
-    iconBg: 'bg-sky-100 dark:bg-sky-900/50',
-    description: 'Cita programada',
-  },
-  [AppointmentStatusEnum.CONFIRMADA]: {
-    label: 'Confirmada',
-    color: 'emerald',
-    bgClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
-    textClass: 'text-emerald-700 dark:text-emerald-300',
-    borderClass: 'border-emerald-400 dark:border-emerald-600',
-    ringClass: 'ring-emerald-100 dark:ring-emerald-900/30',
-    iconBg: 'bg-emerald-100 dark:bg-emerald-900/50',
-    description: 'Cita confirmada por paciente',
-  },
-  [AppointmentStatusEnum.PRESENTE]: {
-    label: 'En Consulta',
-    color: 'teal',
-    bgClass: 'bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-300',
-    textClass: 'text-teal-700 dark:text-teal-300',
-    borderClass: 'border-teal-400 dark:border-teal-600',
-    ringClass: 'ring-teal-100 dark:ring-teal-900/30',
-    iconBg: 'bg-teal-100 dark:bg-teal-900/50',
-    description: 'Paciente en consulta',
-  },
-  [AppointmentStatusEnum.COMPLETADA]: {
-    label: 'Completada',
-    color: 'green',
-    bgClass: 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300',
-    textClass: 'text-green-700 dark:text-green-300',
-    borderClass: 'border-green-400 dark:border-green-600',
-    ringClass: 'ring-green-100 dark:ring-green-900/30',
-    iconBg: 'bg-green-100 dark:bg-green-900/50',
-    description: 'Consulta completada',
-  },
-  [AppointmentStatusEnum.CANCELADA]: {
-    label: 'Cancelada',
-    color: 'red',
-    bgClass: 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300',
-    textClass: 'text-red-700 dark:text-red-300',
-    borderClass: 'border-red-400 dark:border-red-600',
-    ringClass: 'ring-red-100 dark:ring-red-900/30',
-    iconBg: 'bg-red-100 dark:bg-red-900/50',
-    description: 'Cita cancelada',
-  },
-  [AppointmentStatusEnum.NO_ASISTIO]: {
-    label: 'No Asistió',
-    color: 'amber',
-    bgClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
-    textClass: 'text-amber-700 dark:text-amber-300',
-    borderClass: 'border-amber-400 dark:border-amber-600',
-    ringClass: 'ring-amber-100 dark:ring-amber-900/30',
-    iconBg: 'bg-amber-100 dark:bg-amber-900/50',
-    description: 'Paciente no asistió',
-  },
-  [AppointmentStatusEnum.REAGENDADA]: {
-    label: 'Reagendada',
-    color: 'violet',
-    bgClass: 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300',
-    textClass: 'text-violet-700 dark:text-violet-300',
-    borderClass: 'border-violet-400 dark:border-violet-600',
-    ringClass: 'ring-violet-100 dark:ring-violet-900/30',
-    iconBg: 'bg-violet-100 dark:bg-violet-900/50',
-    description: 'Cita reagendada',
-  },
-} as const;
+// Re-exported from centralized source
+export { APPOINTMENT_STATUS_CONFIG } from '@/lib/constants';
 
 // Mapeo de acciones de UI a estados de cita
-export const ACTION_TO_STATUS_MAP: Record<AdmissionAction, AppointmentStatus | null> = {
-  checkIn: AppointmentStatusEnum.PRESENTE,
-  complete: AppointmentStatusEnum.COMPLETADA,
-  cancel: AppointmentStatusEnum.CANCELADA,
-  noShow: AppointmentStatusEnum.NO_ASISTIO,
-  reschedule: AppointmentStatusEnum.REAGENDADA,
-  viewHistory: null,
-};
+// Re-exported from centralized source
+export { ACTION_TO_STATUS_MAP } from '@/lib/constants';
 
 // ==================== SCHEMAS OPTIMIZADOS ====================
 export const NewPatientSchema = z.object({
@@ -253,7 +176,7 @@ export const NewPatientSchema = z.object({
   nombre: z.string().min(2, "Mínimo 2 caracteres").max(50),
   apellidos: z.string().min(2, "Mínimo 2 caracteres").max(50),
   diagnostico_principal: ZDiagnosisDb,
-  fechaConsulta: z.date({ required_error: "Fecha requerida" }),
+  fechaConsulta: z.date(),
   horaConsulta: z.string().regex(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/, "Formato HH:MM"),
   
   // Opcionales
@@ -286,39 +209,10 @@ export const getStatusConfig = (status: AppointmentStatus) => {
   return APPOINTMENT_STATUS_CONFIG[status] || APPOINTMENT_STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
 };
 
+// Re-exportar la función centralizada
 export const canPerformAction = (
   appointment: AppointmentWithPatient, 
   action: AdmissionAction
 ): boolean => {
-  const status = appointment.estado_cita;
-  
-  // Conjuntos tipados para evitar problemas de unión estrecha en Array.includes
-  const canCheckInStatuses = new Set<AppointmentStatus>([
-    AppointmentStatusEnum.PROGRAMADA,
-    AppointmentStatusEnum.CONFIRMADA,
-  ]);
-  const canCancelStatuses = new Set<AppointmentStatus>([
-    AppointmentStatusEnum.PROGRAMADA,
-    AppointmentStatusEnum.CONFIRMADA,
-  ]);
-  const canNoShowStatuses = new Set<AppointmentStatus>([
-    AppointmentStatusEnum.PROGRAMADA,
-    AppointmentStatusEnum.CONFIRMADA,
-  ]);
-  const canRescheduleStatuses = new Set<AppointmentStatus>([
-    AppointmentStatusEnum.PROGRAMADA,
-    AppointmentStatusEnum.CONFIRMADA,
-    AppointmentStatusEnum.CANCELADA,
-  ]);
-  
-  const rules: Record<AdmissionAction, () => boolean> = {
-    checkIn: () => canCheckInStatuses.has(status),
-    complete: () => status === AppointmentStatusEnum.PRESENTE,
-    cancel: () => canCancelStatuses.has(status),
-    noShow: () => canNoShowStatuses.has(status),
-    reschedule: () => canRescheduleStatuses.has(status),
-    viewHistory: () => true,
-  };
-  
-  return rules[action]?.() ?? false;
+  return _canPerformAction(appointment.estado_cita, action);
 };

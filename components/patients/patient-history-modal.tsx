@@ -1,4 +1,4 @@
-// components/patient-admission/patient-history-modal.tsx
+// components/patients/patient-history-modal.tsx
 import React, { memo, useMemo, useState } from "react";
 import {
   Dialog,
@@ -40,11 +40,11 @@ import type { AppointmentStatus } from '@/lib/types';
 import type { 
   AppointmentWithPatient, 
   PatientHistoryModalProps,
-} from './admision-types';
+} from '@/components/patient-admision/admision-types';
 import { 
   getPatientFullName,
   getStatusConfig
-} from './admision-types';
+} from '@/components/patient-admision/admision-types';
 import { usePatientHistory } from '@/hooks/use-patient';
 
 // ==================== COMPONENTES INTERNOS ====================

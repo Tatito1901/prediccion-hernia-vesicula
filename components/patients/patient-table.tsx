@@ -1,5 +1,5 @@
-import React, { useState, useMemo, memo, useCallback } from "react"
-import { FixedSizeList as List } from "react-window"
+import React, { useState, useMemo, memo, useCallback, useEffect, useRef } from "react"
+import { FixedSizeList as List, ListOnScrollProps } from "react-window"
 import {
   Table,
   TableHeader,
@@ -33,7 +33,8 @@ import {
   Send,
   Edit3,
   Eye,
-  Activity
+  Activity,
+  History
 } from "lucide-react"
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -41,6 +42,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { PatientStatusEnum, EnrichedPatient } from "@/lib/types"
 import EmptyState from "@/components/ui/empty-state"
+import { useAutoListHeight } from "@/hooks/use-auto-size"
 
 interface PatientTableProps {
   patients: EnrichedPatient[]
@@ -50,6 +52,7 @@ interface PatientTableProps {
   onAnswerSurvey?: (patient: EnrichedPatient) => void
   onEditPatient?: (patient: EnrichedPatient) => void
   onScheduleAppointment?: (patient: EnrichedPatient) => void
+  onViewHistory?: (patient: EnrichedPatient) => void
 }
 
 type SortConfig = {
@@ -61,6 +64,9 @@ type SortConfig = {
 const VIRTUALIZE_THRESHOLD = 100
 const ROW_HEIGHT = 64 // px
 const VLIST_HEIGHT = 560 // px visible area
+const OVERSCAN_COUNT = 8
+const MOBILE_INITIAL_RENDER = 12
+const MOBILE_IO_ROOT_MARGIN = "200px"
 
 // 🎨 Configuración de colores elegante y profesional
 const THEME = {
@@ -189,10 +195,18 @@ const SortableHeader = memo(({
         "cursor-pointer select-none font-medium text-xs uppercase tracking-wider",
         "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50",
         "transition-colors duration-150",
-        isSorted && "bg-slate-50 dark:bg-slate-800/50 text-teal-600 dark:text-teal-400",
+        isSorted && "bg-slate-50 dark:bg-slate-800/50 text-primary",
         className
       )}
       onClick={() => onSort(sortKey)}
+      tabIndex={0}
+      aria-sort={isSorted ? (isAsc ? "ascending" : "descending") : "none"}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSort(sortKey)
+        }
+      }}
     >
       <div className="flex items-center gap-2 py-3 px-2">
         {Icon && <Icon className="h-4 w-4 opacity-60" />}
@@ -218,6 +232,7 @@ const PatientActions = memo(({
   onAnswerSurvey, 
   onEditPatient,
   onScheduleAppointment,
+  onViewHistory,
 }: {
   patient: EnrichedPatient
   onSelectPatient: (patient: EnrichedPatient) => void
@@ -225,6 +240,7 @@ const PatientActions = memo(({
   onAnswerSurvey?: (patient: EnrichedPatient) => void
   onEditPatient?: (patient: EnrichedPatient) => void
   onScheduleAppointment?: (patient: EnrichedPatient) => void
+  onViewHistory?: (patient: EnrichedPatient) => void
 }) => {
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -237,6 +253,7 @@ const PatientActions = memo(({
           variant="ghost" 
           size="sm" 
           className="h-8 w-8 p-0 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          aria-label="Acciones de paciente"
           onClick={handleClick}
         >
           <MoreHorizontal className="h-4 w-4" />
@@ -247,6 +264,12 @@ const PatientActions = memo(({
           <Eye className="h-4 w-4 mr-2 opacity-60" />
           Ver detalles
         </DropdownMenuItem>
+        {onViewHistory && (
+          <DropdownMenuItem onClick={() => onViewHistory(patient)}>
+            <History className="h-4 w-4 mr-2 opacity-60" />
+            Ver historial
+          </DropdownMenuItem>
+        )}
         {onEditPatient && (
           <DropdownMenuItem onClick={() => onEditPatient(patient)}>
             <Edit3 className="h-4 w-4 mr-2 opacity-60" />
@@ -292,7 +315,8 @@ const PatientRow = memo(({
   onShareSurvey, 
   onAnswerSurvey, 
   onEditPatient,
-  onScheduleAppointment
+  onScheduleAppointment,
+  onViewHistory
 }: {
   patient: EnrichedPatient
   onSelectPatient: (patient: EnrichedPatient) => void
@@ -300,13 +324,22 @@ const PatientRow = memo(({
   onAnswerSurvey?: (patient: EnrichedPatient) => void
   onEditPatient?: (patient: EnrichedPatient) => void
   onScheduleAppointment?: (patient: EnrichedPatient) => void
+  onViewHistory?: (patient: EnrichedPatient) => void
 }) => {
   const surveyState = getPatientSurveyState(patient)
   
   return (
     <TableRow 
-      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors even:bg-slate-50/50 dark:even:bg-slate-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       onClick={() => onSelectPatient(patient)}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelectPatient(patient)
+        }
+      }}
+      aria-label={`Ver detalles de ${formatText(patient.nombreCompleto)}`}
     >
       <TableCell className="py-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -314,7 +347,7 @@ const PatientRow = memo(({
             {patient.nombreCompleto.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-medium text-slate-900 dark:text-slate-100 truncate">
+            <p className="font-medium text-slate-900 dark:text-slate-100 truncate" title={formatText(patient.nombreCompleto)}>
               {formatText(patient.nombreCompleto)}
             </p>
             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -325,7 +358,7 @@ const PatientRow = memo(({
       </TableCell>
 
       <TableCell>
-        <Badge className={cn(
+        <Badge title={patient.displayDiagnostico || undefined} className={cn(
           "border font-medium",
           getDiagnosticStyle(patient.displayDiagnostico)
         )}>
@@ -345,7 +378,7 @@ const PatientRow = memo(({
 
       <TableCell>
         {patient.estado_paciente && (
-          <Badge className={cn(
+          <Badge title={patient.estado_paciente.replace(/_/g, ' ')} className={cn(
             "border font-medium",
             THEME.status[patient.estado_paciente]
           )}>
@@ -373,6 +406,7 @@ const PatientRow = memo(({
           onAnswerSurvey={onAnswerSurvey}
           onEditPatient={onEditPatient}
           onScheduleAppointment={onScheduleAppointment}
+          onViewHistory={onViewHistory}
         />
       </TableCell>
     </TableRow>
@@ -387,7 +421,8 @@ const MobilePatientCard = memo(({
   onShareSurvey,
   onAnswerSurvey,
   onEditPatient,
-  onScheduleAppointment
+  onScheduleAppointment,
+  onViewHistory
 }: {
   patient: EnrichedPatient
   onSelectPatient: (patient: EnrichedPatient) => void
@@ -395,12 +430,13 @@ const MobilePatientCard = memo(({
   onAnswerSurvey?: (patient: EnrichedPatient) => void
   onEditPatient?: (patient: EnrichedPatient) => void
   onScheduleAppointment?: (patient: EnrichedPatient) => void
+  onViewHistory?: (patient: EnrichedPatient) => void
 }) => {
   const surveyState = getPatientSurveyState(patient)
   
   return (
     <Card 
-      className="p-4 hover:shadow-md transition-all cursor-pointer border-slate-200 dark:border-slate-800"
+      className="p-4 sm:p-5 hover:shadow-md transition-all cursor-pointer border-slate-200 dark:border-slate-800"
       onClick={() => onSelectPatient(patient)}
     >
       <div className="flex items-start justify-between gap-3">
@@ -468,6 +504,70 @@ const MobilePatientCard = memo(({
 })
 MobilePatientCard.displayName = "MobilePatientCard"
 
+// 🦴 Skeleton muy ligero para tarjetas móviles
+const MobilePatientCardSkeleton = memo(() => (
+  <Card className="p-4 sm:p-5 border-slate-200 dark:border-slate-800">
+    <div className="flex items-start justify-between gap-3 animate-pulse">
+      <div className="flex items-start gap-3 flex-1 min-w-0">
+        <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-slate-800" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="h-4 w-2/3 rounded bg-slate-200 dark:bg-slate-800" />
+          <div className="flex gap-2 mt-2">
+            <div className="h-5 w-20 rounded bg-slate-200 dark:bg-slate-800" />
+            <div className="h-5 w-16 rounded bg-slate-200 dark:bg-slate-800" />
+            <div className="h-5 w-20 rounded bg-slate-200 dark:bg-slate-800" />
+          </div>
+          <div className="h-3 w-1/2 mt-3 rounded bg-slate-200 dark:bg-slate-800" />
+        </div>
+      </div>
+      <div className="h-8 w-8 rounded bg-slate-200 dark:bg-slate-800" />
+    </div>
+  </Card>
+))
+MobilePatientCardSkeleton.displayName = "MobilePatientCardSkeleton"
+
+// 👀 Lazy render con IntersectionObserver
+const LazyRender = ({
+  children,
+  placeholder,
+  rootMargin = MOBILE_IO_ROOT_MARGIN,
+  threshold = 0,
+  once = true,
+}: {
+  children: React.ReactNode
+  placeholder: React.ReactNode
+  rootMargin?: string
+  threshold?: number | number[]
+  once?: boolean
+}) => {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (visible) return
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
+    }
+    const obs = new IntersectionObserver((entries) => {
+      const entry = entries[0]
+      if (entry.isIntersecting) {
+        setVisible(true)
+        if (once) obs.disconnect()
+      }
+    }, { root: null, rootMargin, threshold })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [rootMargin, threshold, once, visible])
+
+  return (
+    <div ref={ref} aria-busy={!visible}>
+      {visible ? children : placeholder}
+    </div>
+  )
+}
+
 // ✅ Fila virtualizada (equivalente visual a PatientRow, usando CSS Grid)
 const VirtualPatientRow = memo(({ 
   patient, 
@@ -475,7 +575,9 @@ const VirtualPatientRow = memo(({
   onShareSurvey, 
   onAnswerSurvey, 
   onEditPatient,
-  onScheduleAppointment
+  onScheduleAppointment,
+  onViewHistory,
+  rowIndex,
 }: {
   patient: EnrichedPatient
   onSelectPatient: (patient: EnrichedPatient) => void
@@ -483,14 +585,29 @@ const VirtualPatientRow = memo(({
   onAnswerSurvey?: (patient: EnrichedPatient) => void
   onEditPatient?: (patient: EnrichedPatient) => void
   onScheduleAppointment?: (patient: EnrichedPatient) => void
+  onViewHistory?: (patient: EnrichedPatient) => void
+  rowIndex?: number
 }) => {
   const surveyState = getPatientSurveyState(patient)
 
   return (
     <div 
-      className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_80px] items-center gap-2 px-2 border-b border-slate-200 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50"
+      className={cn(
+        "grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_80px] xl:grid-cols-[2fr_2fr_1.5fr_1fr_1fr_96px] items-center gap-2 px-2",
+        "border-b border-slate-200 dark:border-slate-800 cursor-pointer",
+        "hover:bg-slate-50 dark:hover:bg-slate-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        (rowIndex ?? 0) % 2 === 0 ? "bg-white dark:bg-slate-950" : "bg-slate-50/50 dark:bg-slate-900/40"
+      )}
       style={{ height: ROW_HEIGHT }}
       onClick={() => onSelectPatient(patient)}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelectPatient(patient)
+        }
+      }}
+      aria-label={`Ver detalles de ${formatText(patient.nombreCompleto)}`}
     >
       {/* Paciente */}
       <div className="py-2">
@@ -499,7 +616,7 @@ const VirtualPatientRow = memo(({
             {patient.nombreCompleto.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-medium text-slate-900 dark:text-slate-100 truncate">
+            <p className="font-medium text-slate-900 dark:text-slate-100 truncate" title={formatText(patient.nombreCompleto)}>
               {formatText(patient.nombreCompleto)}
             </p>
             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -511,7 +628,7 @@ const VirtualPatientRow = memo(({
 
       {/* Diagnóstico */}
       <div className="py-2">
-        <Badge className={cn(
+        <Badge title={patient.displayDiagnostico || undefined} className={cn(
           "border font-medium",
           getDiagnosticStyle(patient.displayDiagnostico)
         )}>
@@ -533,7 +650,7 @@ const VirtualPatientRow = memo(({
       {/* Estado */}
       <div className="py-2">
         {patient.estado_paciente && (
-          <Badge className={cn(
+          <Badge title={patient.estado_paciente.replace(/_/g, ' ')} className={cn(
             "border font-medium",
             THEME.status[patient.estado_paciente]
           )}>
@@ -563,12 +680,43 @@ const VirtualPatientRow = memo(({
           onAnswerSurvey={onAnswerSurvey}
           onEditPatient={onEditPatient}
           onScheduleAppointment={onScheduleAppointment}
+          onViewHistory={onViewHistory}
         />
       </div>
     </div>
   )
 })
 VirtualPatientRow.displayName = "VirtualPatientRow"
+
+// ✅ Row renderer estable para react-window usando itemData
+type RowData = {
+  patients: EnrichedPatient[]
+  onSelectPatient: (patient: EnrichedPatient) => void
+  onShareSurvey?: (patient: EnrichedPatient) => void
+  onAnswerSurvey?: (patient: EnrichedPatient) => void
+  onEditPatient?: (patient: EnrichedPatient) => void
+  onScheduleAppointment?: (patient: EnrichedPatient) => void
+  onViewHistory?: (patient: EnrichedPatient) => void
+}
+
+const RowRenderer = memo(({ index, style, data }: { index: number; style: React.CSSProperties; data: RowData }) => {
+  const patient = data.patients[index]
+  return (
+    <div style={style}>
+      <VirtualPatientRow
+        patient={patient}
+        onSelectPatient={data.onSelectPatient}
+        onShareSurvey={data.onShareSurvey}
+        onAnswerSurvey={data.onAnswerSurvey}
+        onEditPatient={data.onEditPatient}
+        onScheduleAppointment={data.onScheduleAppointment}
+        onViewHistory={data.onViewHistory}
+        rowIndex={index}
+      />
+    </div>
+  )
+})
+RowRenderer.displayName = "RowRenderer"
 
 // 🚀 Componente principal optimizado
 const PatientTable: React.FC<PatientTableProps> = ({
@@ -579,11 +727,21 @@ const PatientTable: React.FC<PatientTableProps> = ({
   onAnswerSurvey,
   onEditPatient,
   onScheduleAppointment,
+  onViewHistory,
 }) => {
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "fecha_registro",
     direction: "desc",
   })
+
+  // Elevación de cabecera al hacer scroll en la lista virtual
+  const [headerElevated, setHeaderElevated] = useState(false)
+  const handleListScroll = useCallback(({ scrollOffset }: ListOnScrollProps) => {
+    setHeaderElevated(scrollOffset > 0)
+  }, [])
+
+  // Altura adaptativa de la lista virtual (desktop)
+  const { ref: autoRef, height: autoHeight } = useAutoListHeight({ min: 360, max: 720, bottomGap: 24 })
 
   // Sorting optimizado con memoización
   const sortedPatients = useMemo(() => {
@@ -620,6 +778,25 @@ const PatientTable: React.FC<PatientTableProps> = ({
     }))
   }, [])
 
+  // Datos de fila estables para react-window
+  const itemData = useMemo(() => ({
+    patients: sortedPatients,
+    onSelectPatient,
+    onShareSurvey,
+    onAnswerSurvey,
+    onEditPatient,
+    onScheduleAppointment,
+    onViewHistory,
+  }), [
+    sortedPatients,
+    onSelectPatient,
+    onShareSurvey,
+    onAnswerSurvey,
+    onEditPatient,
+    onScheduleAppointment,
+    onViewHistory,
+  ])
+
   if (loading) {
     return (
       <div className="bg-white dark:bg-slate-950 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-8">
@@ -646,25 +823,41 @@ const PatientTable: React.FC<PatientTableProps> = ({
 
   return (
     <div className="w-full">
-      {/* Vista móvil */}
-      <div className="block lg:hidden space-y-3">
-        {sortedPatients.map((patient) => (
-          <MobilePatientCard
-            key={patient.id}
-            patient={patient}
-            onSelectPatient={onSelectPatient}
-            onShareSurvey={onShareSurvey}
-            onAnswerSurvey={onAnswerSurvey}
-            onEditPatient={onEditPatient}
-            onScheduleAppointment={onScheduleAppointment}
-          />
-        ))}
+      {/* Vista móvil: tarjetas en grid responsivo */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 lg:hidden">
+        {sortedPatients.map((patient, idx) => {
+          const card = (
+            <MobilePatientCard
+              patient={patient}
+              onSelectPatient={onSelectPatient}
+              onShareSurvey={onShareSurvey}
+              onAnswerSurvey={onAnswerSurvey}
+              onEditPatient={onEditPatient}
+              onScheduleAppointment={onScheduleAppointment}
+              onViewHistory={onViewHistory}
+            />
+          )
+          // Render inicial ansioso para evitar CLS
+          if (idx < MOBILE_INITIAL_RENDER) {
+            return <React.Fragment key={patient.id}>{card}</React.Fragment>
+          }
+          // Resto bajo demanda con IntersectionObserver + skeleton
+          return (
+            <LazyRender key={patient.id} placeholder={<MobilePatientCardSkeleton />}>
+              {card}
+            </LazyRender>
+          )
+        })}
       </div>
 
       {/* Vista desktop */}
       <div className="hidden lg:block bg-white dark:bg-slate-950 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
         <Table>
-          <TableHeader className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+          <TableHeader className={cn(
+            "bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/50",
+            "border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10",
+            headerElevated && "shadow-sm"
+          )}>
             <TableRow className="border-none">
               <SortableHeader 
                 sortKey="nombreCompleto" 
@@ -714,26 +907,18 @@ const PatientTable: React.FC<PatientTableProps> = ({
             {sortedPatients.length >= VIRTUALIZE_THRESHOLD ? (
               <TableRow className="border-none">
                 <TableCell colSpan={6} className="p-0">
-                  <div style={{ height: VLIST_HEIGHT }}>
+                  <div ref={autoRef} style={{ height: autoHeight || VLIST_HEIGHT }}>
                     <List
-                      height={VLIST_HEIGHT}
+                      height={autoHeight || VLIST_HEIGHT}
                       itemCount={sortedPatients.length}
                       itemSize={ROW_HEIGHT}
                       width={"100%"}
-                      itemKey={(index) => sortedPatients[index].id}
+                      overscanCount={OVERSCAN_COUNT}
+                      itemData={itemData}
+                      itemKey={(index, data) => data.patients[index].id}
+                      onScroll={handleListScroll}
                     >
-                      {({ index, style }) => (
-                        <div style={style} key={sortedPatients[index].id}>
-                          <VirtualPatientRow
-                            patient={sortedPatients[index]}
-                            onSelectPatient={onSelectPatient}
-                            onShareSurvey={onShareSurvey}
-                            onAnswerSurvey={onAnswerSurvey}
-                            onEditPatient={onEditPatient}
-                            onScheduleAppointment={onScheduleAppointment}
-                          />
-                        </div>
-                      )}
+                      {RowRenderer}
                     </List>
                   </div>
                 </TableCell>
@@ -748,12 +933,14 @@ const PatientTable: React.FC<PatientTableProps> = ({
                   onAnswerSurvey={onAnswerSurvey}
                   onEditPatient={onEditPatient}
                   onScheduleAppointment={onScheduleAppointment}
+                  onViewHistory={onViewHistory}
                 />
               ))
             )}
           </TableBody>
         </Table>
       </div>
+
     </div>
   )
 }

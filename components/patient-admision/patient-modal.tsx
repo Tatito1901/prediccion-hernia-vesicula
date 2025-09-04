@@ -14,7 +14,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  addDays, format, isSunday, startOfDay, isWithinInterval
+  addDays, format, startOfDay, isWithinInterval
 } from 'date-fns';
 import { User2, CalendarIcon, Loader2, Stethoscope, CheckCircle2 } from 'lucide-react';
 import { useAdmitPatient } from '@/hooks/use-patient';
@@ -23,7 +23,7 @@ import { ZDiagnosisDb } from '@/lib/validation/enums';
 import { AppointmentStatusEnum } from '@/lib/types';
 import type { AppointmentStatus } from '@/lib/types';
 import type { AppError } from '@/lib/errors';
-import { generateTimeSlots } from '@/lib/clinic-schedule';
+import { generateTimeSlots, CLINIC_SCHEDULE, isWorkDay } from '@/lib/clinic-schedule';
 import { mxLocalPartsToUtcIso } from '@/utils/datetime';
 
 interface PatientModalProps {
@@ -44,11 +44,11 @@ const BLOCKING_STATUSES: AppointmentStatus[] = [
 const QuickAdmissionSchema = z.object({
   nombre: z.string().min(2, 'Mínimo 2 caracteres'),
   apellidos: z.string().min(2, 'Mínimo 2 caracteres'),
-  genero: z.enum(['Masculino', 'Femenino'], { required_error: 'Seleccione género' }),
+  genero: z.enum(['Masculino', 'Femenino']),
   telefono: z.string().regex(/^[0-9+\-\s()]{10,15}$/, 'Formato inválido'),
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   diagnostico_principal: ZDiagnosisDb,
-  fecha: z.date({ required_error: 'Seleccione una fecha' }),
+  fecha: z.date(),
   hora: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/, 'Formato HH:MM'),
 });
 
@@ -64,8 +64,8 @@ type ClinicAppointment = {
 // ────────────────────────────────────────────────────────────────────────────
 const isValidDate = (date: Date): boolean => {
   const today = startOfDay(new Date());
-  const maxDate = addDays(today, 90);
-  if (isSunday(date)) return false;
+  const maxDate = addDays(today, CLINIC_SCHEDULE.MAX_ADVANCE_DAYS);
+  if (!isWorkDay(date)) return false;
   return isWithinInterval(date, { start: today, end: maxDate });
 };
 
@@ -88,7 +88,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
       email: '',
       diagnostico_principal: 'HERNIA_INGUINAL',
       fecha: undefined,
-      hora: '09:00',
+      hora: `${String(CLINIC_SCHEDULE.START_HOUR).padStart(2, '0')}:00`,
     },
   });
 

@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils"
 const SurveyShareDialog = React.lazy(() => import("@/components/surveys/survey-share-dialog"))
 const PatientDetailsDialog = React.lazy(() => import("./patient-details-dialog"))
 const ScheduleAppointmentDialog = React.lazy(() => import("./schedule-appointment-dialog"))
+const PatientHistoryModal = React.lazy(() => import("./patient-history-modal"))
 
 // --- Constantes y Configuración ---
 const DEBOUNCE_DELAY = 300
@@ -348,7 +349,7 @@ function usePatientData() {
 function usePatientDialogs() {
   const router = useRouter()
   const [dialogState, setDialogState] = useState<{
-    type: 'details' | 'share' | 'appointment' | null
+    type: 'details' | 'share' | 'appointment' | 'history' | null
     patient: EnrichedPatient | null
   }>({ type: null, patient: null })
 
@@ -361,7 +362,7 @@ function usePatientDialogs() {
     return ""
   }, [dialogState.type, dialogState.patient])
 
-  const openDialog = useCallback((type: 'details' | 'share' | 'appointment', patient: EnrichedPatient) => {
+  const openDialog = useCallback((type: 'details' | 'share' | 'appointment' | 'history', patient: EnrichedPatient) => {
     setDialogState({ type, patient })
   }, [])
 
@@ -401,6 +402,23 @@ const PatientManagementView: React.FC = () => {
     router.push(`/survey/${generateSurveyId()}?patientId=${patient.id}&mode=internal`)
   }, [router])
 
+  // Callbacks estables para evitar recreación por render
+  const handleSelectPatient = useCallback((p: EnrichedPatient) => {
+    dialogs.openDialog('details', p)
+  }, [dialogs.openDialog])
+
+  const handleShareSurvey = useCallback((p: EnrichedPatient) => {
+    dialogs.openDialog('share', p)
+  }, [dialogs.openDialog])
+
+  const handleScheduleAppointment = useCallback((p: EnrichedPatient) => {
+    dialogs.openDialog('appointment', p)
+  }, [dialogs.openDialog])
+
+  const handleViewHistory = useCallback((p: EnrichedPatient) => {
+    dialogs.openDialog('history', p)
+  }, [dialogs.openDialog])
+
   // Variables derivadas para renderizado con guardas defensivas
   const hasFilters = Boolean(data.patientsFilters.search) || data.patientsFilters.status !== "all"
   const hasPatients = Array.isArray(data.paginatedPatients) && data.paginatedPatients.length > 0
@@ -439,11 +457,12 @@ const PatientManagementView: React.FC = () => {
             {data.isPatientsLoading && <UpdatingOverlay />}
             <PatientTable 
               patients={data.paginatedPatients}
-              onSelectPatient={(p) => dialogs.openDialog('details', p)}
-              onShareSurvey={(p) => dialogs.openDialog('share', p)}
+              onSelectPatient={handleSelectPatient}
+              onShareSurvey={handleShareSurvey}
               onEditPatient={handleEditPatient}
               onAnswerSurvey={handleAnswerSurvey}
-              onScheduleAppointment={(p) => dialogs.openDialog('appointment', p)}
+              onScheduleAppointment={handleScheduleAppointment}
+              onViewHistory={handleViewHistory}
             />
           </div>
  
@@ -488,6 +507,14 @@ const PatientManagementView: React.FC = () => {
           <ScheduleAppointmentDialog
             isOpen={true}
             patient={dialogs.dialogState.patient}
+            onClose={dialogs.closeDialog}
+          />
+        )}
+        
+        {dialogs.dialogState.type === 'history' && dialogs.dialogState.patient && (
+          <PatientHistoryModal
+            isOpen={true}
+            patientId={dialogs.dialogState.patient.id}
             onClose={dialogs.closeDialog}
           />
         )}

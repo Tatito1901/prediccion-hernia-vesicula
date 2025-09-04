@@ -10,8 +10,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import type { TooltipProps } from "recharts"
-import type { ValueType, NameType } from "recharts/types/component/DefaultTooltipContent"
 import { RefreshCw } from "lucide-react"
 
 // Keep types local to avoid coupling with dashboard component
@@ -28,7 +26,7 @@ export interface ProcedureChartProps {
   period?: '7d' | '30d' | '90d'
 }
 
-const CustomTooltip = memo(({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
+const CustomTooltip = memo(({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white dark:bg-gray-800 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 text-xs">

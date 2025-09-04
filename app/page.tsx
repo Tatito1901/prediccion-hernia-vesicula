@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import LoginPage from "@/components/auth/login-page";
 import { LoadingSpinner } from "@/components/ui/unified-skeletons";
+import { login } from "@/components/auth/actions";
 
 export default function Home() {
     return (
@@ -11,7 +12,7 @@ export default function Home() {
                 </div>
             }
         >
-            <LoginPage />
+            <LoginPage loginAction={login} />
         </Suspense>
     )
 }

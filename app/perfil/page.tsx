@@ -7,7 +7,7 @@ export default async function PerfilPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    return redirect("/login");
+    return redirect("/");
   }
 
   return (
