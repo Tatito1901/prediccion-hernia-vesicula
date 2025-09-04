@@ -31,8 +31,16 @@ import {
   Stethoscope,
   ChevronDown,
 } from "lucide-react";
-import ConfirmActionDialog from "./patient-card/confirm-action-dialog";
-import CheckInInfoDialog from "./patient-card/checkin-info-dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
 import { AppointmentStatusEnum } from '@/lib/types';
@@ -167,6 +175,13 @@ export const PatientCard = memo<PatientCardProps>(({
       return null;
     }
   }, [appointment.fecha_hora_cita]);
+
+  const timePillClass = useMemo(() => {
+    if (!dateTime) return "";
+    if (dateTime.isPast) return "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300";
+    if (dateTime.isNear) return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+    return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+  }, [dateTime]);
 
   // Estado de la ventana de check-in (solo para UI preventiva)
   const checkInUi = useMemo(() => {
@@ -358,7 +373,7 @@ export const PatientCard = memo<PatientCardProps>(({
               <div className="flex items-center gap-2">
                 <div className="flex items-center">
                   <span
-                    className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300 shadow-sm"
+                    className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shadow-sm", timePillClass)}
                     title={dateTime.fullDate}
                     aria-label={`Hora de la cita: ${dateTime.time}`}
                   >
@@ -388,6 +403,7 @@ export const PatientCard = memo<PatientCardProps>(({
                             <DropdownMenuItem 
                               onClick={() => handleAction(action)}
                               className="gap-2 cursor-pointer"
+                              aria-label={config.label}
                             >
                               <config.icon className="h-4 w-4" />
                               {config.label}
@@ -503,31 +519,101 @@ export const PatientCard = memo<PatientCardProps>(({
       </Card>
 
       {/* Diálogo de confirmación */}
-      <ConfirmActionDialog
-        open={!!confirmDialog}
+      <AlertDialog 
+        open={!!confirmDialog} 
         onOpenChange={(open) => !open && setConfirmDialog(null)}
-        title={confirmDialog ? ACTION_CONFIG[confirmDialog].title : ""}
-        description={confirmDialog ? ACTION_CONFIG[confirmDialog].description : undefined}
-        fullName={fullName}
-        isPending={isPending}
-        variant={confirmDialog ? ACTION_CONFIG[confirmDialog].variant : undefined}
-        onConfirm={handleConfirm}
-      />
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmDialog ? ACTION_CONFIG[confirmDialog].title : ""}
+            </AlertDialogTitle>
+            {confirmDialog && ACTION_CONFIG[confirmDialog].description && (
+              <AlertDialogDescription>
+                {ACTION_CONFIG[confirmDialog].description.replace('{name}', fullName)}
+              </AlertDialogDescription>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleConfirm();
+              }}
+              disabled={isPending}
+              className={cn(
+                confirmDialog && ACTION_CONFIG[confirmDialog].variant === 'destructive' &&
+                "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              )}
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                "Confirmar"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Diálogo informativo (check-in fuera de ventana) */}
-      <CheckInInfoDialog
-        open={!!infoDialog}
-        kind={infoDialog?.kind || 'tooEarly'}
-        fullName={fullName}
-        minutes={typeof checkInUi.minutes === 'number' ? checkInUi.minutes : undefined}
-        start={checkInUi.start}
-        end={checkInUi.end}
-        canNoShow={availableActions.includes('noShow')}
-        canReschedule={availableActions.includes('reschedule')}
-        onNoShow={() => { setInfoDialog(null); handleAction('noShow'); }}
-        onReschedule={() => { setInfoDialog(null); handleAction('reschedule'); }}
-        onClose={() => setInfoDialog(null)}
-      />
+      <AlertDialog 
+        open={!!infoDialog} 
+        onOpenChange={(open) => !open && setInfoDialog(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              {infoDialog?.kind === 'tooEarly' 
+                ? 'Check-in disponible pronto' 
+                : 'Check-in ya no disponible'
+              }
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                {infoDialog?.kind === 'tooEarly'
+                  ? `El check-in para ${fullName} estará disponible ${typeof checkInUi.minutes === 'number' ? `en ${checkInUi.minutes} minutos` : 'pronto'}.`
+                  : `El período de check-in para ${fullName} ha expirado.`}
+              </p>
+              {checkInUi.start && checkInUi.end && (
+                <p className="text-sm text-muted-foreground">
+                  Ventana de check-in: {formatMx(checkInUi.start, 'time')} - {formatMx(checkInUi.end, 'time')}
+                </p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {infoDialog?.kind === 'expired' && availableActions.includes('noShow') && (
+              <AlertDialogAction
+                onClick={() => {
+                  setInfoDialog(null);
+                  handleAction('noShow');
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Marcar como no presentado
+              </AlertDialogAction>
+            )}
+            {availableActions.includes('reschedule') && (
+              <Button
+                onClick={() => {
+                  setInfoDialog(null);
+                  handleAction('reschedule');
+                }}
+                variant="outline"
+              >
+                Reprogramar
+              </Button>
+            )}
+            <AlertDialogCancel>Cerrar</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modales */}
       {showReschedule && (

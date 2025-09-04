@@ -8,11 +8,17 @@ import {
   APPOINTMENT_STATUS_CONFIG,
   type AdmissionAction,
   ACTION_TO_STATUS_MAP,
-  canPerformAction as _canPerformAction,
   ZAppointmentStatus,
   ZDiagnosisDb,
   type DbDiagnosis
 } from '@/lib/constants';
+import { 
+  canCheckIn,
+  canCompleteAppointment,
+  canCancelAppointment,
+  canMarkNoShow,
+  canRescheduleAppointment,
+} from '@/lib/admission-business-rules';
 
 // ==================== TIPOS BASE ====================
 export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
@@ -214,5 +220,20 @@ export const canPerformAction = (
   appointment: AppointmentWithPatient, 
   action: AdmissionAction
 ): boolean => {
-  return _canPerformAction(appointment.estado_cita, action);
+  switch (action) {
+    case 'checkIn':
+      return canCheckIn(appointment).valid;
+    case 'complete':
+      return canCompleteAppointment(appointment).valid;
+    case 'cancel':
+      return canCancelAppointment(appointment).valid;
+    case 'noShow':
+      return canMarkNoShow(appointment).valid;
+    case 'reschedule':
+      return canRescheduleAppointment(appointment).valid;
+    case 'viewHistory':
+      return true;
+    default:
+      return false;
+  }
 };
