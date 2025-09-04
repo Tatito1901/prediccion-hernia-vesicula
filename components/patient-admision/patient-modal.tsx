@@ -1,21 +1,23 @@
-// components/patient-admission/patient-modal.tsx
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useId } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
-  TextField, PhoneField, EmailField, GenderSelectField,
-  DiagnosisSelectField, DatePickerField, TimeSelectField
+  TextField,
+  PhoneField,
+  EmailField,
+  GenderSelectField,
+  DiagnosisSelectField,
+  DatePickerField,
+  TimeSelectField,
 } from '@/components/ui/form-components';
 import { Form } from '@/components/ui/form';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  addDays, format, startOfDay, isWithinInterval
-} from 'date-fns';
+import { addDays, startOfDay, isWithinInterval } from 'date-fns';
 import { User2, CalendarIcon, Loader2, Stethoscope, CheckCircle2 } from 'lucide-react';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import { useClinic } from '@/contexts/clinic-data-provider';
@@ -24,7 +26,7 @@ import { AppointmentStatusEnum } from '@/lib/types';
 import type { AppointmentStatus } from '@/lib/types';
 import type { AppError } from '@/lib/errors';
 import { generateTimeSlots, CLINIC_SCHEDULE, isWorkDay } from '@/lib/clinic-schedule';
-import { mxLocalPartsToUtcIso } from '@/utils/datetime';
+import { mxLocalPartsToUtcIso, formatMx } from '@/utils/datetime';
 
 interface PatientModalProps {
   trigger: React.ReactNode;
@@ -32,24 +34,30 @@ interface PatientModalProps {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Constantes
+// Constantes y Tipos
 // ────────────────────────────────────────────────────────────────────────────
-const BLOCKING_STATUSES: AppointmentStatus[] = [
+const BLOCKING_STATUSES: ReadonlySet<AppointmentStatus> = new Set([
   AppointmentStatusEnum.PROGRAMADA,
   AppointmentStatusEnum.CONFIRMADA,
   AppointmentStatusEnum.PRESENTE,
-];
+]);
 
-// Validación
 const QuickAdmissionSchema = z.object({
   nombre: z.string().min(2, 'Mínimo 2 caracteres'),
   apellidos: z.string().min(2, 'Mínimo 2 caracteres'),
   genero: z.enum(['Masculino', 'Femenino']),
-  telefono: z.string().regex(/^[0-9+\-\s()]{10,15}$/, 'Formato inválido'),
-  email: z.string().email('Email inválido').optional().or(z.literal('')),
+  telefono: z
+    .string()
+    .regex(/^[0-9+\-\s()]{10,15}$/u, 'Formato inválido')
+    .transform((v) => v.trim()),
+  email: z
+    .string()
+    .email('Email inválido')
+    .or(z.literal(''))
+    .transform((v) => (v?.trim() ? v.trim() : '')),
   diagnostico_principal: ZDiagnosisDb,
   fecha: z.date(),
-  hora: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/, 'Formato HH:MM'),
+  hora: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/u, 'Formato HH:MM'),
 });
 
 type FormData = z.infer<typeof QuickAdmissionSchema>;
@@ -69,199 +77,227 @@ const isValidDate = (date: Date): boolean => {
   return isWithinInterval(date, { start: today, end: maxDate });
 };
 
+const DEFAULT_HOUR = `${String(CLINIC_SCHEDULE.START_HOUR).padStart(2, '0')}:00` as const;
+
 // ────────────────────────────────────────────────────────────────────────────
 // Componente
 // ────────────────────────────────────────────────────────────────────────────
 export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
   const [open, setOpen] = useState(false);
+  const [isLoadingTimes, setIsLoadingTimes] = useState(false);
+  const [occupiedTimes, setOccupiedTimes] = useState<Set<string>>(() => new Set());
+
+  const occupiedCacheRef = useRef<Map<string, Set<string>>>(new Map());
+  const nombreInputRef = useRef<HTMLInputElement | null>(null);
+  const timeDescId = useId();
+
   const { fetchSpecificAppointments } = useClinic();
   const { mutate: admitPatient, isPending } = useAdmitPatient();
 
   const form = useForm<FormData>({
     resolver: zodResolver(QuickAdmissionSchema),
     mode: 'onBlur',
+    criteriaMode: 'firstError',
     defaultValues: {
       nombre: '',
       apellidos: '',
-      genero: undefined,
+      genero: undefined as unknown as FormData['genero'], // controlado por UI
       telefono: '',
       email: '',
       diagnostico_principal: 'HERNIA_INGUINAL',
-      fecha: undefined,
-      hora: `${String(CLINIC_SCHEDULE.START_HOUR).padStart(2, '0')}:00`,
+      fecha: undefined as unknown as Date,
+      hora: DEFAULT_HOUR,
     },
   });
 
-  // Enfoque inicial al abrir
-  const nombreInputRef = useRef<HTMLInputElement | null>(null);
+  // Observa la fecha seleccionada sólo (evita re-render global del form)
+  const selectedDate = useWatch({ control: form.control, name: 'fecha' });
+  const dateStr = useMemo(() => (selectedDate ? formatMx(selectedDate, 'yyyy-MM-dd') : undefined), [selectedDate]);
 
-  // Observa la fecha seleccionada
-  const selectedDate = form.watch('fecha');
-  const dateStr = useMemo(
-    () => (selectedDate ? format(selectedDate, 'yyyy-MM-dd') : undefined),
-    [selectedDate]
-  );
-
-  const [occupiedTimes, setOccupiedTimes] = useState<Set<string>>(() => new Set());
-
-  // Memoriza props de inputs para evitar recreaciones
-  const givenNameProps = useMemo(() => ({ autoComplete: 'given-name', autoFocus: true, ref: nombreInputRef }), []);
+  // Props de inputs estables
+  const givenNameProps = useMemo(() => ({ autoComplete: 'given-name', ref: nombreInputRef }), []);
   const familyNameProps = useMemo(() => ({ autoComplete: 'family-name' }), []);
   const telProps = useMemo(() => ({ autoComplete: 'tel' }), []);
   const emailProps = useMemo(() => ({ autoComplete: 'email' }), []);
 
-  // Slots de tiempo: sólo generar si hay fecha
+  // Slots de tiempo por día
   const timeSlots = useMemo(() => {
-    if (!selectedDate) return [];
+    if (!selectedDate) return [] as Array<{ label: string; value: string }>;
     return generateTimeSlots({ baseDate: selectedDate, includeLunch: false });
   }, [selectedDate]);
 
-  // Carga de horarios ocupados (por día) con AbortController y guardas
+  // Carga de horarios ocupados por día (usa cache + abort) y sólo si modal está abierto
   useEffect(() => {
-    if (!dateStr) {
-      setOccupiedTimes(prev => (prev.size ? new Set() : prev));
-      return;
-    }
+    let controller: AbortController | null = null;
 
-    const controller = new AbortController();
+    const load = async () => {
+      if (!open || !dateStr) {
+        setOccupiedTimes((prev) => (prev.size ? new Set() : prev));
+        return;
+      }
 
-    (async () => {
+      // Cache hit
+      const cached = occupiedCacheRef.current.get(dateStr);
+      if (cached) {
+        setOccupiedTimes((prev) => {
+          if (prev.size === cached.size && [...prev].every((t) => cached.has(t))) return prev;
+          return new Set(cached);
+        });
+        return;
+      }
+
+      controller = new AbortController();
+      setIsLoadingTimes(true);
       try {
         const res = await fetchSpecificAppointments({
           dateFilter: 'range',
           startDate: dateStr,
           endDate: dateStr,
-          pageSize: 100,
+          pageSize: 200,
           signal: controller.signal,
         });
-
         if (controller.signal.aborted) return;
 
         const next = new Set<string>();
         (res.data as ClinicAppointment[] | undefined)?.forEach((apt) => {
-          if (BLOCKING_STATUSES.includes(apt.estado_cita)) {
-            next.add(format(new Date(apt.fecha_hora_cita), 'HH:mm'));
+          if (BLOCKING_STATUSES.has(apt.estado_cita)) {
+            // Asegura el horario en zona MX para evitar desfases por DST
+            next.add(formatMx(apt.fecha_hora_cita, 'HH:mm'));
           }
         });
 
-        // Solo setea si cambió
+        occupiedCacheRef.current.set(dateStr, next);
         setOccupiedTimes((prev) => {
-          if (prev.size === next.size && [...prev].every(t => next.has(t))) return prev;
+          if (prev.size === next.size && [...prev].every((t) => next.has(t))) return prev;
           return next;
         });
       } catch (err) {
-        if (!controller.signal.aborted) {
-          // Opcional: toast no intrusivo
-          // toast.error('No se pudieron cargar horarios ocupados');
-          console.error('Error cargando las citas:', err);
+        if (!(controller?.signal as AbortSignal | undefined)?.aborted) {
+          // Silencioso: podríamos mostrar toast no bloqueante si existe
+          // console.error('Error cargando las citas:', err);
         }
+      } finally {
+        setIsLoadingTimes(false);
       }
-    })();
+    };
 
-    return () => controller.abort();
-  }, [dateStr, fetchSpecificAppointments]);
+    void load();
 
-  // Submit
-  const onSubmit = useCallback((values: FormData) => {
-    const [hours, minutes] = values.hora.split(':').map(Number);
-    const yyyyMmDd = format(values.fecha, 'yyyy-MM-dd'); // local, evita UTC shift
-    const fechaIso = mxLocalPartsToUtcIso(yyyyMmDd, hours, minutes);
+    return () => controller?.abort();
+  }, [open, dateStr, fetchSpecificAppointments]);
 
-    admitPatient(
-      {
-        nombre: values.nombre.trim(),
-        apellidos: values.apellidos.trim(),
-        genero: values.genero,
-        telefono: values.telefono.trim(),
-        email: values.email?.trim() || undefined,
-        diagnostico_principal: values.diagnostico_principal,
-        fecha_hora_cita: fechaIso,
-        motivos_consulta: [values.diagnostico_principal],
-        creation_source: 'web_quick_admission',
-      },
-      {
-        onSuccess: () => {
-          form.reset();
-          setOpen(false);
-          onSuccess?.();
+  // Submit optimizado
+  const onSubmit = useCallback(
+    (values: FormData) => {
+      const [hours, minutes] = values.hora.split(':').map(Number);
+      const yyyyMmDd = formatMx(values.fecha, 'yyyy-MM-dd'); // local MX
+      const fechaIso = mxLocalPartsToUtcIso(yyyyMmDd, hours, minutes);
+
+      admitPatient(
+        {
+          nombre: values.nombre.trim(),
+          apellidos: values.apellidos.trim(),
+          genero: values.genero,
+          telefono: values.telefono.trim(),
+          email: values.email ? values.email.trim() : undefined,
+          diagnostico_principal: values.diagnostico_principal,
+          fecha_hora_cita: fechaIso,
+          motivos_consulta: [values.diagnostico_principal],
+          creation_source: 'web_quick_admission',
         },
-        onError: (error: AppError) => {
-          const payload: any = error?.details ?? {};
-          const code: string | undefined =
-            typeof payload?.code === 'string'
-              ? payload.code.toUpperCase()
-              : (typeof (error as any)?.code === 'string' ? (error as any).code.toUpperCase() : undefined);
+        {
+          onSuccess: () => {
+            form.reset();
+            setOpen(false);
+            onSuccess?.();
+          },
+          onError: (error: AppError) => {
+            const payload: any = error?.details ?? {};
+            const code: string | undefined =
+              typeof payload?.code === 'string'
+                ? payload.code.toUpperCase()
+                : typeof (error as any)?.code === 'string'
+                ? (error as any).code.toUpperCase()
+                : undefined;
 
-          const validationErrors:
-            | Array<{ field: string; message: string; code?: string }>
-            | undefined = Array.isArray(payload?.validation_errors) ? payload.validation_errors : undefined;
+            const validationErrors: Array<{ field: string; message: string; code?: string }> | undefined = Array.isArray(
+              payload?.validation_errors
+            )
+              ? payload.validation_errors
+              : undefined;
 
-          if (validationErrors?.length) {
-            for (const ve of validationErrors) {
-              const field = ve.field;
-              const message = ve.message || 'Dato inválido';
-              switch (field) {
-                case 'nombre':
-                case 'apellidos':
-                case 'genero':
-                case 'telefono':
-                case 'email':
-                case 'diagnostico_principal':
-                  form.setError(field as any, { message });
-                  break;
-                case 'fecha_hora_cita':
-                  form.setError('hora', { message });
-                  break;
+            if (validationErrors?.length) {
+              for (const ve of validationErrors) {
+                const field = ve.field as keyof FormData | 'fecha_hora_cita';
+                const message = ve.message || 'Dato inválido';
+                switch (field) {
+                  case 'nombre':
+                  case 'apellidos':
+                  case 'genero':
+                  case 'telefono':
+                  case 'email':
+                  case 'diagnostico_principal':
+                    form.setError(field as any, { message });
+                    break;
+                  case 'fecha_hora_cita':
+                    form.setError('hora', { message });
+                    break;
+                }
               }
             }
-          }
 
-          if (error.status === 409 && code === 'SCHEDULE_CONFLICT') {
-            form.setError('hora', { message: error.message || 'Conflicto de horario' });
-          }
-
-          if (error.status === 422 && code === 'INVALID_DATE') {
-            form.setError('hora', { message: error.message || 'La fecha/hora no puede ser en el pasado' });
-          }
-
-          if (error.status === 409 && code === 'DUPLICATE_PATIENT') {
-            form.setError('nombre', { message: 'Posible paciente duplicado' });
-            form.setError('apellidos', { message: 'Verifique los datos: posible duplicado' });
-          }
-
-          const msg = error?.message || '';
-          if (msg.toLowerCase().includes('telefono')) {
-            form.setError('telefono', { message: 'Teléfono ya registrado' });
-          }
-        },
-      }
-    );
-  }, [admitPatient, form, onSuccess]);
-
-  const allDisabled = useMemo(
-    () => timeSlots.length > 0 && timeSlots.every((slot) => occupiedTimes.has(slot.value)),
-    [timeSlots, occupiedTimes]
+            if (error.status === 409 && code === 'SCHEDULE_CONFLICT') {
+              form.setError('hora', { message: error.message || 'Conflicto de horario' });
+            }
+            if (error.status === 422 && code === 'INVALID_DATE') {
+              form.setError('hora', { message: error.message || 'La fecha/hora no puede ser en el pasado' });
+            }
+            if (error.status === 409 && code === 'DUPLICATE_PATIENT') {
+              form.setError('nombre', { message: 'Posible paciente duplicado' });
+              form.setError('apellidos', { message: 'Verifique los datos: posible duplicado' });
+            }
+            const msg = error?.message || '';
+            if (msg.toLowerCase().includes('telefono')) {
+              form.setError('telefono', { message: 'Teléfono ya registrado' });
+            }
+          },
+        }
+      );
+    },
+    [admitPatient, form, onSuccess]
   );
 
-  const timeDescId = 'time-field-description';
+  // Reset al cerrar
+  const handleOpenChange = useCallback(
+    (v: boolean) => {
+      setOpen(v);
+      if (!v) {
+        form.reset();
+        setOccupiedTimes((prev) => (prev.size ? new Set() : prev));
+        setIsLoadingTimes(false);
+      }
+    },
+    [form]
+  );
 
-  // Reset al cerrar (sin conservar datos parciales del intento previo)
-  const handleOpenChange = useCallback((v: boolean) => {
-    setOpen(v);
-    if (!v) {
-      form.reset();
-      setOccupiedTimes(prev => (prev.size ? new Set() : prev));
-    } else {
-      // enfoque suave en nombre cuando abre
-      setTimeout(() => nombreInputRef.current?.focus(), 50);
-    }
-  }, [form]);
+  const allDisabled = useMemo(
+    () => selectedDate && timeSlots.length > 0 && timeSlots.every((slot) => occupiedTimes.has(slot.value)),
+    [selectedDate, timeSlots, occupiedTimes]
+  );
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
 
-      <DialogContent className="w-[min(100vw-2rem,44rem)] sm:max-w-xl md:max-w-2xl max-h-[90vh] p-0 overflow-hidden">
+      <DialogContent
+        className="w-[min(100vw-2rem,44rem)] sm:max-w-xl md:max-w-2xl max-h-[90vh] p-0 overflow-hidden"
+        onOpenAutoFocus={(e) => {
+          // Evita que Radix enfoque el primer foco auto y prioriza nuestro input
+          e.preventDefault();
+          nombreInputRef.current?.focus();
+        }}
+        data-testid="patient-modal"
+      >
         <DialogHeader className="px-6 py-4 border-b bg-white dark:bg-zinc-900">
           <DialogTitle className="flex items-center gap-3 text-base sm:text-lg">
             <span className="p-2 bg-white dark:bg-zinc-800 rounded-lg shadow-sm">
@@ -285,7 +321,7 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
                     <TextField form={form} name="apellidos" label="Apellidos *" inputProps={familyNameProps} />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <GenderSelectField form={form} name="genero" label="Género *" options={['Masculino', 'Femenino']} />
+                    <GenderSelectField form={form} name="genero" label="Género *" options={[ 'Masculino', 'Femenino' ]} />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:col-span-1">
                       <PhoneField form={form} name="telefono" label="Teléfono *" inputProps={telProps} />
                       <EmailField form={form} name="email" label="Email" inputProps={emailProps} />
@@ -311,25 +347,34 @@ export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
                     Programar cita
                   </legend>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <DatePickerField
-                      form={form}
-                      name="fecha"
-                      label="Fecha *"
-                      isValidDate={isValidDate}
-                    />
+                    <DatePickerField form={form} name="fecha" label="Fecha *" isValidDate={isValidDate} />
                     <TimeSelectField
                       form={form}
                       name="hora"
                       label="Hora *"
                       timeSlots={timeSlots}
                       occupiedTimes={occupiedTimes}
-                      disabled={!selectedDate || allDisabled}
-                      description={allDisabled ? 'No hay horarios disponibles' : 'Horarios de la clínica'}
+                      disabled={!selectedDate || isLoadingTimes || !!allDisabled}
+                      description={
+                        !selectedDate
+                          ? 'Selecciona una fecha para ver horarios'
+                          : isLoadingTimes
+                          ? 'Cargando horarios…'
+                          : allDisabled
+                          ? 'No hay horarios disponibles'
+                          : 'Horarios de la clínica'
+                      }
                       describedById={timeDescId}
                     />
                   </div>
                   <p id={timeDescId} className="text-xs text-muted-foreground">
-                    {(allDisabled && selectedDate) ? 'No hay horarios disponibles para esta fecha' : 'Selecciona un horario disponible'}
+                    {!selectedDate
+                      ? 'Primero selecciona una fecha válida'
+                      : isLoadingTimes
+                      ? 'Consultando disponibilidad para el día seleccionado'
+                      : allDisabled
+                      ? 'No hay horarios disponibles para esta fecha'
+                      : 'Selecciona un horario disponible'}
                   </p>
                 </fieldset>
 

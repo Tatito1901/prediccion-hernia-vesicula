@@ -89,7 +89,7 @@ const THEME = {
     [PatientStatusEnum.ALTA_MEDICA]: "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900/50 dark:text-slate-500 dark:border-slate-700",
   },
   survey: {
-    pendiente: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:border-slate-700",
+    pendiente: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-300 dark:border-sky-800",
     sin_contestar: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
     contestando: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800",
     contestada: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800",
@@ -192,7 +192,7 @@ const SortableHeader = memo(({
   return (
     <TableHead
       className={cn(
-        "cursor-pointer select-none font-medium text-xs uppercase tracking-wider",
+        "cursor-pointer select-none font-medium text-xs uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950 rounded-md",
         "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50",
         "transition-colors duration-150",
         isSorted && "bg-slate-50 dark:bg-slate-800/50 text-primary",
@@ -330,7 +330,7 @@ const PatientRow = memo(({
   
   return (
     <TableRow 
-      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors even:bg-slate-50/50 dark:even:bg-slate-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors even:bg-slate-50/50 dark:even:bg-slate-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950"
       onClick={() => onSelectPatient(patient)}
       tabIndex={0}
       onKeyDown={(e) => {
@@ -343,7 +343,7 @@ const PatientRow = memo(({
     >
       <TableCell className="py-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-semibold text-white flex-shrink-0 bg-slate-700 dark:bg-slate-600">
+          <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center text-sm font-semibold flex-shrink-0 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 ring-1 ring-slate-200 dark:ring-slate-800 shadow-sm") }>
             {patient.nombreCompleto.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
@@ -359,7 +359,7 @@ const PatientRow = memo(({
 
       <TableCell>
         <Badge title={patient.displayDiagnostico || undefined} className={cn(
-          "border font-medium",
+          "border font-medium rounded-full px-2.5 py-1 text-xs",
           getDiagnosticStyle(patient.displayDiagnostico)
         )}>
           <Stethoscope className="h-3 w-3 mr-1 opacity-60" />
@@ -379,7 +379,7 @@ const PatientRow = memo(({
       <TableCell>
         {patient.estado_paciente && (
           <Badge title={patient.estado_paciente.replace(/_/g, ' ')} className={cn(
-            "border font-medium",
+            "border font-medium rounded-full px-2.5 py-1 text-xs",
             THEME.status[patient.estado_paciente]
           )}>
             {patient.estado_paciente.replace(/_/g, ' ')}
@@ -389,7 +389,7 @@ const PatientRow = memo(({
 
       <TableCell className="text-center">
         <Badge className={cn(
-          "border font-medium",
+          "border font-medium rounded-full px-2.5 py-1 text-xs",
           THEME.survey[surveyState]
         )}>
           {surveyState === 'contestada' && <CheckCircle2 className="h-3 w-3 mr-1" />}
@@ -436,12 +436,19 @@ const MobilePatientCard = memo(({
   
   return (
     <Card 
-      className="p-4 sm:p-5 hover:shadow-md transition-all cursor-pointer border-slate-200 dark:border-slate-800"
+      className="p-4 sm:p-5 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer border-slate-200 dark:border-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950"
       onClick={() => onSelectPatient(patient)}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelectPatient(patient)
+        }
+      }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className="h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0 bg-slate-700 dark:bg-slate-600">
+          <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 ring-1 ring-slate-200 dark:ring-slate-800 shadow-sm") }>
             {patient.nombre?.charAt(0).toUpperCase() || 'P'}
           </div>
           
@@ -452,7 +459,7 @@ const MobilePatientCard = memo(({
             
             <div className="flex flex-wrap gap-2 mt-2">
               <Badge className={cn(
-                "text-xs border",
+                "text-xs border rounded-full px-2.5 py-1",
                 getDiagnosticStyle(patient.displayDiagnostico)
               )}>
                 {patient.displayDiagnostico}
@@ -460,7 +467,7 @@ const MobilePatientCard = memo(({
               
               {patient.estado_paciente && (
                 <Badge className={cn(
-                  "text-xs border",
+                  "text-xs border rounded-full px-2.5 py-1",
                   THEME.status[patient.estado_paciente]
                 )}>
                   {patient.estado_paciente.replace(/_/g, ' ')}
@@ -468,7 +475,7 @@ const MobilePatientCard = memo(({
               )}
               
               <Badge className={cn(
-                "text-xs border",
+                "text-xs border rounded-full px-2.5 py-1",
                 THEME.survey[surveyState]
               )}>
                 {SURVEY_LABELS[surveyState]}
@@ -595,7 +602,7 @@ const VirtualPatientRow = memo(({
       className={cn(
         "grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_80px] xl:grid-cols-[2fr_2fr_1.5fr_1fr_1fr_96px] items-center gap-2 px-2",
         "border-b border-slate-200 dark:border-slate-800 cursor-pointer",
-        "hover:bg-slate-50 dark:hover:bg-slate-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "hover:bg-slate-50 dark:hover:bg-slate-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950",
         (rowIndex ?? 0) % 2 === 0 ? "bg-white dark:bg-slate-950" : "bg-slate-50/50 dark:bg-slate-900/40"
       )}
       style={{ height: ROW_HEIGHT }}
@@ -612,7 +619,7 @@ const VirtualPatientRow = memo(({
       {/* Paciente */}
       <div className="py-2">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-semibold text-white flex-shrink-0 bg-slate-700 dark:bg-slate-600">
+          <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center text-sm font-semibold flex-shrink-0 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 ring-1 ring-slate-200 dark:ring-slate-800 shadow-sm") }>
             {patient.nombreCompleto.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
@@ -629,7 +636,7 @@ const VirtualPatientRow = memo(({
       {/* Diagnóstico */}
       <div className="py-2">
         <Badge title={patient.displayDiagnostico || undefined} className={cn(
-          "border font-medium",
+          "border font-medium rounded-full px-2.5 py-1 text-xs",
           getDiagnosticStyle(patient.displayDiagnostico)
         )}>
           <Stethoscope className="h-3 w-3 mr-1 opacity-60" />
@@ -651,7 +658,7 @@ const VirtualPatientRow = memo(({
       <div className="py-2">
         {patient.estado_paciente && (
           <Badge title={patient.estado_paciente.replace(/_/g, ' ')} className={cn(
-            "border font-medium",
+            "border font-medium rounded-full px-2.5 py-1 text-xs",
             THEME.status[patient.estado_paciente]
           )}>
             {patient.estado_paciente.replace(/_/g, ' ')}
@@ -662,7 +669,7 @@ const VirtualPatientRow = memo(({
       {/* Encuesta */}
       <div className="py-2 text-center">
         <Badge className={cn(
-          "border font-medium",
+          "border font-medium rounded-full px-2.5 py-1 text-xs",
           THEME.survey[surveyState]
         )}>
           {surveyState === 'contestada' && <CheckCircle2 className="h-3 w-3 mr-1" />}
@@ -851,12 +858,12 @@ const PatientTable: React.FC<PatientTableProps> = ({
       </div>
 
       {/* Vista desktop */}
-      <div className="hidden lg:block bg-white dark:bg-slate-950 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+      <div className="hidden lg:block bg-white dark:bg-slate-950 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
         <Table>
           <TableHeader className={cn(
-            "bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/50",
+            "bg-gradient-to-r from-slate-50/80 to-slate-100/50 dark:from-slate-900/70 dark:to-slate-800/40",
             "border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10",
-            headerElevated && "shadow-sm"
+            headerElevated && "shadow-sm supports-[backdrop-filter]:backdrop-blur-sm ring-1 ring-slate-200/60 dark:ring-slate-800/60"
           )}>
             <TableRow className="border-none">
               <SortableHeader 

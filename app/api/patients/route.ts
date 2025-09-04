@@ -39,7 +39,7 @@ export async function GET(request: Request) {
     pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
 
     // Debug flag y metadatos de diagnóstico
-    const debug = true; // Force debug for troubleshooting
+    const debug = process.env.NODE_ENV === 'development';
     const usingAdmin = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
     const envMeta = {
       hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
@@ -102,14 +102,16 @@ export async function GET(request: Request) {
 
     const { data: patients, error, count } = await query;
     
-    // Debug: Log query results
-    console.log('🔍 [/api/patients][GET] Query result:', {
-      dataLength: patients?.length || 0,
-      count,
-      error: error?.message,
-      hasData: !!patients,
-      firstItem: patients?.[0]
-    });
+    if (debug) {
+      // Debug: Log query results
+      console.log('🔍 [/api/patients][GET] Query result:', {
+        dataLength: patients?.length || 0,
+        count,
+        error: error?.message,
+        hasData: !!patients,
+        firstItem: patients?.[0]
+      });
+    }
     
     if (error) {
       const isPermission = /permission denied/i.test(error.message || '');

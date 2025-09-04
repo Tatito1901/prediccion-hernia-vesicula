@@ -38,7 +38,7 @@ function composeRefs<T>(...refs: Array<React.Ref<T> | undefined>) {
 
 // Generic text input field
 export function TextField<T extends FieldValues>(props: {
-  form: UseFormReturn<T>;
+  form: UseFormReturn<T, any, any>;
   name: FieldPath<T>;
   label: string;
   placeholder?: string;
@@ -77,7 +77,7 @@ export function TextField<T extends FieldValues>(props: {
 
 // Number input with safe empty -> undefined mapping
 export function NumberField<T extends FieldValues>(props: {
-  form: UseFormReturn<T>;
+  form: UseFormReturn<T, any, any>;
   name: FieldPath<T>;
   label: string;
   placeholder?: string;
@@ -119,7 +119,7 @@ export function NumberField<T extends FieldValues>(props: {
 }
 
 export function PhoneField<T extends FieldValues>(props: {
-  form: UseFormReturn<T>;
+  form: UseFormReturn<T, any, any>;
   name: FieldPath<T>;
   label: string;
   placeholder?: string;
@@ -158,7 +158,7 @@ export function PhoneField<T extends FieldValues>(props: {
 }
 
 export function EmailField<T extends FieldValues>(props: {
-  form: UseFormReturn<T>;
+  form: UseFormReturn<T, any, any>;
   name: FieldPath<T>;
   label: string;
   placeholder?: string;
@@ -185,7 +185,7 @@ export function EmailField<T extends FieldValues>(props: {
 }
 
 export function GenderSelectField<T extends FieldValues>(props: {
-  form: UseFormReturn<T>;
+  form: UseFormReturn<T, any, any>;
   name: FieldPath<T>;
   label?: string;
   options?: Array<'Masculino' | 'Femenino' | 'Otro'>;
@@ -221,7 +221,7 @@ export function GenderSelectField<T extends FieldValues>(props: {
 }
 
 export function DiagnosisSelectField<T extends FieldValues>(props: {
-  form: UseFormReturn<T>;
+  form: UseFormReturn<T, any, any>;
   name: FieldPath<T>;
   label?: string;
   placeholder?: string;
@@ -258,7 +258,7 @@ export function DiagnosisSelectField<T extends FieldValues>(props: {
 }
 
 export function DatePickerField<T extends FieldValues>(props: {
-  form: UseFormReturn<T>;
+  form: UseFormReturn<T, any, any>;
   name: FieldPath<T>;
   label: string;
   isValidDate: (date: Date) => boolean;
@@ -318,7 +318,7 @@ export function DatePickerField<T extends FieldValues>(props: {
 }
 
 export function TimeSelectField<T extends FieldValues>(props: {
-  form: UseFormReturn<T>;
+  form: UseFormReturn<T, any, any>;
   name: FieldPath<T>;
   label: string;
   timeSlots: Array<{ value: string; label: string }>;

@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
   const endDate = searchParams.get('endDate')
 
   // Debug flag to optionally include diagnostics in the response
-  const debug = true // Force debug for troubleshooting
+  const debug = process.env.NODE_ENV === 'development'
 
   // Prefer service role on the server when available to bypass RLS for read-only aggregation
   const usingAdmin = !!process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -140,16 +140,18 @@ export async function GET(req: NextRequest) {
 
   const { data, error, count } = await query
   
-  // Debug: Log query results
-  console.log('🔍 [/api/appointments][GET] Query result:', {
-    dataLength: data?.length || 0,
-    count,
-    error: error?.message,
-    hasData: !!data,
-    firstItem: data?.[0],
-    dateFilter,
-    range
-  });
+  if (debug) {
+    // Debug: Log query results
+    console.log('🔍 [/api/appointments][GET] Query result:', {
+      dataLength: data?.length || 0,
+      count,
+      error: error?.message,
+      hasData: !!data,
+      firstItem: data?.[0],
+      dateFilter,
+      range
+    });
+  }
   
   if (error) {
     // Graceful fallback for dev environments without DB permissions

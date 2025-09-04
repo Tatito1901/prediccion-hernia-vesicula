@@ -16,15 +16,24 @@ import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 
 // Form provider wrapper compatible with: <Form {...form}>
-export type FormProps<TFieldValues extends FieldValues = FieldValues, TContext = any> = {
+export type FormProps<
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues extends FieldValues | undefined = undefined
+> = {
   children: React.ReactNode
-} & UseFormReturn<TFieldValues, TContext>
+} & UseFormReturn<TFieldValues, TContext, TTransformedValues>
 
-export function Form<TFieldValues extends FieldValues, TContext>({
-  children,
-  ...form
-}: FormProps<TFieldValues, TContext>) {
-  return <FormProvider {...(form as UseFormReturn<TFieldValues, TContext>)}>{children}</FormProvider>
+export function Form<
+  TFieldValues extends FieldValues,
+  TContext,
+  TTransformedValues extends FieldValues | undefined = undefined
+>({ children, ...form }: FormProps<TFieldValues, TContext, TTransformedValues>) {
+  return (
+    <FormProvider {...(form as UseFormReturn<TFieldValues, TContext, TTransformedValues>)}>
+      {children}
+    </FormProvider>
+  )
 }
 
 // Internal context to expose current field name to nested components like FormMessage
