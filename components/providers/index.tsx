@@ -51,6 +51,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const hide = useCallback(() => setOverlay((s) => ({ ...s, visible: false })), []);
   const setMessage = useCallback((message: string) => setOverlay((s) => ({ ...s, message })), []);
 
+
   return (
     <ThemeProvider
       attribute="class"

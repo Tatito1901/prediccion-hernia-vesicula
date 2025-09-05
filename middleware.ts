@@ -3,200 +3,146 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
-// Rutas públicas que no requieren autenticación
+// === Config básica ===
 const IS_DEV = process.env.NODE_ENV !== 'production'
-// En desarrollo permitimos acceder a /admision y /survey sin autenticación para facilitar pruebas manuales
+
+// Rutas públicas (sin auth). En dev, dejamos /admision y /survey abiertos.
 const PUBLIC_ROUTES = IS_DEV
   ? ['/', '/login', '/reset-password', '/auth/callback', '/auth/confirm', '/admision', '/survey', '/encuesta']
   : ['/', '/login', '/reset-password', '/auth/callback', '/auth/confirm', '/encuesta']
-const API_ROUTES = ['/api/', '/_next/', '/_actions', '/favicon.ico', '/manifest.json']
 
-// Determina si una ruta es pública, tratando '/' como coincidencia exacta
+// Rutas que NO deben pasar por lógica de auth/redirecciones
+const SKIP_ROUTES_PREFIX = ['/api/', '/_next/', '/_actions', '/favicon.ico', '/manifest.json']
+
 function isPublicRoute(pathname: string): boolean {
   if (pathname === '/') return true
-  return PUBLIC_ROUTES.some(route => route !== '/' && pathname.startsWith(route))
+  return PUBLIC_ROUTES.some((route) => route !== '/' && pathname.startsWith(route))
 }
 
-// Cache de sesiones en edge runtime (con TTL corto)
-const sessionCache = new Map<string, { expires: number; hasSession: boolean }>()
-const SESSION_CACHE_TTL = 30 * 1000 // 30 segundos
-
-export async function middleware(request: NextRequest) {
-  const { pathname, searchParams } = request.nextUrl
-
-  // Skip API routes y archivos estáticos
-  if (API_ROUTES.some(route => pathname.startsWith(route))) {
-    return NextResponse.next()
-  }
-
-  // Crear response inicial
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
-
-  // Configurar cliente Supabase para edge runtime
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-        },
-      },
-    }
-  )
-
-  // Check cache first
-  const cacheKey = request.cookies.get('sb-access-token')?.value || 'anonymous'
-  const cached = sessionCache.get(cacheKey)
-  
-  let hasValidSession = false
-  
-  if (cached && cached.expires > Date.now()) {
-    hasValidSession = cached.hasSession
-  } else {
-    // Verificar sesión
-    const { data: { user }, error } = await supabase.auth.getUser()
-    hasValidSession = !error && !!user
-    
-    // Guardar en cache
-    sessionCache.set(cacheKey, {
-      expires: Date.now() + SESSION_CACHE_TTL,
-      hasSession: hasValidSession
-    })
-    
-    // Limpiar cache viejo periódicamente
-    if (sessionCache.size > 100) {
-      const now = Date.now()
-      for (const [key, value] of sessionCache.entries()) {
-        if (value.expires < now) {
-          sessionCache.delete(key)
-        }
-      }
-    }
-  }
-
-  // Rutas públicas
-  if (isPublicRoute(pathname)) {
-    // Si hay sesión válida y está en login, redirigir a dashboard
-    if (hasValidSession && (pathname === '/' || pathname === '/login')) {
-      const dashboardUrl = new URL('/dashboard', request.url)
-      
-      // Preservar el next param si existe
-      const next = searchParams.get('next')
-      if (next && isValidRedirect(next)) {
-        return NextResponse.redirect(new URL(next, request.url))
-      }
-      
-      return NextResponse.redirect(dashboardUrl)
-    }
-    return response
-  }
-
-  // Rutas protegidas - requieren autenticación
-  if (!hasValidSession) {
-    const loginUrl = new URL('/', request.url)
-    
-    // Guardar la ruta original para redirigir después del login
-    if (pathname !== '/' && pathname !== '/dashboard') {
-      loginUrl.searchParams.set('next', pathname)
-    }
-    
-    // Añadir código de error si es apropiado
-    loginUrl.searchParams.set('error', 'session_expired')
-    
-    return NextResponse.redirect(loginUrl)
-  }
-
-  // Usuario autenticado en ruta protegida
-  // Añadir headers de seguridad
-  response.headers.set('X-Frame-Options', 'DENY')
-  response.headers.set('X-Content-Type-Options', 'nosniff')
-  response.headers.set('X-XSS-Protection', '1; mode=block')
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  
-  // Preload hints para recursos críticos del dashboard
-  if (pathname === '/dashboard') {
-    response.headers.set(
-      'Link',
-      '</api/dashboard/stats>; rel=preload; as=fetch, ' +
-      '</api/dashboard/recent>; rel=preload; as=fetch'
-    )
-  }
-
-  return response
-}
-
-// Validar redirecciones para evitar open redirects
 function isValidRedirect(path: string): boolean {
   try {
-    // Debe empezar con / y no ser //
     if (!path.startsWith('/') || path.startsWith('//')) return false
-    
-    // No debe contener ://
     if (path.includes('://')) return false
-    
-    // No debe contener @ (evita user@host)
     if (path.includes('@')) return false
-    
-    // No debe contener backslash
     if (path.includes('\\')) return false
-    
     return true
   } catch {
     return false
   }
 }
 
+// Cache liviano en edge (compartido por instancia). TTL corto.
+const sessionCache = new Map<string, { expires: number; hasSession: boolean }>()
+const SESSION_CACHE_TTL = 30 * 1000 // 30s
+
+export async function middleware(request: NextRequest) {
+  const { pathname, searchParams } = request.nextUrl
+
+  // 0) Saltar APIs/estáticos cuanto antes
+  if (SKIP_ROUTES_PREFIX.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next()
+  }
+
+  const isPublic = isPublicRoute(pathname)
+
+  // 1) Crea una única respuesta "forward" y clona headers (importante en middleware)
+  let response = NextResponse.next({
+    request: {
+      headers: new Headers(request.headers),
+    },
+  })
+
+  // 2) Short-circuit: si la ruta es pública y NO es ('/' o '/login'),
+  // no necesitamos sesión para nada — devolvemos de inmediato.
+  if (isPublic && pathname !== '/' && pathname !== '/login') {
+    return response
+  }
+
+  // 3) Prepara Supabase SSR. ¡Nunca mutar request.cookies aquí!
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      get(name: string) {
+        return request.cookies.get(name)?.value
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        // Escribe SOLO en response (no toques request.cookies)
+        response.cookies.set({ name, value, ...options })
+      },
+      remove(name: string, options: CookieOptions) {
+        response.cookies.set({ name, value: '', ...options })
+      },
+    },
+  })
+
+  // 4) Cache de sesión para reducir llamadas
+  const accessToken = request.cookies.get('sb-access-token')?.value
+  const cacheKey = accessToken ? `atk:${accessToken.slice(0, 24)}` : `anon:${request.ip ?? '0'}`
+  const cached = sessionCache.get(cacheKey)
+
+  let hasValidSession = false
+  if (cached && cached.expires > Date.now()) {
+    hasValidSession = cached.hasSession
+  } else {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    hasValidSession = !error && !!user
+    sessionCache.set(cacheKey, {
+      expires: Date.now() + SESSION_CACHE_TTL,
+      hasSession: hasValidSession,
+    })
+    // Limpieza simple
+    if (sessionCache.size > 200) {
+      const now = Date.now()
+      for (const [k, v] of sessionCache.entries()) {
+        if (v.expires < now) sessionCache.delete(k)
+      }
+    }
+  }
+
+  // 5) Lógica de públicas ('/' y '/login' pueden redirigir si ya hay sesión)
+  if (isPublic) {
+    if (hasValidSession && (pathname === '/' || pathname === '/login')) {
+      const nextParam = searchParams.get('next')
+      if (nextParam && isValidRedirect(nextParam)) {
+        return NextResponse.redirect(new URL(nextParam, request.url))
+      }
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+    return response
+  }
+
+  // 6) Rutas protegidas
+  if (!hasValidSession) {
+    const loginUrl = new URL('/', request.url)
+    if (pathname !== '/' && pathname !== '/dashboard') {
+      loginUrl.searchParams.set('next', pathname)
+    }
+    loginUrl.searchParams.set('error', 'session_expired')
+    return NextResponse.redirect(loginUrl)
+  }
+
+  // 7) Usuario autenticado: headers de seguridad + preload (seguro)
+  response.headers.set('X-Frame-Options', 'DENY')
+  response.headers.set('X-Content-Type-Options', 'nosniff')
+  response.headers.set('X-XSS-Protection', '1; mode=block')
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+
+  if (pathname === '/dashboard') {
+    // Hint de preload; apunta a una ruta que el matcher no intercepte.
+    response.headers.set('Link', '</api/dashboard/metrics>; rel=preload; as=fetch')
+  }
+
+  return response
+}
+
+// 8) Matcher más estricto: excluye API desde aquí para no entrar al middleware.
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - _actions (server actions endpoint)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
-    '/((?!_next/static|_next/image|_actions|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Excluye API, estáticos e imágenes comunes; evita que middleware intercepte recursos innecesarios
+    '/((?!api|_next/static|_next/image|_actions|favicon.ico|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)',
   ],
 }
