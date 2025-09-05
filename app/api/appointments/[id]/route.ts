@@ -41,50 +41,35 @@ export async function PATCH(
 
     const supabase = createAdminClient()
 
-    // Obtener la cita actual para validar conflictos y completar valores faltantes
-    const { data: current, error: fetchError } = await supabase
-      .from('appointments')
-      .select('id, doctor_id, fecha_hora_cita')
-      .eq('id', id)
-      .single()
-
-    if (fetchError || !current) {
-      return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 })
+    // Actualización atómica vía RPC con verificación de traslapes
+    const rpcArgs: any = {
+      p_action: 'update',
+      p_appointment_id: id,
+      p_doctor_id: parsed.data.doctor_id !== undefined ? parsed.data.doctor_id : undefined,
+      p_fecha_hora_cita: parsed.data.fecha_hora_cita ?? undefined,
+      p_motivos_consulta: parsed.data.motivos_consulta ?? undefined,
+      p_notas_breves: parsed.data.notas_breves ?? undefined,
+      p_es_primera_vez: parsed.data.es_primera_vez ?? undefined,
     }
 
-    const targetDoctorId = parsed.data.doctor_id !== undefined ? parsed.data.doctor_id : current.doctor_id
-    const targetDateTime = parsed.data.fecha_hora_cita ?? current.fecha_hora_cita
-
-    // Validación de conflicto de agenda por doctor/fecha
-    if (targetDoctorId) {
-      const { data: conflict, error: conflictErr } = await supabase
-        .from('appointments')
-        .select('id')
-        .eq('doctor_id', targetDoctorId)
-        .eq('fecha_hora_cita', targetDateTime)
-        .neq('id', id)
-        .limit(1)
-
-      if (conflictErr) {
-        return NextResponse.json({ error: 'Error validando conflictos', details: conflictErr.message }, { status: 500 })
-      }
-      if (conflict && conflict.length > 0) {
-        return NextResponse.json({ error: 'Conflicto de horario con el doctor' }, { status: 409 })
-      }
+    const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs)
+    if (rpcError) {
+      return NextResponse.json({ error: rpcError.message || 'Error al actualizar la cita' }, { status: 400 })
+    }
+    const result = rpcData && rpcData[0]
+    if (!result || !result.success) {
+      const msg = result?.message || 'No se pudo actualizar la cita'
+      const status = /no encontrada/i.test(msg)
+        ? 404
+        : /horario no disponible/i.test(msg)
+          ? 409
+          : 400
+      return NextResponse.json({ error: msg }, { status })
     }
 
-    // Construir payload de actualización solo con campos presentes
-    const updatePayload: Record<string, any> = {}
-    if (parsed.data.fecha_hora_cita !== undefined) updatePayload.fecha_hora_cita = parsed.data.fecha_hora_cita
-    if (parsed.data.motivos_consulta !== undefined) updatePayload.motivos_consulta = parsed.data.motivos_consulta
-    if (parsed.data.notas_breves !== undefined) updatePayload.notas_breves = parsed.data.notas_breves
-    if (parsed.data.doctor_id !== undefined) updatePayload.doctor_id = parsed.data.doctor_id
-    if (parsed.data.es_primera_vez !== undefined) updatePayload.es_primera_vez = parsed.data.es_primera_vez
-
-    const { data: updated, error: updateError } = await supabase
+    // Obtener la cita actualizada con datos del paciente
+    const { data: updated, error: fetchUpdatedError } = await supabase
       .from('appointments')
-      .update(updatePayload)
-      .eq('id', id)
       .select(`
         id,
         patient_id,
@@ -100,10 +85,11 @@ export async function PATCH(
           id, nombre, apellidos, telefono, email, diagnostico_principal, estado_paciente
         )
       `)
+      .eq('id', id)
       .single()
 
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message || 'Error al actualizar la cita' }, { status: 400 })
+    if (fetchUpdatedError) {
+      return NextResponse.json({ error: fetchUpdatedError.message || 'Error al consultar cita actualizada' }, { status: 400 })
     }
 
     return NextResponse.json(updated)

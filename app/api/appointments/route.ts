@@ -4,7 +4,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { clinicYmd, clinicStartOfDayUtc, addClinicDaysAsUtcStart } from '@/lib/timezone'
 import { z } from 'zod'
 import { ZDiagnosisDb, ZAppointmentStatus } from '@/lib/validation/enums'
-import type { NewAppointment } from '@/lib/types'
+import type { Database } from '@/lib/types/database.types'
 
 export const runtime = 'nodejs'
 
@@ -206,33 +206,33 @@ export async function POST(req: NextRequest) {
   if (!parse.success) {
     return NextResponse.json({ message: 'Datos inválidos', details: parse.error.issues }, { status: 400 })
   }
-  const supabase = await createAdminClient()
+  const supabase = createAdminClient()
   const payload = parse.data
-  const insertPayload: NewAppointment = {
-    patient_id: payload.patient_id,
-    fecha_hora_cita: payload.fecha_hora_cita,
-    motivos_consulta: payload.motivos_consulta,
-    estado_cita: payload.estado_cita ?? 'PROGRAMADA',
-    doctor_id: payload.doctor_id ?? null,
-    notas_breves: payload.notas_breves,
-    es_primera_vez: payload.es_primera_vez ?? false,
+  // Programación atómica vía RPC con validación de traslapes
+  type ScheduleArgs = Database['public']['Functions']['schedule_appointment']['Args']
+  const rpcArgs: ScheduleArgs = {
+    p_action: 'create',
+    p_patient_id: payload.patient_id,
+    ...(payload.doctor_id !== undefined ? { p_doctor_id: payload.doctor_id ?? null } : {}),
+    p_fecha_hora_cita: payload.fecha_hora_cita,
+    ...(payload.estado_cita !== undefined ? { p_estado_cita: payload.estado_cita } : {}),
+    p_motivos_consulta: payload.motivos_consulta,
+    ...(payload.notas_breves !== undefined ? { p_notas_breves: payload.notas_breves } : {}),
+    ...(payload.es_primera_vez !== undefined ? { p_es_primera_vez: payload.es_primera_vez } : {}),
   }
-  // Conflicto simple por doctor/fecha
-  if (payload.doctor_id) {
-    const { data: conflict } = await supabase
-      .from('appointments')
-      .select('id')
-      .eq('doctor_id', payload.doctor_id)
-      .eq('fecha_hora_cita', payload.fecha_hora_cita)
-      .limit(1)
-    if (conflict && conflict.length > 0) {
-      return NextResponse.json({ message: 'Conflicto de horario con el doctor' }, { status: 409 })
-    }
+  const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs)
+  if (rpcError) {
+    return NextResponse.json({ message: rpcError.message || 'Error al programar la cita' }, { status: 400 })
+  }
+  const result = rpcData && rpcData[0]
+  if (!result || !result.success || !result.appointment_id) {
+    const msg = result?.message || 'No se pudo programar la cita'
+    const status = /horario no disponible/i.test(msg) ? 409 : 400
+    return NextResponse.json({ message: msg }, { status })
   }
 
   const { data, error } = await supabase
     .from('appointments')
-    .insert(insertPayload)
     .select(`
       id,
       patient_id,
@@ -248,6 +248,7 @@ export async function POST(req: NextRequest) {
         id, nombre, apellidos, telefono, email, diagnostico_principal, estado_paciente
       )
     `)
+    .eq('id', result.appointment_id)
     .single()
 
   if (error) {

@@ -782,6 +782,25 @@ export type Database = {
           created_appointment_id: string
         }[]
       }
+      schedule_appointment: {
+        Args: {
+          p_action: string
+          p_appointment_id?: string | null
+          p_patient_id?: string | null
+          p_doctor_id?: string | null
+          p_fecha_hora_cita?: string | null
+          p_estado_cita?: Database["public"]["Enums"]["appointment_status_enum"] | null
+          p_motivos_consulta?: Database["public"]["Enums"]["diagnosis_enum"][] | null
+          p_notas_breves?: string | null
+          p_es_primera_vez?: boolean | null
+          p_expected_updated_at?: string | null
+        }
+        Returns: {
+          success: boolean
+          message: string
+          appointment_id: string | null
+        }[]
+      }
       gtrgm_compress: {
         Args: { "": unknown }
         Returns: unknown

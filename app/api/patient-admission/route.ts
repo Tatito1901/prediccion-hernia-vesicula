@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
         .select('id')
         .eq('doctor_id', payload.doctor_id)
         .eq('fecha_hora_cita', payload.fecha_hora_cita)
+        .in('estado_cita', ['PROGRAMADA', 'CONFIRMADA', 'PRESENTE'])
         .limit(1)
       if (conflicting && conflicting.length > 0) {
         const errorResponse = createApiError('Conflicto de horario', {

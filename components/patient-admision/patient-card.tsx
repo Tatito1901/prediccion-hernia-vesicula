@@ -319,8 +319,23 @@ function _PatientCard({ appointment, onAction, disableActions = false, className
   }, [appointment.fecha_hora_cita]);
 
   const availableActions = useMemo(() => {
-    const all: AdmissionAction[] = ['checkIn', 'complete', 'cancel', 'noShow', 'reschedule', 'viewHistory'];
-    return all.filter((a) => canPerformAction(appointment, a));
+    const actions: AdmissionAction[] = [];
+    // Siempre exponer 'checkIn' para PROGRAMADA/CONFIRMADA, aunque aún no esté en ventana
+    if (
+      appointment.estado_cita === AppointmentStatusEnum.PROGRAMADA ||
+      appointment.estado_cita === AppointmentStatusEnum.CONFIRMADA
+    ) {
+      actions.push('checkIn');
+    } else if (canPerformAction(appointment, 'checkIn')) {
+      actions.push('checkIn');
+    }
+
+    if (canPerformAction(appointment, 'complete')) actions.push('complete');
+    if (canPerformAction(appointment, 'cancel')) actions.push('cancel');
+    if (canPerformAction(appointment, 'noShow')) actions.push('noShow');
+    if (canPerformAction(appointment, 'reschedule')) actions.push('reschedule');
+    actions.push('viewHistory'); // Siempre disponible
+    return actions;
   }, [appointment]);
 
   const primaryAction = useMemo<AdmissionAction | null>(() => {
@@ -592,15 +607,15 @@ function _PatientCard({ appointment, onAction, disableActions = false, className
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              {infoDialog?.kind === 'tooEarly' ? 'Check-in disponible pronto' : 'Check-in ya no disponible'}
+              {infoDialog?.kind === 'tooEarly' ? 'Check-in aún no disponible' : 'Ventana de check-in expirada'}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <p>
                 {infoDialog?.kind === 'tooEarly'
-                  ? `El check-in para ${fullName} estará disponible ${typeof (checkInUi as any).minutes === 'number' ? `en ${(checkInUi as any).minutes} minutos` : 'pronto'}.`
-                  : `El período de check-in para ${fullName} ha expirado.`}
+                  ? 'El check-in se habilita 30 minutos antes de la cita.'
+                  : 'Ventana de check-in expirada.'}
               </p>
-              {'start' in checkInUi && 'end' in checkInUi && (
+              {'start' in checkInUi && 'end' in checkInUi && infoDialog?.kind === 'expired' && (
                 <p className="text-sm text-muted-foreground">
                   Ventana de check-in: {formatMx(checkInUi.start, 'time')} - {formatMx(checkInUi.end, 'time')}
                 </p>
@@ -616,7 +631,7 @@ function _PatientCard({ appointment, onAction, disableActions = false, className
                 }}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Marcar como no presentado
+                No Asistió
               </AlertDialogAction>
             )}
             {availableActions.includes('reschedule') && (

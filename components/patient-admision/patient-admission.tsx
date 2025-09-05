@@ -236,7 +236,7 @@ const SearchAndFilters = memo<{
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden />
           <Input
             ref={inputRef}
-            placeholder="Buscar paciente… (/ para enfocar)"
+            placeholder="Buscar paciente..."
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
             className="pl-10 pr-10 bg-transparent"
@@ -413,15 +413,15 @@ const PatientAdmission = () => {
 
       <Tabs value={activeTab} onValueChange={(v) => startTransition(() => setActiveTab(v as TabType))}>
         <TabsList className="w-full sm:w-auto mb-6 overflow-x-auto">
-          <TabsTrigger value="today" className="flex-1 sm:flex-initial gap-2" aria-label={`Citas de hoy: ${todayCount}`}>
+          <TabsTrigger value="today" className="flex-1 sm:flex-initial gap-2">
             <Calendar className="h-4 w-4" aria-hidden />
             Hoy ({todayCount})
           </TabsTrigger>
-          <TabsTrigger value="future" className="flex-1 sm:flex-initial gap-2" aria-label={`Citas futuras: ${futureCount}`}>
+          <TabsTrigger value="future" className="flex-1 sm:flex-initial gap-2">
             <CalendarDays className="h-4 w-4" aria-hidden />
             Próximas ({futureCount})
           </TabsTrigger>
-          <TabsTrigger value="past" className="flex-1 sm:flex-initial gap-2" aria-label={`Citas anteriores: ${pastCount}`}>
+          <TabsTrigger value="past" className="flex-1 sm:flex-initial gap-2">
             <Clock className="h-4 w-4" aria-hidden />
             Anteriores ({pastCount})
           </TabsTrigger>
