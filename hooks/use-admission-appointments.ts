@@ -1,9 +1,11 @@
 // hooks/use-admission-appointments.ts
-// Hook de dominio para la pantalla de Admisión
+// Hook de dominio para la pantalla de Admisión - REFACTORIZADO
 
 import { useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
+import { endpoints, buildSearchParams } from '@/lib/api-endpoints'
+import { queryFetcher } from '@/lib/http'
 import { AppointmentStatusEnum } from '@/lib/types'
 import type { AppointmentStatus } from '@/lib/types'
 import type { AppointmentWithPatient, TabType } from '@/components/patient-admision/admision-types'
@@ -42,31 +44,22 @@ export interface AdmissionAppointmentsReturn {
   rescheduledCount: number
 }
 
+// Función de fetching centralizada usando las nuevas abstracciones
 async function fetchAppointments(params: {
   dateFilter: 'today' | 'future' | 'past'
   search?: string
   page?: number
   pageSize?: number
 }): Promise<AppointmentsApiResponse> {
-  // Build query string without relying on window during SSR
-  const qs = new URLSearchParams()
-  qs.set('dateFilter', params.dateFilter)
-  if (params.search) qs.set('search', params.search)
-  qs.set('page', String(params.page ?? 1))
-  if (params.pageSize) qs.set('pageSize', String(params.pageSize))
+  const queryParams = buildSearchParams({
+    dateFilter: params.dateFilter,
+    search: params.search,
+    page: params.page ?? 1,
+    pageSize: params.pageSize,
+  })
 
-  const origin =
-    typeof globalThis !== 'undefined' && (globalThis as any).location?.origin
-      ? (globalThis as any).location.origin
-      : ''
-  const url = `${origin}/api/appointments?${qs.toString()}`
-
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) {
-    const details = await res.json().catch(() => ({}))
-    throw new Error(details?.message || 'Error al obtener citas')
-  }
-  return res.json()
+  const url = endpoints.appointments.list(queryParams)
+  return await queryFetcher<AppointmentsApiResponse>(url)
 }
 
 export function useAdmissionAppointments(

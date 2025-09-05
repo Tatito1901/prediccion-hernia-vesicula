@@ -5,6 +5,7 @@ import React, {
   useMemo, 
   useCallback, 
   useEffect,
+  useRef,
   memo,
   Suspense,
   startTransition,
@@ -253,22 +254,8 @@ function usePatientData() {
     refetchPatients,
   } = useClinic()
 
-  const [searchInput, setSearchInput] = useState(patientsFilters.search)
-
-  useEffect(() => {
-    setSearchInput(patientsFilters.search)
-  }, [patientsFilters.search])
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (searchInput !== patientsFilters.search) {
-        startTransition(() => {
-          setPatientsSearch(searchInput)
-        })
-      }
-    }, DEBOUNCE_DELAY)
-    return () => clearTimeout(handler)
-  }, [searchInput, patientsFilters.search, setPatientsSearch])
+  // Usar un ref para manejar el debounce sin duplicar estado
+  const searchTimeoutRef = useRef<NodeJS.Timeout>()
 
   // React Query maneja el fetch inicial automáticamente vía contexto
 
@@ -308,11 +295,38 @@ function usePatientData() {
   }, [clearPatientsFilters])
 
   const handleSearchChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    setSearchInput(e.target.value)
-  }, [])
+    const newValue = e.target.value
+    
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+    
+    // Set new timeout for debounced search
+    searchTimeoutRef.current = setTimeout(() => {
+      startTransition(() => {
+        setPatientsSearch(newValue)
+      })
+    }, DEBOUNCE_DELAY)
+  }, [setPatientsSearch])
 
   const handleClearSearch = useCallback(() => {
-    setSearchInput("")
+    // Clear any pending search
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+    startTransition(() => {
+      setPatientsSearch("")
+    })
+  }, [setPatientsSearch])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
   }, [])
 
   const handleRefresh = useCallback(() => {
@@ -333,7 +347,7 @@ function usePatientData() {
     patientsError,
     patientStatsData,
     statusStats,
-    searchInput,
+    searchTerm: patientsFilters.search,
     handlePageChange,
     handleStatusFilterChange,
     handleClearFilters,
@@ -441,7 +455,7 @@ const PatientManagementView: React.FC = () => {
       />
  
       <FilterBar 
-        searchTerm={data.searchInput}
+        searchTerm={data.searchTerm}
         onSearchChange={data.handleSearchChange}
         onClearSearch={data.handleClearSearch}
         statusFilter={String(data.patientsFilters.status)}

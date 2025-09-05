@@ -1,7 +1,8 @@
-// hooks/use-appointments.ts - Hooks optimizados para manejo de citas
+// hooks/use-appointments.ts - Hooks optimizados para manejo de citas - REFACTORIZADO
 import { useMutation, useQueryClient, UseMutationOptions } from '@tanstack/react-query';
 import { isMxToday } from '@/utils/datetime';
 import { fetchJson } from '@/lib/http';
+import { endpoints } from '@/lib/api-endpoints';
 import { notifyError, notifySuccess } from '@/lib/client-errors';
 import type { AppError } from '@/lib/errors';
  
@@ -57,13 +58,28 @@ const transformAppointment = (apiAppointment: ApiAppointment): AppointmentWithPa
     id: appointmentId,
     patient_id: patientId,
     doctor_id: normalizeId(apiAppointment.doctor_id),
-    created_at: apiAppointment.created_at || undefined,
-    updated_at: apiAppointment.updated_at || undefined,
+    agendado_por: null, // Use the actual database field name
+    created_at: apiAppointment.created_at ?? null,
+    updated_at: apiAppointment.updated_at ?? null,
     fecha_hora_cita: apiAppointment.fecha_hora_cita,
-    motivos_consulta: apiAppointment.motivos_consulta || [],
+    duracion_minutos: 30, // Default duration from database schema
+    motivos_consulta: (apiAppointment.motivos_consulta || []) as any,
     estado_cita: apiAppointment.estado_cita as AppointmentStatus,
-    notas_breves: apiAppointment.notas_breves || undefined,
+    notas_breves: apiAppointment.notas_breves ?? null,
     es_primera_vez: apiAppointment.es_primera_vez || false,
+    canal_agendamiento: null,
+    decision_final: null,
+    descripcion_motivos: null,
+    diagnostico_final: null,
+    fecha_agendamiento: null,
+    hora_llegada: null,
+    modification_count: 0,
+    origen_cita: null,
+    probabilidad_cirugia_inicial: null,
+    proxima_cita_sugerida: null,
+    puntualidad: null,
+    slot: null,
+    version: null,
     patients: apiAppointment.patients ? {
       id: patientId,
       nombre: apiAppointment.patients.nombre || '',
@@ -128,7 +144,7 @@ export const useCreateAppointment = (
   
   return useMutation<AppointmentWithPatient, AppError, CreateAppointmentParams>({
     mutationFn: async (data) => {
-      const created = await fetchJson<ApiAppointment>('/api/appointments', {
+      const created = await fetchJson<ApiAppointment>(endpoints.appointments.list(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -157,7 +173,7 @@ export const useUpdateAppointment = (
   
   return useMutation<AppointmentWithPatient, AppError, UpdateAppointmentParams>({
     mutationFn: async ({ id, ...updateData }) => {
-      const updated = await fetchJson<ApiAppointment>(`/api/appointments/${id}`, {
+      const updated = await fetchJson<ApiAppointment>(endpoints.appointments.detail(id), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData),
@@ -195,7 +211,7 @@ export const useUpdateAppointmentStatus = (
         nuevaFechaHora
       };
       
-      const updated = await fetchJson<ApiAppointment>(`/api/appointments/${appointmentId}/status`, {
+      const updated = await fetchJson<ApiAppointment>(endpoints.appointments.updateStatus(appointmentId), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

@@ -216,18 +216,41 @@ const SearchAndFilters = memo<{
   onFocusRequest?: (fn: () => void) => void; // Para atajos de teclado
 }>(({ search, onSearchChange, statusFilter, onStatusChange, isLoading, onFocusRequest }) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [localSearch, setLocalSearch] = useState(search);
-  const deferredSearch = useDeferredValue(localSearch);
-
-  useEffect(() => {
-    onSearchChange(deferredSearch);
-  }, [deferredSearch, onSearchChange]);
+  const searchTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     onFocusRequest?.(() => inputRef.current?.focus());
   }, [onFocusRequest]);
 
-  const clear = useCallback(() => setLocalSearch(''), []);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Set new timeout for debounced search
+    searchTimeoutRef.current = setTimeout(() => {
+      onSearchChange(newValue);
+    }, 300); // 300ms debounce delay
+  }, [onSearchChange]);
+
+  const clear = useCallback(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    onSearchChange('');
+  }, [onSearchChange]);
 
   return (
     <div className="mb-6 md:sticky md:top-2 md:z-10">
@@ -237,13 +260,13 @@ const SearchAndFilters = memo<{
           <Input
             ref={inputRef}
             placeholder="Buscar paciente..."
-            value={localSearch}
-            onChange={(e) => setLocalSearch(e.target.value)}
+            defaultValue={search}
+            onChange={handleSearchChange}
             className="pl-10 pr-10 bg-transparent"
             disabled={isLoading}
             aria-label="Buscar paciente"
           />
-          {localSearch && (
+          {search && (
             <button
               onClick={clear}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"

@@ -20,7 +20,7 @@ import { Clock, Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn, formatPhoneNumber } from '@/lib/utils';
-import { DIAGNOSIS_DB_VALUES, dbDiagnosisToDisplay } from '@/lib/validation/enums';
+import { DIAGNOSIS_DB_VALUES, dbDiagnosisToDisplay } from '@/lib/constants';
 
 // Compose multiple refs (object or callback) into a single ref setter
 function composeRefs<T>(...refs: Array<React.Ref<T> | undefined>) {

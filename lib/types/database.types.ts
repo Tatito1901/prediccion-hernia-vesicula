@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
@@ -20,45 +20,45 @@ export type Database = {
           confidence_level: number
           generated_at: string | null
           id: string
-          intervention_opportunities: string[] | null
+          intervention_opportunities: Json | null
           model_version: string
           patient_id: string
-          positive_indicators: string[] | null
+          positive_indicators: Json | null
           predicted_category: string | null
           propensity_score: number
-          risk_factors: string[] | null
+          risk_factors: Json | null
           survey_response_id: string | null
-          talking_points: string[] | null
+          talking_points: Json | null
         }
         Insert: {
           appointment_id: string
           confidence_level: number
           generated_at?: string | null
           id?: string
-          intervention_opportunities?: string[] | null
+          intervention_opportunities?: Json | null
           model_version: string
           patient_id: string
-          positive_indicators?: string[] | null
+          positive_indicators?: Json | null
           predicted_category?: string | null
           propensity_score: number
-          risk_factors?: string[] | null
+          risk_factors?: Json | null
           survey_response_id?: string | null
-          talking_points?: string[] | null
+          talking_points?: Json | null
         }
         Update: {
           appointment_id?: string
           confidence_level?: number
           generated_at?: string | null
           id?: string
-          intervention_opportunities?: string[] | null
+          intervention_opportunities?: Json | null
           model_version?: string
           patient_id?: string
-          positive_indicators?: string[] | null
+          positive_indicators?: Json | null
           predicted_category?: string | null
           propensity_score?: number
-          risk_factors?: string[] | null
+          risk_factors?: Json | null
           survey_response_id?: string | null
-          talking_points?: string[] | null
+          talking_points?: Json | null
         }
         Relationships: [
           {
@@ -76,6 +76,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ai_predictions_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: true
+            referencedRelation: "vw_survey_responses_enriched"
+            referencedColumns: ["appointment_id"]
+          },
+          {
+            foreignKeyName: "ai_predictions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patient_clinical_summary_view"
+            referencedColumns: ["patient_id"]
+          },
+          {
             foreignKeyName: "ai_predictions_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
@@ -87,6 +101,60 @@ export type Database = {
             columns: ["survey_response_id"]
             isOneToOne: false
             referencedRelation: "survey_responses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_predictions_survey_response_id_fkey"
+            columns: ["survey_response_id"]
+            isOneToOne: false
+            referencedRelation: "vw_survey_responses_enriched"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      appointment_diagnoses: {
+        Row: {
+          appointment_id: string
+          diagnosis_id: number
+          is_primary: boolean | null
+        }
+        Insert: {
+          appointment_id: string
+          diagnosis_id: number
+          is_primary?: boolean | null
+        }
+        Update: {
+          appointment_id?: string
+          diagnosis_id?: number
+          is_primary?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_appdiag_appointment"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_appdiag_appointment"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_appdiag_appointment"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "vw_survey_responses_enriched"
+            referencedColumns: ["appointment_id"]
+          },
+          {
+            foreignKeyName: "fk_appdiag_diagnosis"
+            columns: ["diagnosis_id"]
+            isOneToOne: false
+            referencedRelation: "diagnoses"
             referencedColumns: ["id"]
           },
         ]
@@ -137,7 +205,47 @@ export type Database = {
             referencedRelation: "dashboard_appointments"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "appointment_history_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "vw_survey_responses_enriched"
+            referencedColumns: ["appointment_id"]
+          },
         ]
+      }
+      appointment_state_transitions: {
+        Row: {
+          description: string | null
+          from_state:
+            | Database["public"]["Enums"]["appointment_status_enum"]
+            | null
+          id: string
+          requires_reason: boolean | null
+          role_required: Database["public"]["Enums"]["user_role_enum"] | null
+          to_state: Database["public"]["Enums"]["appointment_status_enum"]
+        }
+        Insert: {
+          description?: string | null
+          from_state?:
+            | Database["public"]["Enums"]["appointment_status_enum"]
+            | null
+          id?: string
+          requires_reason?: boolean | null
+          role_required?: Database["public"]["Enums"]["user_role_enum"] | null
+          to_state: Database["public"]["Enums"]["appointment_status_enum"]
+        }
+        Update: {
+          description?: string | null
+          from_state?:
+            | Database["public"]["Enums"]["appointment_status_enum"]
+            | null
+          id?: string
+          requires_reason?: boolean | null
+          role_required?: Database["public"]["Enums"]["user_role_enum"] | null
+          to_state?: Database["public"]["Enums"]["appointment_status_enum"]
+        }
+        Relationships: []
       }
       appointments: {
         Row: {
@@ -152,12 +260,14 @@ export type Database = {
             | Database["public"]["Enums"]["diagnosis_enum"]
             | null
           doctor_id: string | null
+          duracion_minutos: number
           es_primera_vez: boolean | null
           estado_cita: Database["public"]["Enums"]["appointment_status_enum"]
           fecha_agendamiento: string | null
           fecha_hora_cita: string
           hora_llegada: string | null
           id: string
+          modification_count: number
           motivos_consulta: Database["public"]["Enums"]["diagnosis_enum"][]
           notas_breves: string | null
           origen_cita: string | null
@@ -165,7 +275,9 @@ export type Database = {
           probabilidad_cirugia_inicial: number | null
           proxima_cita_sugerida: string | null
           puntualidad: Database["public"]["Enums"]["arrival_status_enum"] | null
+          slot: unknown | null
           updated_at: string | null
+          version: number | null
         }
         Insert: {
           agendado_por?: string | null
@@ -179,12 +291,14 @@ export type Database = {
             | Database["public"]["Enums"]["diagnosis_enum"]
             | null
           doctor_id?: string | null
+          duracion_minutos?: number
           es_primera_vez?: boolean | null
           estado_cita?: Database["public"]["Enums"]["appointment_status_enum"]
           fecha_agendamiento?: string | null
           fecha_hora_cita: string
           hora_llegada?: string | null
           id?: string
+          modification_count?: number
           motivos_consulta: Database["public"]["Enums"]["diagnosis_enum"][]
           notas_breves?: string | null
           origen_cita?: string | null
@@ -194,7 +308,9 @@ export type Database = {
           puntualidad?:
             | Database["public"]["Enums"]["arrival_status_enum"]
             | null
+          slot?: unknown | null
           updated_at?: string | null
+          version?: number | null
         }
         Update: {
           agendado_por?: string | null
@@ -208,12 +324,14 @@ export type Database = {
             | Database["public"]["Enums"]["diagnosis_enum"]
             | null
           doctor_id?: string | null
+          duracion_minutos?: number
           es_primera_vez?: boolean | null
           estado_cita?: Database["public"]["Enums"]["appointment_status_enum"]
           fecha_agendamiento?: string | null
           fecha_hora_cita?: string
           hora_llegada?: string | null
           id?: string
+          modification_count?: number
           motivos_consulta?: Database["public"]["Enums"]["diagnosis_enum"][]
           notas_breves?: string | null
           origen_cita?: string | null
@@ -223,7 +341,9 @@ export type Database = {
           puntualidad?:
             | Database["public"]["Enums"]["arrival_status_enum"]
             | null
+          slot?: unknown | null
           updated_at?: string | null
+          version?: number | null
         }
         Relationships: [
           {
@@ -237,6 +357,13 @@ export type Database = {
             foreignKeyName: "appointments_patient_id_fkey"
             columns: ["patient_id"]
             isOneToOne: false
+            referencedRelation: "patient_clinical_summary_view"
+            referencedColumns: ["patient_id"]
+          },
+          {
+            foreignKeyName: "appointments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
             referencedRelation: "patients"
             referencedColumns: ["id"]
           },
@@ -245,7 +372,7 @@ export type Database = {
       assigned_surveys: {
         Row: {
           access_token: string | null
-          appointment_id: string | null
+          appointment_id: string
           assigned_at: string | null
           assigned_by: string | null
           completed_at: string | null
@@ -256,7 +383,7 @@ export type Database = {
         }
         Insert: {
           access_token?: string | null
-          appointment_id?: string | null
+          appointment_id: string
           assigned_at?: string | null
           assigned_by?: string | null
           completed_at?: string | null
@@ -267,7 +394,7 @@ export type Database = {
         }
         Update: {
           access_token?: string | null
-          appointment_id?: string | null
+          appointment_id?: string
           assigned_at?: string | null
           assigned_by?: string | null
           completed_at?: string | null
@@ -280,16 +407,30 @@ export type Database = {
           {
             foreignKeyName: "assigned_surveys_appointment_id_fkey"
             columns: ["appointment_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "appointments"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "assigned_surveys_appointment_id_fkey"
             columns: ["appointment_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "dashboard_appointments"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assigned_surveys_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "vw_survey_responses_enriched"
+            referencedColumns: ["appointment_id"]
+          },
+          {
+            foreignKeyName: "assigned_surveys_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patient_clinical_summary_view"
+            referencedColumns: ["patient_id"]
           },
           {
             foreignKeyName: "assigned_surveys_patient_id_fkey"
@@ -306,6 +447,96 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      audit_log_partitioned: {
+        Row: {
+          id: string | null
+          new_data: Json | null
+          old_data: Json | null
+          operation: string
+          performed_at: string
+          record_id: string
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          id?: string | null
+          new_data?: Json | null
+          old_data?: Json | null
+          operation: string
+          performed_at?: string
+          record_id: string
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          id?: string | null
+          new_data?: Json | null
+          old_data?: Json | null
+          operation?: string
+          performed_at?: string
+          record_id?: string
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      audit_queue: {
+        Row: {
+          created_at: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          operation: string
+          record_id: string
+          table_name: string
+          user_id: string | null
+          version_after: number | null
+          version_before: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation: string
+          record_id: string
+          table_name: string
+          user_id?: string | null
+          version_after?: number | null
+          version_before?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation?: string
+          record_id?: string
+          table_name?: string
+          user_id?: string | null
+          version_after?: number | null
+          version_before?: number | null
+        }
+        Relationships: []
+      }
+      diagnoses: {
+        Row: {
+          description: string | null
+          id: number
+          name: string
+        }
+        Insert: {
+          description?: string | null
+          id?: number
+          name: string
+        }
+        Update: {
+          description?: string | null
+          id?: number
+          name?: string
+        }
+        Relationships: []
       }
       doctor_feedback: {
         Row: {
@@ -369,13 +600,34 @@ export type Database = {
             referencedRelation: "dashboard_appointments"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "doctor_feedback_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: true
+            referencedRelation: "vw_survey_responses_enriched"
+            referencedColumns: ["appointment_id"]
+          },
         ]
       }
-      // leads table removed from schema
+      marketing_sources: {
+        Row: {
+          id: number
+          source_name: string
+        }
+        Insert: {
+          id?: number
+          source_name: string
+        }
+        Update: {
+          id?: number
+          source_name?: string
+        }
+        Relationships: []
+      }
       patients: {
         Row: {
           antecedentes_medicos: string | null
-          apellidos: string | null
+          apellidos: string
           ciudad: string | null
           comentarios_registro: string | null
           contacto_emergencia_nombre: string | null
@@ -383,6 +635,7 @@ export type Database = {
           creado_por: string | null
           created_at: string | null
           creation_source: string | null
+          deleted_at: string | null
           diagnostico_principal:
             | Database["public"]["Enums"]["diagnosis_enum"]
             | null
@@ -395,20 +648,24 @@ export type Database = {
           fecha_nacimiento: string | null
           fecha_registro: string | null
           fecha_ultima_consulta: string | null
-          genero: string | null
+          genero: Database["public"]["Enums"]["gender_enum"]
           id: string
           marketing_source:
             | Database["public"]["Enums"]["patient_source_enum"]
             | null
-          nombre: string | null
+          nombre: string
+          normalized_phone: string | null
           numero_expediente: string | null
+          probabilidad_cirugia: number | null
+          search_vector: unknown | null
           seguro_medico: string | null
           telefono: string | null
           updated_at: string | null
+          version: number
         }
         Insert: {
           antecedentes_medicos?: string | null
-          apellidos?: string | null
+          apellidos: string
           ciudad?: string | null
           comentarios_registro?: string | null
           contacto_emergencia_nombre?: string | null
@@ -416,6 +673,7 @@ export type Database = {
           creado_por?: string | null
           created_at?: string | null
           creation_source?: string | null
+          deleted_at?: string | null
           diagnostico_principal?:
             | Database["public"]["Enums"]["diagnosis_enum"]
             | null
@@ -428,20 +686,24 @@ export type Database = {
           fecha_nacimiento?: string | null
           fecha_registro?: string | null
           fecha_ultima_consulta?: string | null
-          genero?: string | null
+          genero?: Database["public"]["Enums"]["gender_enum"]
           id?: string
           marketing_source?:
             | Database["public"]["Enums"]["patient_source_enum"]
             | null
-          nombre?: string | null
+          nombre: string
+          normalized_phone?: string | null
           numero_expediente?: string | null
+          probabilidad_cirugia?: number | null
+          search_vector?: unknown | null
           seguro_medico?: string | null
           telefono?: string | null
           updated_at?: string | null
+          version?: number
         }
         Update: {
           antecedentes_medicos?: string | null
-          apellidos?: string | null
+          apellidos?: string
           ciudad?: string | null
           comentarios_registro?: string | null
           contacto_emergencia_nombre?: string | null
@@ -449,6 +711,7 @@ export type Database = {
           creado_por?: string | null
           created_at?: string | null
           creation_source?: string | null
+          deleted_at?: string | null
           diagnostico_principal?:
             | Database["public"]["Enums"]["diagnosis_enum"]
             | null
@@ -461,16 +724,20 @@ export type Database = {
           fecha_nacimiento?: string | null
           fecha_registro?: string | null
           fecha_ultima_consulta?: string | null
-          genero?: string | null
+          genero?: Database["public"]["Enums"]["gender_enum"]
           id?: string
           marketing_source?:
             | Database["public"]["Enums"]["patient_source_enum"]
             | null
-          nombre?: string | null
+          nombre?: string
+          normalized_phone?: string | null
           numero_expediente?: string | null
+          probabilidad_cirugia?: number | null
+          search_vector?: unknown | null
           seguro_medico?: string | null
           telefono?: string | null
           updated_at?: string | null
+          version?: number
         }
         Relationships: []
       }
@@ -481,6 +748,7 @@ export type Database = {
           full_name: string | null
           id: string
           is_active: boolean | null
+          nombre_completo: string | null
           role: Database["public"]["Enums"]["user_role_enum"] | null
           updated_at: string | null
         }
@@ -490,6 +758,7 @@ export type Database = {
           full_name?: string | null
           id: string
           is_active?: boolean | null
+          nombre_completo?: string | null
           role?: Database["public"]["Enums"]["user_role_enum"] | null
           updated_at?: string | null
         }
@@ -499,8 +768,24 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_active?: boolean | null
+          nombre_completo?: string | null
           role?: Database["public"]["Enums"]["user_role_enum"] | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      role_hierarchy: {
+        Row: {
+          inherits_role: Database["public"]["Enums"]["user_role_enum"]
+          role: Database["public"]["Enums"]["user_role_enum"]
+        }
+        Insert: {
+          inherits_role: Database["public"]["Enums"]["user_role_enum"]
+          role: Database["public"]["Enums"]["user_role_enum"]
+        }
+        Update: {
+          inherits_role?: Database["public"]["Enums"]["user_role_enum"]
+          role?: Database["public"]["Enums"]["user_role_enum"]
         }
         Relationships: []
       }
@@ -508,12 +793,10 @@ export type Database = {
         Row: {
           afectacion_actividades: string | null
           alcaldia_cdmx: string | null
-          apellidos_completos: string | null
           appointment_id: string
           aseguradora_seleccionada: string | null
           aspectos_mas_importantes: string[] | null
           assigned_survey_id: string
-          como_nos_conocio: string | null
           completed_at: string | null
           completion_time_minutes: number | null
           condiciones_medicas_cronicas: string[] | null
@@ -522,17 +805,16 @@ export type Database = {
           detalles_adicionales_diagnostico: string | null
           diagnostico_previo: boolean | null
           diagnostico_principal_previo: string | null
-          edad: number | null
           estudios_medicos_previos: string | null
           expectativa_principal_tratamiento: string | null
           id: string
           informacion_adicional_importante: string | null
           intensidad_dolor_actual: number | null
+          marketing_source_id: number | null
           mayor_beneficio_esperado: string | null
           mayor_preocupacion_cirugia: string | null
           motivo_visita: string | null
           municipio_edomex: string | null
-          nombre_completo: string | null
           otra_aseguradora: string | null
           otra_ciudad_municipio: string | null
           otra_condicion_medica: string | null
@@ -551,12 +833,10 @@ export type Database = {
         Insert: {
           afectacion_actividades?: string | null
           alcaldia_cdmx?: string | null
-          apellidos_completos?: string | null
           appointment_id: string
           aseguradora_seleccionada?: string | null
           aspectos_mas_importantes?: string[] | null
           assigned_survey_id: string
-          como_nos_conocio?: string | null
           completed_at?: string | null
           completion_time_minutes?: number | null
           condiciones_medicas_cronicas?: string[] | null
@@ -565,17 +845,16 @@ export type Database = {
           detalles_adicionales_diagnostico?: string | null
           diagnostico_previo?: boolean | null
           diagnostico_principal_previo?: string | null
-          edad?: number | null
           estudios_medicos_previos?: string | null
           expectativa_principal_tratamiento?: string | null
           id?: string
           informacion_adicional_importante?: string | null
           intensidad_dolor_actual?: number | null
+          marketing_source_id?: number | null
           mayor_beneficio_esperado?: string | null
           mayor_preocupacion_cirugia?: string | null
           motivo_visita?: string | null
           municipio_edomex?: string | null
-          nombre_completo?: string | null
           otra_aseguradora?: string | null
           otra_ciudad_municipio?: string | null
           otra_condicion_medica?: string | null
@@ -594,12 +873,10 @@ export type Database = {
         Update: {
           afectacion_actividades?: string | null
           alcaldia_cdmx?: string | null
-          apellidos_completos?: string | null
           appointment_id?: string
           aseguradora_seleccionada?: string | null
           aspectos_mas_importantes?: string[] | null
           assigned_survey_id?: string
-          como_nos_conocio?: string | null
           completed_at?: string | null
           completion_time_minutes?: number | null
           condiciones_medicas_cronicas?: string[] | null
@@ -608,17 +885,16 @@ export type Database = {
           detalles_adicionales_diagnostico?: string | null
           diagnostico_previo?: boolean | null
           diagnostico_principal_previo?: string | null
-          edad?: number | null
           estudios_medicos_previos?: string | null
           expectativa_principal_tratamiento?: string | null
           id?: string
           informacion_adicional_importante?: string | null
           intensidad_dolor_actual?: number | null
+          marketing_source_id?: number | null
           mayor_beneficio_esperado?: string | null
           mayor_preocupacion_cirugia?: string | null
           motivo_visita?: string | null
           municipio_edomex?: string | null
-          nombre_completo?: string | null
           otra_aseguradora?: string | null
           otra_ciudad_municipio?: string | null
           otra_condicion_medica?: string | null
@@ -636,25 +912,46 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_marketing_source"
+            columns: ["marketing_source_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_sources"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "survey_responses_appointment_id_fkey"
             columns: ["appointment_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "appointments"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "survey_responses_appointment_id_fkey"
             columns: ["appointment_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "dashboard_appointments"
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "survey_responses_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: true
+            referencedRelation: "vw_survey_responses_enriched"
+            referencedColumns: ["appointment_id"]
+          },
+          {
             foreignKeyName: "survey_responses_assigned_survey_id_fkey"
             columns: ["assigned_survey_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "assigned_surveys"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "survey_responses_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patient_clinical_summary_view"
+            referencedColumns: ["patient_id"]
           },
           {
             foreignKeyName: "survey_responses_patient_id_fkey"
@@ -758,48 +1055,346 @@ export type Database = {
         }
         Relationships: []
       }
+      patient_clinical_summary_view: {
+        Row: {
+          apellidos: string | null
+          estado_paciente:
+            | Database["public"]["Enums"]["patient_status_enum"]
+            | null
+          fecha_nacimiento: string | null
+          historial_citas: Json | null
+          nombre: string | null
+          numero_expediente: string | null
+          patient_id: string | null
+        }
+        Insert: {
+          apellidos?: string | null
+          estado_paciente?:
+            | Database["public"]["Enums"]["patient_status_enum"]
+            | null
+          fecha_nacimiento?: string | null
+          historial_citas?: never
+          nombre?: string | null
+          numero_expediente?: string | null
+          patient_id?: string | null
+        }
+        Update: {
+          apellidos?: string | null
+          estado_paciente?:
+            | Database["public"]["Enums"]["patient_status_enum"]
+            | null
+          fecha_nacimiento?: string | null
+          historial_citas?: never
+          nombre?: string | null
+          numero_expediente?: string | null
+          patient_id?: string | null
+        }
+        Relationships: []
+      }
+      vw_survey_responses_enriched: {
+        Row: {
+          appointment_id: string | null
+          aspectos_mas_importantes: string[] | null
+          completed_at: string | null
+          completion_time_minutes: number | null
+          descripcion_sintoma_principal: string | null
+          estado_cita:
+            | Database["public"]["Enums"]["appointment_status_enum"]
+            | null
+          id: string | null
+          intensidad_dolor_actual: number | null
+          motivo_visita: string | null
+          numero_expediente: string | null
+          paciente: string | null
+          preocupaciones_principales: string[] | null
+          severidad_sintomas: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      change_appointment_status: {
+        Args: {
+          p_appointment_id: string
+          p_expected_version: number
+          p_new_status: Database["public"]["Enums"]["appointment_status_enum"]
+          p_reason?: string
+        }
+        Returns: Json
+      }
       create_patient_and_appointment: {
         Args: {
-          p_nombre: string
           p_apellidos: string
-          p_telefono: string
-          p_email: string
-          p_edad: number
-          p_diagnostico_principal: string
           p_comentarios_registro: string
-          p_probabilidad_cirugia: number
+          p_creado_por_id?: string
+          p_diagnostico_principal: string
+          p_doctor_id?: string
+          p_edad: number
+          p_email: string
           p_fecha_hora_cita: string
           p_motivo_cita: string
-          p_doctor_id?: string
-          p_creado_por_id?: string
+          p_nombre: string
+          p_probabilidad_cirugia: number
+          p_telefono: string
         }
         Returns: {
-          success: boolean
-          message: string
-          created_patient_id: string
           created_appointment_id: string
+          created_patient_id: string
+          message: string
+          success: boolean
         }[]
       }
-      schedule_appointment: {
+      create_patient_with_appointment: {
         Args: {
-          p_action: string
-          p_appointment_id?: string | null
-          p_patient_id?: string | null
-          p_doctor_id?: string | null
-          p_fecha_hora_cita?: string | null
-          p_estado_cita?: Database["public"]["Enums"]["appointment_status_enum"] | null
-          p_motivos_consulta?: Database["public"]["Enums"]["diagnosis_enum"][] | null
-          p_notas_breves?: string | null
-          p_es_primera_vez?: boolean | null
-          p_expected_updated_at?: string | null
+          p_apellidos: string
+          p_canal_agendamiento: string
+          p_created_by_id: string
+          p_doctor_id: string
+          p_fecha_hora_cita: string
+          p_fecha_nacimiento: string
+          p_nombre: string
         }
-        Returns: {
-          success: boolean
-          message: string
-          appointment_id: string | null
-        }[]
+        Returns: Json
+      }
+      debug_static_jsonb: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      gbt_bit_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_bool_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_bool_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_bpchar_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_bytea_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_cash_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_cash_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_date_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_date_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_decompress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_enum_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_enum_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_float4_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_float4_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_float8_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_float8_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_inet_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_int2_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_int2_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_int4_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_int4_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_int8_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_int8_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_intv_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_intv_decompress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_intv_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_macad_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_macad_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_macad8_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_macad8_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_numeric_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_oid_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_oid_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_text_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_time_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_time_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_timetz_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_ts_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_ts_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_tstz_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_uuid_compress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_uuid_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_var_decompress: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbt_var_fetch: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey_var_in: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey_var_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey16_in: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey16_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey2_in: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey2_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey32_in: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey32_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey4_in: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey4_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey8_in: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      gbtreekey8_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      get_clinical_profile: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_demographic_profile: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_operational_metrics: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
       }
       gtrgm_compress: {
         Args: { "": unknown }
@@ -821,6 +1416,23 @@ export type Database = {
         Args: { "": unknown }
         Returns: unknown
       }
+      process_audit_queue: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      reschedule_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_expected_version: number
+          p_new_datetime: string
+          p_reason: string
+        }
+        Returns: Json
+      }
+      rpc_ping: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       set_limit: {
         Args: { "": number }
         Returns: number
@@ -832,6 +1444,33 @@ export type Database = {
       show_trgm: {
         Args: { "": string }
         Returns: string[]
+      }
+      unaccent: {
+        Args: { "": string }
+        Returns: string
+      }
+      unaccent_init: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      update_appointment_with_validation: {
+        Args: {
+          p_appointment_id: string
+          p_change_reason?: string
+          p_expected_version: number
+          p_updates: Json
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      update_appointment_with_version: {
+        Args: {
+          p_appointment_id: string
+          p_expected_version: number
+          p_new_status: Database["public"]["Enums"]["appointment_status_enum"]
+          p_user_id: string
+        }
+        Returns: Json
       }
     }
     Enums: {
@@ -857,6 +1496,13 @@ export type Database = {
         | "POLIPOS_VESICULA"
         | "OTRO_DIAGNOSTICO"
         | "SIN_DIAGNOSTICO"
+      gender_enum: "Hombre" | "Mujer" | "Prefiero no especificar"
+      patient_final_status_enum:
+        | "EN_SEGUIMIENTO"
+        | "OPERADO"
+        | "NO_OPERADO"
+        | "ALTA_MEDICA"
+        | "SEGUNDA_OPINION"
       patient_source_enum:
         | "pagina_web_google"
         | "redes_sociales"
@@ -1039,6 +1685,14 @@ export const Constants = {
         "POLIPOS_VESICULA",
         "OTRO_DIAGNOSTICO",
         "SIN_DIAGNOSTICO",
+      ],
+      gender_enum: ["Hombre", "Mujer", "Prefiero no especificar"],
+      patient_final_status_enum: [
+        "EN_SEGUIMIENTO",
+        "OPERADO",
+        "NO_OPERADO",
+        "ALTA_MEDICA",
+        "SEGUNDA_OPINION",
       ],
       patient_source_enum: [
         "pagina_web_google",

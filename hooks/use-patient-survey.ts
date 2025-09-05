@@ -1,43 +1,31 @@
-// hooks/use-patient-survey.ts
+// hooks/use-patient-survey.ts - REFACTORIZADO
 import { useQuery } from '@tanstack/react-query';
-import { createClient } from '@/utils/supabase/client';
+import { queryFetcher } from '@/lib/http';
+import { endpoints } from '@/lib/api-endpoints';
+import { queryKeys } from '@/lib/query-keys';
 import type { PatientSurveyData } from '@/lib/types';
 
 export function usePatientSurvey(patientId: string | undefined) {
   return useQuery({
-    queryKey: ['patient-survey', patientId],
+    queryKey: queryKeys.surveys.byPatient(patientId || ''),
     queryFn: async () => {
       if (!patientId) return null;
       
-      const supabase = createClient();
-      
-      // Get the most recent survey for this patient
-      const { data, error } = await supabase
-        .from('patient_surveys')
-        .select(`
-          *,
-          answers:survey_answers(
-            *,
-            question:survey_questions(*)
-          )
-        `)
-        .eq('patient_id', patientId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // No survey found for patient
+      try {
+        const data = await queryFetcher<PatientSurveyData>(
+          endpoints.surveys.byPatient(patientId)
+        );
+        return data;
+      } catch (error: any) {
+        // Handle 404 as no survey found
+        if (error?.status === 404) {
           return null;
         }
         throw error;
       }
-      
-      return data as PatientSurveyData;
     },
     enabled: !!patientId,
     staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes (garbage collection time)
+    gcTime: 10 * 60 * 1000, // 10 minutes
   });
 }

@@ -1,16 +1,17 @@
-// hooks/use-analytics-data.ts - unified statistics data manager
+// hooks/use-analytics-data.ts - unified statistics data manager - REFACTORIZADO
 'use client';
 
 import { useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
+import { endpoints } from '@/lib/api-endpoints';
+import { queryFetcher } from '@/lib/http';
 import { type StatisticsResponse, type LabelCount } from '@/lib/validation/statistics';
 import { AppointmentStatusEnum } from '@/lib/types';
-import { fetchJson } from '@/lib/http';
 import { notifyError } from '@/lib/client-errors';
 
 async function fetchStatistics(): Promise<StatisticsResponse> {
-  const data = await fetchJson<StatisticsResponse>('/api/statistics');
+  const data = await queryFetcher<StatisticsResponse>(endpoints.statistics.unified());
   try { console.debug('[useAnalyticsData] fetched statistics meta', (data as any)?.meta); } catch {}
   return data;
 }

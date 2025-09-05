@@ -242,7 +242,7 @@ const PrimaryActionButton = memo(function PrimaryActionButton({
 });
 
 // Componente principal
-function _PatientCard({ appointment, onAction, disableActions = false, className, open: controlledOpen, onOpenChange }: PatientCardProps) {
+function PatientCard({ appointment, onAction, disableActions = false, className, open: controlledOpen, onOpenChange }: PatientCardProps) {
   const { mutateAsync: updateStatus, isPending } = useUpdateAppointmentStatus();
 
   const [confirmDialog, setConfirmDialog] = useState<AdmissionAction | null>(null);
@@ -681,6 +681,7 @@ const propsAreEqual = (prev: PatientCardProps, next: PatientCardProps) => {
   );
 };
 
-export const PatientCard = memo(_PatientCard, propsAreEqual);
-PatientCard.displayName = 'PatientCard';
-export default PatientCard;
+const MemoizedPatientCard = memo(PatientCard, propsAreEqual);
+MemoizedPatientCard.displayName = 'PatientCard';
+export { MemoizedPatientCard as PatientCard };
+export default MemoizedPatientCard;

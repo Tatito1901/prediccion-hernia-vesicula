@@ -5,7 +5,7 @@ import { createAdminClient } from '@/utils/supabase/admin';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/types/database.types';
-import { ZAppointmentStatus, AppointmentStatusEnum } from '@/lib/validation/enums';
+import { ZAppointmentStatus, AppointmentStatusEnum } from '@/lib/constants';
 import { planUpdateOnAppointmentCompleted } from '@/lib/patient-state-rules';
 import {
   canTransitionToStatus,

@@ -12,7 +12,7 @@ import {
 
 // ✅ Tipos locales mínimos para evitar depender de components/* (isomórfico FE/BE)
 import { z } from 'zod';
-import { ZAppointmentStatus } from '@/lib/validation/enums';
+import { ZAppointmentStatus } from '@/lib/constants';
 import { AppointmentStatusEnum, PatientStatusEnum } from '@/lib/types';
 import type { PatientStatus } from '@/lib/types';
 import { mxNow, formatMx } from '@/utils/datetime';
@@ -21,7 +21,7 @@ export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
 export type AdmissionAction = 'checkIn' | 'complete' | 'cancel' | 'noShow' | 'reschedule' | 'viewHistory';
 export interface ValidationResult { valid: boolean; reason?: string }
 export interface BusinessRuleContext { currentTime?: Date; allowOverride?: boolean; userRole?: string }
-export type AppointmentLike = { fecha_hora_cita: string; estado_cita: AppointmentStatus; updated_at?: string };
+export type AppointmentLike = { fecha_hora_cita: string; estado_cita: AppointmentStatus; updated_at?: string | null };
 
 // ==================== CONFIGURACIÓN DE REGLAS ====================
 export const BUSINESS_RULES = {

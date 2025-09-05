@@ -33,63 +33,17 @@ export type { AdmissionAction } from '@/lib/constants';
 export type TabType = 'today' | 'future' | 'past';
 
 // ==================== INTERFACES PRINCIPALES ====================
-export interface Patient {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  nombre: string;
-  apellidos: string;
-  edad?: number;
-  telefono?: string;
-  email?: string;
-  fecha_registro: string;
-  fecha_nacimiento?: string;
-  genero?: string;
-  ciudad?: string;
-  estado?: string;
-  contacto_emergencia_nombre?: string;
-  contacto_emergencia_telefono?: string;
-  antecedentes_medicos?: string;
-  numero_expediente?: string;
-  seguro_medico?: string;
-  fecha_ultima_consulta?: string;
-  creation_source?: string;
-  marketing_source?: string;
-  estado_paciente: PatientStatus;
-  diagnostico_principal?: DiagnosisType;
-  diagnostico_principal_detalle?: string;
-  doctor_asignado_id?: string;
-  fecha_primera_consulta?: string;
-  comentarios_registro?: string;
-  origen_paciente?: string;
-  probabilidad_cirugia?: number;
-  ultimo_contacto?: string;
-  proximo_contacto?: string;
-  etiquetas?: string[];
-  fecha_cirugia_programada?: string;
-}
+// Import from centralized types - single source of truth
+import type { 
+  Patient as BasePatient,
+  Appointment as BaseAppointment,
+  AppointmentWithPatient as BaseAppointmentWithPatient
+} from '@/lib/types';
 
-export interface Appointment {
-  id: string;
-  patient_id: string;
-  doctor_id?: string;
-  fecha_hora_cita: string;
-  motivos_consulta: string[];
-  estado_cita: AppointmentStatus;
-  es_primera_vez?: boolean;
-  notas_breves?: string;
-  created_at?: string;
-  updated_at?: string;
-  agendado_por?: string;
-  fecha_agendamiento?: string;
-}
-
-export interface AppointmentWithPatient extends Appointment {
-  patients: Pick<Patient, 
-    'id' | 'nombre' | 'apellidos' | 'telefono' | 'email' | 
-    'edad' | 'estado_paciente' | 'diagnostico_principal'
-  >;
-}
+// Re-export the centralized types for backward compatibility
+export type Patient = BasePatient;
+export type Appointment = BaseAppointment;
+export type AppointmentWithPatient = BaseAppointmentWithPatient;
 
 // Datos agregados para vistas de historial de paciente
 export interface PatientHistoryData {

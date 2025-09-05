@@ -1,8 +1,9 @@
-// hooks/use-survey-analytics.ts - React Query hook para consumir /api/surveys/stats
+// hooks/use-survey-analytics.ts - REFACTORIZADO
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
-import { fetchJson } from '@/lib/http';
+import { queryFetcher } from '@/lib/http';
+import { endpoints, buildSearchParams } from '@/lib/api-endpoints';
 import { notifyError } from '@/lib/client-errors';
 
 export interface NameTotal { name: string; total: number }
@@ -62,13 +63,14 @@ export function useSurveyAnalytics(opts?: UseSurveyAnalyticsOptions) {
   const q = useQuery<SurveyStatsResponse>({
     queryKey: queryKeys.surveys.statsWithParams(normalized),
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (normalized.startDate) params.set('startDate', normalized.startDate);
-      if (normalized.endDate) params.set('endDate', normalized.endDate);
-      if (normalized.groupBy) params.set('groupBy', normalized.groupBy);
+      const params = buildSearchParams({
+        startDate: normalized.startDate,
+        endDate: normalized.endDate,
+        groupBy: normalized.groupBy
+      });
 
-      return fetchJson<SurveyStatsResponse>(
-        `/api/surveys/stats${params.toString() ? `?${params.toString()}` : ''}`
+      return queryFetcher<SurveyStatsResponse>(
+        endpoints.surveys.stats(params)
       );
     },
     staleTime: 2 * 60 * 1000,

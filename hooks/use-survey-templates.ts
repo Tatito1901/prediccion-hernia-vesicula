@@ -1,6 +1,8 @@
-// hooks/use-survey-templates.ts - HOOK CENTRALIZADO PARA SURVEY TEMPLATES
+// hooks/use-survey-templates.ts - REFACTORIZADO
 import { useQuery } from '@tanstack/react-query';
-import { createClient } from '@/utils/supabase/client';
+import { queryFetcher } from '@/lib/http';
+import { endpoints } from '@/lib/api-endpoints';
+import { queryKeys } from '@/lib/query-keys';
 import { toast } from 'sonner';
 
 // ==================== TIPOS ====================
@@ -13,21 +15,17 @@ interface SurveyTemplate {
 // ==================== HOOK CENTRALIZADO ====================
 export const useSurveyTemplates = () => {
   return useQuery({
-    queryKey: ['surveyTemplates'],
+    queryKey: queryKeys.surveys.templates,
     queryFn: async (): Promise<SurveyTemplate[]> => {
-      const supabase = createClient();
-      
-      const { data, error } = await supabase
-        .from('survey_templates')
-        .select('id, title, description')
-        .order('id', { ascending: true });
-
-      if (error) {
+      try {
+        const data = await queryFetcher<SurveyTemplate[]>(
+          endpoints.surveys.templates()
+        );
+        return data || [];
+      } catch (error) {
         toast.error('Error al cargar las plantillas de encuesta.');
         throw error;
       }
-
-      return data || [];
     },
     staleTime: 5 * 60 * 1000, // 5 minutos - los templates no cambian frecuentemente
     gcTime: 10 * 60 * 1000,   // 10 minutos en caché
@@ -39,7 +37,7 @@ export const useSurveyTemplates = () => {
 // ==================== HOOK PARA ASIGNAR SURVEY ====================
 export const useAssignSurvey = () => {
   return async (patientId: string, templateId: number) => {
-    const response = await fetch('/api/assign-survey', {
+    const response = await fetch(endpoints.assignSurvey(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patientId, templateId }),

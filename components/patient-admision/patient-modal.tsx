@@ -21,7 +21,7 @@ import { addDays, startOfDay, isWithinInterval } from 'date-fns';
 import { User2, CalendarIcon, Loader2, Stethoscope, CheckCircle2 } from 'lucide-react';
 import { useAdmitPatient } from '@/hooks/use-patient';
 import { useClinic } from '@/contexts/clinic-data-provider';
-import { ZDiagnosisDb } from '@/lib/validation/enums';
+import { ZDiagnosisDb } from '@/lib/constants';
 import { AppointmentStatusEnum } from '@/lib/types';
 import type { AppointmentStatus } from '@/lib/types';
 import type { AppError } from '@/lib/errors';

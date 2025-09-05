@@ -107,6 +107,9 @@ export const queryKeys = {
     stats: ['surveys', 'stats'] as const,
     statsWithParams: (params: { startDate?: string; endDate?: string; groupBy?: 'day' | 'week' | 'month'; templateId?: number | 'all' }) =>
       ['surveys', 'stats', params] as const,
+    
+    // Templates de encuestas
+    templates: ['surveys', 'templates'] as const,
   },
 
   // ==================== ESTADÍSTICAS UNIFICADAS ====================

@@ -13,9 +13,9 @@ function sanitizeNext(path?: string | null): string | null {
 export default async function LoginAliasPage({
   searchParams,
 }: {
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const sp = searchParams ?? {};
+  const sp = (await searchParams) ?? {};
   const nextRaw = typeof sp.next === "string" ? sp.next : Array.isArray(sp.next) ? sp.next[0] : undefined;
   const errorCode = typeof sp.error === "string" ? sp.error : Array.isArray(sp.error) ? sp.error[0] : undefined;
   const nextPath = sanitizeNext(nextRaw) || undefined;

@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { clinicYmd, clinicStartOfDayUtc, addClinicDaysAsUtcStart } from '@/lib/timezone'
 import { z } from 'zod'
-import { ZDiagnosisDb, ZAppointmentStatus } from '@/lib/validation/enums'
+import { ZDiagnosisDb, ZAppointmentStatus } from '@/lib/constants'
 import type { Database } from '@/lib/types/database.types'
 
 export const runtime = 'nodejs'

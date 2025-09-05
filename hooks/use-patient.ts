@@ -2,44 +2,42 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { queryKeys } from '@/lib/query-keys';
+import { endpoints, buildSearchParams } from '@/lib/api-endpoints';
+import { fetchJson, queryFetcher } from '@/lib/http';
+import type { AppError } from '@/lib/errors';
+import { toUserMessage } from '@/lib/errors';
 import type { Patient } from '@/lib/types';
 import type {
   AdmissionPayload,
   AdmissionDBResponse,
   PatientHistoryData,
 } from '@/components/patient-admision/admision-types';
-import { fetchJson } from '@/lib/http';
-import type { AppError } from '@/lib/errors';
-import { toUserMessage } from '@/lib/errors';
 
 // ==================== API HELPERS ====================
-async function fetchPatientDetail(id: string): Promise<Patient> {
-  const payload: any = await fetchJson<any>(`/api/patients/${id}`);
-  return (payload && payload.success === true && 'data' in payload) ? payload.data : payload;
-}
-
 interface PatientHistoryOptions {
   includeHistory?: boolean;
   limit?: number;
   enabled?: boolean;
 }
 
-async function fetchPatientHistory(patientId: string, options?: PatientHistoryOptions): Promise<PatientHistoryData> {
-  const params = new URLSearchParams();
-  if (options?.includeHistory) params.set('includeHistory', 'true');
-  if (options?.limit) params.set('limit', String(options.limit));
+async function fetchPatientDetail(id: string): Promise<Patient> {
+  const payload: any = await queryFetcher<any>(endpoints.patients.detail(id));
+  return (payload && payload.success === true && 'data' in payload) ? payload.data : payload;
+}
 
-  const url = `/api/patients/${patientId}/history?${params}`;
-  return await fetchJson<PatientHistoryData>(url);
+async function fetchPatientHistory(patientId: string, options?: PatientHistoryOptions): Promise<PatientHistoryData> {
+  const params = buildSearchParams({
+    includeHistory: options?.includeHistory,
+    limit: options?.limit,
+  });
+  
+  const url = endpoints.patients.history(patientId, params.toString() ? params : undefined);
+  return await queryFetcher<PatientHistoryData>(url);
 }
 
 async function postAdmission(payload: AdmissionPayload): Promise<AdmissionDBResponse> {
-  const payloadResp: any = await fetchJson<any>('/api/patient-admission', {
+  const payloadResp: any = await fetchJson<any>(endpoints.admission.create(), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
     body: JSON.stringify(payload),
   });
   // Desempaquetar createApiResponse
@@ -54,9 +52,8 @@ async function postAdmission(payload: AdmissionPayload): Promise<AdmissionDBResp
 }
 
 async function patchPatient({ id, updates }: { id: string; updates: Partial<Patient> }): Promise<Patient> {
-  const payload: any = await fetchJson<any>(`/api/patients/${id}`, {
+  const payload: any = await fetchJson<any>(endpoints.patients.update(id), {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
   });
   return (payload && payload.success === true && 'data' in payload) ? payload.data : payload;

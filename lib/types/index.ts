@@ -61,6 +61,7 @@ export type { LabelCount, StatisticsResponse } from '@/lib/validation/statistics
 export { Constants } from './database.types';
 
 // --- Row Types (for reading data) ---
+// These are the ACTUAL database types - single source of truth
 export type BasePatient = Database['public']['Tables']['patients']['Row'];
 export type BaseAppointment = Database['public']['Tables']['appointments']['Row'];
 export type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -81,35 +82,35 @@ export interface Patient extends BasePatient {
   ai_predictions?: AiPrediction[];
 }
 
+// Appointment uses the actual database structure with estado_cita
+// We extend it to include relations
 export interface Appointment extends BaseAppointment {
   patient?: Patient;
-  status: AppointmentStatus;
+  // Note: BaseAppointment already has estado_cita from the database
 }
 
 // --- Extended Types with Joined Relations ---
 
-// ExtendedAppointment incluye los datos del paciente en la propiedad paciente
-export interface ExtendedAppointment {
-  id: string;
-  patient_id: string;
-  doctor_id: string | null;
-  created_at: string | null;
-  fecha_hora_cita: string;
-  motivos_consulta: string[];
-  estado_cita: AppointmentStatus;
-  notas_breves: string | null;
-  es_primera_vez: boolean | null;
+// AppointmentWithPatient - for appointments with patient info joined
+// Uses the actual database structure
+export interface AppointmentWithPatient extends BaseAppointment {
   patients?: {
     id: string;
     nombre?: string;
     apellidos?: string;
     telefono?: string;
     email?: string;
+    edad?: number;
+    estado_paciente?: PatientStatus;
+    diagnostico_principal?: DiagnosisEnum;
   };
   doctor?: {
     full_name?: string;
   };
 }
+
+// Legacy alias for compatibility (will be removed)
+export type ExtendedAppointment = AppointmentWithPatient;
 
 // --- Insert Types (for creating data) ---
 export type NewPatient = Database['public']['Tables']['patients']['Insert'];
