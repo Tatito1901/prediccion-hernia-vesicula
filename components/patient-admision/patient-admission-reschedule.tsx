@@ -161,7 +161,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
     }
   }, [selectedDate, selectedTime, selectedSlotValidation, onReschedule, onClose]);
 
-  const patientName = getPatientFullName(appointment.patients);
+  const patientName = getPatientFullName(appointment.patients || null);
 
   // Si no se puede reagendar
   if (!canReschedule) {

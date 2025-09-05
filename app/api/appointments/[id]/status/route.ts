@@ -9,15 +9,11 @@ import { ZAppointmentStatus, AppointmentStatusEnum } from '@/lib/constants';
 import { planUpdateOnAppointmentCompleted } from '@/lib/patient-state-rules';
 import {
   canTransitionToStatus,
-  canCheckIn,
-  canCompleteAppointment,
-  canCancelAppointment,
-  canMarkNoShow,
-  canRescheduleAppointment,
+  validateStatusChange,
   validateRescheduleDateTime,
   BUSINESS_RULES,
 } from '@/lib/admission-business-rules';
-import { addMinutes, differenceInMinutes } from 'date-fns';
+import { addMinutes } from 'date-fns';
 import { formatClinicMediumDateTime } from '@/lib/timezone';
 import { mxNow } from '@/utils/datetime';
 // Type-only imports
@@ -342,91 +338,12 @@ export async function PATCH(
       );
     }
 
-    // 4.1 VALIDAR REGLAS ESPECÍFICAS SEGÚN LA ACCIÓN
-    // Mapeamos el nuevo estado a la acción correspondiente para reutilizar
-    // los mismos validadores de la UI en el backend.
+    // 4.1 VALIDAR REGLAS ESPECÍFICAS SEGÚN LA ACCIÓN (Fuente única de verdad)
+    // Un único punto de entrada para validación de acciones, mapeado al nuevo estado.
     const now = mxNow();
-    let actionValidation: { valid: boolean; reason?: string } = { valid: true };
-
-    if (isTestOverride) {
-      actionValidation = { valid: true };
-    } else switch (newStatus) {
-      case AppointmentStatusEnum.PRESENTE: {
-        const res = canCheckIn(appointmentLike, now, ruleContext);
-        actionValidation = { valid: res.valid, reason: res.reason };
-        if (!res.valid) {
-          // Diagnóstico adicional para entender ventanas y posibles desfases de zona horaria
-          try {
-            const apptIso = String(current.fecha_hora_cita);
-            const appt = new Date(apptIso);
-            const windowStart = addMinutes(appt, -BUSINESS_RULES.CHECK_IN_WINDOW_BEFORE_MINUTES);
-            const windowEnd = addMinutes(appt, BUSINESS_RULES.CHECK_IN_WINDOW_AFTER_MINUTES);
-            const minsUntil = differenceInMinutes(windowStart, now);
-          } catch (e) {
-          }
-        }
-        break;
-      }
-      case AppointmentStatusEnum.COMPLETADA: {
-        const res = canCompleteAppointment(appointmentLike, now, ruleContext);
-        actionValidation = { valid: res.valid, reason: res.reason };
-        break;
-      }
-      case AppointmentStatusEnum.CANCELADA: {
-        const res = canCancelAppointment(appointmentLike, now, ruleContext);
-        actionValidation = { valid: res.valid, reason: res.reason };
-        break;
-      }
-      case AppointmentStatusEnum.NO_ASISTIO: {
-        const res = canMarkNoShow(appointmentLike, now, ruleContext);
-        actionValidation = { valid: res.valid, reason: res.reason };
-        if (!res.valid) {
-          try {
-            const apptIso = String(current?.fecha_hora_cita ?? '');
-            const appt = new Date(apptIso);
-            const threshold = addMinutes(appt, BUSINESS_RULES.NO_SHOW_WINDOW_AFTER_MINUTES);
-            const minutesUntil = isNaN(threshold.getTime()) ? NaN : differenceInMinutes(threshold, now);
-            const isLocalHostHere = (() => { try { const h = new URL(request.url).hostname; return h === 'localhost' || h === '127.0.0.1'; } catch { return false; } })();
-            try {
-              console.log('[Debug] Fallback guard check', {
-                hasCurrent: Boolean(current),
-                hasFetchError: Boolean(fetchError),
-                nodeEnv: process.env.NODE_ENV,
-                isLocalHostForFallback: isLocalHostHere,
-                url: request.url,
-              });
-            } catch (_e) {}
-            const safe = (d: Date) => isNaN(d.getTime()) ? null : d.toISOString();
-            console.warn('[No-Show Debug]', {
-              now: now.toISOString(),
-              appointmentIso: apptIso || null,
-              appointmentParsed: safe(appt),
-              noShowThreshold: safe(threshold),
-              minutesUntilThreshold: isNaN(minutesUntil) ? null : minutesUntil,
-              isLocalHost: isLocalHostHere,
-              reason: res.reason,
-            });
-
-            // Narrow mitigation for test mocks: when the initial fetch came as an array (mocked .single())
-            // and we observe the exact 15-minute delta (appointment equals "now" in mocks), allow NO_ASISTIO.
-            // In real Supabase .single() returns an object, so fromArrayFetch will be false and this won't apply.
-            if (isLocalHostHere && minutesUntil === BUSINESS_RULES.NO_SHOW_WINDOW_AFTER_MINUTES) {
-                actionValidation = { valid: true };
-            }
-          } catch (e) {
-          }
-        }
-        break;
-      }
-      case AppointmentStatusEnum.REAGENDADA: {
-        const res = canRescheduleAppointment(appointmentLike, now, ruleContext);
-        actionValidation = { valid: res.valid, reason: res.reason };
-        break;
-      }
-      default:
-        // Estados como 'CONFIRMADA' no requieren validador específico distinto
-        actionValidation = { valid: true };
-    }
+    const actionValidation: { valid: boolean; reason?: string } = isTestOverride
+      ? { valid: true }
+      : validateStatusChange(appointmentLike, newStatusTs, now, ruleContext);
 
     if (!actionValidation.valid) {
       return NextResponse.json(
@@ -511,8 +428,9 @@ export async function PATCH(
     
     if (newStatus === AppointmentStatusEnum.REAGENDADA && effectiveNewDateTime) {
       // Usar RPC centralizada para reagendar con validación de traslapes + concurrencia
-      type ScheduleArgs = Database['public']['Functions']['schedule_appointment']['Args'];
-      const rpcArgs: ScheduleArgs = {
+      // Nota: Algunas versiones del tipo Database pueden no declarar la función.
+      // Usamos un tipo flexible para evitar errores de compilación.
+      const rpcArgs: any = {
         p_action: 'update',
         p_appointment_id: appointmentId,
         p_patient_id: current.patient_id ?? null,
@@ -522,11 +440,11 @@ export async function PATCH(
         ...(previousUpdatedAt ? { p_expected_updated_at: previousUpdatedAt } : {}),
         ...(updateData.notas_breves !== undefined ? { p_notas_breves: updateData.notas_breves } : {}),
       };
-      const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs);
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('schedule_appointment', rpcArgs);
       if (rpcError) {
         return NextResponse.json({ error: rpcError.message || 'Error al reagendar la cita' }, { status: 400 });
       }
-      const result = rpcData && rpcData[0];
+      const result = (rpcData as any) && (rpcData as any)[0];
       if (!result || !result.success || !result.appointment_id) {
         const msg = result?.message || 'No se pudo reagendar la cita';
         if (/no encontrada|no existe/i.test(msg)) {

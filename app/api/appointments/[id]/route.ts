@@ -52,11 +52,11 @@ export async function PATCH(
       p_es_primera_vez: parsed.data.es_primera_vez ?? undefined,
     }
 
-    const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs)
+    const { data: rpcData, error: rpcError } = await (supabase as any).rpc('schedule_appointment', rpcArgs)
     if (rpcError) {
       return NextResponse.json({ error: rpcError.message || 'Error al actualizar la cita' }, { status: 400 })
     }
-    const result = rpcData && rpcData[0]
+    const result = (rpcData as any) && (rpcData as any)[0]
     if (!result || !result.success) {
       const msg = result?.message || 'No se pudo actualizar la cita'
       const status = /no encontrada/i.test(msg)

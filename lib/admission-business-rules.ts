@@ -312,6 +312,32 @@ export const getAvailableActions = (
   ];
 };
 
+// ✅ Validador centralizado para cambios de estado específicos por acción.
+// Permite al API y a otros consumidores invocar una sola función y delegar
+// a los validadores correctos sin repetir el switch-case.
+export const validateStatusChange = (
+  appointment: AppointmentLike,
+  newStatus: AppointmentStatus,
+  currentTime: Date = mxNow(),
+  context?: BusinessRuleContext
+): ValidationResult => {
+  switch (newStatus) {
+    case AppointmentStatusEnum.PRESENTE:
+      return canCheckIn(appointment, currentTime, context);
+    case AppointmentStatusEnum.COMPLETADA:
+      return canCompleteAppointment(appointment, currentTime, context);
+    case AppointmentStatusEnum.CANCELADA:
+      return canCancelAppointment(appointment, currentTime, context);
+    case AppointmentStatusEnum.NO_ASISTIO:
+      return canMarkNoShow(appointment, currentTime, context);
+    case AppointmentStatusEnum.REAGENDADA:
+      return canRescheduleAppointment(appointment, currentTime, context);
+    default:
+      // Estados como CONFIRMADA no requieren validador adicional
+      return { valid: true };
+  }
+};
+
 // ✅ Sugerir próxima acción más relevante
 export const suggestNextAction = (
   appointment: AppointmentLike,
@@ -591,6 +617,7 @@ export const ADMISSION_BUSINESS_RULES = {
   suggestNextAction,
   needsUrgentAttention,
   getTimeUntilActionAvailable,
+  validateStatusChange,
   canTransitionToStatus,
   
   // Patient rules centralizados

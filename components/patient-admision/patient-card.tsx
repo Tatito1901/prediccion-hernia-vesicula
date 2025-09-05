@@ -257,7 +257,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
   // Derivados (optimizados)
   const patient = useMemo(() => appointment.patients, [appointment.patients]);
   const statusConfig = useMemo(() => getStatusConfig(appointment.estado_cita), [appointment.estado_cita]);
-  const fullName = useMemo(() => getPatientFullName(patient), [patient]);
+  const fullName = useMemo(() => getPatientFullName(patient || null), [patient]);
 
   const dateTime = useMemo<DateTimeState | null>(() => {
     try {

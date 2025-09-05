@@ -209,8 +209,7 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient()
   const payload = parse.data
   // Programación atómica vía RPC con validación de traslapes
-  type ScheduleArgs = Database['public']['Functions']['schedule_appointment']['Args']
-  const rpcArgs: ScheduleArgs = {
+  const rpcArgs: any = {
     p_action: 'create',
     p_patient_id: payload.patient_id,
     ...(payload.doctor_id !== undefined ? { p_doctor_id: payload.doctor_id ?? null } : {}),
@@ -220,11 +219,11 @@ export async function POST(req: NextRequest) {
     ...(payload.notas_breves !== undefined ? { p_notas_breves: payload.notas_breves } : {}),
     ...(payload.es_primera_vez !== undefined ? { p_es_primera_vez: payload.es_primera_vez } : {}),
   }
-  const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs)
+  const { data: rpcData, error: rpcError } = await (supabase as any).rpc('schedule_appointment', rpcArgs)
   if (rpcError) {
     return NextResponse.json({ message: rpcError.message || 'Error al programar la cita' }, { status: 400 })
   }
-  const result = rpcData && rpcData[0]
+  const result = (rpcData as any) && (rpcData as any)[0]
   if (!result || !result.success || !result.appointment_id) {
     const msg = result?.message || 'No se pudo programar la cita'
     const status = /horario no disponible/i.test(msg) ? 409 : 400
