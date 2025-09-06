@@ -169,25 +169,11 @@ export const getStatusConfig = (status: AppointmentStatus) => {
   return APPOINTMENT_STATUS_CONFIG[status] || APPOINTMENT_STATUS_CONFIG[AppointmentStatusEnum.PROGRAMADA];
 };
 
-// Re-exportar la función centralizada
-export const canPerformAction = (
-  appointment: AppointmentWithPatient, 
-  action: AdmissionAction
-): boolean => {
-  switch (action) {
-    case 'checkIn':
-      return canCheckIn(appointment).valid;
-    case 'complete':
-      return canCompleteAppointment(appointment).valid;
-    case 'cancel':
-      return canCancelAppointment(appointment).valid;
-    case 'noShow':
-      return canMarkNoShow(appointment).valid;
-    case 'reschedule':
-      return canRescheduleAppointment(appointment).valid;
-    case 'viewHistory':
-      return true;
-    default:
-      return false;
-  }
-};
+// NOTA: canPerformAction ha sido eliminada.
+// Usar directamente las funciones centralizadas de lib/admission-business-rules.ts:
+// - canCheckIn(appointment) 
+// - canCompleteAppointment(appointment)
+// - canCancelAppointment(appointment)
+// - canMarkNoShow(appointment)
+// - canRescheduleAppointment(appointment)
+// - getAvailableActions(appointment) para obtener todas las acciones disponibles

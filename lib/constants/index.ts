@@ -225,36 +225,43 @@ export const PATIENT_STATUS_CONFIG = {
     label: 'Potencial',
     color: 'purple',
     bgClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300',
+    borderClass: 'border-purple-200 dark:border-purple-700',
   },
   [PatientStatusEnum.ACTIVO]: {
     label: 'Activo',
     color: 'blue',
     bgClass: 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300',
+    borderClass: 'border-blue-200 dark:border-blue-700',
   },
   [PatientStatusEnum.OPERADO]: {
     label: 'Operado',
     color: 'green',
     bgClass: 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300',
+    borderClass: 'border-green-200 dark:border-green-700',
   },
   [PatientStatusEnum.NO_OPERADO]: {
     label: 'No Operado',
     color: 'orange',
     bgClass: 'bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-300',
+    borderClass: 'border-orange-200 dark:border-orange-700',
   },
   [PatientStatusEnum.EN_SEGUIMIENTO]: {
     label: 'En Seguimiento',
     color: 'indigo',
     bgClass: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300',
+    borderClass: 'border-indigo-200 dark:border-indigo-700',
   },
   [PatientStatusEnum.INACTIVO]: {
     label: 'Inactivo',
     color: 'gray',
     bgClass: 'bg-gray-50 text-gray-700 dark:bg-gray-950/30 dark:text-gray-300',
+    borderClass: 'border-gray-200 dark:border-gray-700',
   },
   [PatientStatusEnum.ALTA_MEDICA]: {
     label: 'Alta Médica',
     color: 'emerald',
     bgClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
+    borderClass: 'border-emerald-200 dark:border-emerald-700',
   },
 } as const;
 
@@ -291,39 +298,11 @@ export const getPatientStatusConfig = (status: PatientStatus) => {
   return PATIENT_STATUS_CONFIG[status] || PATIENT_STATUS_CONFIG[PatientStatusEnum.POTENCIAL];
 };
 
-export const canPerformAction = (
-  appointmentStatus: AppointmentStatus, 
-  action: AdmissionAction
-): boolean => {
-  const canCheckInStatuses = new Set<AppointmentStatus>([
-    AppointmentStatusEnum.PROGRAMADA,
-    AppointmentStatusEnum.CONFIRMADA,
-  ]);
-  const canCancelStatuses = new Set<AppointmentStatus>([
-    AppointmentStatusEnum.PROGRAMADA,
-    AppointmentStatusEnum.CONFIRMADA,
-  ]);
-  const canNoShowStatuses = new Set<AppointmentStatus>([
-    AppointmentStatusEnum.PROGRAMADA,
-    AppointmentStatusEnum.CONFIRMADA,
-  ]);
-  const canRescheduleStatuses = new Set<AppointmentStatus>([
-    AppointmentStatusEnum.PROGRAMADA,
-    AppointmentStatusEnum.CONFIRMADA,
-    AppointmentStatusEnum.CANCELADA,
-  ]);
-  
-  const rules: Record<AdmissionAction, () => boolean> = {
-    checkIn: () => canCheckInStatuses.has(appointmentStatus),
-    complete: () => appointmentStatus === AppointmentStatusEnum.PRESENTE,
-    cancel: () => canCancelStatuses.has(appointmentStatus),
-    noShow: () => canNoShowStatuses.has(appointmentStatus),
-    reschedule: () => canRescheduleStatuses.has(appointmentStatus),
-    viewHistory: () => true,
-  };
-  
-  return rules[action]?.() ?? false;
-};
+// NOTA: canPerformAction ha sido eliminada de aquí.
+// Usar las funciones centralizadas en lib/admission-business-rules.ts:
+// - canCheckIn, canCompleteAppointment, canCancelAppointment, etc.
+// - getAvailableActions para obtener todas las acciones disponibles
+// - validateStatusChange para validar cambios de estado
 
 // =========================================================================
 // RE-EXPORTS para compatibilidad

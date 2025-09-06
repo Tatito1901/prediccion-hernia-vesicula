@@ -58,6 +58,43 @@ const getErrMsg = (err: unknown): string => {
   }
 };
 
+// Helper para obtener transiciones válidas desde un estado
+const getValidTransitionsFrom = (status: AppointmentStatus): AppointmentStatus[] => {
+  const transitions: Record<AppointmentStatus, AppointmentStatus[]> = {
+    [AppointmentStatusEnum.PROGRAMADA]: [
+      AppointmentStatusEnum.CONFIRMADA,
+      AppointmentStatusEnum.PRESENTE,
+      AppointmentStatusEnum.CANCELADA,
+      AppointmentStatusEnum.NO_ASISTIO,
+      AppointmentStatusEnum.REAGENDADA,
+    ],
+    [AppointmentStatusEnum.CONFIRMADA]: [
+      AppointmentStatusEnum.PRESENTE,
+      AppointmentStatusEnum.CANCELADA,
+      AppointmentStatusEnum.NO_ASISTIO,
+      AppointmentStatusEnum.REAGENDADA,
+    ],
+    [AppointmentStatusEnum.PRESENTE]: [
+      AppointmentStatusEnum.COMPLETADA,
+      AppointmentStatusEnum.CANCELADA,
+    ],
+    [AppointmentStatusEnum.COMPLETADA]: [
+      AppointmentStatusEnum.REAGENDADA,
+    ],
+    [AppointmentStatusEnum.CANCELADA]: [
+      AppointmentStatusEnum.REAGENDADA,
+    ],
+    [AppointmentStatusEnum.NO_ASISTIO]: [
+      AppointmentStatusEnum.REAGENDADA,
+    ],
+    [AppointmentStatusEnum.REAGENDADA]: [
+      AppointmentStatusEnum.PROGRAMADA,
+      AppointmentStatusEnum.CONFIRMADA,
+    ],
+  };
+  return transitions[status] || [];
+};
+
 // ==================== VALIDACIÓN CORREGIDA PARA TU ESQUEMA ====================
 const UpdateStatusSchema = z.object({
   // estado_cita debe coincidir EXACTAMENTE con appointment_status_enum de la BD
@@ -177,6 +214,18 @@ export async function PATCH(
       const h = new URL(request.url).hostname;
       isLocalHost = h === 'localhost' || h === '127.0.0.1';
     } catch {}
+    
+    // 1.5 OBTENER INFORMACIÓN DEL USUARIO PARA AUDITORÍA (mover antes para evitar errores de scope)
+    let userId: string | null = null;
+    if (!isAdmin) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        userId = user?.id || null;
+      } catch {
+        userId = null;
+      }
+    }
+    
     // Ensure variables are defined for entire handler scope
     let current: AppointmentSnapshot | null = null;
     
@@ -242,29 +291,48 @@ export async function PATCH(
       }
     }
     
-    // 2. OBTENER CITA ACTUAL (preferir .single() para forma de objeto consistente)
-    const { data: currentRow, error: fetchError } = await supabase
-      .from('appointments')
-      .select(`
-        id,
-        patient_id,
-        doctor_id,
-        fecha_hora_cita,
-        motivos_consulta,
-        estado_cita,
-        es_primera_vez,
-        notas_breves,
-        created_at,
-        updated_at
-      `)
-      .eq('id', appointmentId)
-      .single();
+    // 2. OBTENER CITA ACTUAL CON REINTENTOS PARA MANEJAR CONCURRENCIA
+    let fetchAttempts = 0;
+    const maxFetchAttempts = 3;
+    let fetchError: any = null;
+    
+    while (fetchAttempts < maxFetchAttempts && !current) {
+      const { data: currentRow, error } = await supabase
+        .from('appointments')
+        .select(`
+          id,
+          patient_id,
+          doctor_id,
+          fecha_hora_cita,
+          motivos_consulta,
+          estado_cita,
+          es_primera_vez,
+          notas_breves,
+          created_at,
+          updated_at
+        `)
+        .eq('id', appointmentId)
+        .single();
+      
+      if (!error) {
+        current = currentRow ?? null;
+        break;
+      }
+      
+      fetchError = error;
+      fetchAttempts++;
+      
+      // Si es un error temporal, reintentar con backoff
+      if (fetchAttempts < maxFetchAttempts && 
+          (error.code === 'PGRST116' || error.message?.includes('network'))) {
+        await new Promise(resolve => setTimeout(resolve, 100 * fetchAttempts));
+      }
+    }
 
-    current = currentRow ?? null;
-
-    if (fetchError) {
+    if (fetchError && !current) {
+      console.error(`[Status Update] Failed to fetch appointment after ${fetchAttempts} attempts:`, fetchError);
       return NextResponse.json(
-        { error: 'Cita no encontrada' },
+        { error: 'Cita no encontrada o temporalmente inaccesible' },
         { status: 404 }
       );
     }
@@ -327,12 +395,19 @@ export async function PATCH(
         );
     
     if (!transitionValidation.valid) {
+      console.warn(`[Status Update] Invalid transition: ${currentStatus} -> ${newStatus}`, {
+        appointmentId,
+        reason: transitionValidation.reason,
+        userId
+      });
+      
       return NextResponse.json(
         { 
           error: 'Transición de estado no permitida',
           reason: transitionValidation.reason,
           currentStatus,
           attemptedStatus: newStatus,
+          allowedTransitions: getValidTransitionsFrom(currentStatus),
         },
         { status: 422 }
       );
@@ -389,18 +464,7 @@ export async function PATCH(
       );
     }
 
-    // 5. OBTENER INFORMACIÓN DEL USUARIO PARA AUDITORÍA
-    let userId: string | null = null;
-    if (!isAdmin) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        userId = user?.id || null;
-      } catch {
-        userId = null;
-      }
-    }
-    
-    // Obtener información adicional de la request
+    // Obtener información adicional de la request para auditoría
     const userAgent = request.headers.get('user-agent') || undefined;
     const forwardedFor = request.headers.get('x-forwarded-for');
     const realIp = request.headers.get('x-real-ip');
@@ -423,7 +487,7 @@ export async function PATCH(
     }
     
     // 7. REALIZAR ACTUALIZACIÓN (RPC para REAGENDADA, directa para otros estados)
-    const previousUpdatedAt = current.updated_at;
+    let previousUpdatedAt = current.updated_at;
     let updatedAppointment: AppointmentSnapshot | null = null;
     
     if (newStatus === AppointmentStatusEnum.REAGENDADA && effectiveNewDateTime) {
@@ -475,54 +539,93 @@ export async function PATCH(
       }
       updatedAppointment = fetchedUpdated as AppointmentSnapshot;
     } else {
-      // Actualización directa para otros estados (sin cambio de fecha/hora)
-      let updateQuery = supabase
-        .from('appointments')
-        .update(updateData)
-        .eq('id', appointmentId);
-      // Optimistic locking: only update if the row wasn't modified since we fetched it
-      if (previousUpdatedAt === null) {
-        updateQuery = updateQuery.is('updated_at', null);
-      } else {
-        updateQuery = updateQuery.eq('updated_at', previousUpdatedAt);
-      }
-      const { data: directUpdated, error: updateError } = await updateQuery
-        .select(`
-          id,
-          patient_id,
-          doctor_id,
-          fecha_hora_cita,
-          motivos_consulta,
-          estado_cita,
-          es_primera_vez,
-          notas_breves,
-          created_at,
-          updated_at
-        `)
-        .single();
+      // Actualización directa para otros estados con reintentos en caso de conflicto
+      let updateAttempts = 0;
+      const maxUpdateAttempts = 3;
+      let lastUpdateError: any = null;
       
-      if (updateError) {
-        const msg = String(updateError.message || '');
-        const code = String(updateError.code || '');
-        // Concurrency conflict (no rows matched updated_at guard)
-        if (
-          code === 'PGRST116' ||
-          msg.toLowerCase().includes('no rows') ||
-          msg.toLowerCase().includes('single row')
-        ) {
-          console.warn('⛔ [Status Update] Optimistic concurrency conflict for appointment', { appointmentId });
-          return NextResponse.json(
-            { error: 'Conflicto de actualización: la cita fue modificada por otro proceso. Refresca y reintenta.' },
-            { status: 409 }
-          );
+      while (updateAttempts < maxUpdateAttempts) {
+        let updateQuery = supabase
+          .from('appointments')
+          .update(updateData)
+          .eq('id', appointmentId);
+        
+        // Optimistic locking: only update if the row wasn't modified since we fetched it
+        if (previousUpdatedAt === null) {
+          updateQuery = updateQuery.is('updated_at', null);
+        } else {
+          updateQuery = updateQuery.eq('updated_at', previousUpdatedAt);
         }
-        console.error('❌ [Status Update] Database update error:', updateError);
+        
+        const { data: directUpdated, error: updateError } = await updateQuery
+          .select(`
+            id,
+            patient_id,
+            doctor_id,
+            fecha_hora_cita,
+            motivos_consulta,
+            estado_cita,
+            es_primera_vez,
+            notas_breves,
+            created_at,
+            updated_at
+          `)
+          .single();
+        
+        if (!updateError && directUpdated) {
+          // Actualización exitosa
+          updatedAppointment = directUpdated as AppointmentSnapshot;
+          break;
+        }
+        
+        lastUpdateError = updateError;
+        updateAttempts++;
+        
+        const msg = String(updateError?.message || '');
+        const code = String(updateError?.code || '');
+        
+        // Si es un conflicto de concurrencia, reintentar
+        if (code === 'PGRST116' || msg.toLowerCase().includes('no rows')) {
+          if (updateAttempts < maxUpdateAttempts) {
+            // Re-fetch el estado actual antes de reintentar
+            const { data: refreshed } = await supabase
+              .from('appointments')
+              .select('updated_at, estado_cita')
+              .eq('id', appointmentId)
+              .single();
+            
+            if (refreshed) {
+              previousUpdatedAt = refreshed.updated_at;
+              // Verificar que el estado no haya cambiado a uno incompatible
+              if (refreshed.estado_cita !== currentStatus) {
+                console.warn('⛔ [Status Update] State changed by another process', { 
+                  appointmentId,
+                  expected: currentStatus,
+                  actual: refreshed.estado_cita 
+                });
+                return NextResponse.json(
+                  { error: 'La cita fue modificada por otro proceso. Por favor refresca y vuelve a intentar.' },
+                  { status: 409 }
+                );
+              }
+            }
+            // Esperar antes de reintentar
+            await new Promise(resolve => setTimeout(resolve, 100 * updateAttempts));
+          }
+        } else {
+          // Error no recuperable
+          break;
+        }
+      }
+      
+      // Si después de todos los intentos no se pudo actualizar
+      if (!updatedAppointment) {
+        console.error('❌ [Status Update] Failed after', updateAttempts, 'attempts:', lastUpdateError);
         return NextResponse.json(
           { error: 'Error al actualizar el estado de la cita' },
           { status: 500 }
         );
       }
-      updatedAppointment = directUpdated as AppointmentSnapshot;
     }
     
     // 8. CREAR REGISTRO DE AUDITORÍA

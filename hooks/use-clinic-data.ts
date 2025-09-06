@@ -70,7 +70,14 @@ export type ClinicDataState = {
   };
   filters: ClinicFilters;
   loading: boolean;
+  isLoading: boolean; // Alias para compatibilidad
   error: Error | null;
+  errorDetails: {
+    patients?: Error | null;
+    appointments?: Error | null;
+    message?: string;
+  };
+  isRetrying: boolean;
   lastUpdated: number | null;
   chartData: {
     daily: ChartDataResult;
@@ -332,8 +339,34 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     retry: 1,
   });
 
+  // Estados de carga mejorados
+  const [isRetrying, setIsRetrying] = useState(false);
   const loading = loadingEssential || (loadingPaginated && !isPlaceholderData);
   const error = (errorEssential as Error) || (errorPaginated as Error) || null;
+  
+  // Detalles de error granulares
+  const errorDetails = useMemo(() => {
+    const details: ClinicDataState['errorDetails'] = {};
+    
+    if (errorEssential) {
+      const msg = (errorEssential as Error)?.message || 'Error desconocido';
+      if (msg.includes('patient')) {
+        details.patients = errorEssential as Error;
+      } else if (msg.includes('appointment')) {
+        details.appointments = errorEssential as Error;
+      }
+      details.message = msg;
+    }
+    
+    if (errorPaginated) {
+      details.patients = errorPaginated as Error;
+      if (!details.message) {
+        details.message = (errorPaginated as Error)?.message || 'Error al cargar pacientes';
+      }
+    }
+    
+    return details;
+  }, [errorEssential, errorPaginated]);
 
   const lastUpdated = useMemo(() => {
     if (!essentialUpdatedAt && !paginatedUpdatedAt) return null;
@@ -380,7 +413,12 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
   }, []);
 
   const refetch = useCallback(async () => {
-    await Promise.allSettled([refetchEssentialRef.current(), refetchPaginatedRef.current()]);
+    setIsRetrying(true);
+    try {
+      await Promise.allSettled([refetchEssentialRef.current(), refetchPaginatedRef.current()]);
+    } finally {
+      setIsRetrying(false);
+    }
   }, []);
 
   const fetchSpecificAppointments = useCallback(async ({
@@ -548,7 +586,10 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     },
     filters,
     loading,
+    isLoading: loading, // Alias para compatibilidad
     error,
+    errorDetails,
+    isRetrying,
     lastUpdated,
     chartData,
     getChartData,
@@ -572,6 +613,8 @@ export function useClinicData(initial?: Partial<ClinicFilters>): UseClinicDataRe
     filters,
     loading,
     error,
+    errorDetails,
+    isRetrying,
     lastUpdated,
     chartData,
     getChartData,

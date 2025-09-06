@@ -171,21 +171,16 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
   }, [clinic.setFilters, clinic.resetFilters, clinic.refetch, clinic.fetchSpecificAppointments, clinic.fetchPatientDetail, clinic.fetchPatientHistory]);
 
   // ✅ Context value más estable y optimizado
-  const contextValue = useMemo(() => ({
+  const contextValue = useMemo<ExtendedClinicDataContextType>(() => ({
+    // From useClinicData - spread all properties
+    ...clinic,
+    // Override/add specific properties
+    isLoading: clinic.loading,
+    errorDetails: clinic.errorDetails || {},
+    isRetrying: clinic.isRetrying || false,
     // Core stable data
     patients: stablePatients,
     appointments: stableAppointments,
-    filters: clinic.filters,
-    loading: clinic.loading,
-    error: clinic.error,
-    lastUpdated: clinic.lastUpdated,
-    
-    // ✅ Stable actions con métodos faltantes incluidos
-    ...actionsRef.current,
-    setPage: clinic.setPage,
-    setPageSize: clinic.setPageSize,
-    
-    // ===== Pacientes via React Query =====
     patientsData,
     patientsFilters,
     setPatientsPage,
@@ -195,35 +190,23 @@ export const ClinicDataProvider = ({ children }: { children: ReactNode }) => {
     isPatientsLoading: clinic.loading,
     patientsError: clinic.error,
     refetchPatients: clinic.refetch,
-    
-    // Datos adicionales de paginación (enriquecidos)
-    paginatedPatients: patientsData.data,
-    patientsPagination: stablePatients?.pagination,
-    patientsStats: stablePatients?.stats ?? null,
-    
-    // ===== Exposición de campos heredados =====
+    // ✅ Propiedades adicionales más estables
+    paginatedPatients: clinic.patients?.paginated,
+    patientsPagination: clinic.patients?.pagination,
+    patientsStats: clinic.patients?.stats || null,
+    // ✅ Compatibilidad hacia atrás
     allPatients,
     allAppointments,
     enrichedPatients,
     appointmentsWithPatientData,
     appointmentsSummary,
-    
-    // Alias de estados
-    isLoading: clinic.loading,
-    isLoadingAppointments: clinic.loading,
-    
-    // Chart data centralizado
+    // Chart data
     chartData: clinic.chartData,
     getChartData: clinic.getChartData,
   }), [
+    clinic,
     stablePatients, 
     stableAppointments, 
-    clinic.filters, 
-    clinic.loading, 
-    clinic.error, 
-    clinic.lastUpdated,
-    clinic.chartData,
-    clinic.getChartData,
     patientsData,
     patientsFilters,
     setPatientsPage,

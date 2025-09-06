@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { EnrichedPatient, PatientStatusEnum } from "@/lib/types"
+import { getPatientStatusConfig } from "@/lib/constants"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { useIsLargeScreen, useIsMobile } from "@/hooks/use-breakpoint"
@@ -37,40 +38,6 @@ interface PatientDetailsDialogProps {
   readonly patient: EnrichedPatient
   readonly onClose: () => void
 }
-
-type StatusVariantType = "default" | "secondary" | "destructive" | "outline"
-
-// 🎨 Configuración de colores mejorada - basada en el logo de la clínica
-const STATUS_CONFIG = {
-  [PatientStatusEnum.POTENCIAL]: {
-    variant: "secondary" as StatusVariantType,
-    className: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700"
-  },
-  [PatientStatusEnum.ACTIVO]: {
-    variant: "default" as StatusVariantType,
-    className: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-700"
-  },
-  [PatientStatusEnum.EN_SEGUIMIENTO]: {
-    variant: "secondary" as StatusVariantType,
-    className: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700"
-  },
-  [PatientStatusEnum.OPERADO]: {
-    variant: "default" as StatusVariantType,
-    className: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700"
-  },
-  [PatientStatusEnum.NO_OPERADO]: {
-    variant: "destructive" as StatusVariantType,
-    className: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-700"
-  },
-  [PatientStatusEnum.INACTIVO]: {
-    variant: "outline" as StatusVariantType,
-    className: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:border-slate-700"
-  },
-  [PatientStatusEnum.ALTA_MEDICA]: {
-    variant: "outline" as StatusVariantType,
-    className: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:border-slate-700"
-  }
-} as const
 
 // ✅ Cache para formateo de fechas
 const dateCache = new Map<string, string>()
@@ -129,7 +96,7 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
   const patientData = useMemo(() => {
     const fullName = `${patient.nombre} ${patient.apellidos}`
     const status = patient.estado_paciente ?? PatientStatusEnum.POTENCIAL
-    const statusConfig = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG[PatientStatusEnum.INACTIVO]
+    const statusConfig = getPatientStatusConfig(status as any)
     
     return {
       fullName,
@@ -170,10 +137,11 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
                   <Badge 
                     className={cn(
                       "mt-1 text-xs font-medium border",
-                      patientData.statusConfig.className
+                      patientData.statusConfig.bgClass,
+                      patientData.statusConfig.borderClass
                     )}
                   >
-                    {patientData.status}
+                    {patientData.statusConfig.label}
                   </Badge>
                 </div>
               </div>

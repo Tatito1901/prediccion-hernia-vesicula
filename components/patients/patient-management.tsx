@@ -42,6 +42,7 @@ import {
   PatientStatusEnum, 
   StatusStats 
 } from "@/lib/types"
+import { PATIENT_STATUS_CONFIG } from "@/lib/constants"
 import { generateSurveyId } from "@/lib/form-utils"
 import { cn } from "@/lib/utils"
 
@@ -54,14 +55,15 @@ const PatientHistoryModal = React.lazy(() => import("./patient-history-modal"))
 // --- Constantes y Configuración ---
 const DEBOUNCE_DELAY = 300
 
-const STATUS_CONFIG = {
-  [PatientStatusEnum.POTENCIAL]: { label: "Potencial", icon: AlertTriangle },
-  [PatientStatusEnum.ACTIVO]: { label: "Activo", icon: Activity },
-  [PatientStatusEnum.EN_SEGUIMIENTO]: { label: "En Seguimiento", icon: ClipboardCheck },
-  [PatientStatusEnum.OPERADO]: { label: "Operado", icon: ClipboardCheck },
-  [PatientStatusEnum.NO_OPERADO]: { label: "No Operado", icon: X },
-  [PatientStatusEnum.INACTIVO]: { label: "Inactivo", icon: Inbox },
-  [PatientStatusEnum.ALTA_MEDICA]: { label: "Alta Médica", icon: Inbox }
+// Mapa local exclusivo para iconos; la configuración visual viene de PATIENT_STATUS_CONFIG
+const STATUS_ICONS = {
+  [PatientStatusEnum.POTENCIAL]: AlertTriangle,
+  [PatientStatusEnum.ACTIVO]: Activity,
+  [PatientStatusEnum.EN_SEGUIMIENTO]: ClipboardCheck,
+  [PatientStatusEnum.OPERADO]: ClipboardCheck,
+  [PatientStatusEnum.NO_OPERADO]: X,
+  [PatientStatusEnum.INACTIVO]: Inbox,
+  [PatientStatusEnum.ALTA_MEDICA]: Inbox,
 } as const
 
 // --- Tipos Definidos ---
@@ -181,13 +183,14 @@ const FilterBar = memo(({
                 <Badge variant="secondary" className="ml-2">{statusStats.all || 0}</Badge>
               </div>
             </SelectItem>
-            {Object.entries(STATUS_CONFIG).map(([enumValue, config]) => {
+            {Object.entries(PATIENT_STATUS_CONFIG).map(([enumValue, config]) => {
               const count = (statusStats as Record<string, number>)[enumValue] || 0
+              const Icon = (STATUS_ICONS as Record<string, React.ElementType>)[enumValue] ?? Activity
               return (
                 <SelectItem key={enumValue} value={enumValue}>
                   <div className="flex items-center justify-between w-full">
                     <div className="flex items-center gap-2">
-                      <config.icon className="w-4 h-4 opacity-60" />
+                      <Icon className="w-4 h-4 opacity-60" />
                       <span>{config.label}</span>
                     </div>
                     <Badge variant="secondary" className="ml-2">{count}</Badge>

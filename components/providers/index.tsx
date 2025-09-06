@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, createContext, useContext, useCallback } from 'react';
+import { useState, createContext, useContext, useCallback, useEffect } from 'react';
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@tanstack/react-query';
 import { notifyError } from '@/lib/client-errors';
@@ -50,6 +50,60 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const show = useCallback((message: string) => setOverlay({ visible: true, message }), []);
   const hide = useCallback(() => setOverlay((s) => ({ ...s, visible: false })), []);
   const setMessage = useCallback((message: string) => setOverlay((s) => ({ ...s, message })), []);
+
+  // Global auto-reload guard for stale/dropped dynamic chunks (Webpack ChunkLoadError)
+  useEffect(() => {
+    const KEY = '__next_chunk_reload_once__';
+
+    const reloadOnce = (reason: string) => {
+      try {
+        if (typeof window === 'undefined') return;
+        if (sessionStorage.getItem(KEY)) return;
+        sessionStorage.setItem(KEY, '1');
+        // eslint-disable-next-line no-console
+        console.warn('[ChunkLoadError] Auto reloading due to:', reason);
+        window.location.reload();
+      } catch {
+        // Fallback if sessionStorage not available
+        if (typeof window !== 'undefined') window.location.reload();
+      }
+    };
+
+    // Handles import() promise rejections
+    const onUnhandledRejection = (ev: PromiseRejectionEvent) => {
+      const reason: any = ev?.reason;
+      const name: string | undefined = reason?.name;
+      const msg: string | undefined = reason?.message;
+      if (name === 'ChunkLoadError' || (typeof msg === 'string' && msg.includes('Loading chunk'))) {
+        reloadOnce(`unhandledrejection:${name || msg}`);
+      }
+    };
+
+    // Handles <script> resource errors for Next chunks
+    const onResourceError = (ev: Event) => {
+      // Some browsers don't populate message on resource errors; detect by target
+      const target = (ev as any)?.target as HTMLScriptElement | undefined;
+      const message: string | undefined = (ev as any)?.message;
+      if (typeof message === 'string' && message.includes('Loading chunk')) {
+        reloadOnce('errorEvent:message');
+        return;
+      }
+      if (target && target.tagName === 'SCRIPT' && typeof target.src === 'string') {
+        // Only react to Next.js chunk files
+        if (target.src.includes('/_next/static/chunks/')) {
+          reloadOnce(`scriptError:${target.src}`);
+        }
+      }
+    };
+
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    // Capture phase to catch resource loading errors
+    window.addEventListener('error', onResourceError, true);
+    return () => {
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+      window.removeEventListener('error', onResourceError, true);
+    };
+  }, []);
 
 
   return (

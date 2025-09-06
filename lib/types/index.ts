@@ -33,7 +33,7 @@ export {
   dbDiagnosisToDisplay,
   getStatusConfig,
   getPatientStatusConfig,
-  canPerformAction,
+  // canPerformAction eliminado - usar funciones de lib/admission-business-rules.ts
   // Constants
   DIAGNOSIS_DB_VALUES,
   APPOINTMENT_STATUS_CONFIG,

@@ -16,7 +16,10 @@ const SKIP_ROUTES_PREFIX = ['/api/', '/_next/', '/_actions', '/favicon.ico', '/m
 
 function isPublicRoute(pathname: string): boolean {
   if (pathname === '/') return true
-  return PUBLIC_ROUTES.some((route) => route !== '/' && pathname.startsWith(route))
+  return PUBLIC_ROUTES.some((route) => {
+    if (route === '/') return false
+    return pathname === route || pathname.startsWith(`${route}/`)
+  })
 }
 
 function isValidRedirect(path: string): boolean {
@@ -34,6 +37,17 @@ function isValidRedirect(path: string): boolean {
 // Cache liviano en edge (compartido por instancia). TTL corto.
 const sessionCache = new Map<string, { expires: number; hasSession: boolean }>()
 const SESSION_CACHE_TTL = 30 * 1000 // 30s
+
+// Obtiene una IP del request sin depender de propiedades no tipadas
+function getClientIp(request: NextRequest): string {
+  const xff = request.headers.get('x-forwarded-for')
+  if (xff) {
+    const first = xff.split(',')[0]?.trim()
+    if (first) return first
+  }
+  const real = request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip')
+  return real || ''
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl
@@ -81,7 +95,7 @@ export async function middleware(request: NextRequest) {
 
   // 4) Cache de sesión para reducir llamadas
   const accessToken = request.cookies.get('sb-access-token')?.value
-  const cacheKey = accessToken ? `atk:${accessToken.slice(0, 24)}` : `anon:${request.ip ?? '0'}`
+  const cacheKey = accessToken ? `atk:${accessToken.slice(0, 24)}` : `anon:${getClientIp(request) || '0'}`
   const cached = sessionCache.get(cacheKey)
 
   let hasValidSession = false

@@ -41,6 +41,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { PatientStatusEnum, EnrichedPatient } from "@/lib/types"
+import { PATIENT_STATUS_CONFIG } from "@/lib/constants"
 import EmptyState from "@/components/ui/empty-state"
 import { useAutoListHeight } from "@/hooks/use-auto-size"
 
@@ -78,15 +79,6 @@ const THEME = {
     lipoma: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800",
     quiste: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800",
     default: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:border-slate-700"
-  },
-  status: {
-    [PatientStatusEnum.POTENCIAL]: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
-    [PatientStatusEnum.ACTIVO]: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600",
-    [PatientStatusEnum.EN_SEGUIMIENTO]: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800",
-    [PatientStatusEnum.OPERADO]: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800",
-    [PatientStatusEnum.NO_OPERADO]: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-800",
-    [PatientStatusEnum.INACTIVO]: "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900/50 dark:text-slate-500 dark:border-slate-700",
-    [PatientStatusEnum.ALTA_MEDICA]: "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900/50 dark:text-slate-500 dark:border-slate-700",
   },
   survey: {
     pendiente: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-300 dark:border-sky-800",
@@ -378,11 +370,12 @@ const PatientRow = memo(({
 
       <TableCell>
         {patient.estado_paciente && (
-          <Badge title={patient.estado_paciente.replace(/_/g, ' ')} className={cn(
+          <Badge className={cn(
             "border font-medium rounded-full px-2.5 py-1 text-xs",
-            THEME.status[patient.estado_paciente]
+            PATIENT_STATUS_CONFIG[patient.estado_paciente]?.bgClass,
+            PATIENT_STATUS_CONFIG[patient.estado_paciente]?.borderClass
           )}>
-            {patient.estado_paciente.replace(/_/g, ' ')}
+            {PATIENT_STATUS_CONFIG[patient.estado_paciente]?.label ?? patient.estado_paciente.replace(/_/g, ' ')}
           </Badge>
         )}
       </TableCell>
@@ -468,9 +461,10 @@ const MobilePatientCard = memo(({
               {patient.estado_paciente && (
                 <Badge className={cn(
                   "text-xs border rounded-full px-2.5 py-1",
-                  THEME.status[patient.estado_paciente]
+                  PATIENT_STATUS_CONFIG[patient.estado_paciente]?.bgClass,
+                  PATIENT_STATUS_CONFIG[patient.estado_paciente]?.borderClass
                 )}>
-                  {patient.estado_paciente.replace(/_/g, ' ')}
+                  {PATIENT_STATUS_CONFIG[patient.estado_paciente]?.label ?? patient.estado_paciente.replace(/_/g, ' ')}
                 </Badge>
               )}
               
@@ -657,11 +651,12 @@ const VirtualPatientRow = memo(({
       {/* Estado */}
       <div className="py-2">
         {patient.estado_paciente && (
-          <Badge title={patient.estado_paciente.replace(/_/g, ' ')} className={cn(
+          <Badge className={cn(
             "border font-medium rounded-full px-2.5 py-1 text-xs",
-            THEME.status[patient.estado_paciente]
+            PATIENT_STATUS_CONFIG[patient.estado_paciente]?.bgClass,
+            PATIENT_STATUS_CONFIG[patient.estado_paciente]?.borderClass
           )}>
-            {patient.estado_paciente.replace(/_/g, ' ')}
+            {PATIENT_STATUS_CONFIG[patient.estado_paciente]?.label ?? patient.estado_paciente.replace(/_/g, ' ')}
           </Badge>
         )}
       </div>
