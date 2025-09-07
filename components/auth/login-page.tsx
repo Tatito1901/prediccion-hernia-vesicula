@@ -3,20 +3,8 @@
 
 import React, { useCallback, useState, useTransition, useId, useEffect, useRef } from "react"
 import { LockKeyhole, AtSign, LogIn, Eye, EyeOff, AlertCircle, Loader2, Clock } from "lucide-react"
-
-// --- Mocks para dependencias externas (para compatibilidad de vista previa) ---
-
-// Mock del hook useRouter de Next.js
-const useRouter = () => ({
-  push: (path: string) => console.log(`Redirigiendo a: ${path}`),
-  prefetch: (path: string) => console.log(`Pre-cargando: ${path}`),
-})
-
-// Mock del hook useGlobalOverlay
-const useGlobalOverlay = () => ({
-  show: (message: string) => console.log(`Mostrando overlay: ${message}`),
-  hide: () => console.log("Ocultando overlay"),
-})
+import { useRouter } from "next/navigation"
+import { useGlobalOverlay } from "@/components/providers"
 
 // Definición del tipo de respuesta para que el componente sea autónomo
 interface LoginResponse {
