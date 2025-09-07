@@ -305,4 +305,4 @@ export const PatientModal = memo(({ trigger, onSuccess }: PatientModalProps) => 
     </Dialog>
   );
 });
-
+PatientModal.displayName = 'PatientModal';

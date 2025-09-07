@@ -1,9 +1,10 @@
--- supabase/sql/schedule_appointment.sql
 -- RPC: schedule_appointment
 -- Purpose: Atomically create or update an appointment with overlap checks by doctor and datetime.
 -- Notes:
 -- - Overlap is only checked when doctor_id IS NOT NULL.
--- - Overlap considers appointments in states PROGRAMADA, CONFIRMADA, PRESENTE.
+-- - Overlap considers appointments in states PROGRAMADA, CONFIRMADA, PRESENTE, intentionally
+--   NOT including COMPLETADA to allow reusing that time slot once completed. This is a business
+--   decision: completed appointments do not block future scheduling at the same time.
 -- - For updates, target doctor/datetime default to current row values when NULL is provided.
 -- - Optimistic concurrency can be enforced via p_expected_updated_at.
 
@@ -47,6 +48,12 @@ begin
     end if;
     if p_fecha_hora_cita is null then
       return query select false, 'Falta fecha_hora_cita', null::uuid;
+      return;
+    end if;
+
+    -- Reject creating appointments in the past (absolute time)
+    if p_fecha_hora_cita < now() then
+      return query select false, 'La fecha de la cita no puede ser en el pasado', null::uuid;
       return;
     end if;
 
@@ -116,6 +123,12 @@ begin
     -- Determine target values for conflict validation
     v_target_doctor := coalesce(p_doctor_id, rec_current.doctor_id);
     v_target_datetime := coalesce(p_fecha_hora_cita, rec_current.fecha_hora_cita);
+
+    -- Reject explicitly setting the appointment datetime into the past
+    if p_fecha_hora_cita is not null and p_fecha_hora_cita < now() then
+      return query select false, 'La fecha de la cita no puede ser en el pasado', null::uuid;
+      return;
+    end if;
 
     if v_target_doctor is not null then
       select exists (

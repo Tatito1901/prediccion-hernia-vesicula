@@ -431,7 +431,7 @@ const PatientAdmission = () => {
         });
       });
     });
-  }, [summary?.future_count, summary?.past_count, activeTab, queryClient]);
+  }, [summary, search, statusFilter, activeTab, queryClient]);
   
   // Cambio automático a la primera pestaña con datos si la actual está vacía
   useEffect(() => {

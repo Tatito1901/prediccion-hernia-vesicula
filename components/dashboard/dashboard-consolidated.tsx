@@ -314,3 +314,5 @@ function DashboardEnhanced() {
     </div>
   );
 }
+
+export default memo(DashboardEnhanced);

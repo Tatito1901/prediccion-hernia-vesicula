@@ -9,6 +9,7 @@ create or replace function public.create_patient_and_appointment(
   p_telefono text,
   p_email text,
   p_edad integer,
+  p_fecha_nacimiento text default null,
   p_diagnostico_principal public.diagnosis_enum,
   p_comentarios_registro text,
   p_probabilidad_cirugia numeric,
@@ -30,7 +31,26 @@ as $$
 declare
   v_patient_id uuid;
   v_sched record;
+  v_fecha_nacimiento date;
+  v_dup record;
 begin
+  -- Normalize input birthdate: accept YYYY-MM-DD or ISO with time/offset
+  v_fecha_nacimiento := case when nullif(p_fecha_nacimiento, '') is null then null
+                             else ((p_fecha_nacimiento)::timestamptz)::date end;
+
+  -- Duplicate patient guard (only when fecha_nacimiento is provided)
+  if v_fecha_nacimiento is not null then
+    select id into v_dup
+    from patients
+    where nombre = p_nombre
+      and apellidos = p_apellidos
+      and fecha_nacimiento = v_fecha_nacimiento
+    limit 1;
+    if found then
+      return query select false::boolean, 'Paciente duplicado'::text, null::uuid, null::uuid;
+      return;
+    end if;
+  end if;
   -- Insert patient
   insert into patients (
     nombre,
@@ -38,6 +58,7 @@ begin
     telefono,
     email,
     edad,
+    fecha_nacimiento,
     diagnostico_principal,
     comentarios_registro,
     probabilidad_cirugia,
@@ -51,6 +72,7 @@ begin
     nullif(p_telefono, ''),
     nullif(p_email, ''),
     nullif(p_edad, 0),
+    v_fecha_nacimiento,
     p_diagnostico_principal,
     nullif(p_comentarios_registro, ''),
     nullif(p_probabilidad_cirugia, 0),

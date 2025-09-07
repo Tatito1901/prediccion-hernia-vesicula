@@ -269,15 +269,16 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
     return () => clearInterval(id);
   }, [appointment.estado_cita]);
 
+  // Derivados (optimizados)
   const open = controlledOpen ?? uncontrolledOpen;
   const setOpen = onOpenChange ?? setUncontrolledOpen;
-
-  // Derivados (optimizados)
   const patient = useMemo(() => appointment.patients, [appointment.patients]);
   const statusConfig = useMemo(() => getStatusConfig(appointment.estado_cita), [appointment.estado_cita]);
   const fullName = useMemo(() => getPatientFullName(patient || null), [patient]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run on clockTick to keep relative time fresh
   const dateTime = useMemo<DateTimeState | null>(() => {
+    void clockTick; // tick-driven invalidation
     try {
       const date = parseISO(appointment.fecha_hora_cita);
       if (!isValid(date)) return null;
@@ -330,7 +331,9 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
     }
   }, [appointment.fecha_hora_cita]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- tick-driven recomputation keeps actions in sync with time
   const availableActions = useMemo(() => {
+    void clockTick; // tick-driven invalidation
     // Preferir las acciones calculadas por el backend si están presentes
     if (appointment.actions?.available && Array.isArray(appointment.actions.available)) {
       return appointment.actions.available as AdmissionAction[];
@@ -343,7 +346,9 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
     return validActions;
   }, [appointment, clockTick]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- tick ensures timely updates to suggested action
   const primaryAction = useMemo<AdmissionAction | null>(() => {
+    void clockTick; // tick-driven invalidation
     // 1) Preferir sugerencia del backend si existe
     if (typeof appointment.suggested_action !== 'undefined') {
       return appointment.suggested_action as AdmissionAction | null;

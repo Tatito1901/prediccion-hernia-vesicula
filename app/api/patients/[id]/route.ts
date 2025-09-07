@@ -98,18 +98,22 @@ export async function PATCH(
         const currentStatus = (existingPatient as any)?.estado_paciente ?? null;
         const result = validatePatientStatusChange(currentStatus, desiredRaw);
         if (!result.allowed) {
-          if (result.code === 'INVALID_VALUE') {
-            return NextResponse.json(
-              createApiError('Valor de estado_paciente inválido', { code: 'INVALID_VALUE' }),
-              { status: 400 }
-            );
-          }
-          // Para bloqueos por terminal o degradación, ignorar el cambio de estado
-          delete safeBody.estado_paciente;
-        } else {
-          // Aplicar valor normalizado
-          safeBody.estado_paciente = result.normalized;
+          const code = result.code || 'INVALID_VALUE';
+          const message =
+            code === 'INVALID_VALUE'
+              ? 'Valor de estado_paciente inválido'
+              : code === 'BLOCKED_TERMINAL'
+              ? 'No se puede modificar un estado de paciente terminal'
+              : code === 'DOWNGRADE_NOT_ALLOWED'
+              ? 'No se permite degradar el estado del paciente'
+              : 'Cambio de estado de paciente no permitido';
+          return NextResponse.json(
+            createApiError(message, { code, details: { reason: result.reason } }),
+            { status: 422 }
+          );
         }
+        // Aplicar valor normalizado (incluye caso NO_CHANGE)
+        safeBody.estado_paciente = result.normalized;
       }
     }
 

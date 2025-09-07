@@ -75,6 +75,7 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/react-window": "^1.8.8",
+    "critters": "^0.0.23",
     "eslint-config-next": "15.3.4",
     "jsdom": "^26.1.0",
     "supabase": "^2.33.9",

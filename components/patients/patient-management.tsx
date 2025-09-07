@@ -460,19 +460,19 @@ const PatientManagementView: React.FC = () => {
   // Callbacks estables para evitar recreación por render
   const handleSelectPatient = useCallback((p: EnrichedPatient) => {
     dialogs.openDialog('details', p)
-  }, [dialogs.openDialog])
+  }, [dialogs])
 
   const handleShareSurvey = useCallback((p: EnrichedPatient) => {
     dialogs.openDialog('share', p)
-  }, [dialogs.openDialog])
+  }, [dialogs])
 
   const handleScheduleAppointment = useCallback((p: EnrichedPatient) => {
     dialogs.openDialog('appointment', p)
-  }, [dialogs.openDialog])
+  }, [dialogs])
 
   const handleViewHistory = useCallback((p: EnrichedPatient) => {
     dialogs.openDialog('history', p)
-  }, [dialogs.openDialog])
+  }, [dialogs])
 
   // Variables derivadas para renderizado con guardas defensivas
   const hasFilters = Boolean(data.patientsFilters.search) || data.patientsFilters.status !== "all"
