@@ -6,10 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tablet, Smartphone, ArrowLeft } from "lucide-react"
-// ❌ ELIMINADO: import { usePatient } - Ya no es necesario, usamos contexto central
-import { useClinic } from "@/contexts/clinic-data-provider";
+// ❌ ELIMINADO: import { usePatient }
 import MedicalSurveyAnalysis from "@/components/surveys/medical-survey-analysis"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"
+import { useActivePatients } from "@/hooks/core/use-patients"
  
 
 // Componente interno que utiliza useSearchParams
@@ -33,8 +33,8 @@ function EncuestaContent() {
   const [viewMode, setViewMode] = useState<"survey" | "analysis">("survey")
 
   // ANTES: const { data: patient, isLoading, isError } = usePatient(patientId ? String(patientId) : null);
-  // AHORA: Usar contexto central para obtener datos del paciente
-  const { enrichedPatients } = useClinic();
+  // AHORA: Usar hooks unificados para obtener pacientes activos enriquecidos
+  const { patients: enrichedPatients } = useActivePatients();
   const patient = enrichedPatients.find(p => p.id === String(patientId));
   const isLoading = false; // Ya no hay loading porque los datos vienen del contexto
   const isError = false; // Ya no hay error porque los datos vienen del contexto
@@ -163,7 +163,7 @@ function EncuestaContent() {
   )
 }
 
-// Componente principal envuelto en Suspense y ClinicDataProvider
+// Componente principal envuelto en Suspense
 export default function EncuestaPage() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div></div>}>

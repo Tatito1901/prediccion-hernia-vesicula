@@ -3,7 +3,7 @@ import type React from "react";
 import { useEffect } from "react";
 import { AppSidebar } from "@/components/navigation/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { ClinicDataProvider } from "@/contexts/clinic-data-provider";
+// ClinicDataProvider ya no es necesario con los nuevos hooks
 import { useIsMobile } from "@/hooks/use-breakpoint";
 import { cn } from "@/lib/utils";
 import { useGlobalOverlay } from "@/components/providers";
@@ -27,7 +27,6 @@ export default function DashboardLayout({
   }, [userName, setMessage, hide]);
 
   return (
-    <ClinicDataProvider>
       <SidebarProvider 
         className={cn(
           "min-h-screen bg-background",
@@ -45,6 +44,5 @@ export default function DashboardLayout({
           </main>
         </SidebarInset>
       </SidebarProvider>
-    </ClinicDataProvider>
   );
 }

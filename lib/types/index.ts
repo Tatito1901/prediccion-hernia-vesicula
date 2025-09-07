@@ -2,7 +2,7 @@
 
 // Single source of truth for database types
 import type { Database } from './database.types';
-import type { AppointmentStatus, PatientStatus } from '@/lib/constants';
+import type { AppointmentStatus, PatientStatus, AdmissionAction } from '@/lib/constants';
 
 // Re-export ALL constants from centralized source
 export {
@@ -107,6 +107,19 @@ export interface AppointmentWithPatient extends BaseAppointment {
   doctor?: {
     full_name?: string;
   };
+  /**
+   * Optional server-enriched action flags computed from centralized business rules.
+   * This makes the backend the source of truth while keeping UI simple.
+   */
+  actions?: AppointmentActions;
+  /**
+   * Optional per-action reasons when an action is not available (for UX messaging).
+   */
+  action_reasons?: Partial<Record<AdmissionAction, string>>;
+  /**
+   * Optional suggested primary action from the backend.
+   */
+  suggested_action?: AdmissionAction | null;
 }
 
 // Legacy alias for compatibility (will be removed)
@@ -269,6 +282,26 @@ export interface LegacyAppointment {
   costo: number;
   doctor: string;
   raw_doctor_id: string;
+}
+
+// --- Frontend/Backend shared action flags ---
+export interface AppointmentActions {
+  canCheckIn: boolean;
+  canComplete: boolean;
+  canCancel: boolean;
+  canNoShow: boolean;
+  canReschedule: boolean;
+  /** List of actions that are currently valid according to business rules */
+  available: AdmissionAction[];
+  /** Suggested primary action to highlight in UI */
+  primary?: AdmissionAction | null;
+}
+
+// --- Error Types ---
+export interface AppError extends Error {
+  code?: string;
+  details?: any;
+  status?: number;
 }
 
 // --- Export Database Type for Advanced Use Cases ---

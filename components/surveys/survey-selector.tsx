@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { useSurveyTemplates, useAssignSurvey } from '@/hooks/use-survey-templates';
+import { useSurveyTemplates, useAssignSurvey } from '@/hooks';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardTitle } from '@/components/ui/card';

@@ -3,7 +3,6 @@
 
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { createAdminClient } from '@/utils/supabase/admin';
 import { AppointmentStatusEnum } from '@/lib/types';
 
 export async function GET(
@@ -17,8 +16,8 @@ export async function GET(
     if (!user) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
-    // Usa cliente admin (service role) para consultas sin restricciones de RLS
-    const supabase = createAdminClient();
+    // Usa el cliente con contexto de usuario (RLS aplicado por defecto)
+    const supabase = anon;
     const { id: patientId } = await params;
     const { searchParams } = new URL(request.url);
     

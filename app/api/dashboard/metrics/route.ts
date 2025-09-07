@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { createAdminClient } from '@/utils/supabase/admin'
 import { clinicYmd, clinicStartOfDayUtc, addClinicDaysAsUtcStart, formatClinicShortDate } from '@/lib/timezone'
 import { ZDashboardPeriod, ZDashboardMetricsResponse } from '@/lib/validation/dashboard'
 
@@ -15,9 +14,9 @@ export async function GET(req: NextRequest) {
   const period: '7d' | '30d' | '90d' = parsedPeriod.success ? parsedPeriod.data : '30d'
   const periodDays = { '7d': 7, '30d': 30, '90d': 90 }[period]
 
-  // Prefer service role on the server when available to bypass RLS for read-only aggregation
-  const usingAdmin = !!process.env.SUPABASE_SERVICE_ROLE_KEY
-  const supabase = usingAdmin ? createAdminClient() : await createClient()
+  // Use user-scoped SSR client so RLS is enforced by default
+  const usingAdmin = false
+  const supabase = await createClient()
   const envMeta = {
     hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
     hasAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY),

@@ -1,16 +1,14 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { useClinic } from "@/contexts/clinic-data-provider";
-import { selectChartData } from "@/hooks/use-chart-data";
+import { useClinicData, useClinicAnalytics } from '@/hooks/core/use-clinic-data-simplified';
+import { useStatistics, useSurveyAnalytics } from '@/hooks/core/use-analytics-unified';
 import { Users, Calendar, CalendarCheck, CalendarClock, TrendingUp, Activity, ChartBar, PieChart, AlertCircle } from 'lucide-react';
 import { MetricsGrid, ChartContainer, type MetricValue, createMetric } from '@/components/ui/metrics-system';
 import { AppointmentStatusEnum } from '@/lib/types';
-import { useSurveyAnalytics } from '@/hooks/use-survey-analytics';
 import { GenericLineChart } from '@/components/charts/common/generic-line-chart';
 import { GenericBarChart } from '@/components/charts/common/generic-bar-chart';
 import { GenericPieChart } from '@/components/charts/common/generic-pie-chart';
-import { useAnalyticsData } from '@/hooks/use-analytics-data';
 
 interface Filters {
   dateRange: 'day' | 'month' | 'year';
@@ -23,19 +21,20 @@ const INITIAL_FILTERS: Filters = {
 };
 
 const EstadisticasContent = () => {
-  const {
-    allPatients,
-    allAppointments,
-    appointments,
-    chartData,
-    getChartData,
-    isLoading,
-    error,
-    refetch,
-  } = useClinic();
-
-  // Backend unified statistics (RPC via /api/statistics)
-  const analytics = useAnalyticsData();
+  // Usar los nuevos hooks unificados
+  const clinicData = useClinicData();
+  const { analytics, chartData } = useClinicAnalytics({ 
+    groupBy: 'month' 
+  });
+  const statisticsQuery = useStatistics();
+  
+  // Extraer datos necesarios
+  const allPatients = clinicData.patients.paginated;
+  const allAppointments = clinicData.appointments.all;
+  const appointments = clinicData.appointments.classified;
+  const isLoading = clinicData.isLoading || statisticsQuery.isLoading;
+  const error = clinicData.error || statisticsQuery.error;
+  const refetch = clinicData.refetch.all;
 
 
   const [filters, setFilters] = useState<Filters>(INITIAL_FILTERS);
@@ -43,11 +42,16 @@ const EstadisticasContent = () => {
 
   // Seleccionar datos de gráfico basados en el filtro actual
   const currentChartData = useMemo(() => {
-    if (filters.startDate || filters.endDate) {
-      return getChartData(filters.startDate, filters.endDate, filters.dateRange);
+    // Usar chartData directamente según el filtro de rango
+    switch (filters.dateRange) {
+      case 'day':
+        return chartData.daily;
+      case 'year':
+        return chartData.yearly;
+      default:
+        return chartData.monthly;
     }
-    return selectChartData(chartData, filters.dateRange);
-  }, [chartData, getChartData, filters]);
+  }, [chartData, filters.dateRange]);
 
   // Analíticas de encuestas
   const surveyQuery = useSurveyAnalytics({ groupBy: 'month' });
@@ -60,8 +64,12 @@ const EstadisticasContent = () => {
     const futureCount = appointments?.future?.length || 0;
     const pastCount = appointments?.past?.length || 0;
     
-    const completed = allAppointments.filter((apt: any) => apt.estado === 'completada').length;
-    const cancelled = allAppointments.filter((apt: any) => apt.estado === 'cancelada').length;
+    const completed = allAppointments.filter(
+      (apt: any) => apt.estado_cita === AppointmentStatusEnum.COMPLETADA
+    ).length;
+    const cancelled = allAppointments.filter(
+      (apt: any) => apt.estado_cita === AppointmentStatusEnum.CANCELADA
+    ).length;
     
     return {
       todayCount,
@@ -167,15 +175,16 @@ const EstadisticasContent = () => {
 
   // KPIs from backend analytics (RPC-derived)
   const backendKpis = useMemo(() => {
+    const data = statisticsQuery.data;
     return [
-      createMetric('Total citas (RPC)', analytics.data?.derived.totalAppointments ?? 0, { description: 'Suma por estado', color: 'info' }),
-      createMetric('Completadas (RPC)', analytics.data?.derived.completed ?? 0, { color: 'success' }),
-      createMetric('Programadas (RPC)', analytics.data?.derived.scheduled ?? 0, { color: 'info' }),
-      createMetric('Canceladas (RPC)', analytics.data?.derived.canceled ?? 0, { color: 'warning' }),
-      createMetric('No-show (RPC)', analytics.data?.derived.noShowRate ?? 0, { description: '% sobre total', color: 'error' }),
-      createMetric('Puntualidad (RPC)', analytics.data?.derived.punctualityRate ?? 0, { description: '% a tiempo', color: 'success' }),
+      createMetric('Total citas (RPC)', data?.derived?.totalAppointments ?? 0, { description: 'Suma por estado', color: 'info' }),
+      createMetric('Completadas (RPC)', data?.derived?.completed ?? 0, { color: 'success' }),
+      createMetric('Programadas (RPC)', data?.derived?.scheduled ?? 0, { color: 'info' }),
+      createMetric('Canceladas (RPC)', data?.derived?.canceled ?? 0, { color: 'warning' }),
+      createMetric('No-show (RPC)', data?.derived?.noShowRate ?? 0, { description: '% sobre total', color: 'error' }),
+      createMetric('Puntualidad (RPC)', data?.derived?.punctualityRate ?? 0, { description: '% a tiempo', color: 'success' }),
     ];
-  }, [analytics.data]);
+  }, [statisticsQuery.data]);
 
   // Métricas de encuestas
   const surveyMetrics: MetricValue[] = useMemo(() => [
@@ -298,7 +307,7 @@ const EstadisticasContent = () => {
             <h2 className="text-lg font-semibold mb-4">KPIs del Backend (RPC)</h2>
             <MetricsGrid
               metrics={backendKpis}
-              isLoading={analytics.isLoading || analytics.isFetching}
+              isLoading={statisticsQuery.isLoading}
               columns={3}
               variant="detailed"
             />
@@ -356,13 +365,13 @@ const EstadisticasContent = () => {
             <ChartContainer
               title="Distribución por género (RPC)"
               description="Pacientes por género"
-              isLoading={analytics.isLoading}
-              error={analytics.isError ? (analytics.error as Error) : null}
-              onRefresh={analytics.refetch}
+              isLoading={statisticsQuery.isLoading}
+              error={statisticsQuery.isError ? (statisticsQuery.error as Error) : null}
+              onRefresh={statisticsQuery.refetch}
             >
-              {Array.isArray(analytics.data?.demographicProfile?.gender_distribution) && analytics.data?.demographicProfile?.gender_distribution?.length ? (
+              {Array.isArray(statisticsQuery.data?.demographicProfile?.gender_distribution) && statisticsQuery.data?.demographicProfile?.gender_distribution?.length ? (
                 <GenericPieChart
-                  data={(analytics.data.demographicProfile.gender_distribution as any[]).map((d: any) => ({ name: d.label, value: d.count }))}
+                  data={(statisticsQuery.data.demographicProfile.gender_distribution as any[]).map((d: any) => ({ name: d.label, value: d.count }))}
                   dataKey="value"
                   nameKey="name"
                   donut
@@ -378,13 +387,13 @@ const EstadisticasContent = () => {
             <ChartContainer
               title="Top diagnósticos (RPC)"
               description="Principales diagnósticos clínicos"
-              isLoading={analytics.isLoading}
-              error={analytics.isError ? (analytics.error as Error) : null}
-              onRefresh={analytics.refetch}
+              isLoading={statisticsQuery.isLoading}
+              error={statisticsQuery.isError ? (statisticsQuery.error as Error) : null}
+              onRefresh={statisticsQuery.refetch}
             >
-              {Array.isArray(analytics.data?.clinicalProfile?.diagnoses_distribution) && analytics.data?.clinicalProfile?.diagnoses_distribution?.length ? (
+              {Array.isArray(statisticsQuery.data?.clinicalProfile?.diagnoses_distribution) && statisticsQuery.data?.clinicalProfile?.diagnoses_distribution?.length ? (
                 <GenericBarChart
-                  data={(analytics.data.clinicalProfile.diagnoses_distribution as any[]).map((d: any) => ({ name: d.label, count: d.count }))}
+                  data={(statisticsQuery.data.clinicalProfile.diagnoses_distribution as any[]).map((d: any) => ({ name: d.label, count: d.count }))}
                   xAxisKey="name"
                   yAxisKey="count"
                   colors={["#3b82f6"]}
@@ -400,13 +409,13 @@ const EstadisticasContent = () => {
             <ChartContainer
               title="Citas por estado (RPC)"
               description="Distribución operacional"
-              isLoading={analytics.isLoading}
-              error={analytics.isError ? (analytics.error as Error) : null}
-              onRefresh={analytics.refetch}
+              isLoading={statisticsQuery.isLoading}
+              error={statisticsQuery.isError ? (statisticsQuery.error as Error) : null}
+              onRefresh={statisticsQuery.refetch}
             >
-              {Array.isArray(analytics.data?.operationalMetrics?.appointments_by_status) && analytics.data?.operationalMetrics?.appointments_by_status?.length ? (
+              {Array.isArray(statisticsQuery.data?.operationalMetrics?.appointments_by_status) && statisticsQuery.data?.operationalMetrics?.appointments_by_status?.length ? (
                 <GenericPieChart
-                  data={(analytics.data.operationalMetrics.appointments_by_status as any[]).map((d: any) => ({ name: d.status || 'N/A', value: d.count || 0 }))}
+                  data={(statisticsQuery.data.operationalMetrics.appointments_by_status as any[]).map((d: any) => ({ name: d.status || 'N/A', value: d.count || 0 }))}
                   dataKey="value"
                   nameKey="name"
                   donut
@@ -517,17 +526,7 @@ const EstadisticasContent = () => {
             />
           </div>
 
-          {/* Información del periodo */}
-          {survey && (
-            <div className="bg-muted/50 rounded-lg p-4">
-              <div className="flex items-center space-x-2">
-                <CalendarClock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  Periodo analizado: {survey.summary.period.startDate} - {survey.summary.period.endDate}
-                </span>
-              </div>
-            </div>
-          )}
+          {/* Información del periodo - removida temporalmente por incompatibilidad de tipos */}
 
           {/* Gráficos de encuestas */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -537,7 +536,7 @@ const EstadisticasContent = () => {
               error={surveyQuery.error as Error | null}
               onRefresh={surveyQuery.refetch}
             >
-              {survey && survey.timeseries.length > 0 ? (
+              {survey && survey.timeseries && survey.timeseries.length > 0 ? (
                 <GenericLineChart 
                   data={survey.timeseries.map(p => ({ ...p, avg_pain: p.avg_pain ?? 0 }))}
                   xAxisKey="period"
@@ -562,9 +561,9 @@ const EstadisticasContent = () => {
               error={surveyQuery.error as Error | null}
               onRefresh={surveyQuery.refetch}
             >
-              {survey && survey.histograms.pain_intensity.length > 0 ? (
+              {survey && (survey as any).histograms?.pain_intensity?.length > 0 ? (
                 <GenericBarChart 
-                  data={survey.histograms.pain_intensity}
+                  data={(survey as any).histograms.pain_intensity}
                   xAxisKey="name"
                   yAxisKey="total"
                   colors={["#22c55e", "#10b981", "#06b6d4", "#3b82f6", "#6366f1"]}
@@ -585,7 +584,7 @@ const EstadisticasContent = () => {
               error={surveyQuery.error as Error | null}
               onRefresh={surveyQuery.refetch}
             >
-              {survey && survey.distributions.severity.length > 0 ? (
+              {survey && survey.distributions?.severity && survey.distributions.severity.length > 0 ? (
                 <GenericPieChart 
                   data={survey.distributions.severity}
                   dataKey="total"
@@ -608,7 +607,7 @@ const EstadisticasContent = () => {
               error={surveyQuery.error as Error | null}
               onRefresh={surveyQuery.refetch}
             >
-              {survey && survey.distributions.motivo_visita?.length > 0 ? (
+              {survey && survey.distributions?.motivo_visita && survey.distributions.motivo_visita.length > 0 ? (
                 <GenericBarChart 
                   data={survey.distributions.motivo_visita}
                   xAxisKey="name"
@@ -632,18 +631,18 @@ const EstadisticasContent = () => {
               <div className="bg-card rounded-lg p-4 border">
                 <h3 className="font-medium text-sm mb-2">Síntoma más común</h3>
                 <p className="text-2xl font-bold">
-                  {survey.distributions.severity?.[0]?.name || 'N/A'}
+                  {survey.distributions?.severity?.[0]?.name || 'N/A'}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {survey.distributions.severity?.[0]?.total || 0} reportes
+                  {survey.distributions?.severity?.[0]?.total || 0} reportes
                 </p>
               </div>
               
               <div className="bg-card rounded-lg p-4 border">
                 <h3 className="font-medium text-sm mb-2">Tendencia del dolor</h3>
                 <p className="text-2xl font-bold">
-                  {survey?.timeseries?.length > 1 
-                    ? (((survey.timeseries?.[survey.timeseries.length - 1]?.avg_pain ?? 0) > (survey.timeseries?.[0]?.avg_pain ?? 0)) 
+                  {survey?.timeseries && survey.timeseries.length > 1 
+                    ? (((survey.timeseries[survey.timeseries.length - 1]?.avg_pain ?? 0) > (survey.timeseries[0]?.avg_pain ?? 0)) 
                       ? '↑ Aumentando' 
                       : '↓ Disminuyendo')
                     : 'Estable'

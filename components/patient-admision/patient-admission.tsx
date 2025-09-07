@@ -1,4 +1,3 @@
-// components/patient-admission/patient-admission-optimized.tsx
 'use client';
 
 import React, {
@@ -8,39 +7,59 @@ import React, {
   memo,
   useEffect,
   useRef,
-  useDeferredValue,
-  startTransition,
+  useTransition,
 } from 'react';
 import dynamic from 'next/dynamic';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-// Utils & types
-import { cn } from '@/lib/utils';
-import { AppointmentStatusEnum } from '@/lib/types';
-import type { AppointmentStatus } from '@/lib/types';
-import { useAdmissionAppointments } from '@/hooks/use-admission-appointments';
+// Utils, hooks & types
+import { cn } from '../../lib/utils';
+import { AppointmentStatusEnum } from '../../lib/types';
+import type { AppointmentStatus } from '../../lib/types';
+import { useAppointments } from '@/hooks/core/use-appointments';
+import { endpoints, buildSearchParams } from '../../lib/api-endpoints';
+import { queryFetcher } from '../../lib/http';
+import { queryKeys } from '../../lib/query-keys';
 import type { TabType, AppointmentWithPatient, AdmissionAction } from './admision-types';
 
 // UI Components
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '../ui/button';
+import { Card, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Alert, AlertDescription } from '../ui/alert';
+import { Input } from '../ui/input';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
-// Icons (solo los usados)
-import { RefreshCw, Calendar, CalendarDays, CalendarCheck, AlertCircle, Plus, Search, SlidersHorizontal, Clock, Stethoscope, X } from 'lucide-react';
+// Icons: Importaciones agrupadas para mayor claridad
+import {
+  RefreshCw,
+  Calendar,
+  CalendarDays,
+  CalendarCheck,
+  AlertCircle,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Clock,
+  Stethoscope,
+  X,
+} from 'lucide-react';
 
 // ==================== CONSTANTS ====================
 const SKELETON_COUNT = 6;
+
+// Opciones para el filtro de estado. Definido como constante para evitar recreación en cada render.
+const STATUS_FILTER_OPTIONS = [
+  { value: AppointmentStatusEnum.PROGRAMADA, label: 'Programadas' },
+  { value: AppointmentStatusEnum.CONFIRMADA, label: 'Confirmadas' },
+  { value: AppointmentStatusEnum.PRESENTE, label: 'En Consulta' },
+  { value: AppointmentStatusEnum.COMPLETADA, label: 'Completadas' },
+  { value: AppointmentStatusEnum.CANCELADA, label: 'Canceladas' },
+  { value: AppointmentStatusEnum.NO_ASISTIO, label: 'No Asistió' },
+];
+
 
 // ==================== SKELETON ====================
 const CardSkeleton = memo(() => (
@@ -61,28 +80,36 @@ const CardSkeleton = memo(() => (
 ));
 CardSkeleton.displayName = 'CardSkeleton';
 
-// ==================== LAZY MOUNT (windowing ligero) ====================
-const LazyMount: React.FC<{ children: React.ReactNode; rootMargin?: string }> = ({ children, rootMargin = '300px' }) => {
+// ==================== LAZY MOUNT (Virtualización ligera) ====================
+// Este componente utiliza IntersectionObserver para retrasar el montaje de sus hijos
+// hasta que estén cerca del viewport. La propiedad CSS `content-visibility` ayuda
+// al navegador a optimizar el renderizado, saltándose el layout y paint de elementos
+// fuera de pantalla.
+const LazyMount = ({ children, rootMargin = '300px' }: { children: React.ReactNode; rootMargin?: string }) => {
   const ref = useRef<HTMLDivElement | null>(null);
-  const [visible, setVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    if (!ref.current || visible) return;
-    const el = ref.current;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setVisible(true);
-          obs.disconnect();
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
         }
       },
       { rootMargin }
     );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [visible, rootMargin]);
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+    return () => observer.disconnect();
+  }, [rootMargin]);
 
-  return <div ref={ref}>{visible ? children : <CardSkeleton />}</div>;
+  return (
+    <div ref={ref} style={{ contentVisibility: 'auto', containIntrinsicSize: '360px' }}>
+      {isVisible ? children : <CardSkeleton />}
+    </div>
+  );
 };
 
 // ==================== LAZY loaded components ====================
@@ -92,23 +119,21 @@ const PatientCard = dynamic(() => import('./patient-card'), {
 });
 
 const PatientModal = dynamic(
-  () => import('./patient-modal').then((m) => ({ default: m.PatientModal })),
+  () => import('./patient-modal').then(mod => ({ default: mod.PatientModal })),
   { ssr: false }
 );
 
 // ==================== ACCESOS DIRECTOS ====================
-const useKeyboardShortcuts = ({ focusSearch, onRefresh }: { focusSearch: () => void; onRefresh: () => void }) => {
+const useKeyboardShortcuts = (focusSearch: () => void, onRefresh: () => void) => {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
+      const target = e.target as HTMLElement;
+      if (target.isContentEditable || ['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+
+      if (e.key === '/') {
         e.preventDefault();
         focusSearch();
-      }
-      if ((e.key === 'r' || e.key === 'R') && (e.metaKey || e.ctrlKey)) {
-        // No interferir con refresh del navegador
-        return;
-      }
-      if (e.key === 'r' && !e.metaKey && !e.ctrlKey) {
+      } else if (e.key.toLowerCase() === 'r' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         onRefresh();
       }
@@ -119,16 +144,21 @@ const useKeyboardShortcuts = ({ focusSearch, onRefresh }: { focusSearch: () => v
 };
 
 // ==================== HEADER COMPONENT ====================
-const AdmissionHeader = memo<{
+const AdmissionHeader = memo(function AdmissionHeader({
+  isRefreshing,
+  onRefresh,
+  onSuccess,
+  stats,
+}: {
   isRefreshing: boolean;
   onRefresh: () => void;
   onSuccess: () => void;
   stats: { today: number; pending: number; completed: number };
-}>(function AdmissionHeader({ isRefreshing, onRefresh, onSuccess, stats }) {
+}) {
+  // El contenido de este componente es estático y bien memoizado, no requiere cambios.
   return (
     <div className="space-y-6 mb-8">
-      {/* Header Principal */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
             <span className="p-2 bg-sky-100 dark:bg-sky-900/30 rounded-lg">
@@ -142,7 +172,10 @@ const AdmissionHeader = memo<{
         <div className="flex items-center gap-3">
           <PatientModal
             trigger={
-              <Button className="gap-2 bg-sky-600 hover:bg-sky-700 text-white shadow-md" aria-label="Crear nuevo paciente">
+              <Button
+                className="gap-2 bg-sky-600 hover:bg-sky-700 text-white shadow-md"
+                aria-label="Crear nuevo paciente"
+              >
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">Nuevo Paciente</span>
                 <span className="sm:hidden">Nuevo</span>
@@ -157,13 +190,13 @@ const AdmissionHeader = memo<{
             disabled={isRefreshing}
             aria-label="Actualizar datos"
             className="shadow-sm"
+            title="Actualizar (R)"
           >
             <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin motion-reduce:animate-none')} />
           </Button>
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-0 shadow-sm bg-gradient-to-br from-sky-50 to-sky-100/50 dark:from-sky-950/30 dark:to-sky-900/20">
           <CardHeader className="pb-3">
@@ -204,54 +237,26 @@ const AdmissionHeader = memo<{
     </div>
   );
 });
-AdmissionHeader.displayName = 'AdmissionHeader';
 
 // ==================== SEARCH & FILTERS ====================
-const SearchAndFilters = memo<{
-  search: string;
+// OPTIMIZACIÓN: Se eliminó el estado interno (useState, useEffect). Ahora es un componente
+// 100% controlado por sus props. Esto simplifica su lógica, elimina re-renders
+// innecesarios y hace que su comportamiento sea más predecible.
+const SearchAndFilters = memo(function SearchAndFilters({
+  searchValue,
+  onSearchChange,
+  statusFilter,
+  onStatusChange,
+  isLoading,
+  inputRef,
+}: {
+  searchValue: string;
   onSearchChange: (value: string) => void;
   statusFilter: 'all' | AppointmentStatus;
   onStatusChange: (value: 'all' | AppointmentStatus) => void;
   isLoading: boolean;
-  onFocusRequest?: (fn: () => void) => void; // Para atajos de teclado
-}>(({ search, onSearchChange, statusFilter, onStatusChange, isLoading, onFocusRequest }) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
-
-  useEffect(() => {
-    onFocusRequest?.(() => inputRef.current?.focus());
-  }, [onFocusRequest]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    
-    // Clear existing timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    
-    // Set new timeout for debounced search
-    searchTimeoutRef.current = setTimeout(() => {
-      onSearchChange(newValue);
-    }, 300); // 300ms debounce delay
-  }, [onSearchChange]);
-
-  const clear = useCallback(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    onSearchChange('');
-  }, [onSearchChange]);
-
+  inputRef: React.RefObject<HTMLInputElement>;
+}) {
   return (
     <div className="mb-6 md:sticky md:top-2 md:z-10">
       <div className="flex flex-col sm:flex-row gap-3 rounded-lg border border-gray-200/70 dark:border-gray-800/70 bg-white/70 dark:bg-gray-900/50 backdrop-blur supports-[backdrop-filter]:bg-white/60 p-2">
@@ -259,28 +264,28 @@ const SearchAndFilters = memo<{
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden />
           <Input
             ref={inputRef}
-            placeholder="Buscar paciente..."
-            defaultValue={search}
-            onChange={handleSearchChange}
+            placeholder="Buscar paciente... (atajo: /)"
+            value={searchValue}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="pl-10 pr-10 bg-transparent"
             disabled={isLoading}
             aria-label="Buscar paciente"
           />
-          {search && (
-            <button
-              onClick={clear}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          {!!searchValue && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => onSearchChange('')}
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-gray-400 hover:text-gray-600"
               aria-label="Limpiar búsqueda"
             >
               <X className="h-4 w-4" />
-            </button>
+            </Button>
           )}
         </div>
 
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => startTransition(() => onStatusChange(v as 'all' | AppointmentStatus))}
-        >
+        <Select value={statusFilter} onValueChange={onStatusChange as (v: string) => void}>
           <SelectTrigger className="w-full sm:w-[220px]">
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4" aria-hidden />
@@ -289,31 +294,31 @@ const SearchAndFilters = memo<{
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
-            <SelectItem value={AppointmentStatusEnum.PROGRAMADA}>Programadas</SelectItem>
-            <SelectItem value={AppointmentStatusEnum.CONFIRMADA}>Confirmadas</SelectItem>
-            <SelectItem value={AppointmentStatusEnum.PRESENTE}>En Consulta</SelectItem>
-            <SelectItem value={AppointmentStatusEnum.COMPLETADA}>Completadas</SelectItem>
-            <SelectItem value={AppointmentStatusEnum.CANCELADA}>Canceladas</SelectItem>
-            <SelectItem value={AppointmentStatusEnum.NO_ASISTIO}>No Asistió</SelectItem>
+            {STATUS_FILTER_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
     </div>
   );
 });
-SearchAndFilters.displayName = 'SearchAndFilters';
 
 // ==================== APPOINTMENTS GRID ====================
-const AppointmentsGrid = memo<{
+const AppointmentsGrid = memo(function AppointmentsGrid({
+  appointments,
+  isLoading,
+  emptyMessage,
+  onAction,
+}: {
   appointments: AppointmentWithPatient[];
   isLoading: boolean;
   emptyMessage: string;
   onAction: (action: AdmissionAction, appointmentId: string) => void;
-}>(function AppointmentsGrid({ appointments, isLoading, emptyMessage, onAction }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null); // una sola card expandida
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Si desaparece la cita expandida tras un refetch/filtrado, cerramos estado
     if (expandedId && !appointments.some((a) => String(a.id) === expandedId)) {
       setExpandedId(null);
     }
@@ -322,20 +327,18 @@ const AppointmentsGrid = memo<{
   if (isLoading) {
     return (
       <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
-        {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
-          <CardSkeleton key={i} />
-        ))}
+        {Array.from({ length: SKELETON_COUNT }).map((_, i) => <CardSkeleton key={i} />)}
       </div>
     );
   }
 
-  if (!appointments.length) {
+  if (appointments.length === 0) {
     return (
       <Card className="border-dashed">
         <CardHeader className="text-center py-12">
           <CalendarDays className="h-12 w-12 mx-auto mb-4 text-gray-400" aria-hidden />
           <CardTitle className="text-lg font-normal text-gray-600 dark:text-gray-400">{emptyMessage}</CardTitle>
-          <CardDescription>Las citas aparecerán aquí cuando estén disponibles</CardDescription>
+          <CardDescription>Las citas aparecerán aquí cuando estén disponibles.</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -349,117 +352,178 @@ const AppointmentsGrid = memo<{
             appointment={appointment}
             onAction={onAction}
             open={expandedId === String(appointment.id)}
-            onOpenChange={(open: boolean) => setExpandedId(open ? String(appointment.id) : null)}
+            onOpenChange={(open) => setExpandedId(open ? String(appointment.id) : null)}
           />
         </LazyMount>
       ))}
     </div>
   );
 });
-AppointmentsGrid.displayName = 'AppointmentsGrid';
 
 // ==================== MAIN COMPONENT ====================
 const PatientAdmission = () => {
   const [activeTab, setActiveTab] = useState<TabType>('today');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | AppointmentStatus>('all');
-  const focusSearchRef = useRef<() => void>(() => {});
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+  const [isPending, startTransition] = useTransition();
 
-  const { appointments, stats, isLoading, error, refetch, rescheduledCount } = useAdmissionAppointments({
+  const {
+    classifiedAppointments: appointments,
+    summary,
+    stats,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useAppointments({
     search,
     status: statusFilter,
+    dateFilter: activeTab,
+    includePatient: true,
   });
 
-  const hasError = Boolean(error);
-
-  const handleAction = useCallback(
-    async (action: AdmissionAction, appointmentId: string) => {
-      // Aquí puedes envolver en try/catch si la acción es async real
-      toast.success('Acción completada correctamente');
-      refetch();
-    },
-    [refetch]
-  );
+  const handleAction = useCallback((action: AdmissionAction, appointmentId: string) => {
+    // No necesitamos hacer nada aquí - las acciones se manejan en PatientCard
+    // Solo invalidamos las queries para refrescar datos
+    queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+  }, [queryClient]);
 
   const handleRefresh = useCallback(() => {
-    startTransition(() => refetch());
+    startTransition(() => {
+      refetch();
+    });
     toast.success('Datos actualizados');
   }, [refetch]);
+  
+  // Usamos un callback para el atajo de teclado, es más directo que pasar la función por props.
+  const focusSearchInput = useCallback(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
-  // Atajos: '/' enfoca búsqueda, 'r' refresca
-  useKeyboardShortcuts({
-    focusSearch: () => focusSearchRef.current?.(),
-    onRefresh: handleRefresh,
-  });
+  useKeyboardShortcuts(focusSearchInput, handleRefresh);
 
-  // Memorizar contadores de pestañas (evita recomputar en cada render)
-  const todayCount = appointments.today.length;
-  const futureCount = appointments.future.length;
-  const pastCount = appointments.past.length;
+  // Prefetch de datos para otras pestañas - solo cuando es necesario
+  useEffect(() => {
+    if (!summary || search || statusFilter !== 'all') return; // No prefetch con filtros activos
+
+    const tabsToPrefetch: TabType[] = [];
+    if (summary.future_count > 0 && activeTab !== 'future') tabsToPrefetch.push('future');
+    if (summary.past_count > 0 && activeTab !== 'past') tabsToPrefetch.push('past');
+
+    if (tabsToPrefetch.length === 0) return;
+
+    const baseFilter = { status: 'all', includePatient: true };
+
+    // Usar requestIdleCallback para prefetch en tiempo idle
+    const idleCallback = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
+    
+    idleCallback(() => {
+      tabsToPrefetch.forEach((tab) => {
+        const queryParams = buildSearchParams({ ...baseFilter, dateFilter: tab });
+        const queryKey = queryKeys.appointments.filtered({ ...baseFilter, dateFilter: tab } as any);
+        
+        queryClient.prefetchQuery({
+          queryKey,
+          queryFn: () => queryFetcher(endpoints.appointments.list(queryParams)),
+          staleTime: 60_000, // Cache por 60 segundos
+        });
+      });
+    });
+  }, [summary?.future_count, summary?.past_count, activeTab, queryClient]);
+  
+  // Cambio automático a la primera pestaña con datos si la actual está vacía
+  useEffect(() => {
+    if (!summary || isLoading) return;
+    if (activeTab === 'today' && summary.today_count === 0) {
+      if (summary.future_count > 0) setActiveTab('future');
+      else if (summary.past_count > 0) setActiveTab('past');
+    }
+  }, [summary, activeTab, isLoading]);
+
+  // Solo calcular allAppointments cuando sea necesario
+  const allAppointments = useMemo(
+    () => {
+      if (activeTab !== 'all') return [];
+      // Combinar arrays sin spread para mejor performance con arrays grandes
+      const result = new Array(
+        appointments.today.length + 
+        appointments.future.length + 
+        appointments.past.length
+      );
+      let index = 0;
+      for (const apt of appointments.today) result[index++] = apt;
+      for (const apt of appointments.future) result[index++] = apt;
+      for (const apt of appointments.past) result[index++] = apt;
+      return result;
+    },
+    [activeTab, appointments]
+  );
+  
+  const currentIsLoading = isLoading || isFetching || isPending;
 
   return (
-    <div className={cn('container mx-auto px-4 py-6 max-w-7xl', isLoading && 'aria-busy')}>
-      <AdmissionHeader isRefreshing={isLoading} onRefresh={handleRefresh} onSuccess={refetch} stats={stats} />
+    <div className="container mx-auto px-4 py-6 max-w-7xl">
+      <AdmissionHeader
+        isRefreshing={currentIsLoading}
+        onRefresh={handleRefresh}
+        onSuccess={refetch}
+        stats={stats}
+      />
 
-      {hasError && (
+      {error && (
         <Alert variant="destructive" className="mb-6">
-          <AlertCircle className="h-4 w-4" aria-hidden />
+          <AlertCircle className="h-4 w-4" />
           <AlertDescription className="flex items-center justify-between gap-4">
-            <span>Error al cargar los datos. Por favor, intente nuevamente.</span>
-            <Button size="sm" variant="secondary" onClick={handleRefresh}>
-              Reintentar
-            </Button>
+            Error al cargar datos.
+            <Button size="sm" variant="secondary" onClick={handleRefresh}>Reintentar</Button>
           </AlertDescription>
         </Alert>
       )}
 
       <SearchAndFilters
-        search={search}
-        onSearchChange={(v) => startTransition(() => setSearch(v))}
+        searchValue={search}
+        onSearchChange={(value) => startTransition(() => setSearch(value))}
         statusFilter={statusFilter}
-        onStatusChange={(v) => startTransition(() => setStatusFilter(v))}
-        isLoading={isLoading}
-        onFocusRequest={(fn) => (focusSearchRef.current = fn)}
+        onStatusChange={(value) => startTransition(() => setStatusFilter(value))}
+        isLoading={currentIsLoading}
+        inputRef={searchInputRef}
       />
-
-      {rescheduledCount > 0 && (
-        <div className="mb-4 flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className="border-amber-300 text-amber-800 bg-amber-50 dark:border-amber-800 dark:text-amber-200 dark:bg-amber-900/30"
-          >
-            Reagendadas: {rescheduledCount}
-          </Badge>
-          <span className="text-xs text-muted-foreground">Se identifican pero no se muestran en la lista</span>
+      
+      {stats.rescheduled > 0 && (
+        <div className="mb-4 text-sm text-muted-foreground">
+          <Badge variant="outline" className="mr-2">Reagendadas: {stats.rescheduled}</Badge>
+          (No se muestran en estas listas)
         </div>
       )}
 
       <Tabs value={activeTab} onValueChange={(v) => startTransition(() => setActiveTab(v as TabType))}>
         <TabsList className="w-full sm:w-auto mb-6 overflow-x-auto">
-          <TabsTrigger value="today" className="flex-1 sm:flex-initial gap-2">
-            <Calendar className="h-4 w-4" aria-hidden />
-            Hoy ({todayCount})
-          </TabsTrigger>
-          <TabsTrigger value="future" className="flex-1 sm:flex-initial gap-2">
-            <CalendarDays className="h-4 w-4" aria-hidden />
-            Próximas ({futureCount})
-          </TabsTrigger>
-          <TabsTrigger value="past" className="flex-1 sm:flex-initial gap-2">
-            <Clock className="h-4 w-4" aria-hidden />
-            Anteriores ({pastCount})
-          </TabsTrigger>
+          <TabsTrigger value="today" className="gap-2"><Calendar className="h-4 w-4" />Hoy ({summary?.today_count ?? 0})</TabsTrigger>
+          <TabsTrigger value="future" className="gap-2"><CalendarDays className="h-4 w-4" />Próximas ({summary?.future_count ?? 0})</TabsTrigger>
+          <TabsTrigger value="past" className="gap-2"><Clock className="h-4 w-4" />Anteriores ({summary?.past_count ?? 0})</TabsTrigger>
+          <TabsTrigger value="all" className="gap-2"><Calendar className="h-4 w-4" />Todas ({summary?.total_appointments ?? 0})</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="today" className="mt-0">
-          <AppointmentsGrid appointments={appointments.today} isLoading={isLoading} emptyMessage="No hay citas programadas para hoy" onAction={handleAction} />
-        </TabsContent>
-
-        <TabsContent value="future" className="mt-0">
-          <AppointmentsGrid appointments={appointments.future} isLoading={isLoading} emptyMessage="No hay citas futuras programadas" onAction={handleAction} />
-        </TabsContent>
-
-        <TabsContent value="past" className="mt-0">
-          <AppointmentsGrid appointments={appointments.past} isLoading={isLoading} emptyMessage="No hay citas anteriores registradas" onAction={handleAction} />
+        
+        {/* Usamos un solo componente para mostrar el contenido de las pestañas */}
+        <TabsContent value={activeTab} className="mt-0">
+          <AppointmentsGrid
+            appointments={
+              activeTab === 'today' ? appointments.today :
+              activeTab === 'future' ? appointments.future :
+              activeTab === 'past' ? appointments.past :
+              allAppointments
+            }
+            isLoading={isLoading}
+            emptyMessage={
+              activeTab === 'today' ? 'No hay citas para hoy' :
+              activeTab === 'future' ? 'No hay citas futuras' :
+              activeTab === 'past' ? 'No hay citas anteriores' :
+              'No se encontraron citas'
+            }
+            onAction={handleAction}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -467,3 +531,4 @@ const PatientAdmission = () => {
 };
 
 export default memo(PatientAdmission);
+

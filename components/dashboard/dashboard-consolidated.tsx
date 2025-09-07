@@ -13,7 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-import { useDashboardMetrics } from '@/hooks/use-dashboard-metrics';
+import { useDashboardMetrics } from '@/hooks/core/use-analytics-unified';
 
 // Tipos y enums importados desde '@/lib/types' para evitar duplicación
 

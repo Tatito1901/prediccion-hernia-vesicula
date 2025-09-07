@@ -19,6 +19,12 @@ import {
   canMarkNoShow,
   canRescheduleAppointment,
 } from '@/lib/admission-business-rules';
+// Import from centralized types - single source of truth
+import type { 
+  Patient as BasePatient,
+  Appointment as BaseAppointment,
+  AppointmentWithPatient as BaseAppointmentWithPatient
+} from '@/lib/types';
 
 // ==================== TIPOS BASE ====================
 export type AppointmentStatus = z.infer<typeof ZAppointmentStatus>;
@@ -30,15 +36,9 @@ export type { PatientStatus };
 // Re-exported from centralized source
 export type { AdmissionAction } from '@/lib/constants';
 
-export type TabType = 'today' | 'future' | 'past';
+export type TabType = 'today' | 'future' | 'past' | 'all';
 
 // ==================== INTERFACES PRINCIPALES ====================
-// Import from centralized types - single source of truth
-import type { 
-  Patient as BasePatient,
-  Appointment as BaseAppointment,
-  AppointmentWithPatient as BaseAppointmentWithPatient
-} from '@/lib/types';
 
 // Re-export the centralized types for backward compatibility
 export type Patient = BasePatient;

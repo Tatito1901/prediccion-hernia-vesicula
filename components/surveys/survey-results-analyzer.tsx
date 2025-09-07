@@ -52,8 +52,8 @@ import {
   Zap,
 } from "lucide-react"
 // ❌ ELIMINADO: import { usePatient } - Ya no es necesario, recibimos datos vía props
-import { useCreateAppointment } from '@/hooks/use-appointments';
-import { usePatientSurvey } from '@/hooks/use-patient-survey';
+import { useCreateAppointment } from '@/hooks/core/use-appointments';
+import { usePatientSurvey } from '@/hooks/core/use-patients';
 import { AppointmentStatusEnum, type Appointment, type Patient, type PatientSurveyData } from '@/lib/types';
 import { 
   calculateConversionScore, 

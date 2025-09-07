@@ -26,8 +26,9 @@ import {
   RefreshCw,
   Activity
 } from "lucide-react"
-// Estado de servidor unificado vía React Query + Context
-import { useClinic } from "@/contexts/clinic-data-provider"
+// Estado de servidor unificado vía React Query
+import { useClinicPatients } from '@/hooks/core/use-clinic-data-simplified';
+import { useAdmitPatient } from '@/hooks/core/use-patients';
 
 // --- UI Components (Importaciones asumidas) ---
 import { Input } from "@/components/ui/input"
@@ -243,19 +244,48 @@ EmptyStateComponent.displayName = "EmptyStateComponent"
  * filtros, paginación y acciones de actualización.
  */
 function usePatientData() {
-  const {
-    paginatedPatients,
-    patientsPagination,
-    patientsStats,
-    patientsFilters,
-    isPatientsLoading,
-    patientsError,
-    setPatientsPage,
-    setPatientsSearch,
-    setPatientsStatus,
-    clearPatientsFilters,
-    refetchPatients,
-  } = useClinic()
+  const [filters, setFilters] = useState({
+    search: '',
+    status: 'all',
+    page: 1,
+    pageSize: 15
+  });
+  
+  const { 
+    patients, 
+    isLoading: isPatientsLoading, 
+    isError,
+    error: patientsError,
+    refetch: refetchPatients 
+  } = useClinicPatients(filters);
+  
+  // Funciones de filtrado
+  const setPatientsPage = useCallback((page: number) => {
+    setFilters(prev => ({ ...prev, page }));
+  }, []);
+  
+  const setPatientsSearch = useCallback((search: string) => {
+    setFilters(prev => ({ ...prev, search, page: 1 }));
+  }, []);
+  
+  const setPatientsStatus = useCallback((status: string) => {
+    setFilters(prev => ({ ...prev, status, page: 1 }));
+  }, []);
+  
+  const clearPatientsFilters = useCallback(() => {
+    setFilters({ search: '', status: 'all', page: 1, pageSize: 15 });
+  }, []);
+  
+  // Datos mapeados para compatibilidad
+  const paginatedPatients = patients.paginated;
+  const patientsPagination = patients.pagination;
+  const patientsStats = patients.stats;
+  const patientsFilters = filters;
+  const patientsData = { data: paginatedPatients, count: paginatedPatients.length };
+  
+  // Funciones stub para compatibilidad temporal
+  const fetchPatientDetail = async (id: string) => null;
+  const fetchPatientHistory = async (id: string) => null;
 
   // Usar un ref para manejar el debounce sin duplicar estado
   const searchTimeoutRef = useRef<NodeJS.Timeout>()

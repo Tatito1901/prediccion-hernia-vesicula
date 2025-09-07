@@ -1,7 +1,6 @@
 // app/api/appointments/[id]/status/route.ts - API CORREGIDA PARA TU ESQUEMA REAL
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { createAdminClient } from '@/utils/supabase/admin';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/types/database.types';
@@ -12,6 +11,8 @@ import {
   validateStatusChange,
   validateRescheduleDateTime,
   BUSINESS_RULES,
+  getAvailableActions,
+  suggestNextAction,
 } from '@/lib/admission-business-rules';
 import { addMinutes } from 'date-fns';
 import { formatClinicMediumDateTime } from '@/lib/timezone';
@@ -201,8 +202,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const isAdmin = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const supabase = isAdmin ? createAdminClient() : await createClient();
+    const isAdmin = false;
+    const supabase = await createClient();
     const { id: appointmentId } = await params;
     const rawBody = await request.json();
     // In test runs, allow overriding time/window constraints to make tests deterministic
@@ -217,13 +218,11 @@ export async function PATCH(
     
     // 1.5 OBTENER INFORMACIÓN DEL USUARIO PARA AUDITORÍA (mover antes para evitar errores de scope)
     let userId: string | null = null;
-    if (!isAdmin) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        userId = user?.id || null;
-      } catch {
-        userId = null;
-      }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      userId = user?.id || null;
+    } catch {
+      userId = null;
     }
     
     // Ensure variables are defined for entire handler scope
@@ -674,18 +673,59 @@ export async function PATCH(
       responseAppointment.fecha_hora_cita = effectiveNewDateTime;
     }
 
-    return NextResponse.json({
-      ...responseAppointment,
-      _meta: {
-        previous_status: currentStatus,
-        status_changed_at: new Date().toISOString(),
-        changed_by_user: userId || null,
-        audit_trail_created: auditResult.success,
-        transition_validated: true,
-        ip_address: ipAddress,
-        user_agent: userAgent,
-      },
-    });
+    // Enrich with backend-calculated action flags for the updated appointment
+    try {
+      const apptLike = {
+        fecha_hora_cita: responseAppointment.fecha_hora_cita || current.fecha_hora_cita,
+        estado_cita: responseAppointment.estado_cita!,
+        updated_at: responseAppointment.updated_at ?? null,
+      } as any;
+      const now = mxNow();
+      const actionList = getAvailableActions(apptLike, now);
+      const available = actionList.filter(a => a.valid).map(a => a.action);
+      const action_reasons = Object.fromEntries(
+        actionList.filter(a => !a.valid && a.reason).map(a => [a.action, a.reason as string])
+      );
+      const primary = suggestNextAction(apptLike, now);
+
+      return NextResponse.json({
+        ...responseAppointment,
+        actions: {
+          canCheckIn: available.includes('checkIn'),
+          canComplete: available.includes('complete'),
+          canCancel: available.includes('cancel'),
+          canNoShow: available.includes('noShow'),
+          canReschedule: available.includes('reschedule'),
+          available,
+          primary,
+        },
+        action_reasons,
+        suggested_action: primary,
+        _meta: {
+          previous_status: currentStatus,
+          status_changed_at: new Date().toISOString(),
+          changed_by_user: userId || null,
+          audit_trail_created: auditResult.success,
+          transition_validated: true,
+          ip_address: ipAddress,
+          user_agent: userAgent,
+        },
+      });
+    } catch {
+      // Fallback without enrichment
+      return NextResponse.json({
+        ...responseAppointment,
+        _meta: {
+          previous_status: currentStatus,
+          status_changed_at: new Date().toISOString(),
+          changed_by_user: userId || null,
+          audit_trail_created: auditResult.success,
+          transition_validated: true,
+          ip_address: ipAddress,
+          user_agent: userAgent,
+        },
+      });
+    }
     
   } catch (error: unknown) {
     console.error('💥 [Status Update] Unexpected error:', error);

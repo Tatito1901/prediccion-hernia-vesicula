@@ -1,5 +1,4 @@
 import { createClient } from "@/utils/supabase/server";
-import { createAdminClient } from "@/utils/supabase/admin";
 import { createApiError, createApiResponse } from "@/lib/api-response-types";
 
 export const runtime = "nodejs";
@@ -55,8 +54,8 @@ export async function PATCH(req: Request) {
       );
     }
 
-    // Prefer admin client for DB mutation if available to avoid RLS pitfalls
-    const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase;
+    // Use SSR client so updates respect RLS (user can only update their own profile)
+    const db = supabase;
 
     let { data, error } = await db
       .from("profiles")

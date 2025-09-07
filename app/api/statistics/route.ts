@@ -2,7 +2,6 @@
 import { NextResponse } from 'next/server';
 import { jsonError } from '@/lib/errors';
 import { createClient as createServerClient } from '@/utils/supabase/server';
-import { createAdminClient } from '@/utils/supabase/admin';
 import { ZStatisticsResponse } from '@/lib/validation/statistics';
 
 export const runtime = 'nodejs';
@@ -14,8 +13,8 @@ const cacheHeaders = {
 type RpcResult<T> = { data: T | null; error?: string | null };
 
 export async function GET(req: Request) {
-  const usedClient = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'admin' : 'server';
-  const supabase = usedClient === 'admin' ? createAdminClient() : await createServerClient();
+  const usedClient = 'server' as const;
+  const supabase = await createServerClient();
 
   console.log('🚀 [/api/statistics] Iniciando GET request');
   console.log('🔑 [/api/statistics] Tipo de cliente Supabase:', usedClient);

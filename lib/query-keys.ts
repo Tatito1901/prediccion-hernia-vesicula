@@ -46,9 +46,14 @@ export const queryKeys = {
     
     // Citas con filtros específicos
     filtered: (params: {
-      dateFilter?: 'today' | 'future' | 'past';
-      patientId?: string;
+      dateFilter?: 'today' | 'future' | 'past' | 'all' | 'range';
+      patientId?: string | null;
+      doctorId?: string | null;
       search?: string;
+      status?: string;
+      startDate?: string | null;
+      endDate?: string | null;
+      page?: number;
       pageSize?: number;
     }) => ['appointments', 'filtered', params] as const,
     
@@ -66,6 +71,9 @@ export const queryKeys = {
 
     // Historial de estados de una cita
     history: (appointmentId: string) => ['appointments', 'history', appointmentId] as const,
+    
+    // Horarios ocupados por fecha
+    occupied: (date: string | null) => ['appointments', 'occupied', date] as const,
   },
 
   // ==================== DASHBOARD ====================

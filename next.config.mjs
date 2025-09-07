@@ -16,6 +16,20 @@ const nextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
+  // Optimizaciones de rendimiento y bundle
+  swcMinify: true,
+  modularizeImports: {
+    'lucide-react': {
+      transform: 'lucide-react/dist/esm/icons/{{member}}',
+    },
+    '@/components/ui': {
+      transform: '@/components/ui/{{member}}',
+    },
+  },
+  experimental: {
+    optimizeCss: true,
+    optimizePackageImports: ['lucide-react', 'date-fns', 'react-hook-form', '@tanstack/react-query'],
+  },
   async headers() {
     return [
       {

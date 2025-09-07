@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/utils/supabase/server'
-import { createAdminClient } from '@/utils/supabase/admin'
 import { createApiResponse, createApiError } from '@/lib/api-response-types'
 import { ZDiagnosisDb } from '@/lib/constants'
 
@@ -129,8 +128,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Crear paciente + cita de forma atómica vía RPC transaccional
-    const admin = createAdminClient()
+    // Crear paciente + cita de forma atómica vía RPC transaccional (security definer)
+    const admin = supabase
 
     const p_motivo_cita = (
       (payload.diagnostico_principal_detalle && payload.diagnostico_principal_detalle.trim()) ||

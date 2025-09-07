@@ -1,19 +1,19 @@
 'use client';
 
 import React from 'react';
-import { useAnalyticsData } from '@/hooks/use-analytics-data';
+import { useStatistics } from '@/hooks/core/use-analytics-unified';
 import { MetricsGrid, createMetric, ChartContainer } from '@/components/ui/metrics-system';
 
 function StatisticsContent() {
-  const { data, isLoading, isError, error, refetch, isFetching } = useAnalyticsData();
+  const { data, isLoading, isError, error, refetch } = useStatistics();
 
   const kpis = [
-    createMetric('Total citas', data?.derived.totalAppointments ?? 0, { description: 'Suma por estado' }),
-    createMetric('Completadas', data?.derived.completed ?? 0, { color: 'success' }),
-    createMetric('Programadas', data?.derived.scheduled ?? 0, { color: 'info' }),
-    createMetric('Canceladas', data?.derived.canceled ?? 0, { color: 'warning' }),
-    createMetric('No-show', data?.derived.noShowRate ?? 0, { description: '% sobre total', color: 'error' }),
-    createMetric('Puntualidad', data?.derived.punctualityRate ?? 0, { description: '% de citas a tiempo', color: 'success' }),
+    createMetric('Total citas', data?.derived?.totalAppointments ?? 0, { description: 'Suma por estado' }),
+    createMetric('Completadas', data?.derived?.completed ?? 0, { color: 'success' }),
+    createMetric('Programadas', data?.derived?.scheduled ?? 0, { color: 'info' }),
+    createMetric('Canceladas', data?.derived?.canceled ?? 0, { color: 'warning' }),
+    createMetric('No-show', data?.derived?.noShowRate ?? 0, { description: '% sobre total', color: 'error' }),
+    createMetric('Puntualidad', data?.derived?.punctualityRate ?? 0, { description: '% de citas a tiempo', color: 'success' }),
   ];
 
   return (
@@ -21,7 +21,7 @@ function StatisticsContent() {
         <section>
           <MetricsGrid
             metrics={kpis}
-            isLoading={isLoading || isFetching}
+            isLoading={isLoading}
             columns={3}
           />
         </section>

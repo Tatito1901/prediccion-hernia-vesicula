@@ -45,7 +45,7 @@ import {
   getPatientFullName,
   getStatusConfig
 } from '@/components/patient-admision/admision-types';
-import { usePatientHistory } from '@/hooks/use-patient';
+import { usePatientHistory } from '@/hooks/core/use-patients';
 
 // ==================== COMPONENTES INTERNOS ====================
 

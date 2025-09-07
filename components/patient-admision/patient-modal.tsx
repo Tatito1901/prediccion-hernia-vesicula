@@ -1,5 +1,15 @@
+'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef, useId } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect, memo } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery } from '@tanstack/react-query';
+import { addDays, startOfDay, isWithinInterval } from 'date-fns';
+import { User2, Calendar as CalendarIcon, Loader2, Stethoscope, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+// UI Components
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -14,28 +24,22 @@ import {
   TimeSelectField,
 } from '@/components/ui/form-components';
 import { Form } from '@/components/ui/form';
-import { useForm, useWatch } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { addDays, startOfDay, isWithinInterval } from 'date-fns';
-import { User2, CalendarIcon, Loader2, Stethoscope, CheckCircle2 } from 'lucide-react';
-import { useAdmitPatient } from '@/hooks/use-patient';
-import { useClinic } from '@/contexts/clinic-data-provider';
+
+// Project-specific imports
+import { useAdmitPatient } from '@/hooks/core/use-patients';
 import { ZDiagnosisDb } from '@/lib/constants';
 import { AppointmentStatusEnum } from '@/lib/types';
-import type { AppointmentStatus } from '@/lib/types';
-import type { AppError } from '@/lib/errors';
+import type { AppointmentStatus, AppError } from '@/lib/types';
 import { generateTimeSlots, CLINIC_SCHEDULE, isWorkDay } from '@/lib/clinic-schedule';
 import { mxLocalPartsToUtcIso, formatMx } from '@/utils/datetime';
+import { endpoints, buildSearchParams } from '@/lib/api-endpoints';
+import { queryFetcher } from '@/lib/http';
+import { queryKeys } from '@/lib/query-keys';
 
-interface PatientModalProps {
-  trigger: React.ReactNode;
-  onSuccess?: () => void;
-}
+// ============================================================================
+// Constants & Types
+// ============================================================================
 
-// ────────────────────────────────────────────────────────────────────────────
-// Constantes y Tipos
-// ────────────────────────────────────────────────────────────────────────────
 const BLOCKING_STATUSES: ReadonlySet<AppointmentStatus> = new Set([
   AppointmentStatusEnum.PROGRAMADA,
   AppointmentStatusEnum.CONFIRMADA,
@@ -43,370 +47,253 @@ const BLOCKING_STATUSES: ReadonlySet<AppointmentStatus> = new Set([
 ]);
 
 const QuickAdmissionSchema = z.object({
-  nombre: z.string().min(2, 'Mínimo 2 caracteres'),
-  apellidos: z.string().min(2, 'Mínimo 2 caracteres'),
-  genero: z.enum(['Masculino', 'Femenino']),
-  telefono: z
-    .string()
-    .regex(/^[0-9+\-\s()]{10,15}$/u, 'Formato inválido')
-    .transform((v) => v.trim()),
-  email: z
-    .string()
-    .email('Email inválido')
-    .or(z.literal(''))
-    .transform((v) => (v?.trim() ? v.trim() : '')),
+  nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres.'),
+  apellidos: z.string().min(2, 'Los apellidos deben tener al menos 2 caracteres.'),
+  genero: z.enum(['Masculino', 'Femenino'] as const).refine(val => val, {
+    message: 'Seleccione un género.'
+  }),
+  telefono: z.string().regex(/^[0-9+\-\s()]{10,15}$/u, 'El formato del teléfono es inválido.'),
+  email: z.string().email('El correo electrónico es inválido.').optional().or(z.literal('')),
   diagnostico_principal: ZDiagnosisDb,
-  fecha: z.date(),
-  hora: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/u, 'Formato HH:MM'),
+  fecha: z.date().refine(val => val, {
+    message: 'La fecha es obligatoria.'
+  }),
+  hora: z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/u, 'Seleccione una hora válida.'),
 });
 
 type FormData = z.infer<typeof QuickAdmissionSchema>;
+type ClinicAppointment = { estado_cita: AppointmentStatus; fecha_hora_cita: string };
 
-type ClinicAppointment = {
-  estado_cita: AppointmentStatus;
-  fecha_hora_cita: string; // ISO
-};
+// ============================================================================
+// Utility Hooks & Functions
+// ============================================================================
 
-// ────────────────────────────────────────────────────────────────────────────
-// Utilidades
-// ────────────────────────────────────────────────────────────────────────────
 const isValidDate = (date: Date): boolean => {
   const today = startOfDay(new Date());
   const maxDate = addDays(today, CLINIC_SCHEDULE.MAX_ADVANCE_DAYS);
-  if (!isWorkDay(date)) return false;
-  return isWithinInterval(date, { start: today, end: maxDate });
+  return isWorkDay(date) && isWithinInterval(date, { start: today, end: maxDate });
 };
 
-const DEFAULT_HOUR = `${String(CLINIC_SCHEDULE.START_HOUR).padStart(2, '0')}:00` as const;
+/**
+ * Hook para obtener los horarios de citas ocupados para una fecha específica.
+ * Utiliza React Query para cacheo, reintentos y gestión de estado.
+ */
+function useOccupiedTimes(date: Date | undefined) {
+  const dateStr = date ? formatMx(date, 'yyyy-MM-dd') : null;
 
-// ────────────────────────────────────────────────────────────────────────────
-// Componente
-// ────────────────────────────────────────────────────────────────────────────
-export function PatientModal({ trigger, onSuccess }: PatientModalProps) {
-  const [open, setOpen] = useState(false);
-  const [isLoadingTimes, setIsLoadingTimes] = useState(false);
-  const [occupiedTimes, setOccupiedTimes] = useState<Set<string>>(() => new Set());
+  return useQuery({
+    queryKey: queryKeys.appointments.occupied(dateStr),
+    queryFn: async () => {
+      if (!dateStr) return new Set<string>();
 
-  const occupiedCacheRef = useRef<Map<string, Set<string>>>(new Map());
-  const nombreInputRef = useRef<HTMLInputElement | null>(null);
-  const timeDescId = useId();
+      const params = buildSearchParams({
+        dateFilter: 'range',
+        startDate: dateStr,
+        endDate: dateStr,
+        pageSize: 200, // Asumimos que no hay más de 200 citas en un día
+        includePatient: false,
+      });
+      const { data } = await queryFetcher<{ data?: ClinicAppointment[] }>(endpoints.appointments.list(params));
+      
+      const occupied = new Set<string>();
+      data?.forEach((apt) => {
+        if (BLOCKING_STATUSES.has(apt.estado_cita)) {
+          occupied.add(formatMx(apt.fecha_hora_cita, 'HH:mm'));
+        }
+      });
+      return occupied;
+    },
+    enabled: !!dateStr,
+    staleTime: 5 * 60 * 1000, // 5 minutos de cache
+    refetchOnWindowFocus: true,
+  });
+}
 
-  const { fetchSpecificAppointments } = useClinic();
+/**
+ * Maneja los errores de la API y los mapea a los campos del formulario.
+ */
+function handleAdmissionError(error: AppError, setError: any) {
+  const details = error.details as any;
+  const code = (details?.code || error.code || '').toUpperCase();
+
+  if (details?.validation_errors?.length > 0) {
+    details.validation_errors.forEach((err: { field: string; message: string }) => {
+      const fieldName = err.field === 'fecha_hora_cita' ? 'hora' : err.field;
+      setError(fieldName, { type: 'manual', message: err.message });
+    });
+  }
+
+  const message = error.message || 'Ocurrió un error inesperado.';
+  switch (code) {
+    case 'SCHEDULE_CONFLICT':
+      setError('hora', { message });
+      break;
+    case 'INVALID_DATE':
+      setError('fecha', { message });
+      break;
+    case 'DUPLICATE_PATIENT':
+      setError('nombre', { message: 'Posible paciente duplicado.' });
+      setError('apellidos', { message: 'Verifique si el paciente ya existe.' });
+      break;
+    default:
+      if (message.toLowerCase().includes('telefono')) {
+        setError('telefono', { message: 'Este teléfono ya está registrado.' });
+      }
+      break;
+  }
+}
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
+interface PatientModalProps {
+  trigger: React.ReactNode;
+  onSuccess?: () => void;
+}
+
+export const PatientModal = memo(({ trigger, onSuccess }: PatientModalProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const nombreInputRef = useRef<HTMLInputElement>(null);
+  const timeDescriptionId = useRef(`time-desc-${React.useId()}`).current;
+
   const { mutate: admitPatient, isPending } = useAdmitPatient();
-
+  
   const form = useForm<FormData>({
     resolver: zodResolver(QuickAdmissionSchema),
     mode: 'onBlur',
-    criteriaMode: 'firstError',
     defaultValues: {
       nombre: '',
       apellidos: '',
-      genero: undefined as unknown as FormData['genero'], // controlado por UI
       telefono: '',
       email: '',
       diagnostico_principal: 'HERNIA_INGUINAL',
-      fecha: undefined as unknown as Date,
-      hora: DEFAULT_HOUR,
     },
   });
 
-  // Observa la fecha seleccionada sólo (evita re-render global del form)
   const selectedDate = useWatch({ control: form.control, name: 'fecha' });
-  const dateStr = useMemo(() => (selectedDate ? formatMx(selectedDate, 'yyyy-MM-dd') : undefined), [selectedDate]);
+  const { data: occupiedTimes = new Set(), isLoading: isLoadingTimes } = useOccupiedTimes(selectedDate);
 
-  // Props de inputs estables
-  const givenNameProps = useMemo(() => ({ autoComplete: 'given-name', ref: nombreInputRef }), []);
-  const familyNameProps = useMemo(() => ({ autoComplete: 'family-name' }), []);
-  const telProps = useMemo(() => ({ autoComplete: 'tel' }), []);
-  const emailProps = useMemo(() => ({ autoComplete: 'email' }), []);
-
-  // Slots de tiempo por día
-  const timeSlots = useMemo(() => {
-    if (!selectedDate) return [] as Array<{ label: string; value: string }>;
-    return generateTimeSlots({ baseDate: selectedDate, includeLunch: false });
-  }, [selectedDate]);
-
-  // Carga de horarios ocupados por día (usa cache + abort) y sólo si modal está abierto
-  useEffect(() => {
-    let controller: AbortController | null = null;
-
-    const load = async () => {
-      if (!open || !dateStr) {
-        setOccupiedTimes((prev) => (prev.size ? new Set() : prev));
-        return;
-      }
-
-      // Cache hit
-      const cached = occupiedCacheRef.current.get(dateStr);
-      if (cached) {
-        setOccupiedTimes((prev) => {
-          if (prev.size === cached.size && [...prev].every((t) => cached.has(t))) return prev;
-          return new Set(cached);
-        });
-        return;
-      }
-
-      controller = new AbortController();
-      setIsLoadingTimes(true);
-      try {
-        const res = await fetchSpecificAppointments({
-          dateFilter: 'range',
-          startDate: dateStr,
-          endDate: dateStr,
-          pageSize: 200,
-          signal: controller.signal,
-        });
-        if (controller.signal.aborted) return;
-
-        const next = new Set<string>();
-        (res.data as ClinicAppointment[] | undefined)?.forEach((apt) => {
-          if (BLOCKING_STATUSES.has(apt.estado_cita)) {
-            // Asegura el horario en zona MX para evitar desfases por DST
-            next.add(formatMx(apt.fecha_hora_cita, 'HH:mm'));
-          }
-        });
-
-        occupiedCacheRef.current.set(dateStr, next);
-        setOccupiedTimes((prev) => {
-          if (prev.size === next.size && [...prev].every((t) => next.has(t))) return prev;
-          return next;
-        });
-      } catch (err) {
-        if (!(controller?.signal as AbortSignal | undefined)?.aborted) {
-          // Silencioso: podríamos mostrar toast no bloqueante si existe
-          // console.error('Error cargando las citas:', err);
-        }
-      } finally {
-        setIsLoadingTimes(false);
-      }
-    };
-
-    void load();
-
-    return () => controller?.abort();
-  }, [open, dateStr, fetchSpecificAppointments]);
-
-  // Submit optimizado
-  const onSubmit = useCallback(
-    (values: FormData) => {
-      const [hours, minutes] = values.hora.split(':').map(Number);
-      const yyyyMmDd = formatMx(values.fecha, 'yyyy-MM-dd'); // local MX
-      const fechaIso = mxLocalPartsToUtcIso(yyyyMmDd, hours, minutes);
-
-      admitPatient(
-        {
-          nombre: values.nombre.trim(),
-          apellidos: values.apellidos.trim(),
-          genero: values.genero,
-          telefono: values.telefono.trim(),
-          email: values.email ? values.email.trim() : undefined,
-          diagnostico_principal: values.diagnostico_principal,
-          fecha_hora_cita: fechaIso,
-          motivos_consulta: [values.diagnostico_principal],
-          creation_source: 'web_quick_admission',
-        },
-        {
-          onSuccess: () => {
-            form.reset();
-            setOpen(false);
-            onSuccess?.();
-          },
-          onError: (error: AppError) => {
-            const payload: any = error?.details ?? {};
-            const code: string | undefined =
-              typeof payload?.code === 'string'
-                ? payload.code.toUpperCase()
-                : typeof (error as any)?.code === 'string'
-                ? (error as any).code.toUpperCase()
-                : undefined;
-
-            const validationErrors: Array<{ field: string; message: string; code?: string }> | undefined = Array.isArray(
-              payload?.validation_errors
-            )
-              ? payload.validation_errors
-              : undefined;
-
-            if (validationErrors?.length) {
-              for (const ve of validationErrors) {
-                const field = ve.field as keyof FormData | 'fecha_hora_cita';
-                const message = ve.message || 'Dato inválido';
-                switch (field) {
-                  case 'nombre':
-                  case 'apellidos':
-                  case 'genero':
-                  case 'telefono':
-                  case 'email':
-                  case 'diagnostico_principal':
-                    form.setError(field as any, { message });
-                    break;
-                  case 'fecha_hora_cita':
-                    form.setError('hora', { message });
-                    break;
-                }
-              }
-            }
-
-            if (error.status === 409 && code === 'SCHEDULE_CONFLICT') {
-              form.setError('hora', { message: error.message || 'Conflicto de horario' });
-            }
-            if (error.status === 422 && code === 'INVALID_DATE') {
-              form.setError('hora', { message: error.message || 'La fecha/hora no puede ser en el pasado' });
-            }
-            if (error.status === 409 && code === 'DUPLICATE_PATIENT') {
-              form.setError('nombre', { message: 'Posible paciente duplicado' });
-              form.setError('apellidos', { message: 'Verifique los datos: posible duplicado' });
-            }
-            const msg = error?.message || '';
-            if (msg.toLowerCase().includes('telefono')) {
-              form.setError('telefono', { message: 'Teléfono ya registrado' });
-            }
-          },
-        }
-      );
-    },
-    [admitPatient, form, onSuccess]
+  const timeSlots = useMemo(() => 
+    selectedDate ? generateTimeSlots({ baseDate: selectedDate, includeLunch: false }) : [],
+    [selectedDate]
+  );
+  
+  const allTimesDisabled = useMemo(() => 
+    timeSlots.length > 0 && timeSlots.every(slot => occupiedTimes.has(slot.value)),
+    [timeSlots, occupiedTimes]
   );
 
-  // Reset al cerrar
-  const handleOpenChange = useCallback(
-    (v: boolean) => {
-      setOpen(v);
-      if (!v) {
+  const onSubmit = useCallback((values: FormData) => {
+    const [hours, minutes] = values.hora.split(':').map(Number);
+    const fechaIso = mxLocalPartsToUtcIso(formatMx(values.fecha, 'yyyy-MM-dd'), hours, minutes);
+
+    admitPatient({
+      ...values,
+      nombre: values.nombre.trim(),
+      apellidos: values.apellidos.trim(),
+      email: values.email || undefined,
+      fecha_hora_cita: fechaIso,
+      motivos_consulta: [values.diagnostico_principal],
+      creation_source: 'web_quick_admission',
+    }, {
+      onSuccess: () => {
+        toast.success('Paciente registrado y cita agendada.');
         form.reset();
-        setOccupiedTimes((prev) => (prev.size ? new Set() : prev));
-        setIsLoadingTimes(false);
-      }
-    },
-    [form]
-  );
-
-  const allDisabled = useMemo(
-    () => selectedDate && timeSlots.length > 0 && timeSlots.every((slot) => occupiedTimes.has(slot.value)),
-    [selectedDate, timeSlots, occupiedTimes]
-  );
+        setIsOpen(false);
+        onSuccess?.();
+      },
+      onError: (err) => handleAdmissionError(err as AppError, form.setError),
+    });
+  }, [admitPatient, form, onSuccess]);
+  
+  const handleOpenChange = useCallback((open: boolean) => {
+      setIsOpen(open);
+      if (!open) form.reset();
+  }, [form]);
+  
+  useEffect(() => {
+    if (isOpen) {
+        // Enfoca el primer campo al abrir el modal para una mejor experiencia de teclado.
+        requestAnimationFrame(() => nombreInputRef.current?.focus());
+    }
+  }, [isOpen]);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-
-      <DialogContent
-        className="w-[min(100vw-2rem,44rem)] sm:max-w-xl md:max-w-2xl max-h-[90vh] p-0 overflow-hidden"
-        onOpenAutoFocus={(e) => {
-          // Evita que Radix enfoque el primer foco auto y prioriza nuestro input
-          e.preventDefault();
-          nombreInputRef.current?.focus();
-        }}
-        data-testid="patient-modal"
-      >
-        <DialogHeader className="px-6 py-4 border-b bg-white dark:bg-zinc-900">
-          <DialogTitle className="flex items-center gap-3 text-base sm:text-lg">
-            <span className="p-2 bg-white dark:bg-zinc-800 rounded-lg shadow-sm">
-              <User2 className="h-5 w-5 text-sky-700 dark:text-sky-400" />
-            </span>
-            <span className="font-semibold">Registro rápido de paciente</span>
+      <DialogContent className="w-[min(100vw-2rem,44rem)] max-h-[90vh] p-0 flex flex-col">
+        <DialogHeader className="px-6 py-4 border-b">
+          <DialogTitle className="flex items-center gap-3 text-lg">
+            <User2 className="h-5 w-5 text-sky-600" />
+            Registro Rápido de Paciente
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(90vh-120px)]">
-          <div className="p-6">
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <fieldset className="space-y-4">
-                  <legend className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
-                    <User2 className="h-4 w-4" />
-                    Datos personales
-                  </legend>
+        <ScrollArea className="flex-1">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="p-6">
+              <fieldset disabled={isPending} className="space-y-8">
+                
+                <div className="space-y-4">
+                  <legend className="text-base font-semibold flex items-center gap-2"><User2 className="h-4 w-4" />Datos Personales</legend>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <TextField form={form} name="nombre" label="Nombre *" inputProps={givenNameProps} />
-                    <TextField form={form} name="apellidos" label="Apellidos *" inputProps={familyNameProps} />
+                    <TextField form={form} name="nombre" label="Nombre(s)" inputProps={{ ref: nombreInputRef }} />
+                    <TextField form={form} name="apellidos" label="Apellidos" />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <GenderSelectField form={form} name="genero" label="Género *" options={[ 'Masculino', 'Femenino' ]} />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:col-span-1">
-                      <PhoneField form={form} name="telefono" label="Teléfono *" inputProps={telProps} />
-                      <EmailField form={form} name="email" label="Email" inputProps={emailProps} />
-                    </div>
+                    <GenderSelectField form={form} name="genero" label="Género" options={['Masculino', 'Femenino']} />
+                    <PhoneField form={form} name="telefono" label="Teléfono" />
                   </div>
-                </fieldset>
-
-                <Separator />
-
-                <fieldset className="space-y-4">
-                  <legend className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
-                    <Stethoscope className="h-4 w-4" />
-                    Información médica
-                  </legend>
-                  <DiagnosisSelectField form={form} name="diagnostico_principal" label="Diagnóstico principal *" />
-                </fieldset>
-
-                <Separator />
-
-                <fieldset className="space-y-4">
-                  <legend className="text-sm font-semibold text-foreground flex items-center gap-2 mb-2">
-                    <CalendarIcon className="h-4 w-4" />
-                    Programar cita
-                  </legend>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <DatePickerField form={form} name="fecha" label="Fecha *" isValidDate={isValidDate} />
-                    <TimeSelectField
-                      form={form}
-                      name="hora"
-                      label="Hora *"
-                      timeSlots={timeSlots}
-                      occupiedTimes={occupiedTimes}
-                      disabled={!selectedDate || isLoadingTimes || !!allDisabled}
-                      description={
-                        !selectedDate
-                          ? 'Selecciona una fecha para ver horarios'
-                          : isLoadingTimes
-                          ? 'Cargando horarios…'
-                          : allDisabled
-                          ? 'No hay horarios disponibles'
-                          : 'Horarios de la clínica'
-                      }
-                      describedById={timeDescId}
-                    />
-                  </div>
-                  <p id={timeDescId} className="text-xs text-muted-foreground">
-                    {!selectedDate
-                      ? 'Primero selecciona una fecha válida'
-                      : isLoadingTimes
-                      ? 'Consultando disponibilidad para el día seleccionado'
-                      : allDisabled
-                      ? 'No hay horarios disponibles para esta fecha'
-                      : 'Selecciona un horario disponible'}
-                  </p>
-                </fieldset>
-
-                <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
-                    Cancelar
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={isPending}
-                    aria-busy={isPending}
-                    aria-live="polite"
-                    className="flex-1 bg-sky-700 hover:bg-sky-800 text-white"
-                  >
-                    {isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Registrando…
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Registrar paciente
-                      </>
-                    )}
-                  </Button>
+                   <EmailField form={form} name="email" label="Email (Opcional)" />
                 </div>
-              </form>
-            </Form>
-          </div>
+
+                <Separator />
+
+                <div className="space-y-4">
+                  <legend className="text-base font-semibold flex items-center gap-2"><Stethoscope className="h-4 w-4" />Información Médica</legend>
+                  <DiagnosisSelectField form={form} name="diagnostico_principal" label="Diagnóstico Principal" />
+                </div>
+
+                <Separator />
+                
+                <div className="space-y-4">
+                   <legend className="text-base font-semibold flex items-center gap-2"><CalendarIcon className="h-4 w-4" />Agendar Cita</legend>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <DatePickerField form={form} name="fecha" label="Fecha" isValidDate={isValidDate} />
+                      <TimeSelectField
+                        form={form}
+                        name="hora"
+                        label="Hora"
+                        timeSlots={timeSlots}
+                        occupiedTimes={occupiedTimes}
+                        disabled={!selectedDate || isLoadingTimes || allTimesDisabled}
+                        aria-describedby={timeDescriptionId}
+                      />
+                    </div>
+                    <p id={timeDescriptionId} className="text-xs text-muted-foreground mt-1">
+                      {!selectedDate ? 'Seleccione una fecha para ver horarios disponibles.' : 
+                       isLoadingTimes ? 'Buscando horarios...' :
+                       allTimesDisabled ? 'No hay horarios disponibles para este día.' :
+                       'Horario en zona horaria de la Ciudad de México.'}
+                    </p>
+                </div>
+              </fieldset>
+              
+              <div className="flex flex-col sm:flex-row gap-3 pt-8 mt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="w-full sm:w-auto flex-1">
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={isPending} className="w-full sm:w-auto flex-1 bg-sky-700 hover:bg-sky-800 text-white">
+                  {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                  {isPending ? 'Registrando...' : 'Confirmar Registro'}
+                </Button>
+              </div>
+            </form>
+          </Form>
         </ScrollArea>
       </DialogContent>
     </Dialog>
   );
-}
+});
+

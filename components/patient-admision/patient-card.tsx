@@ -46,8 +46,9 @@ import { AppointmentStatusEnum } from '@/lib/types';
 
 import type { AppointmentWithPatient, AdmissionAction, PatientCardProps } from './admision-types';
 import { getPatientFullName, getStatusConfig } from './admision-types';
-import { getAvailableActions as getAdmissionAvailableActions, suggestNextAction, canCheckIn, getTimeUntilActionAvailable } from '@/lib/admission-business-rules';
-import { useUpdateAppointmentStatus } from '@/hooks/use-appointments';
+import { getAvailableActions as getAdmissionAvailableActions, suggestNextAction, canCheckIn, getTimeUntilActionAvailable, BUSINESS_RULES } from '@/lib/admission-business-rules';
+import { useUpdateAppointmentStatus } from '@/hooks/core/use-appointments';
+import { useRescheduleAppointment } from '@/hooks/use-reschedule-appointment';
 
 // Tipos locales para estados derivados (mejoran legibilidad y chequeo estático)
 type InfoDialogKind = 'tooEarly' | 'expired' | 'info';
@@ -209,10 +210,12 @@ const PrimaryActionButton = memo(function PrimaryActionButton({
   action,
   onClick,
   isPending,
+  disabled,
 }: {
   action: Exclude<AdmissionAction, 'cancel' | 'noShow' | 'reschedule' | 'viewHistory'> | null;
   onClick: (a: AdmissionAction) => void;
   isPending: boolean;
+  disabled?: boolean;
 }) {
   if (!action) return null;
   const cfg = ACTION_CONFIG[action];
@@ -220,7 +223,7 @@ const PrimaryActionButton = memo(function PrimaryActionButton({
   return (
     <Button
       onClick={() => onClick(action)}
-      disabled={isPending}
+      disabled={isPending || disabled}
       className={cn('w-full gap-2 font-medium', cfg.className)}
       aria-label={cfg.label}
       title={cfg.title}
@@ -245,19 +248,26 @@ const PrimaryActionButton = memo(function PrimaryActionButton({
 // Componente principal
 function PatientCard({ appointment, onAction, disableActions = false, className, open: controlledOpen, onOpenChange }: PatientCardProps) {
   const { mutateAsync: updateStatus, isPending } = useUpdateAppointmentStatus();
+  const { mutate: reschedule, isPending: isRescheduling } = useRescheduleAppointment();
 
   const [confirmDialog, setConfirmDialog] = useState<AdmissionAction | null>(null);
   const [showReschedule, setShowReschedule] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [infoDialog, setInfoDialog] = useState<null | { kind: InfoDialogKind; message?: string }>(null);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  // Ticker para recalcular ventanas de check-in sin recargar
+  // Ticker para recalcular ventanas de check-in sin recargar - solo cuando es necesario
   const [clockTick, setClockTick] = useState(0);
 
   useEffect(() => {
+    // Solo activar el ticker si la cita está en estado que requiere actualización de tiempo
+    const needsTicker = appointment.estado_cita === AppointmentStatusEnum.PROGRAMADA || 
+                       appointment.estado_cita === AppointmentStatusEnum.CONFIRMADA;
+    
+    if (!needsTicker) return;
+    
     const id = setInterval(() => setClockTick((t) => t + 1), 30_000); // cada 30s
     return () => clearInterval(id);
-  }, []);
+  }, [appointment.estado_cita]);
 
   const open = controlledOpen ?? uncontrolledOpen;
   const setOpen = onOpenChange ?? setUncontrolledOpen;
@@ -274,13 +284,15 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
       const now = mxNow();
       const isToday = isMxToday(appointment.fecha_hora_cita);
       const isPast = date < now;
+      const timeDiff = date.getTime() - now.getTime();
+      
       return {
         date: formatMx(appointment.fecha_hora_cita, 'EEE d MMM'),
         time: formatMx(appointment.fecha_hora_cita, 'HH:mm'),
         fullDate: formatMx(appointment.fecha_hora_cita, "EEEE d 'de' MMMM"),
         isToday,
         isPast,
-        isNear: !isPast && date.getTime() - now.getTime() < 3_600_000, // < 60 min
+        isNear: !isPast && timeDiff > 0 && timeDiff < 3_600_000, // < 60 min
       };
     } catch {
       return null;
@@ -295,8 +307,9 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
   }, [dateTime]);
 
   const dxLabel = useMemo(() => {
-    if (!open) return '';
-    return prettifyEnumLabel(String(patient?.diagnostico_principal || ''));
+    if (!patient?.diagnostico_principal) return '';
+    if (!open) return ''; // Lazy compute solo cuando está abierto
+    return prettifyEnumLabel(String(patient.diagnostico_principal));
   }, [open, patient?.diagnostico_principal]);
 
   const initials = useMemo(() => {
@@ -309,8 +322,8 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
     try {
       const appt = parseISO(appointment.fecha_hora_cita);
       if (!isValid(appt)) return null;
-      const start = addMinutes(appt, -30);
-      const end = addMinutes(appt, 15);
+      const start = addMinutes(appt, -BUSINESS_RULES.CHECK_IN_WINDOW_BEFORE_MINUTES);
+      const end = addMinutes(appt, BUSINESS_RULES.CHECK_IN_WINDOW_AFTER_MINUTES);
       return { start, end, appt };
     } catch {
       return null;
@@ -318,62 +331,60 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
   }, [appointment.fecha_hora_cita]);
 
   const availableActions = useMemo(() => {
+    // Preferir las acciones calculadas por el backend si están presentes
+    if (appointment.actions?.available && Array.isArray(appointment.actions.available)) {
+      return appointment.actions.available as AdmissionAction[];
+    }
+
+    // Fallback a cálculo local usando reglas centralizadas (sin duplicar lógica ad-hoc)
     const now = mxNow();
     const list = getAdmissionAvailableActions(appointment, now);
-    
-    // Filtrar acciones válidas según reglas centralizadas
-    const validActions = list
-      .filter((a) => a.valid)
-      .map((a) => a.action as AdmissionAction);
-    
-    // Para UX: incluir checkIn si está en ventana aunque no sea válido aún
-    // (se validará al hacer click y mostrará mensaje apropiado)
-    const st = appointment.estado_cita;
-    const hasCheckIn = validActions.includes('checkIn');
-    const canShowCheckIn = (st === AppointmentStatusEnum.PROGRAMADA || st === AppointmentStatusEnum.CONFIRMADA);
-    
-    if (!hasCheckIn && canShowCheckIn && checkInWindow) {
-      const timeInfo = getTimeUntilActionAvailable(appointment, 'checkIn', now);
-      // Solo mostrar si está en ventana futura o actual (no expirada)
-      if (timeInfo.minutesUntil !== undefined && timeInfo.minutesUntil > -15) {
-        validActions.push('checkIn');
-      }
-    }
-    
+    const validActions = list.filter((a) => a.valid).map((a) => a.action as AdmissionAction);
     return validActions;
-  }, [appointment, checkInWindow, clockTick]);
+  }, [appointment, clockTick]);
 
   const primaryAction = useMemo<AdmissionAction | null>(() => {
-    const now = mxNow();
-    
-    // Usar la función centralizada para sugerir la acción principal
-    const suggested = suggestNextAction(appointment, now) as AdmissionAction | null;
-    
-    // Para UX: priorizar checkIn si está disponible en las acciones
-    if (availableActions.includes('checkIn')) {
-      return 'checkIn';
+    // 1) Preferir sugerencia del backend si existe
+    if (typeof appointment.suggested_action !== 'undefined') {
+      return appointment.suggested_action as AdmissionAction | null;
     }
-    
+    if (appointment.actions?.primary) {
+      return appointment.actions.primary as AdmissionAction;
+    }
+
+    // 2) Fallback a sugerencia local con reglas centralizadas
+    const now = mxNow();
+    const suggested = suggestNextAction(appointment, now) as AdmissionAction | null;
     return suggested;
-  }, [appointment, availableActions, clockTick]);
+  }, [appointment, clockTick]);
+
+  const isPrimaryDisabled = useMemo(() => {
+    if (!primaryAction) return false;
+    if (primaryAction === 'checkIn' && appointment.actions) {
+      return !appointment.actions.canCheckIn;
+    }
+    return false;
+  }, [primaryAction, appointment.actions]);
 
   const secondaryActions = useMemo(() => availableActions.filter((a) => a !== primaryAction), [availableActions, primaryAction]);
 
   const contentId = useMemo(() => `patient-card-content-${appointment.id}`, [appointment.id]);
 
   const prettyMotivos = useMemo(() => {
-    if (!open) return [] as string[];
+    if (!open || !appointment.motivos_consulta?.length) return [];
+    
     const base = new Set<string>();
-    const dxNorm = (dxLabel || '').toLowerCase().replace(/\s+/g, '');
-    const items = (appointment.motivos_consulta || [])
-      .map((m) => prettifyEnumLabel(String(m)) || '')
-      .filter(Boolean);
+    const dxNorm = dxLabel.toLowerCase().replace(/\s+/g, '');
     const dedup: string[] = [];
-    for (const item of items) {
-      const norm = item.toLowerCase().replace(/\s+/g, '');
+    
+    for (const motivo of appointment.motivos_consulta) {
+      const pretty = prettifyEnumLabel(String(motivo));
+      if (!pretty) continue;
+      
+      const norm = pretty.toLowerCase().replace(/\s+/g, '');
       if (norm && norm !== dxNorm && !base.has(norm)) {
         base.add(norm);
-        dedup.push(item);
+        dedup.push(pretty);
       }
     }
     return dedup;
@@ -392,22 +403,32 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
       }
       if (action === 'checkIn') {
         const now = mxNow();
+        // Si el backend ya indicó que no se puede hacer check-in, mostrar motivo sin recalcular
+        if (appointment.actions && !appointment.actions.canCheckIn) {
+          const msg = appointment.action_reasons?.checkIn || 'Acción no disponible por reglas de negocio.';
+          // Inferir tipo de info si es posible con mensaje conocido
+          const lower = msg.toLowerCase();
+          if (lower.includes('expirad')) {
+            setInfoDialog({ kind: 'expired', message: msg });
+          } else if (lower.includes('disponible en')) {
+            setInfoDialog({ kind: 'tooEarly', message: msg });
+          } else {
+            setInfoDialog({ kind: 'info', message: msg });
+          }
+          return;
+        }
+
+        // Fallback a validación local con reglas centralizadas (misma fuente que backend)
         const result = canCheckIn(appointment, now);
-        
         if (result.valid) {
           setConfirmDialog('checkIn');
         } else {
-          // Usar información centralizada para determinar el tipo de mensaje
           const timeInfo = getTimeUntilActionAvailable(appointment, 'checkIn', now);
-          
           if (timeInfo.minutesUntil !== undefined && timeInfo.minutesUntil > 0) {
-            // Ventana aún no abierta
             setInfoDialog({ kind: 'tooEarly', message: timeInfo.message || result.reason });
           } else if (result.reason && /expirad/i.test(result.reason)) {
-            // Ventana expirada
             setInfoDialog({ kind: 'expired', message: result.reason });
           } else {
-            // Otro motivo (horario laboral, etc.)
             setInfoDialog({ kind: 'info', message: result.reason || 'Acción no disponible por reglas de negocio.' });
           }
         }
@@ -417,6 +438,8 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
     },
     [appointment]
   );
+
+  const isBusy = isPending || isRescheduling;
 
   const handleConfirm = useCallback(async () => {
     if (!confirmDialog) return;
@@ -444,21 +467,24 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
       const [hh, mm] = time.split(':').map(Number);
       const yyyyMmDd = formatMx(date, 'yyyy-MM-dd');
       const newIso = mxLocalPartsToUtcIso(yyyyMmDd, hh, mm);
-      await updateStatus({
-        appointmentId: appointment.id,
-        newStatus: AppointmentStatusEnum.REAGENDADA,
-        nuevaFechaHora: newIso,
-        motivo: 'Reagendamiento de cita',
-      });
-      await updateStatus({
-        appointmentId: appointment.id,
-        newStatus: AppointmentStatusEnum.PROGRAMADA,
-        motivo: 'Cita reagendada confirmada en nueva fecha',
-      });
-      setShowReschedule(false);
-      onAction?.('reschedule', appointment.id);
+
+      reschedule(
+        {
+          appointmentId: appointment.id,
+          newFechaHora: newIso,
+          expectedUpdatedAt: appointment.updated_at ?? undefined,
+          doctorId: (appointment as any).doctor_id ?? null,
+          notasBreves: 'Reagendamiento de cita',
+        },
+        {
+          onSuccess: () => {
+            setShowReschedule(false);
+            onAction?.('reschedule', appointment.id);
+          },
+        }
+      );
     },
-    [appointment.id, updateStatus, onAction]
+    [appointment, reschedule, onAction]
   );
 
   if (!dateTime) return null;
@@ -521,7 +547,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
                   {dateTime.time}
                 </span>
                 {!disableActions && (
-                  <SecondaryActionsMenu actions={secondaryActions} onAction={handleAction} disabled={isPending} />
+                  <SecondaryActionsMenu actions={secondaryActions} onAction={handleAction} disabled={isBusy} />
                 )}
               </div>
             </div>
@@ -579,7 +605,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
                 {/* Derecha: acción principal */}
                 <div className="md:col-span-2">
                   {!disableActions && (
-                    <PrimaryActionButton action={primaryAction as any} onClick={handleAction} isPending={isPending} />
+                    <PrimaryActionButton action={primaryAction as any} onClick={handleAction} isPending={isBusy} disabled={isPrimaryDisabled} />
                   )}
                 </div>
               </div>
@@ -606,19 +632,19 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isBusy}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
                 void handleConfirm();
               }}
-              disabled={isPending}
+              disabled={isBusy}
               className={cn(
                 confirmDialog && ACTION_CONFIG[confirmDialog].variant === 'destructive' &&
                   'bg-destructive text-destructive-foreground hover:bg-destructive/90'
               )}
             >
-              {isPending ? (
+              {isBusy ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Procesando...

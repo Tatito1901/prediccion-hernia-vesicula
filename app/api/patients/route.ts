@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/utils/supabase/server';
-import { createAdminClient } from '@/utils/supabase/admin';
 import { PatientStatusEnum, PatientStatus } from '@/lib/types';
 import { createApiResponse, createApiError } from '@/lib/api-response-types';
 
@@ -23,9 +22,7 @@ function isPatientStatus(value: string): value is PatientStatus {
 // --- GET: OBTENER LISTA PAGINADA DE PACIENTES CON BÚSQUEDA Y ESTADÍSTICAS ---
 export async function GET(request: Request) {
   try {
-    const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY
-      ? createAdminClient()
-      : await createServerClient();
+    const supabase = await createServerClient();
     // Debug: confirm which client path is used and env presence
     const { searchParams } = new URL(request.url);
 
@@ -40,14 +37,14 @@ export async function GET(request: Request) {
 
     // Debug flag y metadatos de diagnóstico
     const debug = process.env.NODE_ENV === 'development';
-    const usingAdmin = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const usingAdmin = false;
     const envMeta = {
       hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
       hasAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
       hasService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     };
     const meta = {
-      usedClient: usingAdmin ? 'admin' : 'server',
+      usedClient: 'server' as const,
       ...envMeta,
       params: { estado, search: searchTerm, startDate, endDate, page, pageSize },
     };
@@ -260,9 +257,7 @@ export async function GET(request: Request) {
 // --- POST: CREAR NUEVO PACIENTE ---
 export async function POST(request: Request) {
   try {
-    const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY
-      ? createAdminClient()
-      : await createServerClient();
+    const supabase = await createServerClient();
     const body = await request.json();
     const enforceBirthdate = process.env.ENFORCE_PATIENT_BIRTHDATE === 'true';
 

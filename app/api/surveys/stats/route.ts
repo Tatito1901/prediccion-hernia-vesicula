@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jsonError } from '@/lib/errors';
 import { createClient } from '@/utils/supabase/server';
-import { createAdminClient } from '@/utils/supabase/admin';
 import { clinicYmd, clinicStartOfDayUtc, addClinicDaysAsUtcStart, clinicDateKey } from '@/lib/timezone';
 
 // Cache similar al dashboard
@@ -98,7 +97,7 @@ export async function GET(request: NextRequest) {
     const start = clinicStartOfDayUtc(startYmd);
     const endExclusive = addClinicDaysAsUtcStart(endYmd, 1);
 
-    const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : await createClient();
+    const supabase = await createClient();
 
     // Seleccionar solo columnas necesarias
     const { data, error } = await supabase
@@ -109,7 +108,6 @@ export async function GET(request: NextRequest) {
         intensidad_dolor_actual,
         diagnostico_previo,
         motivo_visita,
-        como_nos_conocio,
         seguro_medico,
         tiempo_toma_decision,
         aspectos_mas_importantes,
@@ -118,10 +116,10 @@ export async function GET(request: NextRequest) {
         ubicacion_origen,
         alcaldia_cdmx,
         municipio_edomex,
-        edad,
         desde_cuando_sintoma,
         plazo_resolucion_ideal,
-        estudios_medicos_previos
+        estudios_medicos_previos,
+        patients ( edad )
       `)
       .gte('completed_at', start.toISOString())
       .lt('completed_at', endExclusive.toISOString());
@@ -155,7 +153,7 @@ export async function GET(request: NextRequest) {
     const sintomasTop = countFromStringArrays(rows.map((r: any) => r.sintomas_adicionales));
 
     const painHistogram = bucketPainIntensity(painValues);
-    const ageHistogram = bucketAges(rows.map((r: any) => r.edad as number | null));
+    const ageHistogram = bucketAges(rows.map((r: any) => r.patients?.edad as number | null));
 
     // Series temporales por fecha de completado
     const seriesMap = new Map<string, { responses: number; avg_pain_sum: number; avg_pain_n: number }>();

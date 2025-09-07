@@ -19,12 +19,12 @@ import { es } from "date-fns/locale"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useCreateAppointment } from "@/hooks/use-appointments"
+import { useCreateAppointment } from "@/hooks/core/use-appointments"
 import { EnrichedPatient, AppointmentStatusEnum } from "@/lib/types"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { generateTimeSlots } from "@/lib/clinic-schedule"
-import { useClinic } from "@/contexts/clinic-data-provider"
+import { useClinicAppointments } from "@/hooks/core/use-clinic-data-simplified"
 
 // 🎨 Configuración de tema
 const THEME = {
@@ -74,7 +74,7 @@ const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({
   onClose 
 }: ScheduleAppointmentDialogProps) {
   const { mutateAsync: addAppointment, isPending } = useCreateAppointment()
-  const { fetchSpecificAppointments } = useClinic()
+  const { appointments, refetch } = useClinicAppointments()
   
   // Estado inicial optimizado
   const initialDate = useMemo(() => {
@@ -105,38 +105,25 @@ const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({
       return
     }
 
-    const controller = new AbortController()
-    const load = async () => {
-      const dateStr = format(formData.fechaConsulta, "yyyy-MM-dd")
-      try {
-        const res = await fetchSpecificAppointments({
-          dateFilter: 'range',
-          startDate: dateStr,
-          endDate: dateStr,
-          pageSize: 100,
-          signal: controller.signal,
-        })
-        const blocking = [
-          AppointmentStatusEnum.PROGRAMADA,
-          AppointmentStatusEnum.CONFIRMADA,
-          AppointmentStatusEnum.PRESENTE,
-        ]
-        const occ = new Set<string>()
-        res.data?.forEach((apt: any) => {
-          if (blocking.includes(apt.estado_cita)) {
-            const tt = format(new Date(apt.fecha_hora_cita), 'HH:mm')
-            occ.add(tt)
-          }
-        })
-        setOccupiedTimes(occ)
-      } catch (err) {
-        const aborted = controller.signal.aborted || (err instanceof Error && err.name === 'AbortError')
-        if (!aborted) console.error('Error loading appointments:', err)
+    // Por ahora usar datos locales, ya que el filtrado por fecha se hace en el cliente
+    const blocking = [
+      AppointmentStatusEnum.PROGRAMADA,
+      AppointmentStatusEnum.CONFIRMADA,
+      AppointmentStatusEnum.PRESENTE,
+    ]
+    const occ = new Set<string>()
+    const dateStr = format(formData.fechaConsulta, "yyyy-MM-dd")
+    
+    // Filtrar citas del día seleccionado
+    appointments.all?.forEach((apt: any) => {
+      const aptDate = format(new Date(apt.fecha_hora_cita), "yyyy-MM-dd")
+      if (aptDate === dateStr && blocking.includes(apt.estado_cita)) {
+        const tt = format(new Date(apt.fecha_hora_cita), 'HH:mm')
+        occ.add(tt)
       }
-    }
-    load()
-    return () => { try { controller.abort() } catch {} }
-  }, [formData.fechaConsulta, fetchSpecificAppointments])
+    })
+    setOccupiedTimes(occ)
+  }, [formData.fechaConsulta, appointments])
 
   // Agrupar visualmente por mañana/tarde
   const morningSlots = useMemo(() => timeSlots.filter(s => Number(s.value.split(':')[0]) < 12), [timeSlots])

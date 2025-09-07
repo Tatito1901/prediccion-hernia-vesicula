@@ -4,6 +4,62 @@
 
 El estado debe tener una única fuente de verdad. No duplicar datos del servidor en estado local.
 
+## 🛡️ Backend Autoritativo para Reglas de Negocio
+
+Para evitar divergencias y duplicación de reglas, el backend es la única autoridad en decisiones de negocio. Las respuestas de la API de citas vienen enriquecidas con flags de acción calculados desde `lib/admission-business-rules.ts`.
+
+### Contrato de API (Appointments)
+
+Cada cita puede incluir, además de los campos de BD, los siguientes campos opcionales:
+
+- `actions`: objeto con flags y lista de acciones disponibles
+  - `canCheckIn`, `canComplete`, `canCancel`, `canNoShow`, `canReschedule`
+  - `available: AdmissionAction[]` — lista de acciones válidas
+  - `primary?: AdmissionAction | null` — sugerencia de acción primaria
+- `action_reasons`: `{ [action]: string }` con motivo cuando una acción no está disponible
+- `suggested_action`: acción primaria sugerida (igual a `actions.primary`)
+
+Endpoints que garantizan el enriquecimiento:
+
+- `GET /api/appointments` — listado paginado
+- `POST /api/appointments` — cita creada
+- `GET /api/appointments/:id` — detalle de una cita
+- `PATCH /api/appointments/:id` — actualización parcial
+- `PATCH /api/appointments/:id/status` — cambio de estado
+
+### Consumo en el Frontend
+
+- Siempre preferir `appointment.actions` y `appointment.suggested_action` si existen.
+- Solo hacer fallback a `lib/admission-business-rules.ts` en el cliente cuando falten estos campos (p. ej., caché antiguo o endpoint legacy).
+- No reimplementar ventanas/validaciones ad-hoc en la UI.
+
+Ejemplo (simplificado):
+
+```tsx
+// components/patient-admision/patient-card.tsx
+const availableActions = useMemo(() => {
+  if (appointment.actions?.available) return appointment.actions.available;
+  const list = getAvailableActions(appointment, mxNow());
+  return list.filter(a => a.valid).map(a => a.action);
+}, [appointment]);
+
+const primaryAction = appointment.suggested_action
+  ?? appointment.actions?.primary
+  ?? suggestNextAction(appointment, mxNow());
+
+// Al hacer click en Check-in
+if (appointment.actions && !appointment.actions.canCheckIn) {
+  const reason = appointment.action_reasons?.checkIn || 'Acción no disponible';
+  showInfo(reason);
+  return;
+}
+```
+
+### Migración y Limpieza
+
+- `lib/validation/enums.ts` está deprecado y debe eliminarse tras confirmar que no hay imports restantes.
+- Cualquier lógica de UI que duplique reglas (ventanas, horarios, etc.) debe reemplazarse por el consumo del contrato anterior.
+
 ## 📊 Arquitectura de Estado
 
 ### 1. Estado del Servidor (Server State)

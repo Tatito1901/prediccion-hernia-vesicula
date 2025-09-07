@@ -137,6 +137,7 @@ begin
       doctor_id = coalesce(p_doctor_id, a.doctor_id),
       fecha_hora_cita = coalesce(p_fecha_hora_cita, a.fecha_hora_cita),
       motivos_consulta = coalesce(p_motivos_consulta, a.motivos_consulta),
+      estado_cita = coalesce(p_estado_cita, a.estado_cita),
       notas_breves = coalesce(p_notas_breves, a.notas_breves),
       es_primera_vez = coalesce(p_es_primera_vez, a.es_primera_vez),
       updated_at = now()
