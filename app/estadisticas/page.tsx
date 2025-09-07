@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, memo, useCallback } from 'react';
 import { useClinicData, useClinicAnalytics } from '@/hooks/core/use-clinic-data-simplified';
 import { useStatistics, useSurveyAnalytics } from '@/hooks/core/use-analytics-unified';
 import { Users, Calendar, CalendarCheck, CalendarClock, TrendingUp, Activity, ChartBar, PieChart, AlertCircle } from 'lucide-react';
@@ -20,7 +20,7 @@ const INITIAL_FILTERS: Filters = {
   dateRange: 'month'
 };
 
-const EstadisticasContent = () => {
+const EstadisticasContent = memo(() => {
   // Usar los nuevos hooks unificados
   const clinicData = useClinicData();
   const { analytics, chartData } = useClinicAnalytics({ 
@@ -39,6 +39,15 @@ const EstadisticasContent = () => {
 
   const [filters, setFilters] = useState<Filters>(INITIAL_FILTERS);
   const [activeSection, setActiveSection] = useState<'overview' | 'appointments' | 'surveys'>('overview');
+  
+  // Callbacks optimizados
+  const handleSectionChange = useCallback((section: 'overview' | 'appointments' | 'surveys') => {
+    setActiveSection(section);
+  }, []);
+  
+  const handleFilterChange = useCallback((newFilters: Partial<Filters>) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
+  }, []);
 
   // Seleccionar datos de gráfico basados en el filtro actual
   const currentChartData = useMemo(() => {
@@ -255,7 +264,7 @@ const EstadisticasContent = () => {
         <div className="border-b">
           <nav className="flex space-x-8">
             <button
-              onClick={() => setActiveSection('overview')}
+              onClick={() => handleSectionChange('overview')}
               className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeSection === 'overview'
                   ? 'border-primary text-primary'
@@ -265,7 +274,7 @@ const EstadisticasContent = () => {
               Vista General
             </button>
             <button
-              onClick={() => setActiveSection('appointments')}
+              onClick={() => handleSectionChange('appointments')}
               className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeSection === 'appointments'
                   ? 'border-primary text-primary'
@@ -275,7 +284,7 @@ const EstadisticasContent = () => {
               Análisis de Citas
             </button>
             <button
-              onClick={() => setActiveSection('surveys')}
+              onClick={() => handleSectionChange('surveys')}
               className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeSection === 'surveys'
                   ? 'border-primary text-primary'
@@ -440,7 +449,7 @@ const EstadisticasContent = () => {
               <select 
                 className="px-3 py-2 border rounded-md text-sm"
                 value={filters.dateRange}
-                onChange={(e) => setFilters({...filters, dateRange: e.target.value as any})}
+                onChange={(e) => handleFilterChange({ dateRange: e.target.value as any })}
               >
                 <option value="week">Última semana</option>
                 <option value="month">Último mes</option>
@@ -668,10 +677,14 @@ const EstadisticasContent = () => {
       )}
     </div>
   );
-};
+});
 
-const EstadisticasPage = () => {
+EstadisticasContent.displayName = 'EstadisticasContent';
+
+const EstadisticasPage = memo(() => {
   return <EstadisticasContent />;
-};
+});
+
+EstadisticasPage.displayName = 'EstadisticasPage';
 
 export default EstadisticasPage;

@@ -1,4 +1,4 @@
-import React, { useState, memo, useCallback } from 'react';
+import React, { useState, memo, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { 
   Stethoscope, 
@@ -253,11 +253,11 @@ const ProcedureChart = dynamic(() => import('../charts/procedure-chart'), {
   ),
 });
 
-// Componente principal
-export default function DashboardEnhanced() {
+// Componente principal optimizado con memoización
+function DashboardEnhanced() {
   const [period, setPeriod] = useState<Period>('30d');
   const { data, isLoading, error, refetch } = useDashboardMetrics(period);
-  const metrics = (data ?? defaultMetrics) as Metrics;
+  const metrics = useMemo(() => (data ?? defaultMetrics) as Metrics, [data]);
 
   const getTrend = useCallback((value: number): Trend => {
     if (value > 2) return 'up';

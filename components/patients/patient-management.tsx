@@ -244,7 +244,12 @@ EmptyStateComponent.displayName = "EmptyStateComponent"
  * filtros, paginación y acciones de actualización.
  */
 function usePatientData() {
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<{
+    search: string;
+    status: string;
+    page: number;
+    pageSize: number;
+  }>({
     search: '',
     status: 'all',
     page: 1,
@@ -289,6 +294,7 @@ function usePatientData() {
 
   // Usar un ref para manejar el debounce sin duplicar estado
   const searchTimeoutRef = useRef<NodeJS.Timeout>()
+  const [searchInput, setSearchInput] = useState("") // Estado local para input inmediato
 
   // React Query maneja el fetch inicial automáticamente vía contexto
 
@@ -329,6 +335,7 @@ function usePatientData() {
 
   const handleSearchChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
+    setSearchInput(newValue) // Actualizar input inmediatamente para UX
     
     // Clear existing timeout
     if (searchTimeoutRef.current) {
@@ -348,6 +355,7 @@ function usePatientData() {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current)
     }
+    setSearchInput("") // Limpiar input inmediatamente
     startTransition(() => {
       setPatientsSearch("")
     })
@@ -380,7 +388,7 @@ function usePatientData() {
     patientsError,
     patientStatsData,
     statusStats,
-    searchTerm: patientsFilters.search,
+    searchTerm: searchInput, // Usar searchInput para UI responsiva
     handlePageChange,
     handleStatusFilterChange,
     handleClearFilters,
