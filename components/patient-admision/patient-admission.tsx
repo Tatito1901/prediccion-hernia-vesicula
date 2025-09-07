@@ -157,26 +157,26 @@ const AdmissionHeader = memo(function AdmissionHeader({
 }) {
   // El contenido de este componente es estático y bien memoizado, no requiere cambios.
   return (
-    <div className="space-y-6 mb-8">
-       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
+       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
-            <span className="p-2 bg-sky-100 dark:bg-sky-900/30 rounded-lg">
-              <Stethoscope className="h-6 w-6 text-sky-600 dark:text-sky-400" />
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 sm:gap-3">
+            <span className="p-1.5 sm:p-2 bg-sky-100 dark:bg-sky-900/30 rounded-lg">
+              <Stethoscope className="h-5 w-5 sm:h-6 sm:w-6 text-sky-600 dark:text-sky-400" />
             </span>
-            Admisión de Pacientes
+            <span className="truncate">Admisión de Pacientes</span>
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">Clínica Hernia y Vesícula - Dr. Luis Ángel Medina</p>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1 truncate">Clínica Hernia y Vesícula - Dr. Luis Ángel Medina</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <PatientModal
             trigger={
               <Button
-                className="gap-2 bg-sky-600 hover:bg-sky-700 text-white shadow-md"
+                className="gap-1.5 sm:gap-2 bg-sky-600 hover:bg-sky-700 text-white shadow-md text-sm sm:text-base"
                 aria-label="Crear nuevo paciente"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <span className="hidden sm:inline">Nuevo Paciente</span>
                 <span className="sm:hidden">Nuevo</span>
               </Button>
@@ -197,39 +197,39 @@ const AdmissionHeader = memo(function AdmissionHeader({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
         <Card className="border-0 shadow-sm bg-gradient-to-br from-sky-50 to-sky-100/50 dark:from-sky-950/30 dark:to-sky-900/20">
-          <CardHeader className="pb-3">
+          <CardHeader className="p-3 sm:p-4 lg:p-6 pb-2 sm:pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardDescription className="text-sky-700 dark:text-sky-300">Citas Hoy</CardDescription>
-                <CardTitle className="text-2xl text-sky-900 dark:text-sky-100">{stats.today}</CardTitle>
+                <CardDescription className="text-[10px] sm:text-xs lg:text-sm text-sky-700 dark:text-sky-300">Citas Hoy</CardDescription>
+                <CardTitle className="text-lg sm:text-xl lg:text-2xl text-sky-900 dark:text-sky-100">{stats.today}</CardTitle>
               </div>
-              <Calendar className="h-8 w-8 text-sky-500/30" />
+              <Calendar className="h-5 w-5 sm:h-6 sm:w-6 lg:h-8 lg:w-8 text-sky-500/30" />
             </div>
           </CardHeader>
         </Card>
 
         <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20">
-          <CardHeader className="pb-3">
+          <CardHeader className="p-3 sm:p-4 lg:p-6 pb-2 sm:pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardDescription className="text-amber-700 dark:text-amber-300">Pendientes</CardDescription>
-                <CardTitle className="text-2xl text-amber-900 dark:text-amber-100">{stats.pending}</CardTitle>
+                <CardDescription className="text-[10px] sm:text-xs lg:text-sm text-amber-700 dark:text-amber-300">Pendientes</CardDescription>
+                <CardTitle className="text-lg sm:text-xl lg:text-2xl text-amber-900 dark:text-amber-100">{stats.pending}</CardTitle>
               </div>
-              <Clock className="h-8 w-8 text-amber-500/30" />
+              <Clock className="h-5 w-5 sm:h-6 sm:w-6 lg:h-8 lg:w-8 text-amber-500/30" />
             </div>
           </CardHeader>
         </Card>
 
         <Card className="border-0 shadow-sm bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20">
-          <CardHeader className="pb-3">
+          <CardHeader className="p-3 sm:p-4 lg:p-6 pb-2 sm:pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardDescription className="text-emerald-700 dark:text-emerald-300">Completadas</CardDescription>
-                <CardTitle className="text-2xl text-emerald-900 dark:text-emerald-100">{stats.completed}</CardTitle>
+                <CardDescription className="text-[10px] sm:text-xs lg:text-sm text-emerald-700 dark:text-emerald-300">Completadas</CardDescription>
+                <CardTitle className="text-lg sm:text-xl lg:text-2xl text-emerald-900 dark:text-emerald-100">{stats.completed}</CardTitle>
               </div>
-              <CalendarCheck className="h-8 w-8 text-emerald-500/30" />
+              <CalendarCheck className="h-5 w-5 sm:h-6 sm:w-6 lg:h-8 lg:w-8 text-emerald-500/30" />
             </div>
           </CardHeader>
         </Card>

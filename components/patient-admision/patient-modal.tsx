@@ -222,26 +222,29 @@ export const PatientModal = memo(({ trigger, onSuccess }: PatientModalProps) => 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="w-[min(100vw-2rem,44rem)] max-h-[90vh] p-0 flex flex-col">
-        <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle className="flex items-center gap-3 text-lg">
-            <User2 className="h-5 w-5 text-sky-600" />
-            Registro Rápido de Paciente
+      <DialogContent className="w-[calc(100vw-2rem)] sm:w-[min(90vw,44rem)] max-h-[85vh] sm:max-h-[90vh] p-0 flex flex-col">
+        <DialogHeader className="px-4 sm:px-6 py-3 sm:py-4 border-b">
+          <DialogTitle className="flex items-center gap-2 sm:gap-3 text-base sm:text-lg">
+            <User2 className="h-4 w-4 sm:h-5 sm:w-5 text-sky-600" />
+            <span className="truncate">Registro Rápido de Paciente</span>
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 overflow-x-hidden">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="p-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="p-4 sm:p-6">
               <fieldset disabled={isPending} className="space-y-8">
                 
-                <div className="space-y-4">
-                  <legend className="text-base font-semibold flex items-center gap-2"><User2 className="h-4 w-4" />Datos Personales</legend>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-3 sm:space-y-4">
+                  <legend className="text-sm sm:text-base font-semibold flex items-center gap-2">
+                    <User2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <span>Datos Personales</span>
+                  </legend>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <TextField form={form} name="nombre" label="Nombre(s)" inputProps={{ ref: nombreInputRef }} />
                     <TextField form={form} name="apellidos" label="Apellidos" />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <GenderSelectField form={form} name="genero" label="Género" options={['Masculino', 'Femenino']} />
                     <PhoneField form={form} name="telefono" label="Teléfono" />
                   </div>
@@ -250,16 +253,22 @@ export const PatientModal = memo(({ trigger, onSuccess }: PatientModalProps) => 
 
                 <Separator />
 
-                <div className="space-y-4">
-                  <legend className="text-base font-semibold flex items-center gap-2"><Stethoscope className="h-4 w-4" />Información Médica</legend>
+                <div className="space-y-3 sm:space-y-4">
+                  <legend className="text-sm sm:text-base font-semibold flex items-center gap-2">
+                    <Stethoscope className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <span>Información Médica</span>
+                  </legend>
                   <DiagnosisSelectField form={form} name="diagnostico_principal" label="Diagnóstico Principal" />
                 </div>
 
                 <Separator />
                 
-                <div className="space-y-4">
-                   <legend className="text-base font-semibold flex items-center gap-2"><CalendarIcon className="h-4 w-4" />Agendar Cita</legend>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-3 sm:space-y-4">
+                   <legend className="text-sm sm:text-base font-semibold flex items-center gap-2">
+                     <CalendarIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                     <span>Agendar Cita</span>
+                   </legend>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <DatePickerField form={form} name="fecha" label="Fecha" isValidDate={isValidDate} />
                       <TimeSelectField
                         form={form}
@@ -280,13 +289,13 @@ export const PatientModal = memo(({ trigger, onSuccess }: PatientModalProps) => 
                 </div>
               </fieldset>
               
-              <div className="flex flex-col sm:flex-row gap-3 pt-8 mt-4 border-t">
-                <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="w-full sm:w-auto flex-1">
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-6 sm:pt-8 mt-3 sm:mt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="w-full sm:w-auto sm:flex-1">
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={isPending} className="w-full sm:w-auto flex-1 bg-sky-700 hover:bg-sky-800 text-white">
-                  {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                  {isPending ? 'Registrando...' : 'Confirmar Registro'}
+                <Button type="submit" disabled={isPending} className="w-full sm:w-auto sm:flex-1 bg-sky-700 hover:bg-sky-800 text-white">
+                  {isPending ? <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                  <span className="text-sm sm:text-base">{isPending ? 'Registrando...' : 'Confirmar'}</span>
                 </Button>
               </div>
             </form>

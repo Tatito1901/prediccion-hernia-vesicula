@@ -86,12 +86,12 @@ interface NavItem {
 /* Clinic Header Component                                                     */
 /* ──────────────────────────────────────────────────────────────────────────── */
 const ClinicHeader = ({ isCollapsed, isMobile, onNavigate }: ClinicHeaderProps) => (
-  <div className="space-y-6">
+  <div className="space-y-4 sm:space-y-6">
     <Link
       href="/dashboard"
       onClick={onNavigate}
       className={cn(
-        "flex items-center gap-4 px-2 py-2 group",
+        "flex items-center gap-3 sm:gap-4 px-2 py-2 group touch-manipulation",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
         "transition-colors duration-200"
       )}
@@ -100,13 +100,13 @@ const ClinicHeader = ({ isCollapsed, isMobile, onNavigate }: ClinicHeaderProps) 
     >
       <div
         className={cn(
-          "flex-shrink-0 w-10 h-10 rounded-2xl",
+          "flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl",
           "bg-gradient-to-br from-primary/90 to-primary",
           "flex items-center justify-center shadow-sm"
         )}
       >
         {/* Icono de hospital en lugar del logo anterior */}
-        <Hospital className="h-5 w-5 text-white" />
+        <Hospital className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
       </div>
       <div
         className={cn(
@@ -115,15 +115,15 @@ const ClinicHeader = ({ isCollapsed, isMobile, onNavigate }: ClinicHeaderProps) 
         )}
       >
         <div className="flex flex-col space-y-0.5">
-          <span className="text-[15px] font-semibold tracking-tight text-foreground leading-none">
+          <span className="text-sm sm:text-[15px] font-semibold tracking-tight text-foreground leading-none">
             {isMobile ? "Clínica de Hernia" : CLINIC_INFO.fullName}
           </span>
           {isMobile && (
-            <span className="text-[13px] font-medium text-primary/80 leading-none">
+            <span className="text-xs sm:text-[13px] font-medium text-primary/80 leading-none">
               y Vesícula
             </span>
           )}
-          <span className="text-[11px] font-medium text-muted-foreground leading-none mt-1">
+          <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground leading-none mt-1">
             {isMobile ? "Centro Especializado" : CLINIC_INFO.tagline}
           </span>
         </div>

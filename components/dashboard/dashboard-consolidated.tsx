@@ -87,44 +87,44 @@ const MetricCard = memo<MetricCardProps>(({
 
   if (isLoading) {
     return (
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 sm:p-6 animate-pulse">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 sm:p-4 lg:p-6 animate-pulse">
         <div className="flex items-center justify-between">
           <div className="space-y-2 flex-1">
-            <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-24" />
-            <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-16" />
+            <div className="h-3 sm:h-4 bg-gray-300 dark:bg-gray-600 rounded w-20 sm:w-24" />
+            <div className="h-6 sm:h-8 bg-gray-300 dark:bg-gray-600 rounded w-14 sm:w-16" />
           </div>
-          <div className="h-8 w-8 bg-gray-300 dark:bg-gray-600 rounded flex-shrink-0" />
+          <div className="h-6 w-6 sm:h-8 sm:w-8 bg-gray-300 dark:bg-gray-600 rounded flex-shrink-0" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 sm:p-6 hover:shadow-lg transition-all duration-200 transform hover:scale-[1.02]">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 sm:p-4 lg:p-6 hover:shadow-lg transition-all duration-200 transform hover:scale-[1.02]">
       <div className="flex items-center justify-between gap-2">
-        <div className="space-y-2 flex-1 min-w-0">
-          <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wide truncate">
+        <div className="space-y-1 sm:space-y-2 flex-1 min-w-0">
+          <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wide truncate">
             {title}
           </p>
-          <div className="flex items-baseline flex-wrap gap-2">
-            <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+          <div className="flex items-baseline flex-wrap gap-1 sm:gap-2">
+            <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">
               {value}
             </p>
             {change !== 0 && (
-              <div className={`flex items-center text-xs sm:text-sm ${trendColor}`}>
-                <TrendIcon className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+              <div className={`flex items-center text-[10px] sm:text-xs lg:text-sm ${trendColor}`}>
+                <TrendIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 mr-0.5 sm:mr-1" />
                 <span>{Math.abs(change)}%</span>
               </div>
             )}
           </div>
           {description && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">
               {description}
             </p>
           )}
         </div>
         <div className="flex-shrink-0">
-          <Icon className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 dark:text-blue-400" />
+          <Icon className="w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 text-blue-600 dark:text-blue-400" />
         </div>
       </div>
     </div>
@@ -146,16 +146,16 @@ const DashboardHeader = memo<DashboardHeaderProps>(({
   handleRefresh, 
   isLoading 
 }) => (
-  <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-    <div className="flex items-center gap-3">
-      <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-        <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 dark:text-blue-400" />
+  <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+    <div className="flex items-center gap-2 sm:gap-3">
+      <div className="p-1.5 sm:p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        <Shield className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-blue-600 dark:text-blue-400" />
       </div>
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
+        <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-gray-100">
           Panel de Control
         </h1>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+        <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 dark:text-slate-400">
           Resumen de Actividad Clínica
         </p>
       </div>
@@ -182,9 +182,8 @@ const DashboardHeader = memo<DashboardHeaderProps>(({
         onClick={() => handleRefresh()} 
         disabled={isLoading} 
         aria-label="Actualizar datos" 
-        className="p-2 sm:p-2.5 rounded-lg bg-slate-100 dark:bg-gray-800 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <RefreshCw className={`h-4 w-4 text-slate-700 dark:text-gray-300 ${isLoading ? 'animate-spin' : ''}`} />
+        className="p-1.5 sm:p-2 lg:p-2.5 rounded-lg bg-slate-100 dark:bg-gray-800 hover:bg-slate-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-700 dark:text-gray-300 ${isLoading ? 'animate-spin' : ''}`} />
       </button>
     </div>
   </header>
@@ -205,7 +204,7 @@ const MetricCardGrid = memo<MetricCardGridProps>(({
   period, 
   getTrend 
 }) => (
-  <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+  <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
     <MetricCard 
       title="Consultas del Día" 
       value={metrics.primary.todayConsultations} 

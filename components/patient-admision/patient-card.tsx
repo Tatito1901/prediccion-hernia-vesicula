@@ -502,27 +502,27 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
         )}
         data-testid="patient-card"
       >
-        <CardContent className="p-3 sm:p-4">
+        <CardContent className="p-3 sm:p-4 md:p-5">
           <Collapsible open={open} onOpenChange={setOpen}>
             {/* Header compacto */}
             <div className="flex items-start justify-between gap-2">
               <CollapsibleTrigger asChild>
                 <button
-                  className="flex items-center gap-3 min-w-0 flex-1 text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                  className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 text-left rounded-md p-1 -m-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 touch-manipulation"
                   aria-expanded={open}
                   aria-controls={contentId}
                   aria-label={`Ver detalles de ${fullName}`}
                 >
-                  <Avatar className="h-9 w-9 shrink-0 ring-1 ring-black/5 dark:ring-white/10">
-                    <AvatarFallback className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                  <Avatar className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 ring-1 ring-black/5 dark:ring-white/10">
+                    <AvatarFallback className="text-[10px] sm:text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
                       {initials}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-[15px] sm:text-base text-gray-900 dark:text-gray-100 truncate" title={fullName}>
+                    <h3 className="font-semibold text-sm sm:text-[15px] md:text-base text-gray-900 dark:text-gray-100 truncate" title={fullName}>
                       {fullName}
                     </h3>
-                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-0.5">
                       <Badge variant="outline" className={cn('text-[10px] sm:text-xs font-medium', statusConfig.bgClass)}>
                         {statusConfig.label}
                       </Badge>
@@ -537,13 +537,13 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
               </CollapsibleTrigger>
 
               {/* Hora y menú */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 <span
-                  className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shadow-sm', timePillClass)}
+                  className={cn('inline-flex items-center rounded-full px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium shadow-sm', timePillClass)}
                   title={dateTime.fullDate}
                   aria-label={`Hora de la cita: ${dateTime.time}`}
                 >
-                  <Clock className="h-3.5 w-3.5 mr-1.5" />
+                  <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1 sm:mr-1.5" />
                   {dateTime.time}
                 </span>
                 {!disableActions && (
@@ -554,9 +554,9 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
 
             {/* Contenido expandible */}
             <CollapsibleContent id={contentId}>
-              <div className="mt-3 md:grid md:grid-cols-6 md:gap-4">
+              <div className="mt-3 space-y-3 md:space-y-0 md:grid md:grid-cols-6 md:gap-4">
                 {/* Izquierda: info */}
-                <div className="md:col-span-4 space-y-2 mb-3 md:mb-0">
+                <div className="md:col-span-4 space-y-2">
                   <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                     <Calendar className="h-4 w-4" />
                     <span className="capitalize">{dateTime.fullDate}</span>
@@ -578,7 +578,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
                     </div>
                   )}
 
-                  <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3 text-xs sm:text-sm">
                     {patient?.telefono && (
                       <a
                         href={`tel:${patient.telefono}`}
@@ -603,7 +603,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
                 </div>
 
                 {/* Derecha: acción principal */}
-                <div className="md:col-span-2">
+                <div className="md:col-span-2 mt-3 md:mt-0">
                   {!disableActions && (
                     <PrimaryActionButton action={primaryAction as any} onClick={handleAction} isPending={isBusy} disabled={isPrimaryDisabled} />
                   )}
@@ -611,8 +611,8 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
               </div>
 
               {appointment.notas_breves && (
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg mt-3">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{appointment.notas_breves}</p>
+                <div className="p-2.5 sm:p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg mt-3">
+                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{appointment.notas_breves}</p>
                 </div>
               )}
             </CollapsibleContent>

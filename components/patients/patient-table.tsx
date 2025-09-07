@@ -429,7 +429,7 @@ const MobilePatientCard = memo(({
   
   return (
     <Card 
-      className="p-4 sm:p-5 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer border-slate-200 dark:border-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950"
+      className="p-3 sm:p-4 md:p-5 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer border-slate-200 dark:border-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950 touch-manipulation"
       onClick={() => onSelectPatient(patient)}
       tabIndex={0}
       onKeyDown={(e) => {
@@ -439,20 +439,19 @@ const MobilePatientCard = memo(({
         }
       }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 ring-1 ring-slate-200 dark:ring-slate-800 shadow-sm") }>
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+          <div className={cn("h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold flex-shrink-0 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 ring-1 ring-slate-200 dark:ring-slate-800 shadow-sm") }>
             {patient.nombre?.charAt(0).toUpperCase() || 'P'}
           </div>
-          
           <div className="flex-1 min-w-0">
-            <h4 className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+            <h4 className="font-semibold text-sm sm:text-base text-slate-900 dark:text-slate-100 truncate">
               {patient.nombre} {patient.apellidos}
             </h4>
             
-            <div className="flex flex-wrap gap-2 mt-2">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
               <Badge className={cn(
-                "text-xs border rounded-full px-2.5 py-1",
+                "text-[10px] sm:text-xs border rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1",
                 getDiagnosticStyle(patient.displayDiagnostico)
               )}>
                 {patient.displayDiagnostico}
@@ -460,7 +459,7 @@ const MobilePatientCard = memo(({
               
               {patient.estado_paciente && (
                 <Badge className={cn(
-                  "text-xs border rounded-full px-2.5 py-1",
+                  "text-[10px] sm:text-xs border rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1",
                   PATIENT_STATUS_CONFIG[patient.estado_paciente]?.bgClass,
                   PATIENT_STATUS_CONFIG[patient.estado_paciente]?.borderClass
                 )}>
@@ -469,22 +468,22 @@ const MobilePatientCard = memo(({
               )}
               
               <Badge className={cn(
-                "text-xs border rounded-full px-2.5 py-1",
+                "text-[10px] sm:text-xs border rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1",
                 THEME.survey[surveyState]
               )}>
                 {SURVEY_LABELS[surveyState]}
               </Badge>
             </div>
             
-            <div className="flex items-center gap-3 mt-3 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-2 sm:mt-3 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
               {patient.telefono && (
                 <div className="flex items-center gap-1">
-                  <Phone className="h-3 w-3" />
+                  <Phone className="h-3 w-3 flex-shrink-0" />
                   <span>{patient.telefono}</span>
                 </div>
               )}
               <div className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
+                <Calendar className="h-3 w-3 flex-shrink-0" />
                 <span>{formatDate(patient.fecha_registro)}</span>
               </div>
             </div>
