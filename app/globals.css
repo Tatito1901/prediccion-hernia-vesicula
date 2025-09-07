@@ -281,6 +281,31 @@
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
   }
 
+  /* Patrón de grid sutil usado en la página de login */
+  .bg-grid-pattern {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+
+  /* Animación de flotación suave para el logo */
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  /* Borde con gradiente animado para contenedores con clase .gradient-border-container */
+  .gradient-border-container::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+    z-index: -1;
+    margin: -1px;
+    border-radius: inherit;
+    background: conic-gradient(from 180deg at 50% 50%, #2dc876, #1ca9e0, #2dc876);
+    animation: border-spin 3s linear infinite;
+  }
+
   /* Animación genérica */
   .animate-in { animation-duration: 0.3s; animation-timing-function: ease-out; animation-fill-mode: both; }
 }
@@ -289,6 +314,16 @@
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* Animaciones específicas del login */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes border-spin {
+  100% { transform: rotate(-360deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */

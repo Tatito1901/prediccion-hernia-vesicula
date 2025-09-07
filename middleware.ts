@@ -72,6 +72,26 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  // 2.1) Validación de configuración: si faltan envs de Supabase, no crashear en Edge
+  const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
+  const hasSupabaseKey = !!(
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )
+  if (!hasSupabaseUrl || !hasSupabaseKey) {
+    // Rutas públicas: continuar normalmente
+    if (isPublic) {
+      return response
+    }
+    // Rutas protegidas: redirigir a login sin lanzar excepción
+    const loginUrl = new URL('/', request.url)
+    if (pathname !== '/' && pathname !== '/dashboard') {
+      loginUrl.searchParams.set('next', pathname)
+    }
+    loginUrl.searchParams.set('error', 'config_missing')
+    return NextResponse.redirect(loginUrl)
+  }
+
   // 3) Prepara Supabase SSR. ¡Nunca mutar request.cookies aquí!
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseKey =
@@ -102,17 +122,22 @@ export async function middleware(request: NextRequest) {
   if (cached && cached.expires > Date.now()) {
     hasValidSession = cached.hasSession
   } else {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    hasValidSession = !error && !!user
-    sessionCache.set(cacheKey, {
-      expires: Date.now() + SESSION_CACHE_TTL,
-      hasSession: hasValidSession,
-    })
-    // Limpieza simple
-    if (sessionCache.size > 200) {
-      const now = Date.now()
-      for (const [k, v] of sessionCache.entries()) {
-        if (v.expires < now) sessionCache.delete(k)
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      hasValidSession = !error && !!user
+    } catch {
+      hasValidSession = false
+    } finally {
+      sessionCache.set(cacheKey, {
+        expires: Date.now() + SESSION_CACHE_TTL,
+        hasSession: hasValidSession,
+      })
+      // Limpieza simple
+      if (sessionCache.size > 200) {
+        const now = Date.now()
+        for (const [k, v] of sessionCache.entries()) {
+          if (v.expires < now) sessionCache.delete(k)
+        }
       }
     }
   }

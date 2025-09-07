@@ -19,6 +19,19 @@ function isPatientStatus(value: string): value is PatientStatus {
   return (Object.values(PatientStatusEnum) as string[]).includes(value);
 }
 
+// Sanitize free-text search for PostgREST `.or()` logic to avoid parse errors
+const buildSearchOrFilter = (raw: string | null) => {
+  const term = (raw || '').toLowerCase().trim();
+  if (!term) return undefined as string | undefined;
+  const sanitized = term
+    .replace(/[,%()'"\\/]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!sanitized) return undefined as string | undefined;
+  // Use '*' wildcard per PostgREST filter syntax in `.or()` strings
+  return `nombre.ilike.*${sanitized}*,apellidos.ilike.*${sanitized}*,telefono.ilike.*${sanitized}*,email.ilike.*${sanitized}*,diagnostico_principal.ilike.*${sanitized}*`;
+};
+
 // --- GET: OBTENER LISTA PAGINADA DE PACIENTES CON BÚSQUEDA Y ESTADÍSTICAS ---
 export async function GET(request: Request) {
   try {
@@ -75,14 +88,9 @@ export async function GET(request: Request) {
       query = query.eq('estado_paciente', norm as PatientStatus);
     }
 
-    if (searchTerm) {
-      query = query.or(`
-        nombre.ilike.%${searchTerm}%,
-        apellidos.ilike.%${searchTerm}%,
-        telefono.ilike.%${searchTerm}%,
-        email.ilike.%${searchTerm}%,
-        diagnostico_principal.ilike.%${searchTerm}%
-      `);
+    const orFilter = buildSearchOrFilter(searchTerm);
+    if (orFilter) {
+      query = query.or(orFilter);
     }
 
     if (startDate) {

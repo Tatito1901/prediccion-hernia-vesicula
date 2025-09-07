@@ -58,8 +58,19 @@ const buildDateRange = (dateFilter: string, startDate?: string | null, endDate?:
 const buildSearchFilter = (q: string) => {
   const searchTerm = q.toLowerCase().trim()
   if (!searchTerm) return undefined as string | undefined
+  // Sanitize characters that break PostgREST logic-tree parsing inside or(…):
+  // - Remove commas, parentheses, quotes, backslashes, percent signs and slashes
+  // - Collapse multiple spaces
+  const sanitized = searchTerm
+    .replace(/[,%()'"\\/]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!sanitized) return undefined as string | undefined
+
+  // Use Supabase REST-style wildcard with '*' instead of '%'
   // Nota: limitar búsqueda a columnas seguras del join de patients
-  return `patients.nombre.ilike.%${searchTerm}%,patients.apellidos.ilike.%${searchTerm}%,patients.telefono.ilike.%${searchTerm}%`
+  return `patients.nombre.ilike.*${sanitized}*,patients.apellidos.ilike.*${sanitized}*,patients.telefono.ilike.*${sanitized}*`
 }
 
 const getCounts = async (supabase: any) => {
