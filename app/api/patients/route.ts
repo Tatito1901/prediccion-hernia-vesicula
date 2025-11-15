@@ -6,6 +6,40 @@ import { createApiResponse, createApiError } from '@/lib/api-response-types';
 // Ensure Node.js runtime for access to process.env and server-only libs
 export const runtime = 'nodejs';
 
+// Types for database rows
+interface PatientRow {
+  id: string;
+  nombre: string;
+  apellidos: string;
+  telefono?: string | null;
+  email?: string | null;
+  diagnostico_principal?: string | null;
+  estado_paciente?: PatientStatus | null;
+  created_at?: string;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+
+interface AssignedSurveyRow {
+  id: string;
+  status: string;
+  completed_at?: string | null;
+  assigned_at: string;
+  template_id: number;
+  patient_id: string;
+}
+
+interface PatientStatusRow {
+  estado_paciente: PatientStatus | null;
+}
+
+interface SupabaseError {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+}
+
 const cacheConfig = {
   // 10 minutos de cache del navegador, 1 hora en CDN, 6 horas de stale-while-revalidate
   'Cache-Control': 'max-age=600, s-maxage=3600, stale-while-revalidate=21600',
@@ -125,7 +159,7 @@ export async function GET(request: Request) {
         const stats = page === 1
           ? { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0, statusStats: { all: 0 } }
           : null;
-        const successResponse = createApiResponse<any[]>([], {
+        const successResponse = createApiResponse<PatientRow[]>([], {
           pagination,
           stats,
           meta: debug ? meta : undefined,
@@ -142,11 +176,11 @@ export async function GET(request: Request) {
 
     // 3. Enriquecer datos en el backend
     // Intentar recuperar la última encuesta asignada por paciente (sin romper en entornos donde la tabla no exista)
-    let surveysByPatient: Record<string, any> = {};
+    let surveysByPatient: Record<string, AssignedSurveyRow> = {};
     try {
-      const patientIds: string[] = (patients || [])
-        .map((p: any) => p?.id)
-        .filter((id: any) => typeof id === 'string' && id);
+      const patientIds: string[] = (patients as PatientRow[] || [])
+        .map((p) => p?.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
       if (patientIds.length > 0) {
         const { data: assigned, error: assignedError } = await supabase
@@ -165,10 +199,11 @@ export async function GET(request: Request) {
           }
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
+      // Silently fail if assigned_surveys table doesn't exist
     }
 
-    const enrichedPatients = patients?.map((patient: any) => {
+    const enrichedPatients = (patients as PatientRow[])?.map((patient) => {
       const lastSurvey = surveysByPatient[patient.id];
       const encuestaCompletada = !!(lastSurvey && (lastSurvey.status === 'completed' || lastSurvey.completed_at));
 
@@ -198,12 +233,15 @@ export async function GET(request: Request) {
       if (statsErr) {
       }
 
-      const statusStats = (statsData || []).reduce((acc: Record<string, number>, patient: any) => {
-        if (patient.estado_paciente) {
-          acc[patient.estado_paciente] = (acc[patient.estado_paciente] || 0) + 1;
-        }
-        return acc;
-      }, {});
+      const statusStats = (statsData as PatientStatusRow[] || []).reduce(
+        (acc: Record<string, number>, patient) => {
+          if (patient.estado_paciente) {
+            acc[patient.estado_paciente] = (acc[patient.estado_paciente] || 0) + 1;
+          }
+          return acc;
+        },
+        {} as Record<string, number>
+      );
 
       const totalPatients = statsData?.length || 0;
       // Sin relación de encuestas en esta consulta simplificada
@@ -253,10 +291,11 @@ export async function GET(request: Request) {
     });
     return NextResponse.json(successResponse, { headers: cacheConfig });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error;
     const errorResponse = createApiError('Error al obtener pacientes', {
       code: 'INTERNAL_SERVER_ERROR',
-      details: { message: error?.message },
+      details: { message: err?.message },
     });
     return NextResponse.json(errorResponse, { status: 500 });
   }
@@ -279,10 +318,10 @@ export async function POST(request: Request) {
     }
 
     // 2. Normalizar y pre-chequear duplicados por identidad si hay fecha_nacimiento
-    const norm = (s: any) => (typeof s === 'string' ? s.trim().toLowerCase() : '');
+    const norm = (s: unknown): string => (typeof s === 'string' ? s.trim().toLowerCase() : '');
     const inputNombre = norm(body.nombre);
     const inputApellidos = norm(body.apellidos);
-    const parseDateOnly = (v: any): string | null => {
+    const parseDateOnly = (v: unknown): string | null => {
       if (typeof v !== 'string') return null;
       const s = v.trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; // ya viene como fecha (DATE)
@@ -383,9 +422,10 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      const code = (error as any)?.code;
-      const msg = (error as any)?.message || '';
-      const detailsMsg = (error as any)?.details || '';
+      const supaErr = error as unknown as SupabaseError;
+      const code = supaErr?.code;
+      const msg = supaErr?.message || '';
+      const detailsMsg = supaErr?.details || '';
       const isUnique = code === '23505' || /duplicate key value/i.test(msg);
       const isPhoneDup = isUnique && (msg.includes('patients_telefono_key') || detailsMsg.includes('telefono'));
       if (isPhoneDup) {
@@ -408,10 +448,11 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(successResponse, { status: 201 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error;
     const errorResponse = createApiError('Error al crear paciente', {
       code: 'INTERNAL_SERVER_ERROR',
-      details: { message: error?.message },
+      details: { message: err?.message },
     });
     return NextResponse.json(errorResponse, { status: 500 });
   }
