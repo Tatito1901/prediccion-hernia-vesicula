@@ -9,6 +9,29 @@ const CACHE_HEADERS = {
   'Cache-Control': 'max-age=120, s-maxage=300, stale-while-revalidate=900',
 };
 
+// Interface for survey_responses row with patient join
+interface SurveyResponseRow {
+  completed_at: string | null
+  severidad_sintomas?: string | null
+  intensidad_dolor_actual?: number | null
+  diagnostico_previo?: boolean | null
+  motivo_visita?: string | null
+  seguro_medico?: string | null
+  tiempo_toma_decision?: string | null
+  aspectos_mas_importantes?: string[] | null
+  preocupaciones_principales?: string[] | null
+  sintomas_adicionales?: string[] | null
+  ubicacion_origen?: string | null
+  alcaldia_cdmx?: string | null
+  municipio_edomex?: string | null
+  desde_cuando_sintoma?: string | null
+  plazo_resolucion_ideal?: string | null
+  estudios_medicos_previos?: boolean | null
+  patients?: {
+    edad: number | null
+  } | null
+}
+
 // ========== Helpers centralizados de zona horaria de la clínica (lib/timezone.ts) ==========
 
 // Helper para conteos de arrays (strings)
@@ -129,35 +152,35 @@ export async function GET(request: NextRequest) {
       return jsonError(500, 'Error al obtener analíticas de encuestas');
     }
 
-    const rows = data || [];
+    const rows = (data || []) as SurveyResponseRow[];
 
     // Totales y promedios
     const responsesCount = rows.length;
-    const painValues = rows.map((r: any) => r.intensidad_dolor_actual as number | null).filter((v) => typeof v === 'number') as number[];
+    const painValues = rows.map(r => r.intensidad_dolor_actual ?? null).filter((v): v is number => typeof v === 'number');
     const avgPain = painValues.length ? painValues.reduce((a,b)=>a+b,0) / painValues.length : null;
-    const prevDiagRate = rows.length ? rows.reduce((acc: number, r: any) => acc + (r.diagnostico_previo ? 1 : 0), 0) / rows.length : 0;
+    const prevDiagRate = rows.length ? rows.reduce((acc: number, r) => acc + (r.diagnostico_previo ? 1 : 0), 0) / rows.length : 0;
 
     // Distribuciones
-    const severityDist = countValues(rows.map((r: any) => r.severidad_sintomas));
-    const motivoDist = countValues(rows.map((r: any) => r.motivo_visita));
-    const seguroDist = countValues(rows.map((r: any) => r.seguro_medico));
-    const decisionTimeDist = countValues(rows.map((r: any) => r.tiempo_toma_decision));
-    const desdeCuandoDist = countValues(rows.map((r: any) => r.desde_cuando_sintoma));
-    const plazoIdealDist = countValues(rows.map((r: any) => r.plazo_resolucion_ideal));
-    const origenDist = countValues(rows.map((r: any) => r.ubicacion_origen));
-    const alcaldiaDist = countValues(rows.map((r: any) => r.alcaldia_cdmx));
-    const municipioDist = countValues(rows.map((r: any) => r.municipio_edomex));
+    const severityDist = countValues(rows.map(r => r.severidad_sintomas));
+    const motivoDist = countValues(rows.map(r => r.motivo_visita));
+    const seguroDist = countValues(rows.map(r => r.seguro_medico));
+    const decisionTimeDist = countValues(rows.map(r => r.tiempo_toma_decision));
+    const desdeCuandoDist = countValues(rows.map(r => r.desde_cuando_sintoma));
+    const plazoIdealDist = countValues(rows.map(r => r.plazo_resolucion_ideal));
+    const origenDist = countValues(rows.map(r => r.ubicacion_origen));
+    const alcaldiaDist = countValues(rows.map(r => r.alcaldia_cdmx));
+    const municipioDist = countValues(rows.map(r => r.municipio_edomex));
 
-    const concernsTop = countFromStringArrays(rows.map((r: any) => r.preocupaciones_principales));
-    const importantAspectsTop = countFromStringArrays(rows.map((r: any) => r.aspectos_mas_importantes));
-    const sintomasTop = countFromStringArrays(rows.map((r: any) => r.sintomas_adicionales));
+    const concernsTop = countFromStringArrays(rows.map(r => r.preocupaciones_principales));
+    const importantAspectsTop = countFromStringArrays(rows.map(r => r.aspectos_mas_importantes));
+    const sintomasTop = countFromStringArrays(rows.map(r => r.sintomas_adicionales));
 
     const painHistogram = bucketPainIntensity(painValues);
-    const ageHistogram = bucketAges(rows.map((r: any) => r.patients?.edad as number | null));
+    const ageHistogram = bucketAges(rows.map(r => r.patients?.edad ?? null));
 
     // Series temporales por fecha de completado
     const seriesMap = new Map<string, { responses: number; avg_pain_sum: number; avg_pain_n: number }>();
-    for (const r of rows as any[]) {
+    for (const r of rows) {
       const d = r.completed_at ? new Date(r.completed_at) : null;
       if (!d || isNaN(d.getTime())) continue;
       const key = clinicDateKey(d, groupBy);
@@ -209,7 +232,7 @@ export async function GET(request: NextRequest) {
       timeseries,
       calculatedAt: new Date().toISOString(),
     }, { headers: { ...CACHE_HEADERS } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Survey Stats API] Unexpected error:', error);
     return jsonError(500, 'Error interno del servidor');
   }
