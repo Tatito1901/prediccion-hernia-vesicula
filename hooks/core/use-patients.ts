@@ -9,12 +9,12 @@ import { endpoints, buildSearchParams } from '@/lib/api-endpoints';
 import { queryFetcher, fetchJson } from '@/lib/http';
 import { notifySuccess, notifyError } from '@/lib/client-errors';
 import { toast } from 'sonner';
-import type { 
-  Patient, 
+import type {
+  Patient,
   EnrichedPatient,
   PatientStatus,
   PatientSurveyData,
-  PaginatedResponse 
+  PaginatedResponse
 } from '@/lib/types';
 import { PatientStatusEnum } from '@/lib/types';
 import { dbDiagnosisToDisplay } from '@/lib/constants';
@@ -23,6 +23,10 @@ import type {
   AdmissionDBResponse,
   PatientHistoryData,
 } from '@/components/patient-admision/admision-types';
+import type {
+  ApiSuccessResponse,
+  MutationErrorPayload
+} from '@/lib/api-response-types';
 
 // ==================== TIPOS ====================
 export interface PatientFilters {
@@ -74,8 +78,15 @@ const fetchPatients = async (filters: PatientFilters): Promise<PaginatedResponse
 };
 
 const fetchPatientDetail = async (id: string): Promise<Patient> => {
-  const payload: any = await queryFetcher<any>(endpoints.patients.detail(id));
-  return (payload && payload.success === true && 'data' in payload) ? payload.data : payload;
+  const payload = await queryFetcher<Patient | { success: boolean; data: Patient }>(
+    endpoints.patients.detail(id)
+  );
+
+  // Handle both direct Patient response and wrapped {success, data} response
+  if (payload && typeof payload === 'object' && 'success' in payload && payload.success === true) {
+    return (payload as { success: boolean; data: Patient }).data;
+  }
+  return payload as Patient;
 };
 
 const fetchPatientHistory = async (
@@ -97,9 +108,10 @@ const fetchPatientSurvey = async (patientId: string): Promise<PatientSurveyData 
       endpoints.surveys.byPatient(patientId)
     );
     return data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Handle 404 as no survey found
-    if (error?.status === 404) {
+    const err = error as Error & { status?: number };
+    if (err?.status === 404) {
       return null;
     }
     throw error;
@@ -297,17 +309,20 @@ export const useAdmitPatient = () => {
   
   return useMutation<AdmissionDBResponse, Error, AdmissionPayload>({
     mutationFn: async (payload) => {
-      const payloadResp: any = await fetchJson<any>(endpoints.admission.create(), {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      
+      const payloadResp = await fetchJson<ApiSuccessResponse<AdmissionDBResponse> | AdmissionDBResponse>(
+        endpoints.admission.create(),
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+
       // Desempaquetar createApiResponse
-      if (payloadResp && payloadResp.success === true && 'data' in payloadResp) {
-        const data = payloadResp.data as any;
+      if (payloadResp && typeof payloadResp === 'object' && 'success' in payloadResp && payloadResp.success === true) {
+        const wrapped = payloadResp as ApiSuccessResponse<AdmissionDBResponse>;
         return {
-          ...data,
-          message: payloadResp.message ?? data?.message ?? 'Admisión creada exitosamente',
+          ...wrapped.data,
+          message: wrapped.message ?? wrapped.data?.message ?? 'Admisión creada exitosamente',
         } as AdmissionDBResponse;
       }
       return payloadResp as AdmissionDBResponse;
@@ -332,20 +347,24 @@ export const useAdmitPatient = () => {
         exact: false,
       });
     },
-    onError: (error: any) => {
-      const status = error?.status;
-      const payload: any = error?.details ?? {};
-      const code: string | undefined = typeof payload?.code === 'string' 
-        ? (payload.code as string).toUpperCase() 
-        : undefined;
-      const validationErrors: Array<{ field: string; message: string; code: string }> | undefined = 
-        Array.isArray(payload?.validation_errors) ? payload.validation_errors : undefined;
-      const suggestedActions: string[] | undefined = 
-        Array.isArray(payload?.suggested_actions) ? payload.suggested_actions : undefined;
-      const existing = payload?.details?.existing_patient || payload?.existing_patient;
-      const msg = error?.message || 'No se pudo completar el registro. Intente de nuevo.';
+    onError: (error: unknown) => {
+      const err = error as Error & { status?: number; details?: MutationErrorPayload; category?: string; message: string };
+      const status = err?.status;
+      const payload = err?.details ?? {} as MutationErrorPayload;
 
-      const isValidation = error.category === 'validation' && !!validationErrors;
+      const code: string | undefined = typeof payload?.code === 'string'
+        ? payload.code.toUpperCase()
+        : undefined;
+      const validationErrors = Array.isArray(payload?.validation_errors)
+        ? payload.validation_errors
+        : undefined;
+      const suggestedActions = Array.isArray(payload?.suggested_actions)
+        ? payload.suggested_actions
+        : undefined;
+      const existing = payload?.existing_patient;
+      const msg = err?.message || 'No se pudo completar el registro. Intente de nuevo.';
+
+      const isValidation = err.category === 'validation' && !!validationErrors;
       const isDuplicatePhone = status === 400 && 
         (msg?.includes('patients_telefono_key') || /tel[eé]fono/i.test(msg));
       const isDuplicatePatient = status === 409 && (code === 'DUPLICATE_PATIENT');
@@ -392,8 +411,9 @@ export const useAdmitPatient = () => {
         duration: 6000,
       });
     },
-    retry: (failureCount, error: any) => {
-      if (error.category === 'validation' || error.status === 409) return false;
+    retry: (failureCount, error: unknown) => {
+      const err = error as { category?: string; status?: number };
+      if (err.category === 'validation' || err.status === 409) return false;
       return failureCount < 2;
     },
     retryDelay: (i) => Math.min(1000 * 2 ** i, 30000),
@@ -402,16 +422,22 @@ export const useAdmitPatient = () => {
 
 export const useUpdatePatient = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation<Patient, Error, PatientUpdateParams>({
     mutationFn: async ({ id, updates }) => {
-      const payload: any = await fetchJson<any>(endpoints.patients.update(id), {
-        method: 'PATCH',
-        body: JSON.stringify(updates),
-      });
-      return (payload && payload.success === true && 'data' in payload) 
-        ? payload.data 
-        : payload;
+      const payload = await fetchJson<ApiSuccessResponse<Patient> | Patient>(
+        endpoints.patients.update(id),
+        {
+          method: 'PATCH',
+          body: JSON.stringify(updates),
+        }
+      );
+
+      // Handle both wrapped and unwrapped responses
+      if (payload && typeof payload === 'object' && 'success' in payload && payload.success === true) {
+        return (payload as ApiSuccessResponse<Patient>).data;
+      }
+      return payload as Patient;
     },
     onSuccess: (updated, variables) => {
       // Actualización directa del caché
