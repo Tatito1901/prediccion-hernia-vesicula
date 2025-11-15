@@ -1,10 +1,10 @@
 import { Patient, PatientSurveyData } from "@/lib/types"
-import { 
-  Activity, 
-  AlertCircle, 
-  Heart, 
-  Shield, 
-  Stethoscope, 
+import {
+  Activity,
+  AlertCircle,
+  Heart,
+  Shield,
+  Stethoscope,
   DollarSign,
   Lightbulb,
   Zap,
@@ -12,6 +12,14 @@ import {
   MessageCircle,
   FileText
 } from "lucide-react"
+
+// Survey answer structure from PatientSurveyData
+interface SurveyAnswer {
+  question?: {
+    text?: string
+  } | null
+  answer_text?: string | null
+}
 
 export interface ConversionInsight {
   id: string
@@ -46,7 +54,7 @@ export function calculateConversionScore(
   let factorCount = 0
 
   // Analizar respuestas de la encuesta
-  survey.answers.forEach((answer: any) => {
+  (survey.answers as SurveyAnswer[]).forEach((answer) => {
     const questionText = answer.question?.text?.toLowerCase() || ''
     const answerText = answer.answer_text?.toLowerCase() || ''
     
@@ -116,13 +124,14 @@ export function generateInsights(
   }
 
   // Analizar patrones en las respuestas
-  const severityAnswer = survey.answers.find((a: any) => 
+  const answers = survey.answers as SurveyAnswer[]
+  const severityAnswer = answers.find((a) =>
     a.question?.text?.toLowerCase().includes('severidad')
   )
-  const impactAnswer = survey.answers.find((a: any) => 
+  const impactAnswer = answers.find((a) =>
     a.question?.text?.toLowerCase().includes('actividad')
   )
-  const durationAnswer = survey.answers.find((a: any) => 
+  const durationAnswer = answers.find((a) =>
     a.question?.text?.toLowerCase().includes('tiempo')
   )
 
@@ -304,7 +313,7 @@ export function calculateSurgeryProbability(
   let factorWeight = 0
 
   // Analizar cada respuesta
-  survey.answers.forEach((answer: any) => {
+  (survey.answers as SurveyAnswer[]).forEach((answer) => {
     const questionText = answer.question?.text?.toLowerCase() || ''
     const answerText = answer.answer_text?.toLowerCase() || ''
     
@@ -382,7 +391,7 @@ export function calculateBenefitRiskRatio(
   let riskScore = 1 // Base risk
 
   // Calcular beneficios potenciales
-  survey.answers.forEach((answer: any) => {
+  (survey.answers as SurveyAnswer[]).forEach((answer) => {
     const questionText = answer.question?.text?.toLowerCase() || ''
     const answerText = answer.answer_text?.toLowerCase() || ''
     

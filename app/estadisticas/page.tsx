@@ -10,6 +10,24 @@ import { GenericLineChart } from '@/components/charts/common/generic-line-chart'
 import { GenericBarChart } from '@/components/charts/common/generic-bar-chart';
 import { GenericPieChart } from '@/components/charts/common/generic-pie-chart';
 
+// Type for appointments from clinic data
+interface AppointmentItem {
+  estado_cita: string
+  fecha_hora_cita: string
+  [key: string]: unknown
+}
+
+// Types for RPC statistics distributions
+interface DistributionItem {
+  label: string
+  count: number
+}
+
+interface StatusDistributionItem {
+  status: string
+  count: number
+}
+
 interface Filters {
   dateRange: 'day' | 'month' | 'year';
   startDate?: Date;
@@ -72,12 +90,12 @@ const EstadisticasContent = memo(() => {
     const todayCount = appointments?.today?.length || 0;
     const futureCount = appointments?.future?.length || 0;
     const pastCount = appointments?.past?.length || 0;
-    
-    const completed = allAppointments.filter(
-      (apt: any) => apt.estado_cita === AppointmentStatusEnum.COMPLETADA
+
+    const completed = (allAppointments as AppointmentItem[]).filter(
+      (apt) => apt.estado_cita === AppointmentStatusEnum.COMPLETADA
     ).length;
-    const cancelled = allAppointments.filter(
-      (apt: any) => apt.estado_cita === AppointmentStatusEnum.CANCELADA
+    const cancelled = (allAppointments as AppointmentItem[]).filter(
+      (apt) => apt.estado_cita === AppointmentStatusEnum.CANCELADA
     ).length;
     
     return {
@@ -380,7 +398,7 @@ const EstadisticasContent = memo(() => {
             >
               {Array.isArray(statisticsQuery.data?.demographicProfile?.gender_distribution) && statisticsQuery.data?.demographicProfile?.gender_distribution?.length ? (
                 <GenericPieChart
-                  data={(statisticsQuery.data.demographicProfile.gender_distribution as any[]).map((d: any) => ({ name: d.label, value: d.count }))}
+                  data={(statisticsQuery.data.demographicProfile.gender_distribution as DistributionItem[]).map((d) => ({ name: d.label, value: d.count }))}
                   dataKey="value"
                   nameKey="name"
                   donut
@@ -402,7 +420,7 @@ const EstadisticasContent = memo(() => {
             >
               {Array.isArray(statisticsQuery.data?.clinicalProfile?.diagnoses_distribution) && statisticsQuery.data?.clinicalProfile?.diagnoses_distribution?.length ? (
                 <GenericBarChart
-                  data={(statisticsQuery.data.clinicalProfile.diagnoses_distribution as any[]).map((d: any) => ({ name: d.label, count: d.count }))}
+                  data={(statisticsQuery.data.clinicalProfile.diagnoses_distribution as DistributionItem[]).map((d) => ({ name: d.label, count: d.count }))}
                   xAxisKey="name"
                   yAxisKey="count"
                   colors={["#3b82f6"]}
@@ -424,7 +442,7 @@ const EstadisticasContent = memo(() => {
             >
               {Array.isArray(statisticsQuery.data?.operationalMetrics?.appointments_by_status) && statisticsQuery.data?.operationalMetrics?.appointments_by_status?.length ? (
                 <GenericPieChart
-                  data={(statisticsQuery.data.operationalMetrics.appointments_by_status as any[]).map((d: any) => ({ name: d.status || 'N/A', value: d.count || 0 }))}
+                  data={(statisticsQuery.data.operationalMetrics.appointments_by_status as StatusDistributionItem[]).map((d) => ({ name: d.status || 'N/A', value: d.count || 0 }))}
                   dataKey="value"
                   nameKey="name"
                   donut
