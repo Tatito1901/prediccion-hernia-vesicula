@@ -55,43 +55,17 @@ import {
 import { useCreateAppointment } from '@/hooks/core/use-appointments';
 import { usePatientSurvey } from '@/hooks/core/use-patients';
 import { AppointmentStatusEnum, type Appointment, type Patient, type PatientSurveyData } from '@/lib/types';
-import { 
-  calculateConversionScore, 
-  generateInsights, 
+import {
+  calculateConversionScore,
+  generateInsights,
   generateRecommendationCategories,
   calculateSurgeryProbability,
-  calculateBenefitRiskRatio
+  calculateBenefitRiskRatio,
+  generatePersuasivePoints,
+  type ConversionInsight,
+  type RecommendationCategory,
+  type PersuasivePoint
 } from "@/lib/utils/survey-analyzer-helpers"
-
-// Define the structure for conversion insights
-export interface ConversionInsight {
-  id: string
-  title: string
-  description: string
-  impact: "high" | "medium" | "low"
-  actionable: boolean
-  recommendation: string
-  icon: React.ElementType
-}
-
-// Define the structure for recommendation categories
-export interface RecommendationCategory {
-  id: string
-  title: string
-  description: string
-  icon: React.ElementType
-  recommendations: string[]
-}
-
-// Define the structure for persuasive points
-export interface PersuasivePoint {
-  id: string
-  title: string
-  description: string
-  icon: React.ElementType
-  category: "clinical" | "quality" | "emotional" | "financial" | "social"
-  strength: "high" | "medium" | "low"
-}
 
 interface SurveyResultsAnalyzerProps {
   // ANTES: patient_id: string
@@ -175,82 +149,6 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
     // For now, clearing the error is a good first step.
     setModelError(null);
     // queryClient.invalidateQueries(patientKeys.detail(patient_id)); // If you have queryClient access
-  }
-
-  function generatePersuasivePoints(patient: Patient, survey: PatientSurveyData | null): PersuasivePoint[] {
-    const points: PersuasivePoint[] = []
-    if (!survey || !survey.answers) return points
-
-    // Analizar respuestas para generar puntos persuasivos
-    const severityAnswer = survey.answers.find((a: any) => 
-      a.question?.text?.toLowerCase().includes('severidad')
-    )
-    const impactAnswer = survey.answers.find((a: any) => 
-      a.question?.text?.toLowerCase().includes('actividad')
-    )
-    const durationAnswer = survey.answers.find((a: any) => 
-      a.question?.text?.toLowerCase().includes('tiempo')
-    )
-
-    // Punto clínico sobre severidad
-    if (severityAnswer?.answer_text?.toLowerCase().includes('severo')) {
-      points.push({
-        id: 'clinical-severity',
-        title: 'Alivio Significativo del Dolor',
-        description: 'La cirugía puede proporcionar alivio duradero de sus síntomas severos',
-        icon: Heart,
-        category: 'clinical',
-        strength: 'high'
-      })
-    }
-
-    // Punto sobre calidad de vida
-    if (impactAnswer?.answer_text?.toLowerCase().includes('mucho')) {
-      points.push({
-        id: 'quality-life',
-        title: 'Recuperación de Calidad de Vida',
-        description: 'Podrá retomar sus actividades diarias sin limitaciones',
-        icon: Activity,
-        category: 'quality',
-        strength: 'high'
-      })
-    }
-
-    // Punto sobre tiempo de padecimiento
-    if (durationAnswer?.answer_text?.toLowerCase().includes('año')) {
-      points.push({
-        id: 'chronic-relief',
-        title: 'Fin al Padecimiento Crónico',
-        description: 'No tiene que seguir viviendo con dolor después de tanto tiempo',
-        icon: Shield,
-        category: 'emotional',
-        strength: 'medium'
-      })
-    }
-
-    // Punto sobre seguridad del procedimiento
-    points.push({
-      id: 'procedure-safety',
-      title: 'Procedimiento Seguro y Probado',
-      description: 'Técnicas modernas con alta tasa de éxito y rápida recuperación',
-      icon: Stethoscope,
-      category: 'clinical',
-      strength: 'medium'
-    })
-
-    // Punto económico si es relevante
-    if (patient.edad && patient.edad < 65) {
-      points.push({
-        id: 'economic-benefit',
-        title: 'Retorno a Productividad',
-        description: 'Recuperación completa le permitirá volver a sus actividades laborales',
-        icon: DollarSign,
-        category: 'financial',
-        strength: 'medium'
-      })
-    }
-
-    return points;
   }
 
   if (modelError) {

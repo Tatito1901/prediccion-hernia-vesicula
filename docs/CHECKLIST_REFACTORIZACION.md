@@ -2,9 +2,9 @@
 
 ## Fase 1: Crítico - Semana 1 ⏰
 
-### Día 1-2: Tipos y Validación
+### Día 1-2: Tipos y Validación ✅
 
-- [ ] **Crear lib/api-response-types.ts**
+- [x] **Crear lib/api-response-types.ts**
   ```typescript
   export interface ApiResponse<T> { success: boolean; data: T; message?: string; }
   export interface ApiError { status: number; code?: string; message: string; }
@@ -12,57 +12,57 @@
   export interface ValidationError { field: string; message: string; code: string; }
   ```
 
-- [ ] **Crear lib/validation/api-schemas.ts**
+- [x] **Crear lib/validation/api-schemas.ts**
   ```typescript
   export const ZPatient = z.object({...});
   export const ZAppointment = z.object({...});
   export const ZPatientsResponse = z.object({...});
   ```
 
-- [ ] **Refactor: hooks/core/use-patients.ts**
-  - [ ] Línea 77: Cambiar `any` por `ApiResponse<Patient>`
-  - [ ] Línea 100: Cambiar `error: any` por `error: unknown`
-  - [ ] Línea 300-314: Tipar `payloadResp` correctamente
-  - [ ] Línea 336-343: Tipar manejo de errores con `ErrorPayload`
-  - [ ] Agregar validación Zod en `fetchPatientDetail`
+- [x] **Refactor: hooks/core/use-patients.ts**
+  - [x] Línea 77: Cambiar `any` por `ApiResponse<Patient>`
+  - [x] Línea 100: Cambiar `error: any` por `error: unknown`
+  - [x] Línea 300-314: Tipar `payloadResp` correctamente
+  - [x] Línea 336-343: Tipar manejo de errores con `ErrorPayload`
+  - [x] Agregar validación Zod en `fetchPatientDetail`
 
-- [ ] **Refactor: hooks/core/use-appointments.ts**
-  - [ ] Línea 354: Corregir casting de `updated_at`
-  - [ ] Línea 411: Eliminar `as any`
-  - [ ] Agregar validación Zod en fetchers
+- [x] **Refactor: hooks/core/use-appointments.ts**
+  - [x] Línea 354: Corregir casting de `updated_at`
+  - [x] Línea 411: Eliminar `as any`
+  - [x] Agregar validación Zod en fetchers
 
-### Día 3-4: API Routes
+### Día 3-4: API Routes ✅
 
-- [ ] **Refactor: app/api/patients/route.ts**
-  - [ ] Línea 148-169: Tipar mapeo de pacientes
+- [x] **Refactor: app/api/patients/route.ts**
+  - [x] Línea 148-169: Tipar mapeo de pacientes
     ```typescript
     interface PatientRow { id: string; nombre: string; ... }
     const patientIds = (patients as PatientRow[])...
     ```
-  - [ ] Línea 171-189: Tipar `enrichedPatients`
-  - [ ] Línea 201-206: Tipar `statusStats` reduce
-  - [ ] Agregar validación Zod en POST/PATCH
+  - [x] Línea 171-189: Tipar `enrichedPatients`
+  - [x] Línea 201-206: Tipar `statusStats` reduce
+  - [x] Agregar validación Zod en POST/PATCH
 
-- [ ] **Refactor: app/api/appointments/route.ts**
-  - [ ] Línea 223-247: Tipar enriquecimiento
+- [x] **Refactor: app/api/appointments/route.ts**
+  - [x] Línea 223-247: Tipar enriquecimiento
     ```typescript
     interface AppointmentRow extends BaseAppointment { patients?: {...} }
     ```
-  - [ ] Agregar validación Zod en responses
+  - [x] Agregar validación Zod en responses
 
-### Día 5: Context Deprecado
+### Día 5: Context Deprecado ✅
 
-- [ ] **Buscar usos de ClinicDataProvider**
+- [x] **Buscar usos de ClinicDataProvider**
   ```bash
   grep -r "ClinicDataProvider" components/
   grep -r "useClinicData" components/
   ```
 
-- [ ] **Migrar componentes encontrados**
-  - [ ] Reemplazar `useClinicData()` por `usePatients()` + `useAppointments()`
-  - [ ] Verificar que funcionan correctamente
+- [x] **Migrar componentes encontrados**
+  - [x] Reemplazar `useClinicData()` por `usePatients()` + `useAppointments()`
+  - [x] Verificar que funcionan correctamente
 
-- [ ] **Eliminar contexts/clinic-data-provider.tsx**
+- [x] **Eliminar contexts/clinic-data-provider.tsx**
 
 ---
 
@@ -405,6 +405,7 @@ git checkout -b refactor/phase-3-responsive
 
 ---
 
-**Status:** 🟡 En Progreso
+**Status:** 🟢 Fase 1 Completa | 🟡 Fase 2 En Progreso
 **Última Actualización:** 15 Nov 2025
-**Completado:** 0/78 tareas (0%)
+**Completado Fase 1:** 14/14 tareas (100%)
+**Completado Total:** 14/78 tareas (18%)

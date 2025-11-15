@@ -39,6 +39,15 @@ export interface RecommendationCategory {
   recommendations: string[]
 }
 
+export interface PersuasivePoint {
+  id: string
+  title: string
+  description: string
+  icon: React.ElementType
+  category: "clinical" | "quality" | "emotional" | "financial" | "social"
+  strength: "high" | "medium" | "low"
+}
+
 /**
  * Calcula el puntaje de conversión basado en datos del paciente y encuesta
  */
@@ -424,4 +433,87 @@ export function calculateBenefitRiskRatio(
 
   // Calcular ratio
   return Math.max(0.1, benefitScore / Math.max(1, riskScore))
+}
+
+/**
+ * Genera puntos persuasivos para la conversión del paciente
+ */
+export function generatePersuasivePoints(
+  patient: Patient,
+  survey: PatientSurveyData | null
+): PersuasivePoint[] {
+  const points: PersuasivePoint[] = []
+  if (!survey || !survey.answers) return points
+
+  // Analizar respuestas para generar puntos persuasivos
+  const answers = survey.answers as SurveyAnswer[]
+  const severityAnswer = answers.find((a) =>
+    a.question?.text?.toLowerCase().includes('severidad')
+  )
+  const impactAnswer = answers.find((a) =>
+    a.question?.text?.toLowerCase().includes('actividad')
+  )
+  const durationAnswer = answers.find((a) =>
+    a.question?.text?.toLowerCase().includes('tiempo')
+  )
+
+  // Punto clínico sobre severidad
+  if (severityAnswer?.answer_text?.toLowerCase().includes('severo')) {
+    points.push({
+      id: 'clinical-severity',
+      title: 'Alivio Significativo del Dolor',
+      description: 'La cirugía puede proporcionar alivio duradero de sus síntomas severos',
+      icon: Heart,
+      category: 'clinical',
+      strength: 'high'
+    })
+  }
+
+  // Punto sobre calidad de vida
+  if (impactAnswer?.answer_text?.toLowerCase().includes('mucho')) {
+    points.push({
+      id: 'quality-life',
+      title: 'Recuperación de Calidad de Vida',
+      description: 'Podrá retomar sus actividades diarias sin limitaciones',
+      icon: Activity,
+      category: 'quality',
+      strength: 'high'
+    })
+  }
+
+  // Punto sobre tiempo de padecimiento
+  if (durationAnswer?.answer_text?.toLowerCase().includes('año')) {
+    points.push({
+      id: 'chronic-relief',
+      title: 'Fin al Padecimiento Crónico',
+      description: 'No tiene que seguir viviendo con dolor después de tanto tiempo',
+      icon: Shield,
+      category: 'emotional',
+      strength: 'medium'
+    })
+  }
+
+  // Punto sobre seguridad del procedimiento
+  points.push({
+    id: 'procedure-safety',
+    title: 'Procedimiento Seguro y Probado',
+    description: 'Técnicas modernas con alta tasa de éxito y rápida recuperación',
+    icon: Stethoscope,
+    category: 'clinical',
+    strength: 'medium'
+  })
+
+  // Punto económico si es relevante
+  if (patient.edad && patient.edad < 65) {
+    points.push({
+      id: 'economic-benefit',
+      title: 'Retorno a Productividad',
+      description: 'Recuperación completa le permitirá volver a sus actividades laborales',
+      icon: DollarSign,
+      category: 'financial',
+      strength: 'medium'
+    })
+  }
+
+  return points
 }
