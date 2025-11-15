@@ -3,15 +3,15 @@
 // Reemplaza: use-appointments.ts, use-admission-appointments.ts, y parte de use-clinic-data.ts
 
 import { useMemo, useCallback, useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery, type QueryKey } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { endpoints, buildSearchParams } from '@/lib/api-endpoints';
 import { queryFetcher, fetchJson } from '@/lib/http';
 import { notifySuccess, notifyError } from '@/lib/client-errors';
-import type { 
-  Appointment, 
-  AppointmentStatus, 
-  AppointmentWithPatient 
+import type {
+  Appointment,
+  AppointmentStatus,
+  AppointmentWithPatient
 } from '@/lib/types';
 import { AppointmentStatusEnum } from '@/lib/types';
 
@@ -71,6 +71,13 @@ interface AppointmentsResponse {
     future_count: number;
     past_count: number;
   };
+}
+
+// Context para optimistic updates
+interface StatusUpdateContext {
+  appointmentId: string;
+  previousDetail: AppointmentWithPatient | undefined;
+  previousLists: [QueryKey, AppointmentsResponse | undefined][];
 }
 
 // ==================== FETCH FUNCTIONS ====================
@@ -388,7 +395,7 @@ export const useUpdateAppointmentStatus = () => {
         // Si viene una nueva fecha/hora (reagendar), reflejarla inmediatamente
         ...(nuevaFechaHora ? { fecha_hora_cita: nuevaFechaHora } : {}),
         // Marcar updated_at localmente para coherencia visual
-        updated_at: new Date().toISOString() as any,
+        updated_at: new Date().toISOString(),
       });
 
       // 1) Actualizar caché de detalle si existe
@@ -407,8 +414,8 @@ export const useUpdateAppointmentStatus = () => {
         const updatedList: AppointmentsResponse = {
           ...data,
           data: data.data.map((a) => (a.id === appointmentId ? applyUpdate(a) : a)),
-        } as AppointmentsResponse;
-        queryClient.setQueryData(key as any, updatedList);
+        };
+        queryClient.setQueryData<AppointmentsResponse>(key, updatedList);
       });
 
       return { appointmentId, previousDetail, previousLists };
@@ -429,8 +436,8 @@ export const useUpdateAppointmentStatus = () => {
         const updatedList: AppointmentsResponse = {
           ...data,
           data: data.data.map((a) => (a.id === updatedAppointment.id ? updatedAppointment : a)),
-        } as AppointmentsResponse;
-        queryClient.setQueryData(key as any, updatedList);
+        };
+        queryClient.setQueryData<AppointmentsResponse>(key, updatedList);
       });
       
       // Invalidación inteligente para sincronizar cualquier vista derivada
@@ -451,21 +458,21 @@ export const useUpdateAppointmentStatus = () => {
       
       notifySuccess(statusMessages[updatedAppointment.estado_cita] || 'Estado actualizado');
     },
-    onError: (error, _variables, context: any) => {
+    onError: (error, _variables, context: StatusUpdateContext | undefined) => {
       // Rollback de detalle
       if (context?.previousDetail) {
         queryClient.setQueryData(
-          queryKeys.appointments.detail(context.appointmentId), 
+          queryKeys.appointments.detail(context.appointmentId),
           context.previousDetail
         );
       }
       // Rollback de todas las listas afectadas
       if (Array.isArray(context?.previousLists)) {
         for (const [key, data] of context.previousLists) {
-          queryClient.setQueryData(key as any, data);
+          queryClient.setQueryData<AppointmentsResponse>(key, data);
         }
       }
-      
+
       notifyError(error, { prefix: 'Estado de cita' });
     },
   });
