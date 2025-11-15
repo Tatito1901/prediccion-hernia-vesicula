@@ -3,6 +3,30 @@
 
 // ✅ SOLUCIÓN: Sistema de debugging centralized para identificar problemas
 
+// Types for debug logging
+interface ApiCallData {
+  url?: string
+  method?: string
+  body?: unknown
+  headers?: Record<string, string>
+  status?: number
+  [key: string]: unknown
+}
+
+interface ErrorData {
+  message?: string
+  stack?: string
+  code?: string
+  [key: string]: unknown
+}
+
+interface ApiResponse {
+  data?: unknown
+  error?: string | ErrorData
+  success?: boolean
+  [key: string]: unknown
+}
+
 export const debugConfig = {
   api: {
     logRequests: process.env.NEXT_PUBLIC_DEBUG_API === 'true',
@@ -139,7 +163,7 @@ function initCleanupLoopIfNeeded() {
   }
 }
 
-export const logApiCall = (phase: 'request' | 'response' | 'error', data: any) => {
+export const logApiCall = (phase: 'request' | 'response' | 'error', data: ApiCallData) => {
   if (!debugConfig.api.logRequests && phase === 'request') return;
   if (!debugConfig.api.logResponses && phase === 'response') return;
   if (!debugConfig.api.logErrors && phase === 'error') return;
@@ -185,14 +209,14 @@ export const trackRender = (componentName: string) => {
   }
 };
 
-export const trackEffect = (effectName: string, dependencies: any[]) => {
+export const trackEffect = (effectName: string, dependencies: unknown[]) => {
   if (!debugConfig.performance.trackEffects) return;
-  
+
   initCleanupLoopIfNeeded();
   const state = getDebugState();
   if (!state) return;
   const next = state.effectExecutions.incr(effectName);
-  
+
   console.log(
     `%c[EFFECT] ${effectName} executed (${next} times)`,
     'color: orange',
@@ -204,14 +228,15 @@ export const trackEffect = (effectName: string, dependencies: any[]) => {
   }
 };
 
-export const logSyncError = (context: string, error: any, data?: any) => {
+export const logSyncError = (context: string, error: unknown, data?: unknown) => {
   // Definitively avoid triggering Next.js error overlays from client logs.
   // No-op by default. Enable only when explicitly requested via env flag.
   if (process.env.NEXT_PUBLIC_ENABLE_SYNC_ERROR_LOG === 'true') {
     try {
+      const err = error as ErrorData
       const payload = {
-        error: (error && (error.message || String(error))) ?? 'Unknown error',
-        stack: error?.stack,
+        error: (err && (err.message || String(err))) ?? 'Unknown error',
+        stack: err?.stack,
         data,
         timestamp: new Date().toISOString(),
       };
@@ -228,16 +253,18 @@ export const logSyncError = (context: string, error: any, data?: any) => {
   }
 };
 
-export const validateApiResponse = (response: any, expectedShape?: any): boolean => {
-  if (!response) {
-    console.warn('[API VALIDATION] Response is null or undefined');
+export const validateApiResponse = (response: unknown, expectedShape?: unknown): boolean => {
+  if (!response || typeof response !== 'object') {
+    console.warn('[API VALIDATION] Response is null, undefined, or not an object');
     return false;
   }
 
+  const resp = response as ApiResponse
+
   // Check for consistent structure
-  const hasData = 'data' in response;
-  const hasError = 'error' in response;
-  const hasSuccess = 'success' in response;
+  const hasData = 'data' in resp;
+  const hasError = 'error' in resp;
+  const hasSuccess = 'success' in resp;
 
   if (!hasSuccess) {
     console.warn('[API VALIDATION] Response missing "success" field for consistency');
