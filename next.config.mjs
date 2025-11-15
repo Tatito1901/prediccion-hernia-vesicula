@@ -1,5 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Optional bundle analyzer (run with: ANALYZE=true npm run build)
+  ...(process.env.ANALYZE === 'true' && {
+    webpack: (config, { isServer }) => {
+      if (!isServer) {
+        const { BundleAnalyzerPlugin } = require('@next/bundle-analyzer')({
+          enabled: true,
+        });
+      }
+      return config;
+    },
+  }),
   eslint: {
     ignoreDuringBuilds: false,
   },
@@ -13,6 +24,7 @@ const nextConfig = {
   },
   poweredByHeader: false,
   reactStrictMode: true,
+  compress: true, // Enable gzip compression
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
@@ -27,7 +39,15 @@ const nextConfig = {
   },
   experimental: {
     optimizeCss: true,
-    optimizePackageImports: ['lucide-react', 'date-fns', 'react-hook-form', '@tanstack/react-query'],
+    optimizePackageImports: [
+      'lucide-react',
+      'date-fns',
+      'react-hook-form',
+      '@tanstack/react-query',
+      'recharts', // Optimize recharts imports
+      '@radix-ui/react-dialog'
+    ],
+    serverComponentsExternalPackages: ['recharts'], // Prevent bundling recharts in server components
   },
   async headers() {
     return [
