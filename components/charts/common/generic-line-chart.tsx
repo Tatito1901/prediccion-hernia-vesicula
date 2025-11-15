@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Area, AreaChart, ReferenceLine } from 'recharts';
 import { useChartConfig } from './use-chart-config';
 import { formatClinicShortDate, formatClinicMediumDateTime } from '@/lib/timezone';
@@ -16,8 +16,8 @@ interface GenericLineChartProps {
   showTrend?: boolean;
 }
 
-// 🎨 Componente de tooltip personalizado elegante
-const CustomTooltip = ({ active, payload, label }: any) => {
+// 🎨 Componente de tooltip personalizado elegante (memoizado)
+const CustomTooltip = memo(({ active, payload, label }: any) => {
   const { tooltipStyle, isDark } = useChartConfig();
   const formatLabel = (val: any) => {
     try {
@@ -54,10 +54,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     );
   }
   return null;
-};
+});
+CustomTooltip.displayName = 'CustomTooltip';
 
-// 🎨 Componente de punto personalizado elegante
-const CustomDot = ({ cx, cy, fill }: any) => {
+// 🎨 Componente de punto personalizado elegante (memoizado)
+const CustomDot = memo(({ cx, cy, fill }: any) => {
   return (
     <circle
       cx={cx}
@@ -73,7 +74,8 @@ const CustomDot = ({ cx, cy, fill }: any) => {
       }}
     />
   );
-};
+});
+CustomDot.displayName = 'CustomDot';
 
 export const GenericLineChart: React.FC<GenericLineChartProps> = ({ 
   data, 

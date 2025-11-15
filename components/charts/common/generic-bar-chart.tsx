@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from 'recharts';
 import { useChartConfig } from './use-chart-config';
 
@@ -11,8 +11,8 @@ interface GenericBarChartProps {
   animated?: boolean;
 }
 
-// 🎨 Componente de tooltip personalizado elegante
-const CustomTooltip = ({ active, payload, label }: any) => {
+// 🎨 Componente de tooltip personalizado elegante (memoizado)
+const CustomTooltip = memo(({ active, payload, label }: any) => {
   const { tooltipStyle, isDark } = useChartConfig();
   
   if (active && payload && payload.length) {
@@ -31,7 +31,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     );
   }
   return null;
-};
+});
+CustomTooltip.displayName = 'CustomTooltip';
 
 export const GenericBarChart: React.FC<GenericBarChartProps> = ({ 
   data, 

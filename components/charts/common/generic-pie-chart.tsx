@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { useChartConfig } from './use-chart-config';
 
@@ -12,8 +12,8 @@ interface GenericPieChartProps {
   animated?: boolean;
 }
 
-// 🎨 Componente de tooltip personalizado elegante con validación de datos
-const CustomTooltip = ({ active, payload }: any) => {
+// 🎨 Componente de tooltip personalizado elegante con validación de datos (memoizado)
+const CustomTooltip = memo(({ active, payload }: any) => {
   const { tooltipStyle, isDark } = useChartConfig();
   
   if (active && payload && payload.length) {
@@ -41,10 +41,11 @@ const CustomTooltip = ({ active, payload }: any) => {
     );
   }
   return null;
-};
+});
+CustomTooltip.displayName = 'CustomTooltip';
 
-// 🎨 Componente de leyenda personalizado elegante
-const CustomLegend = ({ payload }: any) => {
+// 🎨 Componente de leyenda personalizado elegante (memoizado)
+const CustomLegend = memo(({ payload }: any) => {
   const { isDark } = useChartConfig();
   
   return (
@@ -66,7 +67,8 @@ const CustomLegend = ({ payload }: any) => {
       ))}
     </div>
   );
-};
+});
+CustomLegend.displayName = 'CustomLegend';
 
 // 🎨 Función para renderizar etiquetas personalizadas
 const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
