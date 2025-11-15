@@ -6,8 +6,61 @@ import { ZDiagnosisDb, ZAppointmentStatus } from '@/lib/constants'
 import type { Database } from '@/lib/types/database.types'
 import { getAvailableActions, suggestNextAction } from '@/lib/admission-business-rules'
 import { mxNow } from '@/utils/datetime'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { AppointmentStatus } from '@/lib/types'
 
 export const runtime = 'nodejs'
+
+// Types for database rows and responses
+interface AppointmentRow {
+  id: string
+  patient_id: string
+  fecha_hora_cita: string
+  estado_cita: AppointmentStatus
+  motivos_consulta: string[]
+  doctor_id?: string | null
+  notas_breves?: string | null
+  es_primera_vez?: boolean | null
+  created_at: string
+  updated_at?: string | null
+}
+
+interface PatientInfo {
+  id: string
+  nombre?: string
+  apellidos?: string
+  telefono?: string | null
+  email?: string | null
+  diagnostico_principal?: string | null
+  estado_paciente?: string | null
+}
+
+interface AppointmentWithPatient extends AppointmentRow {
+  patients?: PatientInfo | null
+}
+
+interface AppointmentLike {
+  fecha_hora_cita: string
+  estado_cita: AppointmentStatus
+  updated_at?: string | null
+}
+
+interface ScheduleAppointmentArgs {
+  p_action: 'create'
+  p_patient_id: string
+  p_doctor_id?: string | null
+  p_fecha_hora_cita: string
+  p_estado_cita?: AppointmentStatus
+  p_motivos_consulta: string[]
+  p_notas_breves?: string
+  p_es_primera_vez?: boolean
+}
+
+interface ScheduleAppointmentResult {
+  success: boolean
+  appointment_id?: string
+  message?: string
+}
 
 // Helpers
 const validatePagination = (page?: string | null, pageSize?: string | null) => {
@@ -73,7 +126,7 @@ const buildSearchFilter = (q: string) => {
   return `patients.nombre.ilike.*${sanitized}*,patients.apellidos.ilike.*${sanitized}*,patients.telefono.ilike.*${sanitized}*`
 }
 
-const getCounts = async (supabase: any) => {
+const getCounts = async (supabase: SupabaseClient<Database>) => {
   const todayYmd = clinicYmd(new Date())
   const todayStart = clinicStartOfDayUtc(todayYmd).toISOString()
   const tomorrowStart = addClinicDaysAsUtcStart(todayYmd, 1).toISOString()
@@ -222,18 +275,18 @@ export async function GET(req: NextRequest) {
   }
   // Enrich each appointment with backend-calculated business-rule action flags
   const now = mxNow()
-  const enriched = (data || []).map((row: any) => {
-    const apptLike = {
+  const enriched = (data as AppointmentWithPatient[] || []).map((row) => {
+    const apptLike: AppointmentLike = {
       fecha_hora_cita: row.fecha_hora_cita,
       estado_cita: row.estado_cita,
       updated_at: row.updated_at ?? null,
     }
-    const actionList = getAvailableActions(apptLike as any, now)
+    const actionList = getAvailableActions(apptLike, now)
     const available = actionList.filter(a => a.valid).map(a => a.action)
     const action_reasons = Object.fromEntries(
       actionList.filter(a => !a.valid && a.reason).map(a => [a.action, a.reason as string])
     )
-    const primary = suggestNextAction(apptLike as any, now)
+    const primary = suggestNextAction(apptLike, now)
     const actions = {
       canCheckIn: available.includes('checkIn'),
       canComplete: available.includes('complete'),
@@ -268,7 +321,7 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const payload = parse.data
   // Programación atómica vía RPC con validación de traslapes
-  const rpcArgs: any = {
+  const rpcArgs: ScheduleAppointmentArgs = {
     p_action: 'create',
     p_patient_id: payload.patient_id,
     ...(payload.doctor_id !== undefined ? { p_doctor_id: payload.doctor_id ?? null } : {}),
@@ -278,11 +331,12 @@ export async function POST(req: NextRequest) {
     ...(payload.notas_breves !== undefined ? { p_notas_breves: payload.notas_breves } : {}),
     ...(payload.es_primera_vez !== undefined ? { p_es_primera_vez: payload.es_primera_vez } : {}),
   }
-  const { data: rpcData, error: rpcError } = await (supabase as any).rpc('schedule_appointment', rpcArgs)
+  const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs)
   if (rpcError) {
     return NextResponse.json({ message: rpcError.message || 'Error al programar la cita' }, { status: 400 })
   }
-  const result = (rpcData as any) && (rpcData as any)[0]
+  const resultArray = (rpcData as unknown) as ScheduleAppointmentResult[]
+  const result = resultArray?.[0]
   if (!result || !result.success || !result.appointment_id) {
     const msg = result?.message || 'No se pudo programar la cita'
     const status = /horario no disponible/i.test(msg) ? 409 : 400
@@ -316,17 +370,18 @@ export async function POST(req: NextRequest) {
   // Enrich the single created appointment as well
   try {
     const now = mxNow()
-    const apptLike = {
-      fecha_hora_cita: (data as any).fecha_hora_cita,
-      estado_cita: (data as any).estado_cita,
-      updated_at: (data as any).updated_at ?? null,
+    const appointment = data as unknown as AppointmentWithPatient
+    const apptLike: AppointmentLike = {
+      fecha_hora_cita: appointment.fecha_hora_cita,
+      estado_cita: appointment.estado_cita,
+      updated_at: appointment.updated_at ?? null,
     }
-    const actionList = getAvailableActions(apptLike as any, now)
+    const actionList = getAvailableActions(apptLike, now)
     const available = actionList.filter(a => a.valid).map(a => a.action)
     const action_reasons = Object.fromEntries(
       actionList.filter(a => !a.valid && a.reason).map(a => [a.action, a.reason as string])
     )
-    const primary = suggestNextAction(apptLike as any, now)
+    const primary = suggestNextAction(apptLike, now)
     const actions = {
       canCheckIn: available.includes('checkIn'),
       canComplete: available.includes('complete'),
@@ -336,7 +391,7 @@ export async function POST(req: NextRequest) {
       available,
       primary,
     }
-    return NextResponse.json({ ...(data as any), actions, action_reasons, suggested_action: primary })
+    return NextResponse.json({ ...appointment, actions, action_reasons, suggested_action: primary })
   } catch {
     // Fallback to raw data if enrichment fails for any reason
     return NextResponse.json(data)
