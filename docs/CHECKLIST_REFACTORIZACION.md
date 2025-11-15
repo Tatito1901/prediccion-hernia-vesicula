@@ -68,18 +68,18 @@
 
 ## Fase 2: Importante - Semana 2 🚀
 
-### Día 1-2: Performance
+### Día 1-2: Performance ✅
 
-- [ ] **Refactor: components/surveys/survey-results-analyzer.tsx**
-  - [ ] Extraer `generatePersuasivePoints` fuera del componente
-  - [ ] Crear `ResumenTab` como memo component
+- [x] **Refactor: components/surveys/survey-results-analyzer.tsx**
+  - [x] Extraer `generatePersuasivePoints` fuera del componente
+  - [ ] Crear `ResumenTab` como memo component (Pendiente)
     ```typescript
     const ResumenTab = memo(({ ... }: ResumenTabProps) => { ... });
     ```
-  - [ ] Crear `ProbabilidadTab` como memo component
-  - [ ] Crear `RiesgosTab` como memo component
-  - [ ] Crear `RecomendacionesTab` como memo component
-  - [ ] Agregar dynamic import en componente padre
+  - [ ] Crear `ProbabilidadTab` como memo component (Pendiente)
+  - [ ] Crear `RiesgosTab` como memo component (Pendiente)
+  - [ ] Crear `RecomendacionesTab` como memo component (Pendiente)
+  - [ ] Agregar dynamic import en componente padre (Pendiente)
     ```typescript
     const SurveyResultsAnalyzer = dynamic(() => import('./survey-results-analyzer'), {
       ssr: false,
@@ -94,14 +94,15 @@
   - [ ] Memoizar cada subcomponente
   - [ ] Simplificar componente principal
 
-- [ ] **Refactor: Charts**
-  - [ ] `components/charts/common/generic-pie-chart.tsx`
-    - [ ] Memoizar `CustomTooltip`
-    - [ ] Memoizar `CustomLegend`
-  - [ ] `components/charts/common/generic-bar-chart.tsx`
-    - [ ] Verificar memoización
-  - [ ] `components/charts/common/generic-line-chart.tsx`
-    - [ ] Verificar memoización
+- [x] **Refactor: Charts** ✅
+  - [x] `components/charts/common/generic-pie-chart.tsx`
+    - [x] Memoizar `CustomTooltip`
+    - [x] Memoizar `CustomLegend`
+  - [x] `components/charts/common/generic-bar-chart.tsx`
+    - [x] Memoizar `CustomTooltip`
+  - [x] `components/charts/common/generic-line-chart.tsx`
+    - [x] Memoizar `CustomTooltip`
+    - [x] Memoizar `CustomDot`
 
 ### Día 3-4: Optimización de Cache
 
@@ -121,24 +122,23 @@
   - [ ] `useRescheduleAppointment` - Optimizar invalidaciones
   - [ ] Reducir refetches innecesarios
 
-### Día 5: Next.js Config
+### Día 5: Next.js Config ✅
 
-- [ ] **Actualizar: next.config.mjs**
+- [x] **Actualizar: next.config.mjs**
   ```javascript
-  swcMinify: true,
   compress: true,
   experimental: {
     optimizePackageImports: [
       'lucide-react',
       'date-fns',
-      'recharts', // <-- AGREGAR
+      'recharts', // <-- AGREGADO
       '@radix-ui/react-dialog',
     ],
-    serverComponentsExternalPackages: ['recharts'],
+    serverComponentsExternalPackages: ['recharts'], // <-- AGREGADO
   }
   ```
 
-- [ ] **Agregar bundle analyzer**
+- [x] **Agregar bundle analyzer**
   ```javascript
   ...(process.env.ANALYZE === 'true' && {
     webpack: (config) => {
@@ -149,7 +149,7 @@
   })
   ```
 
-- [ ] **Ejecutar análisis**
+- [ ] **Ejecutar análisis** (Opcional - usuario puede ejecutar cuando quiera)
   ```bash
   ANALYZE=true npm run build
   ```
@@ -405,7 +405,8 @@ git checkout -b refactor/phase-3-responsive
 
 ---
 
-**Status:** 🟢 Fase 1 Completa | 🟡 Fase 2 En Progreso
+**Status:** 🟢 Fase 1 Completa | 🟡 Fase 2 En Progreso (Parcial)
 **Última Actualización:** 15 Nov 2025
 **Completado Fase 1:** 14/14 tareas (100%)
-**Completado Total:** 14/78 tareas (18%)
+**Completado Fase 2:** 8/19 tareas (42%)
+**Completado Total:** 22/78 tareas (28%)
