@@ -158,82 +158,87 @@
 
 ## Fase 3: Mejoras - Semana 3 ✨
 
-### Día 1-2: Responsividad
+### Día 1-2: Responsividad ✅
 
-- [ ] **Aumentar touch targets**
-  - [ ] `components/patients/patient-table.tsx` línea 247
+- [x] **Aumentar touch targets** ✅
+  - [x] `components/patients/patient-table.tsx` línea 247
     ```tsx
     <Button className="h-11 w-11 p-0"> {/* era h-8 w-8 */}
     ```
-  - [ ] Buscar otros botones pequeños
+  - [x] Buscar otros botones pequeños
     ```bash
     grep -r "h-8 w-8" components/
+    # Encontrado: patient-card.tsx línea 181
     ```
-  - [ ] Verificar cumplimiento WCAG 2.1 (44x44px mínimo)
+  - [x] Verificar cumplimiento WCAG 2.1 (44x44px mínimo) ✅
 
-- [ ] **Mostrar email en móvil**
-  - [ ] `components/patient-admision/patient-card.tsx` línea 598
+- [x] **Mostrar email en móvil** ✅
+  - [x] `components/patient-admision/patient-card.tsx` línea 600
     ```tsx
     className="flex items-center gap-1.5 text-xs sm:text-sm"
     // era: "hidden sm:flex items-center gap-1.5"
     ```
 
-- [ ] **Proteger grid virtualizado**
-  - [ ] `components/patients/patient-table.tsx` línea 596
+- [x] **Proteger grid virtualizado** ✅
+  - [x] `components/patients/patient-table.tsx` línea 596
     ```tsx
     className="hidden lg:grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_80px]"
     // era: "grid grid-cols-[...]"
     ```
 
-- [ ] **Verificar en dispositivos reales**
+- [ ] **Verificar en dispositivos reales** (Pendiente - Usuario)
   - [ ] iPhone (Safari)
   - [ ] Android (Chrome)
   - [ ] iPad (Safari)
 
-### Día 3-4: RLS Granular
+### Día 3-4: RLS Granular ✅
 
-- [ ] **Crear: supabase/sql/rls_granular.sql**
+- [x] **Crear: supabase/sql/rls_granular.sql** ✅
   ```sql
   create or replace function public.has_role(required_role text)
   returns boolean as $$
-    select exists (
+  begin
+    return exists (
       select 1 from public.profiles p
       where p.id = auth.uid() and p.role::text = required_role
     );
-  $$ language sql stable security definer;
+  end;
+  $$ language plpgsql stable security definer;
   ```
 
-- [ ] **Implementar políticas por rol**
-  - [ ] Pacientes - solo lectura para asistente
-  - [ ] Citas - update solo para doctor/admin
-  - [ ] Encuestas - asignación solo admin/doctor
+- [x] **Implementar políticas por rol** ✅
+  - [x] Pacientes - solo lectura para asistente
+  - [x] Citas - update solo para doctor/admin
+  - [x] Encuestas - asignación solo admin/doctor
 
-- [ ] **Crear auditoría: supabase/sql/audit_triggers.sql**
+- [x] **Crear auditoría: supabase/sql/audit_triggers.sql** ✅
   ```sql
   create table if not exists audit_log (
-    id uuid primary key default uuid_generate_v4(),
+    id uuid primary key default gen_random_uuid(),
     table_name text not null,
-    operation text not null,
+    operation text not null check (operation in ('INSERT', 'UPDATE', 'DELETE')),
     user_id uuid references auth.users(id),
+    user_email text,
+    user_role text,
     old_data jsonb,
     new_data jsonb,
+    changed_fields jsonb,
+    ip_address inet,
+    user_agent text,
     created_at timestamptz default now()
   );
 
   create or replace function audit_trigger_func()
-  returns trigger as $$
-  begin
-    insert into audit_log (table_name, operation, user_id, old_data, new_data)
-    values (TG_TABLE_NAME, TG_OP, auth.uid(), row_to_json(OLD), row_to_json(NEW));
-    return NEW;
-  end;
-  $$ language plpgsql security definer;
+  returns trigger language plpgsql security definer as $$
+  -- Implementación completa con detección de cambios
+  $$;
   ```
 
-- [ ] **Aplicar triggers a tablas críticas**
-  - [ ] patients
-  - [ ] appointments
-  - [ ] assigned_surveys
+- [x] **Aplicar triggers a tablas críticas** ✅
+  - [x] patients
+  - [x] appointments
+  - [x] assigned_surveys
+  - [x] profiles (adicional - crítico para auditoría de roles)
 
 ### Día 5: Testing
 
@@ -405,8 +410,10 @@ git checkout -b refactor/phase-3-responsive
 
 ---
 
-**Status:** 🟢 Fase 1 Completa | 🟡 Fase 2 En Progreso (Parcial)
+**Status:** 🟢 Fase 1 Completa | 🟡 Fase 2 En Progreso | 🟡 Fase 3 En Progreso
 **Última Actualización:** 15 Nov 2025
-**Completado Fase 1:** 14/14 tareas (100%)
-**Completado Fase 2:** 8/19 tareas (42%)
-**Completado Total:** 22/78 tareas (28%)
+**Completado Fase 1:** 14/14 tareas (100%) ✅
+**Completado Fase 2:** 8/19 tareas (42%) 🔄
+**Completado Fase 3:** 14/26 tareas (54%) 🔄
+**Completado Fase 4:** 0/19 tareas (0%) ⏳
+**Completado Total:** 36/78 tareas (46%)
