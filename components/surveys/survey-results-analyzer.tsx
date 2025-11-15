@@ -1,60 +1,28 @@
 "use client"
 
 import React from "react"
-import { useState, useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
-import { format, addDays } from "date-fns"
-import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useMemo } from "react"
+import { addDays } from "date-fns"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-} from "recharts"
-import {
-  Activity,
   AlertCircle,
-  ArrowRight,
   Award,
-  Calendar,
-  Check,
-  CheckSquare,
   ClipboardX,
-  DollarSign,
   Download,
   FileText,
   Gauge,
-  Heart,
   Lightbulb,
-  Loader2,
-  MessageCircle,
   PhoneIcon,
   RefreshCcw,
   Share2,
   Shield,
-  Stethoscope,
-  ThumbsDown,
-  ThumbsUp,
-  User,
-  Zap,
 } from "lucide-react"
 // ❌ ELIMINADO: import { usePatient } - Ya no es necesario, recibimos datos vía props
 import { useCreateAppointment } from '@/hooks/core/use-appointments';
 import { usePatientSurvey } from '@/hooks/core/use-patients';
-import { AppointmentStatusEnum, type Appointment, type Patient, type PatientSurveyData } from '@/lib/types';
+import { AppointmentStatusEnum, type Patient } from '@/lib/types';
 import {
   calculateConversionScore,
   generateInsights,
@@ -62,10 +30,13 @@ import {
   calculateSurgeryProbability,
   calculateBenefitRiskRatio,
   generatePersuasivePoints,
-  type ConversionInsight,
-  type RecommendationCategory,
-  type PersuasivePoint
 } from "@/lib/utils/survey-analyzer-helpers"
+// Importar componentes de tabs memoizados
+import { ResumenTab } from "./tabs/resumen-tab"
+import { ProbabilidadTab } from "./tabs/probabilidad-tab"
+import { RecomendacionesTab } from "./tabs/recomendaciones-tab"
+import { RiesgosTab } from "./tabs/riesgos-tab"
+import { SeguimientoTab } from "./tabs/seguimiento-tab"
 
 interface SurveyResultsAnalyzerProps {
   // ANTES: patient_id: string
@@ -228,211 +199,32 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
               </TabsList>
             </div>
 
-            <TabsContent value="resumen" className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card className="shadow-md rounded-xl">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-semibold text-gray-700 flex items-center">
-                      <User className="w-5 h-5 mr-2 text-blue-500" />
-                      Información del Paciente
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-gray-600"><strong>Edad:</strong> {patientData.edad} años</p>
-                    {/* <p className="text-gray-600"><strong>Género:</strong> {patientData.genero}</p> */}
-                    {/* ❌ COMENTADO: 'genero' no existe en el tipo Patient según el esquema de BD */}
-                    {/* <p className="text-gray-600"><strong>Motivo:</strong> {surveyData?.motivo_visita}</p> */}
-                  </CardContent>
-                </Card>
-                <Card className="shadow-md rounded-xl">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg font-semibold text-gray-700 flex items-center">
-                      <Activity className="w-5 h-5 mr-2 text-green-500" />
-                      Estado de Salud General
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {/* <p className="text-gray-600"><strong>Condiciones Crónicas:</strong> {surveyData.condiciones_medicas_cronicas?.join(', ') || 'Ninguna'}</p> */}
-                    {/* <p className="text-gray-600"><strong>Diagnóstico Previo:</strong> {surveyData?.diagnostico_previo ? 'Sí' : 'No'}</p> */}
-                  </CardContent>
-                </Card>
-              </div>
-              <Separator className="my-6" />
-              <h3 className="text-xl font-semibold text-gray-800 mb-4">Puntos Clave de la Encuesta</h3>
-              <div className="space-y-4">
-                {insights.map((insight: ConversionInsight) => (
-                  <Alert key={insight.id} className={`bg-${insight.impact === 'high' ? 'yellow' : 'blue'}-50/70 border-${insight.impact === 'high' ? 'yellow' : 'blue'}-200/80 shadow-sm rounded-lg`}>
-                    <insight.icon className={`w-5 h-5 text-${insight.impact === 'high' ? 'yellow' : 'blue'}-600`} />
-                    <AlertTitle className="font-semibold text-gray-800">{insight.title}</AlertTitle>
-                    <AlertDescription className="text-gray-600">{insight.description}</AlertDescription>
-                  </Alert>
-                ))}
-              </div>
+            <TabsContent value="resumen">
+              <ResumenTab
+                patientData={patientData}
+                surveyData={surveyData}
+                insights={insights}
+              />
             </TabsContent>
 
-            <TabsContent value="probabilidad" className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                <div className="flex flex-col items-center justify-center">
-                  <h3 className="text-2xl font-bold text-gray-800 mb-2">Probabilidad de Cirugía</h3>
-                  <div style={{ width: 200, height: 200 }}>
-                    <ResponsiveContainer>
-                      <PieChart>
-                        <Pie
-                          data={[{ name: 'Probabilidad', value: surgeryProbability }, { name: 'Resto', value: 1 - surgeryProbability }]}
-                          dataKey="value"
-                          innerRadius="70%"
-                          outerRadius="100%"
-                          startAngle={90}
-                          endAngle={-270}
-                          paddingAngle={0}
-                          cornerRadius={10}
-                        >
-                          <Cell fill="#3b82f6" />
-                          <Cell fill="#e5e7eb" />
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <p className="text-5xl font-bold text-blue-600 mt-[-120px]">{(surgeryProbability * 100).toFixed(0)}%</p>
-                  <p className="text-gray-500 mt-[80px]">Basado en el modelo predictivo</p>
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-4">Factores Influyentes</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center">
-                      <ThumbsUp className="w-5 h-5 text-green-500 mr-3" />
-                      <span className="text-gray-700">Severidad de síntomas</span>
-                    </div>
-                    <div className="flex items-center">
-                      <ThumbsUp className="w-5 h-5 text-green-500 mr-3" />
-                      <span className="text-gray-700">Impacto en calidad de vida</span>
-                    </div>
-                    <div className="flex items-center">
-                      <ThumbsDown className="w-5 h-5 text-red-500 mr-3" />
-                      <span className="text-gray-700">Preocupaciones sobre recuperación</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <TabsContent value="probabilidad">
+              <ProbabilidadTab surgeryProbability={surgeryProbability} />
             </TabsContent>
 
-            <TabsContent value="recomendaciones" className="p-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-4">Plan de Acción Sugerido</h3>
-              <div className="space-y-4">
-                {recommendationCategories.map((category: RecommendationCategory) => (
-                  <Accordion key={category.id} type="single" collapsible className="w-full">
-                    <AccordionItem value={category.id} className="border rounded-lg shadow-sm">
-                      <AccordionTrigger className="px-4 py-3 font-semibold text-gray-700 hover:bg-gray-50/80 rounded-t-lg">
-                        <div className="flex items-center">
-                          <category.icon className="w-5 h-5 mr-3 text-blue-500" />
-                          {category.title}
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-4 py-3 border-t bg-white">
-                        <p className="text-gray-600 mb-3">{category.description}</p>
-                        <ul className="list-disc list-inside space-y-2 text-gray-700">
-                          {category.recommendations.map((rec: string, index: number) => (
-                            <li key={index}>{rec}</li>
-                          ))}
-                        </ul>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                ))}
-              </div>
+            <TabsContent value="recomendaciones">
+              <RecomendacionesTab recommendationCategories={recommendationCategories} />
             </TabsContent>
 
-            <TabsContent value="riesgos" className="p-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-4">Balanza: Beneficios vs. Riesgos</h3>
-              <div className="w-full flex flex-col items-center">
-                <div className="w-full max-w-md">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-semibold text-green-600">Beneficios Potenciales</span>
-                    <span className="font-semibold text-red-600">Riesgos Potenciales</span>
-                  </div>
-                  <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full"
-                      style={{ width: `${Math.min(100, (benefitRiskRatio / (benefitRiskRatio + 1)) * 100)}%` }}
-                    ></div>
-                  </div>
-                  <div className="flex justify-between text-sm text-gray-500 mt-2">
-                    <span>Alivio del dolor, mejora de movilidad</span>
-                    <span>Complicaciones, recuperación</span>
-                  </div>
-                </div>
-              </div>
-              <Separator className="my-6" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-semibold text-lg text-green-700 mb-2">Principales Beneficios</h4>
-                  <ul className="list-disc list-inside space-y-1 text-gray-600">
-                    <li>Reducción significativa y duradera del dolor.</li>
-                    <li>Retorno a actividades diarias sin limitaciones.</li>
-                    <li>Prevención de complicaciones a largo plazo.</li>
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-lg text-red-700 mb-2">Principales Riesgos</h4>
-                  <ul className="list-disc list-inside space-y-1 text-gray-600">
-                    <li>Riesgos inherentes a cualquier procedimiento quirúrgico.</li>
-                    <li>Posibilidad de recurrencia de la hernia.</li>
-                    <li>Tiempo de recuperación y rehabilitación.</li>
-                  </ul>
-                </div>
-              </div>
+            <TabsContent value="riesgos">
+              <RiesgosTab benefitRiskRatio={benefitRiskRatio} />
             </TabsContent>
 
-            <TabsContent value="seguimiento" className="p-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-4">Plan de Comunicación y Seguimiento</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card className="shadow-md rounded-xl">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <MessageCircle className="w-5 h-5 mr-2 text-blue-500" />
-                      Mensajes Clave
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="list-disc list-inside space-y-2 text-gray-600">
-                      {persuasivePoints.map(point => (
-                        <li key={point.id}>{point.title}: {point.description}</li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-                <div className="space-y-6">
-                  <Card className="shadow-md rounded-xl">
-                    <CardHeader>
-                      <CardTitle className="flex items-center">
-                        <Calendar className="w-5 h-5 mr-2 text-green-500" />
-                        Agendar Próxima Interacción
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-gray-600 mb-4">Se recomienda un seguimiento en <strong>7 días</strong> para discutir los resultados y próximos pasos.</p>
-                      <Button 
-                        onClick={handleScheduleFollowUp} 
-                        disabled={createAppointment.isPending}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full transition-all duration-200"
-                      >
-                        {createAppointment.isPending ? (
-                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Programando...</>
-                        ) : (
-                          <><CheckSquare className="w-4 h-4 mr-2" /> Programar Llamada de Seguimiento</>
-                        )}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                  <Alert className="bg-blue-50/70 border-blue-200/80">
-                    <Lightbulb className="h-4 w-4" />
-                    <AlertTitle>Sugerencia</AlertTitle>
-                    <AlertDescription>
-                      Envíe un resumen por correo electrónico al paciente con los puntos más importantes y el plan de acción.
-                    </AlertDescription>
-                  </Alert>
-                </div>
-              </div>
+            <TabsContent value="seguimiento">
+              <SeguimientoTab
+                persuasivePoints={persuasivePoints}
+                onScheduleFollowUp={handleScheduleFollowUp}
+                isScheduling={createAppointment.isPending}
+              />
             </TabsContent>
           </Tabs>
       </CardContent>
