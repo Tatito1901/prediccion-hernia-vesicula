@@ -3,8 +3,52 @@ import { createClient } from '@/utils/supabase/server'
 import { z } from 'zod'
 import { getAvailableActions, suggestNextAction } from '@/lib/admission-business-rules'
 import { mxNow } from '@/utils/datetime'
+import type { AppointmentStatus } from '@/lib/types'
 
 export const runtime = 'nodejs'
+
+interface AppointmentWithPatient {
+  id: string
+  patient_id: string
+  doctor_id?: string | null
+  created_at: string
+  updated_at?: string | null
+  fecha_hora_cita: string
+  motivos_consulta: string[]
+  estado_cita: AppointmentStatus
+  notas_breves?: string | null
+  es_primera_vez?: boolean | null
+  patients?: {
+    id: string
+    nombre: string
+    apellidos: string
+    telefono?: string | null
+    email?: string | null
+    diagnostico_principal?: string | null
+    estado_paciente?: string | null
+  } | null
+}
+
+interface AppointmentLike {
+  fecha_hora_cita: string
+  estado_cita: AppointmentStatus
+  updated_at?: string | null
+}
+
+interface UpdateAppointmentArgs {
+  p_action: 'update'
+  p_appointment_id: string
+  p_doctor_id?: string | null
+  p_fecha_hora_cita?: string
+  p_motivos_consulta?: string[]
+  p_notas_breves?: string
+  p_es_primera_vez?: boolean
+}
+
+interface UpdateAppointmentResult {
+  success: boolean
+  message?: string
+}
 
 const PatchSchema = z.object({
   fecha_hora_cita: z.string().datetime().optional(),
@@ -15,8 +59,8 @@ const PatchSchema = z.object({
 })
 
 // Nota: el estado de la cita se actualiza en subruta dedicada `/status`
-function hasForbiddenStatusField(body: any): boolean {
-  return body && Object.prototype.hasOwnProperty.call(body, 'estado_cita')
+function hasForbiddenStatusField(body: unknown): boolean {
+  return typeof body === 'object' && body !== null && Object.prototype.hasOwnProperty.call(body, 'estado_cita')
 }
 
 // GET /api/appointments/[id] - devuelve una cita enriquecida con acciones calculadas
@@ -55,20 +99,21 @@ export async function GET(
 
     // Enriquecer con flags de acciones
     const now = mxNow()
-    const apptLike = {
-      fecha_hora_cita: (data as any).fecha_hora_cita,
-      estado_cita: (data as any).estado_cita,
-      updated_at: (data as any).updated_at ?? null,
+    const appointment = data as unknown as AppointmentWithPatient
+    const apptLike: AppointmentLike = {
+      fecha_hora_cita: appointment.fecha_hora_cita,
+      estado_cita: appointment.estado_cita,
+      updated_at: appointment.updated_at ?? null,
     }
-    const actionList = getAvailableActions(apptLike as any, now)
+    const actionList = getAvailableActions(apptLike, now)
     const available = actionList.filter(a => a.valid).map(a => a.action)
     const action_reasons = Object.fromEntries(
       actionList.filter(a => !a.valid && a.reason).map(a => [a.action, a.reason as string])
     )
-    const primary = suggestNextAction(apptLike as any, now)
+    const primary = suggestNextAction(apptLike, now)
 
     return NextResponse.json({
-      ...(data as any),
+      ...appointment,
       actions: {
         canCheckIn: available.includes('checkIn'),
         canComplete: available.includes('complete'),
@@ -81,8 +126,9 @@ export async function GET(
       action_reasons,
       suggested_action: primary,
     })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Error inesperado' }, { status: 500 })
+  } catch (e: unknown) {
+    const error = e as Error
+    return NextResponse.json({ error: error?.message || 'Error inesperado' }, { status: 500 })
   }
 }
 
@@ -111,7 +157,7 @@ export async function PATCH(
     const supabase = await createClient()
 
     // Actualización atómica vía RPC con verificación de traslapes
-    const rpcArgs: any = {
+    const rpcArgs: UpdateAppointmentArgs = {
       p_action: 'update',
       p_appointment_id: id,
       p_doctor_id: parsed.data.doctor_id !== undefined ? parsed.data.doctor_id : undefined,
@@ -121,11 +167,12 @@ export async function PATCH(
       p_es_primera_vez: parsed.data.es_primera_vez ?? undefined,
     }
 
-    const { data: rpcData, error: rpcError } = await (supabase as any).rpc('schedule_appointment', rpcArgs)
+    const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs)
     if (rpcError) {
       return NextResponse.json({ error: rpcError.message || 'Error al actualizar la cita' }, { status: 400 })
     }
-    const result = (rpcData as any) && (rpcData as any)[0]
+    const resultArray = (rpcData as unknown) as UpdateAppointmentResult[]
+    const result = resultArray?.[0]
     if (!result || !result.success) {
       const msg = result?.message || 'No se pudo actualizar la cita'
       const status = /no encontrada/i.test(msg)
@@ -164,17 +211,18 @@ export async function PATCH(
     // Enrich with backend-calculated business-rule action flags
     try {
       const now = mxNow()
-      const apptLike = {
-        fecha_hora_cita: (updated as any).fecha_hora_cita,
-        estado_cita: (updated as any).estado_cita,
-        updated_at: (updated as any).updated_at ?? null,
+      const appointment = updated as unknown as AppointmentWithPatient
+      const apptLike: AppointmentLike = {
+        fecha_hora_cita: appointment.fecha_hora_cita,
+        estado_cita: appointment.estado_cita,
+        updated_at: appointment.updated_at ?? null,
       }
-      const actionList = getAvailableActions(apptLike as any, now)
+      const actionList = getAvailableActions(apptLike, now)
       const available = actionList.filter(a => a.valid).map(a => a.action)
       const action_reasons = Object.fromEntries(
         actionList.filter(a => !a.valid && a.reason).map(a => [a.action, a.reason as string])
       )
-      const primary = suggestNextAction(apptLike as any, now)
+      const primary = suggestNextAction(apptLike, now)
       const actions = {
         canCheckIn: available.includes('checkIn'),
         canComplete: available.includes('complete'),
@@ -184,11 +232,12 @@ export async function PATCH(
         available,
         primary,
       }
-      return NextResponse.json({ ...(updated as any), actions, action_reasons, suggested_action: primary })
+      return NextResponse.json({ ...appointment, actions, action_reasons, suggested_action: primary })
     } catch {
       return NextResponse.json(updated)
     }
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Error inesperado' }, { status: 500 })
+  } catch (e: unknown) {
+    const error = e as Error
+    return NextResponse.json({ error: error?.message || 'Error inesperado' }, { status: 500 })
   }
 }

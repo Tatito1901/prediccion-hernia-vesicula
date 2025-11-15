@@ -41,6 +41,24 @@ type AppointmentSnapshot = Pick<
   | 'updated_at'
 >;
 
+// RPC arguments for reschedule/update via schedule_appointment
+interface RescheduleAppointmentArgs {
+  p_action: 'update'
+  p_appointment_id: string
+  p_patient_id: string | null
+  p_doctor_id?: string | null
+  p_fecha_hora_cita: string
+  p_estado_cita: AppointmentStatus
+  p_expected_updated_at?: string | null
+  p_notas_breves?: string
+}
+
+interface RescheduleAppointmentResult {
+  success: boolean
+  appointment_id?: string
+  message?: string
+}
+
 // Safe extraction of error messages from unknown
 const getErrMsg = (err: unknown): string => {
   if (typeof err === 'string') return err;
@@ -293,7 +311,7 @@ export async function PATCH(
     // 2. OBTENER CITA ACTUAL CON REINTENTOS PARA MANEJAR CONCURRENCIA
     let fetchAttempts = 0;
     const maxFetchAttempts = 3;
-    let fetchError: any = null;
+    let fetchError: unknown = null;
     
     while (fetchAttempts < maxFetchAttempts && !current) {
       const { data: currentRow, error } = await supabase
@@ -491,9 +509,7 @@ export async function PATCH(
     
     if (newStatus === AppointmentStatusEnum.REAGENDADA && effectiveNewDateTime) {
       // Usar RPC centralizada para reagendar con validación de traslapes + concurrencia
-      // Nota: Algunas versiones del tipo Database pueden no declarar la función.
-      // Usamos un tipo flexible para evitar errores de compilación.
-      const rpcArgs: any = {
+      const rpcArgs: RescheduleAppointmentArgs = {
         p_action: 'update',
         p_appointment_id: appointmentId,
         p_patient_id: current.patient_id ?? null,
@@ -503,11 +519,12 @@ export async function PATCH(
         ...(previousUpdatedAt ? { p_expected_updated_at: previousUpdatedAt } : {}),
         ...(updateData.notas_breves !== undefined ? { p_notas_breves: updateData.notas_breves } : {}),
       };
-      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('schedule_appointment', rpcArgs);
+      const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs);
       if (rpcError) {
         return NextResponse.json({ error: rpcError.message || 'Error al reagendar la cita' }, { status: 400 });
       }
-      const result = (rpcData as any) && (rpcData as any)[0];
+      const resultArray = (rpcData as unknown) as RescheduleAppointmentResult[]
+      const result = resultArray?.[0];
       if (!result || !result.success || !result.appointment_id) {
         const msg = result?.message || 'No se pudo reagendar la cita';
         if (/no encontrada|no existe/i.test(msg)) {
@@ -541,7 +558,7 @@ export async function PATCH(
       // Actualización directa para otros estados con reintentos en caso de conflicto
       let updateAttempts = 0;
       const maxUpdateAttempts = 3;
-      let lastUpdateError: any = null;
+      let lastUpdateError: unknown = null;
       
       while (updateAttempts < maxUpdateAttempts) {
         let updateQuery = supabase
