@@ -41,9 +41,10 @@ export async function GET(
 
     return NextResponse.json(createApiResponse(patient));
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error
     return NextResponse.json(
-      createApiError('Error interno del servidor', { details: error.message, code: 'INTERNAL_ERROR' }),
+      createApiError('Error interno del servidor', { details: err.message, code: 'INTERNAL_ERROR' }),
       { status: 500 }
     );
   }
@@ -137,9 +138,10 @@ export async function PATCH(
 
     return NextResponse.json(createApiResponse(updatedPatient));
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error
     return NextResponse.json(
-      createApiError('Error interno del servidor', { details: error.message, code: 'INTERNAL_ERROR' }),
+      createApiError('Error interno del servidor', { details: err.message, code: 'INTERNAL_ERROR' }),
       { status: 500 }
     );
   }
@@ -176,9 +178,10 @@ export async function DELETE(
 
     return NextResponse.json(createApiResponse({ id }, { message: 'Paciente eliminado exitosamente' }));
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error
     return NextResponse.json(
-      createApiError('Error interno del servidor', { details: error.message, code: 'INTERNAL_ERROR' }),
+      createApiError('Error interno del servidor', { details: err.message, code: 'INTERNAL_ERROR' }),
       { status: 500 }
     );
   }
