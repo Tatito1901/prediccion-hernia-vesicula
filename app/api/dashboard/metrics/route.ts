@@ -165,7 +165,8 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json(validated.data)
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error
     return NextResponse.json({ message: 'Error al obtener métricas de dashboard', details: String(error?.message || error) }, { status: 500 })
   }
 }

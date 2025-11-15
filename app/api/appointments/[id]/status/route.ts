@@ -696,7 +696,7 @@ export async function PATCH(
         fecha_hora_cita: responseAppointment.fecha_hora_cita || current.fecha_hora_cita,
         estado_cita: responseAppointment.estado_cita!,
         updated_at: responseAppointment.updated_at ?? null,
-      } as any;
+      };
       const now = mxNow();
       const actionList = getAvailableActions(apptLike, now);
       const available = actionList.filter(a => a.valid).map(a => a.action);

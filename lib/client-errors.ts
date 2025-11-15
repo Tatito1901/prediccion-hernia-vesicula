@@ -13,7 +13,7 @@ export function notifyError(err: unknown, ctx?: NotifyContext): AppError {
   // Try to append backend reason if present in the JSON payload
   const reason = (() => {
     try {
-      const d: any = n.details;
+      const d = n.details as Record<string, unknown> | undefined;
       const r = typeof d?.reason === 'string' ? d.reason : undefined;
       return r && r !== base ? r : undefined;
     } catch { return undefined; }

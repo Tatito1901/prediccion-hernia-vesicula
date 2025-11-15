@@ -15,7 +15,7 @@ export default async function DashboardSectionLayout({ children }: { children: R
         .select("full_name")
         .eq("id", user.id)
         .single()
-      const fullName = (profileData as any)?.full_name as string | null
+      const fullName = (profileData as { full_name?: string | null } | null)?.full_name ?? null
       if (fullName && typeof fullName === "string" && fullName.trim().length > 0) {
         userName = fullName.split(" ")[0]
       } else {

@@ -8,6 +8,23 @@ import { mxNow } from '@/utils/datetime'
 
 export const runtime = 'nodejs'
 
+// Interface for RPC parameters
+interface CreatePatientAndAppointmentArgs {
+  p_nombre: string
+  p_apellidos: string
+  p_telefono: string
+  p_email: string
+  p_edad: number
+  p_fecha_nacimiento: string | null
+  p_diagnostico_principal: string
+  p_comentarios_registro: string
+  p_probabilidad_cirugia: number
+  p_fecha_hora_cita: string
+  p_motivo_cita: string[]
+  p_doctor_id?: string
+  p_creado_por_id?: string
+}
+
 // Minimal GET to satisfy Next.js module requirements (not used by UI)
 export async function GET() {
   return NextResponse.json({ message: 'patient-admission API' })
@@ -124,7 +141,7 @@ export async function POST(req: NextRequest) {
       return Math.max(0, years);
     })();
 
-    const rpcArgs: any = {
+    const rpcArgs: CreatePatientAndAppointmentArgs = {
       p_nombre: payload.nombre,
       p_apellidos: payload.apellidos,
       p_telefono: payload.telefono ?? '',
@@ -173,7 +190,8 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json(successResponse, { status: 201 })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error
     const errorResponse = createApiError(error?.message || 'Error interno del servidor', {
       code: 'INTERNAL_SERVER_ERROR',
       details: process.env.NODE_ENV === 'development' ? { stack: error?.stack } : undefined

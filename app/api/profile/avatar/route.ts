@@ -65,9 +65,10 @@ export async function PATCH(req: Request) {
       .single();
 
     // If no existing row, create one (first-login scenario)
+    const errObj = error as { code?: string; message?: string } | null;
     const isNoRow = !!error && (
-      (error as any)?.code === "PGRST116" ||
-      /no rows|0 rows|not found/i.test((error as any)?.message || "")
+      errObj?.code === "PGRST116" ||
+      /no rows|0 rows|not found/i.test(errObj?.message || "")
     );
 
     if (isNoRow) {
@@ -76,14 +77,15 @@ export async function PATCH(req: Request) {
         .insert({ id: user.id, avatar_url: avatar_url ?? null })
         .select("id, avatar_url")
         .single();
-      data = insertRes.data as any;
-      error = insertRes.error as any;
+      data = insertRes.data;
+      error = insertRes.error;
     }
 
     if (error) {
       // Map RLS/permission errors to 403 for clarity
-      const code = (error as any)?.code || (error as any)?.hint || undefined;
-      const isRls = (error as any)?.code === "42501" || /row-level security/i.test((error as any)?.message || "");
+      const errDetails = error as { code?: string; hint?: string; message?: string };
+      const code = errDetails?.code || errDetails?.hint || undefined;
+      const isRls = errDetails?.code === "42501" || /row-level security/i.test(errDetails?.message || "");
       return Response.json(
         createApiError(isRls ? "PERMISSION_DENIED" : "DB_UPDATE_FAILED", {
           message: isRls ? "Política de seguridad impidió la actualización" : "No se pudo actualizar el avatar",
@@ -110,7 +112,8 @@ export async function PATCH(req: Request) {
         { message: "Avatar actualizado" }
       )
     );
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const error = e as Error
     return Response.json(
       createApiError("UNEXPECTED_ERROR", {
         message: "Ocurrió un error inesperado",

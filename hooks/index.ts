@@ -2,6 +2,8 @@
 // Exportación centralizada de todos los hooks
 // Los hooks antiguos son wrappers de compatibilidad que redirigen a los nuevos hooks unificados
 
+import type { AppointmentStatus } from '@/lib/types';
+
 // ==================== HOOKS UNIFICADOS (NUEVOS) ====================
 // Estos son los hooks principales que deberías usar
 export {
@@ -88,7 +90,7 @@ export const useAdmissionAppointments = (params?: {
 }) => {
   const query = useAppointmentsUnified({
     search: params?.search,
-    status: params?.status as any,
+    status: params?.status as AppointmentStatus | undefined,
     pageSize: params?.pageSize,
   });
   

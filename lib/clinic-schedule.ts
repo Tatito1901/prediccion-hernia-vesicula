@@ -49,13 +49,15 @@ const getZonedWeekdayIndex = (date: Date, tz: string = CLINIC_TIMEZONE): number 
 // Etiqueta corta para días laborales basada en configuración (p. ej., "L-V" o "L-S")
 export function getWorkDaysLabel(): string {
   // Si incluye sábado y excluye domingo, usar "L-S"; en caso contrario, "L-V" como predeterminado.
-  const hasSaturday = (CLINIC_SCHEDULE.WORK_DAYS as readonly number[]).includes(6 as any);
+  const workDaysArray = CLINIC_SCHEDULE.WORK_DAYS as readonly number[];
+  const hasSaturday = workDaysArray.includes(6);
   return hasSaturday ? 'L-S' : 'L-V';
 }
 
 export function isWorkDay(date: Date): boolean {
   const d = getZonedWeekdayIndex(date);
-  return (CLINIC_SCHEDULE.WORK_DAYS as readonly number[]).includes(d as any);
+  const workDaysArray = CLINIC_SCHEDULE.WORK_DAYS as readonly number[];
+  return workDaysArray.includes(d);
 }
 
 export function withinWorkHours(date: Date): boolean {

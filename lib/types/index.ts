@@ -258,7 +258,7 @@ export type PatientSurveyData = {
   id: string;
   patient_id: string;
   submitted_at: string | null;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 /**
@@ -298,9 +298,12 @@ export interface AppointmentActions {
 }
 
 // --- Error Types ---
+/**
+ * @deprecated Use AppError from @/lib/errors instead
+ */
 export interface AppError extends Error {
   code?: string;
-  details?: any;
+  details?: unknown;
   status?: number;
 }
 

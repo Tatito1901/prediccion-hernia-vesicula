@@ -96,7 +96,7 @@ export async function PATCH(
       if (desiredRaw == null) {
         delete safeBody.estado_paciente;
       } else {
-        const currentStatus = (existingPatient as any)?.estado_paciente ?? null;
+        const currentStatus = (existingPatient as { estado_paciente?: string | null })?.estado_paciente ?? null;
         const result = validatePatientStatusChange(currentStatus, desiredRaw);
         if (!result.allowed) {
           const code = result.code || 'INVALID_VALUE';

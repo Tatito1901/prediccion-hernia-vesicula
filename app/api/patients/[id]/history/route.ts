@@ -245,7 +245,8 @@ export async function GET(
 
     return NextResponse.json(response);
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error
     return NextResponse.json(
       { error: 'Error interno del servidor', details: error.message }, 
       { status: 500 }

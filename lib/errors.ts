@@ -33,7 +33,7 @@ function categoryFromStatus(status?: number): AppErrorCategory {
 }
 
 export function isAppError(e: unknown): e is AppError {
-  return !!e && typeof e === 'object' && (e as any).name === 'AppError';
+  return !!e && typeof e === 'object' && 'name' in e && e.name === 'AppError';
 }
 
 // Best-effort normalization from unknown inputs coming from fetch, Supabase, zod, etc.
@@ -42,31 +42,31 @@ export function normalizeError(err: unknown): AppError {
 
   // Supabase/PostgREST errors or API error payloads often look like { error, message, code, details }
   if (err && typeof err === 'object') {
-    const anyErr = err as any;
+    const errObj = err as Record<string, unknown>;
     // If it looks like a Response error payload
-    if (typeof anyErr.message === 'string' || typeof anyErr.error === 'string') {
-      const status = typeof anyErr.status === 'number' ? anyErr.status : undefined;
-      const code = typeof anyErr.code === 'string' ? anyErr.code : undefined;
-      const message = (anyErr.message || anyErr.error) as string;
+    if (typeof errObj.message === 'string' || typeof errObj.error === 'string') {
+      const status = typeof errObj.status === 'number' ? errObj.status : undefined;
+      const code = typeof errObj.code === 'string' ? errObj.code : undefined;
+      const message = (errObj.message || errObj.error) as string;
       return {
         name: 'AppError',
         message: message || 'Ocurrió un error',
         code,
         status,
         category: categoryFromStatus(status),
-        details: anyErr.details,
+        details: errObj.details,
         cause: err,
       };
     }
     // Supabase client error shape sometimes uses { message, status, hint, details }
-    if (typeof anyErr?.message === 'string' || typeof anyErr?.hint === 'string') {
-      const status = typeof anyErr.status === 'number' ? anyErr.status : undefined;
+    if (typeof errObj.message === 'string' || typeof errObj.hint === 'string') {
+      const status = typeof errObj.status === 'number' ? errObj.status : undefined;
       return {
         name: 'AppError',
-        message: anyErr.message || 'Ocurrió un error',
+        message: (errObj.message as string) || 'Ocurrió un error',
         status,
         category: categoryFromStatus(status),
-        details: { hint: anyErr.hint, details: anyErr.details },
+        details: { hint: errObj.hint, details: errObj.details },
         cause: err,
       };
     }

@@ -41,8 +41,8 @@ export function useAutoListHeight(options?: { min?: number; max?: number; bottom
     // Observe layout changes to re-measure when needed
     let ro: ResizeObserver | undefined
     try {
-      if ("ResizeObserver" in window) {
-        const observer: ResizeObserver = new (window as any).ResizeObserver(handle)
+      if ("ResizeObserver" in window && typeof ResizeObserver !== 'undefined') {
+        const observer: ResizeObserver = new ResizeObserver(handle)
         observer.observe(document.body)
         ro = observer
       }

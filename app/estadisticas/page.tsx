@@ -121,8 +121,8 @@ const EstadisticasContent = memo(() => {
     if (!allAppointments?.length) return [] as { name: string; value: number }[];
     const map = new Map<string, number>();
     for (const apt of allAppointments) {
-      const a = apt as any;
-      const key = String(a.estado_cita || a.estado || 'desconocido');
+      const aptObj = apt as { estado_cita?: string; estado?: string };
+      const key = String(aptObj.estado_cita || aptObj.estado || 'desconocido');
       map.set(key, (map.get(key) || 0) + 1);
     }
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
@@ -155,7 +155,8 @@ const EstadisticasContent = memo(() => {
     if (!allAppointments?.length) return [] as { name: string; value: number }[];
     const map = new Map<string, number>();
     for (const apt of allAppointments) {
-      const motivos: string[] = (apt as any).motivos_consulta || [];
+      const aptObj = apt as { motivos_consulta?: string[] };
+      const motivos: string[] = aptObj.motivos_consulta || [];
       motivos.forEach((m) => {
         const key = String(m || 'Sin especificar');
         map.set(key, (map.get(key) || 0) + 1);
@@ -464,10 +465,10 @@ const EstadisticasContent = memo(() => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-semibold mb-4 sm:mb-0">Análisis Detallado de Citas</h2>
             <div className="flex space-x-2">
-              <select 
+              <select
                 className="px-3 py-2 border rounded-md text-sm"
                 value={filters.dateRange}
-                onChange={(e) => handleFilterChange({ dateRange: e.target.value as any })}
+                onChange={(e) => handleFilterChange({ dateRange: e.target.value as 'week' | 'month' | 'quarter' | 'year' })}
               >
                 <option value="week">Última semana</option>
                 <option value="month">Último mes</option>
@@ -582,15 +583,15 @@ const EstadisticasContent = memo(() => {
               )}
             </ChartContainer>
 
-            <ChartContainer 
-              title="Distribución de Intensidad del Dolor" 
+            <ChartContainer
+              title="Distribución de Intensidad del Dolor"
               isLoading={surveyQuery.isLoading}
               error={surveyQuery.error as Error | null}
               onRefresh={surveyQuery.refetch}
             >
-              {survey && (survey as any).histograms?.pain_intensity?.length > 0 ? (
-                <GenericBarChart 
-                  data={(survey as any).histograms.pain_intensity}
+              {survey && (survey as { histograms?: { pain_intensity?: unknown[] } }).histograms?.pain_intensity?.length ? (
+                <GenericBarChart
+                  data={(survey as { histograms: { pain_intensity: unknown[] } }).histograms.pain_intensity}
                   xAxisKey="name"
                   yAxisKey="total"
                   colors={["#22c55e", "#10b981", "#06b6d4", "#3b82f6", "#6366f1"]}

@@ -7,7 +7,7 @@ import { useAppointments } from './use-appointments';
 import { usePatients, useActivePatients } from './use-patients';
 import { useAnalytics } from './use-analytics-unified';
 import { processChartData } from '@/lib/services/chart-transformations';
-import type { Appointment } from '@/lib/types';
+import type { Appointment, AppointmentStatus, PatientStatus } from '@/lib/types';
 
 export interface ClinicDataFilters {
   // Filtros de pacientes
@@ -36,18 +36,18 @@ export const useClinicData = (filters: ClinicDataFilters = {}) => {
   // Datos de pacientes
   const patientsQuery = usePatients({
     search: filters.patientSearch,
-    status: filters.patientStatus as any,
+    status: filters.patientStatus as PatientStatus | undefined,
     page: filters.patientPage,
     pageSize: filters.patientPageSize,
   });
-  
+
   // Pacientes activos (para vistas que los necesitan)
   const activePatientsQuery = useActivePatients();
-  
+
   // Datos de citas
   const appointmentsQuery = useAppointments({
     search: filters.appointmentSearch,
-    status: filters.appointmentStatus as any,
+    status: filters.appointmentStatus as AppointmentStatus | undefined,
     dateFilter: filters.appointmentDateFilter,
     startDate: filters.appointmentStartDate,
     endDate: filters.appointmentEndDate,

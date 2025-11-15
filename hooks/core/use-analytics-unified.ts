@@ -19,6 +19,11 @@ import { ZDashboardMetricsResponse } from '@/lib/validation/dashboard';
 import { AppointmentStatusEnum } from '@/lib/types';
 
 // ==================== TIPOS ====================
+interface StatusDistributionItem {
+  status: string
+  count: number
+}
+
 export interface AnalyticsFilters {
   startDate?: string;
   endDate?: string;
@@ -108,13 +113,13 @@ function normalizeStatistics(data: StatisticsResponse | undefined) {
 
   const demographic = data.demographicProfile;
   const operational = data.operationalMetrics;
-  
-  const totalAppointments = (operational?.appointments_by_status || [])
-    .reduce((acc: number, s: any) => acc + (s.count || 0), 0);
-  
-  const findStatus = (name: string) => 
-    (operational?.appointments_by_status || [])
-      .find((s: any) => s.status?.toUpperCase?.() === name)?.count || 0;
+
+  const statusItems = (operational?.appointments_by_status || []) as StatusDistributionItem[]
+  const totalAppointments = statusItems
+    .reduce((acc: number, s) => acc + (s.count || 0), 0);
+
+  const findStatus = (name: string) =>
+    statusItems.find((s) => s.status?.toUpperCase?.() === name)?.count || 0;
   
   return {
     ...data,
@@ -223,7 +228,7 @@ export const useAnalytics = (filters: AnalyticsFilters = {}) => {
   // Datos unificados
   const data: UnifiedAnalyticsData = {
     dashboard: dashboardQuery.data,
-    statistics: normalizedStatistics as any,
+    statistics: normalizedStatistics || undefined,
     surveys: surveyQuery.data,
     chartData,
   };

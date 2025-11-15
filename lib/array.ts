@@ -7,7 +7,7 @@ export function dedupeById<T extends { id?: string | null }>(arr: T[]): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
   for (const item of arr) {
-    const id = (item && typeof item === 'object' ? (item as any).id : undefined) as string | undefined;
+    const id = item?.id;
     if (!id) continue; // skip invalid items lacking an id
     if (seen.has(id)) continue;
     seen.add(id);

@@ -69,7 +69,7 @@ export async function fetchJson<T = unknown>(
 
       if (!res.ok) {
         // Try to parse JSON error payload and include status
-        let payload: any = null;
+        let payload: unknown = null;
         if (contentType.includes('application/json')) {
           try {
             payload = await res.json();
@@ -83,10 +83,11 @@ export async function fetchJson<T = unknown>(
             payload = null;
           }
         }
+        const payloadObj = payload as Record<string, unknown> | null;
         const err: AppError = {
           name: 'AppError',
-          message: payload?.error || payload?.message || `HTTP ${res.status}`,
-          code: payload?.code,
+          message: (payloadObj?.error as string) || (payloadObj?.message as string) || `HTTP ${res.status}`,
+          code: payloadObj?.code as string | undefined,
           status: res.status,
           category: ((): AppError['category'] => {
             if (res.status === 400 || res.status === 422) return 'validation';
@@ -97,7 +98,7 @@ export async function fetchJson<T = unknown>(
             if (res.status >= 500) return 'server';
             return 'unknown';
           })(),
-          details: payload ?? undefined,
+          details: payloadObj ?? undefined,
         };
         
         // Don't retry on client errors (4xx)
@@ -122,7 +123,7 @@ export async function fetchJson<T = unknown>(
       if (contentType.includes('application/json')) {
         return (await res.json()) as T;
       }
-      // If not JSON, still return text as any
+      // If not JSON, return text content cast to expected type
       return (await res.text()) as unknown as T;
     } catch (e) {
       // Handle timeout
@@ -146,8 +147,9 @@ export async function fetchJson<T = unknown>(
       lastError = e;
       
       // Only retry on network errors
-      if (attempt < maxRetries && 
-          (e instanceof TypeError || (e as any)?.category === 'network' || (e as any)?.category === 'server')) {
+      const errObj = e as { category?: string };
+      if (attempt < maxRetries &&
+          (e instanceof TypeError || errObj?.category === 'network' || errObj?.category === 'server')) {
         const delay = typeof config.retryDelay === 'function'
           ? config.retryDelay(attempt)
           : config.retryDelay || Math.min(1000 * Math.pow(2, attempt), 10000);

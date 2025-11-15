@@ -20,7 +20,9 @@ export function useRescheduleAppointment() {
   return useMutation<{ appointment_id: string }, Error, RescheduleParams>({
     mutationFn: async ({ appointmentId, newFechaHora, expectedUpdatedAt, doctorId, notasBreves }) => {
       const supabase = createClient();
-      const { data, error } = await (supabase as any).rpc('reschedule_appointment', {
+      // Type assertion needed as Supabase client types don't include custom RPC functions
+      const rpcClient = supabase as unknown as { rpc: (name: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> };
+      const { data, error } = await rpcClient.rpc('reschedule_appointment', {
         p_appointment_id: appointmentId,
         p_new_fecha_hora_cita: newFechaHora,
         ...(expectedUpdatedAt ? { p_expected_updated_at: expectedUpdatedAt } : {}),
@@ -49,7 +51,7 @@ export function useRescheduleAppointment() {
         ...appt,
         fecha_hora_cita: newFechaHora,
         estado_cita: AppointmentStatusEnum.PROGRAMADA,
-        updated_at: new Date().toISOString() as any,
+        updated_at: new Date().toISOString(),
       });
 
       if (previousDetail) {
@@ -67,7 +69,7 @@ export function useRescheduleAppointment() {
           ...data,
           data: data.data.map((a) => (a.id === appointmentId ? applyReschedule(a) : a)),
         };
-        queryClient.setQueryData(key as any, updated);
+        queryClient.setQueryData(key, updated);
       });
 
       return { appointmentId, previousDetail, previousLists };
@@ -78,7 +80,7 @@ export function useRescheduleAppointment() {
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments.today(), exact: false });
       notifySuccess('Cita reagendada con éxito.');
     },
-    onError: (error, _vars, context: any) => {
+    onError: (error, _vars, context: { appointmentId: string; previousDetail: unknown } | undefined) => {
       // Rollback de caches
       if (context?.previousDetail) {
         queryClient.setQueryData(
@@ -86,9 +88,9 @@ export function useRescheduleAppointment() {
           context.previousDetail
         );
       }
-      if (Array.isArray(context?.previousLists)) {
-        for (const [key, data] of context.previousLists) {
-          queryClient.setQueryData(key as any, data);
+      if (Array.isArray((context as { previousLists?: unknown[] })?.previousLists)) {
+        for (const [key, data] of (context as { previousLists: [unknown, unknown][] }).previousLists) {
+          queryClient.setQueryData(key, data);
         }
       }
       notifyError(error, { prefix: 'Reagendar' });
