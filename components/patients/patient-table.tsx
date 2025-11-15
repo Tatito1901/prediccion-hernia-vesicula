@@ -241,10 +241,10 @@ const PatientActions = memo(({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="h-8 w-8 p-0 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-11 w-11 p-0 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           aria-label="Acciones de paciente"
           onClick={handleClick}
         >
@@ -591,9 +591,9 @@ const VirtualPatientRow = memo(({
   const surveyState = getPatientSurveyState(patient)
 
   return (
-    <div 
+    <div
       className={cn(
-        "grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_80px] xl:grid-cols-[2fr_2fr_1.5fr_1fr_1fr_96px] items-center gap-2 px-2",
+        "hidden lg:grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr_80px] xl:grid-cols-[2fr_2fr_1.5fr_1fr_1fr_96px] items-center gap-2 px-2",
         "border-b border-slate-200 dark:border-slate-800 cursor-pointer",
         "hover:bg-slate-50 dark:hover:bg-slate-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950",
         (rowIndex ?? 0) % 2 === 0 ? "bg-white dark:bg-slate-950" : "bg-slate-50/50 dark:bg-slate-900/40"

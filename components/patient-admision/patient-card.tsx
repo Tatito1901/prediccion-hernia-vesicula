@@ -178,7 +178,7 @@ const SecondaryActionsMenu = memo(function SecondaryActionsMenu({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+          className="h-11 w-11 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
           aria-label="Más opciones de la cita"
           disabled={disabled}
         >
@@ -597,7 +597,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
                     {patient?.email && (
                       <a
                         href={`mailto:${patient.email}`}
-                        className="hidden sm:flex items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                        className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
                         aria-label={`Enviar correo a ${patient.email}`}
                       >
                         <Mail className="h-4 w-4" />
