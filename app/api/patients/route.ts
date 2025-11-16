@@ -127,7 +127,7 @@ export async function GET(request: Request) {
           : null;
         const successResponse = createApiResponse<any[]>([], {
           pagination,
-          stats,
+          stats: stats ?? undefined,
           meta: debug ? meta : undefined,
         });
         return NextResponse.json(successResponse, { headers: cacheConfig });
@@ -248,7 +248,7 @@ export async function GET(request: Request) {
         totalPages,
         hasMore: page < totalPages,
       },
-      stats, // ✅ Estadísticas calculadas en backend
+      stats: stats ?? undefined, // ✅ Estadísticas calculadas en backend
       meta: debug ? meta : undefined,
     });
     return NextResponse.json(successResponse, { headers: cacheConfig });
