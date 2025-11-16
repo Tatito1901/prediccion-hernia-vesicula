@@ -27,14 +27,12 @@ import { Form } from '@/components/ui/form';
 
 // Project-specific imports
 import { useAdmitPatient } from '@/hooks/core/use-patients';
+import { useOccupiedTimeSlots, useAppointmentDateValidation } from '@/hooks';
 import { ZDiagnosisDb } from '@/lib/constants';
 import { AppointmentStatusEnum } from '@/lib/types';
 import type { AppointmentStatus, AppError } from '@/lib/types';
-import { generateTimeSlots, CLINIC_SCHEDULE, isWorkDay } from '@/lib/clinic-schedule';
+import { generateTimeSlots, CLINIC_SCHEDULE } from '@/lib/clinic-schedule';
 import { mxLocalPartsToUtcIso, formatMx } from '@/utils/datetime';
-import { endpoints, buildSearchParams } from '@/lib/api-endpoints';
-import { queryFetcher } from '@/lib/http';
-import { queryKeys } from '@/lib/query-keys';
 
 // ============================================================================
 // Constants & Types
@@ -68,52 +66,11 @@ type ClinicAppointment = { estado_cita: AppointmentStatus; fecha_hora_cita: stri
 // Utility Hooks & Functions
 // ============================================================================
 
-const isValidDate = (date: Date): boolean => {
-  const today = startOfDay(new Date());
-  const maxDate = addDays(today, CLINIC_SCHEDULE.MAX_ADVANCE_DAYS);
-  return isWorkDay(date) && isWithinInterval(date, { start: today, end: maxDate });
-};
-
-/**
- * Hook para obtener los horarios de citas ocupados para una fecha específica.
- * Utiliza React Query para cacheo, reintentos y gestión de estado.
- */
-function useOccupiedTimes(date: Date | undefined) {
-  const dateStr = date ? formatMx(date, 'yyyy-MM-dd') : null;
-
-  return useQuery({
-    queryKey: queryKeys.appointments.occupied(dateStr),
-    queryFn: async () => {
-      if (!dateStr) return new Set<string>();
-
-      const params = buildSearchParams({
-        dateFilter: 'range',
-        startDate: dateStr,
-        endDate: dateStr,
-        pageSize: 200, // Asumimos que no hay más de 200 citas en un día
-        includePatient: false,
-      });
-      const { data } = await queryFetcher<{ data?: ClinicAppointment[] }>(endpoints.appointments.list(params));
-      
-      const occupied = new Set<string>();
-      data?.forEach((apt) => {
-        if (BLOCKING_STATUSES.has(apt.estado_cita)) {
-          occupied.add(formatMx(apt.fecha_hora_cita, 'HH:mm'));
-        }
-      });
-      return occupied;
-    },
-    enabled: !!dateStr,
-    staleTime: 5 * 60 * 1000, // 5 minutos de cache
-    refetchOnWindowFocus: true,
-  });
-}
-
 /**
  * Maneja los errores de la API y los mapea a los campos del formulario.
  */
-function handleAdmissionError(error: AppError, setError: any) {
-  const details = error.details as any;
+function handleAdmissionError(error: AppError, setError: (field: keyof FormData, error: { type: string; message: string }) => void) {
+  const details = error.details as Record<string, unknown> | undefined;
   const code = (details?.code || error.code || '').toUpperCase();
 
   if (details?.validation_errors?.length > 0) {
@@ -158,7 +115,10 @@ export const PatientModal = memo(({ trigger, onSuccess }: PatientModalProps) => 
   const timeDescriptionId = useRef(`time-desc-${React.useId()}`).current;
 
   const { mutate: admitPatient, isPending } = useAdmitPatient();
-  
+
+  // Usar hooks compartidos para validación y horarios ocupados
+  const { isValidDate } = useAppointmentDateValidation();
+
   const form = useForm<FormData>({
     resolver: zodResolver(QuickAdmissionSchema),
     mode: 'onBlur',
@@ -172,7 +132,7 @@ export const PatientModal = memo(({ trigger, onSuccess }: PatientModalProps) => 
   });
 
   const selectedDate = useWatch({ control: form.control, name: 'fecha' });
-  const { data: occupiedTimes = new Set(), isLoading: isLoadingTimes } = useOccupiedTimes(selectedDate);
+  const { data: occupiedTimes = new Set(), isLoading: isLoadingTimes } = useOccupiedTimeSlots(selectedDate);
 
   const timeSlots = useMemo(() => 
     selectedDate ? generateTimeSlots({ baseDate: selectedDate, includeLunch: false }) : [],

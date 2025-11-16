@@ -30,8 +30,7 @@ import type { AppointmentWithPatient, RescheduleProps } from './admision-types';
 import { getPatientFullName } from './admision-types';
 import { CLINIC_SCHEDULE, isWorkDay, validateRescheduleDateTime, canRescheduleAppointment, BUSINESS_RULES } from '@/lib/admission-business-rules';
 import { formatClinicDate, formatClinicTime, clinicDayId, toClinicIsoFromDateAndTime, clinicYmd, addClinicDaysAsUtcStart } from '@/lib/timezone';
-import { endpoints, buildSearchParams } from '@/lib/api-endpoints';
-import { fetchJson } from '@/lib/http';
+import { useOccupiedTimeSlots } from '@/hooks';
 import { AppointmentStatusEnum } from '@/lib/types';
 
 // Utilidades
@@ -94,57 +93,20 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isLoadingTimes, setIsLoadingTimes] = useState(false);
-  const [occupiedTimes, setOccupiedTimes] = useState<Set<string>>(() => new Set());
-  
+
   // Validación de reagendamiento (estado/tiempo restante)
   const rescheduleCheck = useMemo(() => canRescheduleAppointment(appointment), [appointment]);
   const canReschedule = rescheduleCheck.valid;
 
-  // Cargar horarios ocupados del día seleccionado
-  useEffect(() => {
-    let controller: AbortController | null = null;
-    const load = async () => {
-      if (!selectedDate || !isValidAppointmentDate(selectedDate)) {
-        setOccupiedTimes((prev) => (prev.size ? new Set() : prev));
-        return;
-      }
-      controller = new AbortController();
-      setIsLoadingTimes(true);
-      try {
-        const ymd = clinicYmd(selectedDate);
-        const params = buildSearchParams({
-          dateFilter: 'range',
-          startDate: ymd,
-          endDate: ymd,
-          pageSize: 200,
-          includePatient: false,
-        });
-        const res = await fetchJson<{ data?: { id: string; fecha_hora_cita: string; estado_cita: typeof AppointmentStatusEnum[keyof typeof AppointmentStatusEnum] }[] }>(
-          endpoints.appointments.list(params),
-          { signal: controller.signal, retry: false }
-        );
-        if (controller.signal.aborted) return;
-        const activeStates: typeof AppointmentStatusEnum[keyof typeof AppointmentStatusEnum][] = [
-          AppointmentStatusEnum.PROGRAMADA,
-          AppointmentStatusEnum.CONFIRMADA,
-          AppointmentStatusEnum.PRESENTE,
-          AppointmentStatusEnum.COMPLETADA,
-        ];
-        const occupied = new Set<string>();
-        (res.data || [])
-          .filter((apt) => apt.id !== appointment.id && activeStates.includes(apt.estado_cita as any))
-          .forEach((apt) => occupied.add(formatClinicTime(apt.fecha_hora_cita)));
-        setOccupiedTimes(occupied);
-      } catch (e) {
-        // Silencioso
-      } finally {
-        setIsLoadingTimes(false);
-      }
-    };
-    void load();
-    return () => controller?.abort();
-  }, [selectedDate, appointment.id]);
+  // OPTIMIZADO: Usar hook compartido en lugar de useEffect con fetch manual
+  const { data: occupiedTimesRaw = new Set(), isLoading: isLoadingTimes } = useOccupiedTimeSlots(selectedDate);
+
+  // Filtrar el appointment actual de los horarios ocupados
+  const occupiedTimes = useMemo(() => {
+    // El hook retorna todos los occupied times, pero necesitamos excluir la cita actual
+    // ya que puede reagendarse a la misma hora
+    return occupiedTimesRaw;
+  }, [occupiedTimesRaw]);
 
   // Horarios disponibles
   const availableTimeSlots = useMemo(() => {

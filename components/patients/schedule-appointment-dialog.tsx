@@ -20,11 +20,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useCreateAppointment } from "@/hooks/core/use-appointments"
+import { useOccupiedTimeSlots, useAppointmentDateValidation } from "@/hooks"
 import { EnrichedPatient, AppointmentStatusEnum } from "@/lib/types"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { generateTimeSlots } from "@/lib/clinic-schedule"
-import { useClinicAppointments } from "@/hooks/core/use-clinic-data-simplified"
 
 // 🎨 Configuración de tema
 const THEME = {
@@ -68,62 +68,39 @@ interface FormState {
 }
 
 // 🚀 Componente principal optimizado
-const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({ 
-  isOpen, 
-  patient, 
-  onClose 
+const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({
+  isOpen,
+  patient,
+  onClose
 }: ScheduleAppointmentDialogProps) {
   const { mutateAsync: addAppointment, isPending } = useCreateAppointment()
-  const { appointments, refetch } = useClinicAppointments()
-  
+
+  // Usar hooks compartidos para validación y horarios
+  const { disabledDates } = useAppointmentDateValidation()
+
   // Estado inicial optimizado
   const initialDate = useMemo(() => {
     const tomorrow = addDays(new Date(), 1)
     return isWeekend(tomorrow) ? addDays(tomorrow, 2) : tomorrow
   }, [])
-  
+
   const [formData, setFormData] = useState<FormState>({
     fechaConsulta: initialDate,
     horaConsulta: "09:00",
     motivoConsulta: "",
     notas: "",
   })
-  
+
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [touched, setTouched] = useState<Record<string, boolean>>({})
-  const [occupiedTimes, setOccupiedTimes] = useState<Set<string>>(new Set())
+
+  // OPTIMIZADO: Usar hook compartido en lugar de useEffect local
+  const { data: occupiedTimes = new Set(), isLoading: isLoadingTimes } = useOccupiedTimeSlots(formData.fechaConsulta)
 
   // Generar horarios dinámicamente (excluyendo comida)
   const timeSlots = useMemo(() => (
     generateTimeSlots({ baseDate: formData.fechaConsulta, includeLunch: false })
   ), [formData.fechaConsulta])
-
-  // Cargar horarios ocupados para la fecha seleccionada
-  useEffect(() => {
-    if (!formData.fechaConsulta) {
-      setOccupiedTimes(new Set())
-      return
-    }
-
-    // Por ahora usar datos locales, ya que el filtrado por fecha se hace en el cliente
-    const blocking = [
-      AppointmentStatusEnum.PROGRAMADA,
-      AppointmentStatusEnum.CONFIRMADA,
-      AppointmentStatusEnum.PRESENTE,
-    ]
-    const occ = new Set<string>()
-    const dateStr = format(formData.fechaConsulta, "yyyy-MM-dd")
-    
-    // Filtrar citas del día seleccionado
-    appointments.all?.forEach((apt: any) => {
-      const aptDate = format(new Date(apt.fecha_hora_cita), "yyyy-MM-dd")
-      if (aptDate === dateStr && blocking.includes(apt.estado_cita)) {
-        const tt = format(new Date(apt.fecha_hora_cita), 'HH:mm')
-        occ.add(tt)
-      }
-    })
-    setOccupiedTimes(occ)
-  }, [formData.fechaConsulta, appointments])
 
   // Agrupar visualmente por mañana/tarde
   const morningSlots = useMemo(() => timeSlots.filter(s => Number(s.value.split(':')[0]) < 12), [timeSlots])
@@ -233,12 +210,7 @@ const ScheduleAppointmentDialog = memo(function ScheduleAppointmentDialog({
       error: (err) => err.message || "Error al agendar la cita",
     })
   }, [patient, validateForm, addAppointment, formData, onClose, initialDate])
-  
-  // ✅ Validación de fechas
-  const disabledDates = useCallback((date: Date) => {
-    return isBefore(date, startOfDay(new Date())) || isWeekend(date)
-  }, [])
-  
+
   // ✅ Texto del botón de fecha memoizado
   const dateButtonText = useMemo(() => {
     return formatDisplayDate(formData.fechaConsulta)
