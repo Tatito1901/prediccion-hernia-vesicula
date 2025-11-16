@@ -123,7 +123,7 @@ export async function GET(request: Request) {
       if (isPermission) {
         const pagination = { page, pageSize, totalCount: 0, totalPages: 0, hasMore: false };
         const stats = page === 1
-          ? { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0, statusStats: { all: 0 } }
+          ? { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0, all: 0 }
           : null;
         const successResponse = createApiResponse<any[]>([], {
           pagination,
@@ -214,7 +214,8 @@ export async function GET(request: Request) {
         surveyRate,
         pendingConsults: statusStats[PatientStatusEnum.POTENCIAL] || 0,
         operatedPatients: statusStats[PatientStatusEnum.OPERADO] || 0,
-        statusStats: { ...statusStats, all: totalPatients }
+        ...statusStats,
+        all: totalPatients
       };
     }
 
