@@ -238,7 +238,10 @@ export async function GET(request: Request) {
           stats,
           meta,
         });
-      } catch {}
+      } catch (error) {
+        // Ignore console.info errors in environments where console methods might fail
+        // This is safe to ignore as it's only for debugging
+      }
     }
 
     const successResponse = createApiResponse(enrichedPatients, {
