@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { queryKeys } from '@/lib/query-keys';
-import { queryFetcher } from '@/hooks/core/use-clinic-data-simplified';
-import { endpoints } from '@/lib/api-endpoints';
-import { buildSearchParams } from '@/lib/http';
+import { queryFetcher } from '@/lib/http';
+import { endpoints, buildSearchParams } from '@/lib/api-endpoints';
 import { AppointmentStatusEnum, type AppointmentWithPatient } from '@/lib/types';
 
 /**
