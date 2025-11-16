@@ -2,6 +2,10 @@
 // Exportación centralizada de todos los hooks
 // Los hooks antiguos son wrappers de compatibilidad que redirigen a los nuevos hooks unificados
 
+// ==================== HOOKS COMPARTIDOS ====================
+export { useOccupiedTimeSlots } from './use-occupied-time-slots';
+export { useAppointmentDateValidation } from './use-appointment-date-validation';
+
 // ==================== HOOKS UNIFICADOS (NUEVOS) ====================
 // Estos son los hooks principales que deberías usar
 export {

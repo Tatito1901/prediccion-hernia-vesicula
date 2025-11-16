@@ -6,8 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tablet, Smartphone, ArrowLeft } from "lucide-react"
-// ❌ ELIMINADO: import { usePatient }
-import MedicalSurveyAnalysis from "@/components/surveys/medical-survey-analysis"
+import SurveyResultsAnalyzer from "@/components/surveys/survey-results-analyzer"
 import PatientSurveyForm from "@/components/surveys/patient-survey-form"
 import { useActivePatients } from "@/hooks/core/use-patients"
  
@@ -150,11 +149,17 @@ function EncuestaContent() {
                 </Card>
               )
             ) : (
-              <MedicalSurveyAnalysis
-                title="Análisis Clínico de Encuestas"
-                description="Análisis médico detallado de los datos recopilados en las encuestas de pacientes"
-                patients={enrichedPatients} // Pasar la lista de pacientes del contexto central
-              />
+              <div className="p-4">
+                <h2 className="text-xl font-bold">Análisis Clínico de Encuestas</h2>
+                <p className="text-muted-foreground">Análisis médico detallado de los datos recopilados en las encuestas de pacientes</p>
+                <div className="mt-4">
+                  {enrichedPatients && enrichedPatients.length > 0 ? (
+                    <SurveyResultsAnalyzer patientData={enrichedPatients[0]} />
+                  ) : (
+                    <p className="text-muted-foreground mt-4">No hay datos de pacientes disponibles para el análisis.</p>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
