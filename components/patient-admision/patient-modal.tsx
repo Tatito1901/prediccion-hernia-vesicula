@@ -73,8 +73,10 @@ function handleAdmissionError(error: AppError, setError: (field: keyof FormData,
   const details = error.details as Record<string, unknown> | undefined;
   const code = (details?.code || error.code || '').toUpperCase();
 
-  if (details?.validation_errors?.length > 0) {
-    details.validation_errors.forEach((err: { field: string; message: string }) => {
+  // Verificación de tipo segura para validation_errors
+  const validationErrors = Array.isArray(details?.validation_errors) ? details.validation_errors : undefined;
+  if (validationErrors && validationErrors.length > 0) {
+    validationErrors.forEach((err: { field: string; message: string }) => {
       const fieldName = err.field === 'fecha_hora_cita' ? 'hora' : err.field;
       setError(fieldName, { type: 'manual', message: err.message });
     });
