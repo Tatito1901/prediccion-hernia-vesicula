@@ -2,8 +2,10 @@
 
 import React, { useState, useMemo, useEffect, memo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { useClinicData, useClinicAnalytics } from '@/hooks/core/use-clinic-data-simplified';
+import { useClinicAnalytics } from '@/hooks/core/use-clinic-data-simplified';
 import { useStatistics, useSurveyAnalytics } from '@/hooks/core/use-analytics-unified';
+import { useAppointments } from '@/hooks/core/use-appointments';
+import { usePatients } from '@/hooks/core/use-patients';
 import { Users, Calendar, CalendarCheck, CalendarClock, TrendingUp, Activity, ChartBar, PieChart, AlertCircle } from 'lucide-react';
 import { MetricsGrid, ChartContainer, type MetricValue, createMetric } from '@/components/ui/metrics-system';
 import { AppointmentStatusEnum } from '@/lib/types';
@@ -36,20 +38,32 @@ const INITIAL_FILTERS: Filters = {
 };
 
 const EstadisticasContent = memo(() => {
-  // Usar los nuevos hooks unificados
-  const clinicData = useClinicData();
-  const { analytics, chartData } = useClinicAnalytics({ 
-    groupBy: 'month' 
+  // OPTIMIZADO: Usar hooks específicos en lugar de useClinicData que carga 4 queries innecesarias
+  const { data: patientsData, isLoading: patientsLoading } = usePatients({ pageSize: 100 });
+  const { data: allAppointmentsData, isLoading: appointmentsLoading } = useAppointments({ dateFilter: 'all', pageSize: 500 });
+  const { data: todayAppointments } = useAppointments({ dateFilter: 'today', pageSize: 100 });
+  const { data: futureAppointments } = useAppointments({ dateFilter: 'future', pageSize: 100 });
+  const { data: pastAppointments } = useAppointments({ dateFilter: 'past', pageSize: 100 });
+
+  const { analytics, chartData } = useClinicAnalytics({
+    groupBy: 'month'
   });
   const statisticsQuery = useStatistics();
-  
+
   // Extraer datos necesarios
-  const allPatients = clinicData.patients.paginated;
-  const allAppointments = clinicData.appointments.all;
-  const appointments = clinicData.appointments.classified;
-  const isLoading = clinicData.isLoading || statisticsQuery.isLoading;
-  const error = clinicData.error || statisticsQuery.error;
-  const refetch = clinicData.refetch.all;
+  const allPatients = patientsData?.data || [];
+  const allAppointments = allAppointmentsData?.data || [];
+  const appointments = {
+    today: todayAppointments?.data || [],
+    future: futureAppointments?.data || [],
+    past: pastAppointments?.data || []
+  };
+  const isLoading = patientsLoading || appointmentsLoading || statisticsQuery.isLoading;
+  const error = statisticsQuery.error;
+  const refetch = () => {
+    // Refetch individual queries instead of all
+    statisticsQuery.refetch();
+  };
 
 
   const [filters, setFilters] = useState<Filters>(INITIAL_FILTERS);

@@ -140,8 +140,15 @@ export const useAppointments = (filters: AppointmentFilters = {}) => {
     gcTime: 5 * 60_000, // 5 minutes
   });
 
-  // Clasificación de citas por período - Optimizada con una sola pasada
+  // OPTIMIZADO: Clasificación de citas por período - SOLO cuando dateFilter='all'
+  // Si el usuario pidió un dateFilter específico, el servidor ya filtró correctamente
   const classifiedAppointments = useMemo(() => {
+    // Si el usuario pidió un dateFilter específico, no clasificar
+    // El servidor ya hizo el filtrado
+    if (filters.dateFilter && filters.dateFilter !== 'all') {
+      return { today: [], future: [], past: [] };
+    }
+
     if (!query.data?.data?.length) {
       return { today: [], future: [], past: [] };
     }
@@ -151,7 +158,7 @@ export const useAppointments = (filters: AppointmentFilters = {}) => {
     const tomorrowStart = todayStart + 86400000; // 24 hours in ms
 
     const appointments = query.data.data;
-    
+
     const classified = {
       today: [] as AppointmentWithPatient[],
       future: [] as AppointmentWithPatient[],
@@ -161,7 +168,7 @@ export const useAppointments = (filters: AppointmentFilters = {}) => {
     // Una sola pasada con timestamps precalculados para mejor performance
     for (const appointment of appointments) {
       const appointmentTime = new Date(appointment.fecha_hora_cita).getTime();
-      
+
       if (appointmentTime >= todayStart && appointmentTime < tomorrowStart) {
         classified.today.push(appointment);
       } else if (appointmentTime >= tomorrowStart) {
@@ -173,23 +180,23 @@ export const useAppointments = (filters: AppointmentFilters = {}) => {
 
     // Ordenar solo si hay elementos
     if (classified.today.length > 1) {
-      classified.today.sort((a, b) => 
+      classified.today.sort((a, b) =>
         new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime()
       );
     }
     if (classified.future.length > 1) {
-      classified.future.sort((a, b) => 
+      classified.future.sort((a, b) =>
         new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime()
       );
     }
     if (classified.past.length > 1) {
-      classified.past.sort((a, b) => 
+      classified.past.sort((a, b) =>
         new Date(b.fecha_hora_cita).getTime() - new Date(a.fecha_hora_cita).getTime()
       );
     }
 
     return classified;
-  }, [query.data]);
+  }, [query.data, filters.dateFilter]);
 
   // Estadísticas
   const stats = useMemo(() => {
