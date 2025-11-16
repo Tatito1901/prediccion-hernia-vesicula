@@ -3,6 +3,8 @@
 import React, { memo, useMemo } from 'react';
 import { useStatistics } from '@/hooks/core/use-analytics-unified';
 import { MetricsGrid, createMetric, ChartContainer } from '@/components/ui/metrics-system';
+import { GenericBarChart } from '@/components/charts/common/generic-bar-chart';
+import { GenericPieChart } from '@/components/charts/common/generic-pie-chart';
 
 const StatisticsContent = memo(function StatisticsContent() {
   const { data, isLoading, isError, error, refetch } = useStatistics();
@@ -34,10 +36,13 @@ const StatisticsContent = memo(function StatisticsContent() {
             error={isError ? (error as Error) : null}
             onRefresh={() => refetch()}
           >
-            {/* TODO: Replace with a specialized chart component */}
-            <pre className="text-xs bg-slate-50 dark:bg-slate-900 p-3 rounded-md overflow-auto">
-              {JSON.stringify(data?.clinicalProfile?.diagnoses_distribution?.slice(0, 10) || [], null, 2)}
-            </pre>
+            <GenericBarChart
+              data={data?.clinicalProfile?.diagnoses_distribution?.slice(0, 10) || []}
+              xAxisKey="diagnosis"
+              yAxisKey="count"
+              colors={['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444']}
+              animated
+            />
           </ChartContainer>
 
           <ChartContainer
@@ -47,10 +52,17 @@ const StatisticsContent = memo(function StatisticsContent() {
             error={isError ? (error as Error) : null}
             onRefresh={() => refetch()}
           >
-            {/* TODO: Replace with a specialized chart component */}
-            <pre className="text-xs bg-slate-50 dark:bg-slate-900 p-3 rounded-md overflow-auto">
-              {JSON.stringify(data?.demographicProfile?.gender_distribution || [], null, 2)}
-            </pre>
+            <GenericPieChart
+              data={Array.isArray(data?.demographicProfile?.gender_distribution)
+                ? data.demographicProfile.gender_distribution
+                : []}
+              dataKey="count"
+              nameKey="gender"
+              colors={['#3b82f6', '#ec4899', '#8b5cf6']}
+              showLabels
+              donut
+              animated
+            />
           </ChartContainer>
         </section>
       </div>

@@ -3,7 +3,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip, Legend } from 'recha
 import { useChartConfig } from './use-chart-config';
 
 interface GenericPieChartProps {
-  data: any[];
+  data: Array<Record<string, unknown>>;
   dataKey: string;
   nameKey: string;
   colors: string[];
@@ -12,8 +12,20 @@ interface GenericPieChartProps {
   animated?: boolean;
 }
 
+interface PieTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    payload: {
+      value?: number;
+      total?: number;
+      name?: string;
+    };
+    color: string;
+  }>;
+}
+
 // 🎨 Componente de tooltip personalizado elegante con validación de datos
-const CustomTooltip = ({ active, payload }: any) => {
+const CustomTooltip = ({ active, payload }: PieTooltipProps) => {
   const { tooltipStyle, isDark } = useChartConfig();
   
   if (active && payload && payload.length) {
@@ -43,10 +55,19 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+interface LegendProps {
+  payload?: Array<{
+    value: string;
+    color: string;
+  }>;
+}
+
 // 🎨 Componente de leyenda personalizado elegante
-const CustomLegend = ({ payload }: any) => {
+const CustomLegend = ({ payload }: LegendProps) => {
   const { isDark } = useChartConfig();
-  
+
+  if (!payload) return null;
+
   return (
     <div className="flex flex-wrap justify-center gap-4 mt-4">
       {payload.map((entry: any, index: number) => (

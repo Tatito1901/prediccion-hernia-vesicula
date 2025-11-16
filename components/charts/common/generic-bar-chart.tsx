@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { useChartConfig } from './use-chart-config';
 
 interface GenericBarChartProps {
-  data: any[];
+  data: Array<Record<string, unknown>>;
   xAxisKey: string;
   yAxisKey: string;
   colors: string[];
@@ -11,8 +11,14 @@ interface GenericBarChartProps {
   animated?: boolean;
 }
 
+interface TooltipProps {
+  active?: boolean;
+  payload?: Array<{ value: number; color: string }>;
+  label?: string;
+}
+
 // 🎨 Componente de tooltip personalizado elegante
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   const { tooltipStyle, isDark } = useChartConfig();
   
   if (active && payload && payload.length) {
