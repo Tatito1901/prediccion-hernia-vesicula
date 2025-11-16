@@ -1,14 +1,29 @@
 "use client"
 
 import React, { useState, useMemo, useEffect, memo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useClinicData, useClinicAnalytics } from '@/hooks/core/use-clinic-data-simplified';
 import { useStatistics, useSurveyAnalytics } from '@/hooks/core/use-analytics-unified';
 import { Users, Calendar, CalendarCheck, CalendarClock, TrendingUp, Activity, ChartBar, PieChart, AlertCircle } from 'lucide-react';
 import { MetricsGrid, ChartContainer, type MetricValue, createMetric } from '@/components/ui/metrics-system';
 import { AppointmentStatusEnum } from '@/lib/types';
-import { GenericLineChart } from '@/components/charts/common/generic-line-chart';
-import { GenericBarChart } from '@/components/charts/common/generic-bar-chart';
-import { GenericPieChart } from '@/components/charts/common/generic-pie-chart';
+import { Skeleton } from '@/components/ui/skeleton';
+
+// Lazy load de gráficos pesados para mejorar rendimiento inicial
+const GenericLineChart = dynamic(() => import('@/components/charts/common/generic-line-chart').then(mod => ({ default: mod.GenericLineChart })), {
+  ssr: false,
+  loading: () => <Skeleton className="h-64 w-full" />
+});
+
+const GenericBarChart = dynamic(() => import('@/components/charts/common/generic-bar-chart').then(mod => ({ default: mod.GenericBarChart })), {
+  ssr: false,
+  loading: () => <Skeleton className="h-64 w-full" />
+});
+
+const GenericPieChart = dynamic(() => import('@/components/charts/common/generic-pie-chart').then(mod => ({ default: mod.GenericPieChart })), {
+  ssr: false,
+  loading: () => <Skeleton className="h-64 w-full" />
+});
 
 interface Filters {
   dateRange: 'day' | 'month' | 'year';

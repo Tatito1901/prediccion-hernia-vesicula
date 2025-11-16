@@ -178,11 +178,11 @@ const SecondaryActionsMenu = memo(function SecondaryActionsMenu({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+          className="h-10 w-10 sm:h-8 sm:w-8 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 touch-manipulation"
           aria-label="Más opciones de la cita"
           disabled={disabled}
         >
-          <MoreVertical className="h-4 w-4" />
+          <MoreVertical className="h-5 w-5 sm:h-4 sm:w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">

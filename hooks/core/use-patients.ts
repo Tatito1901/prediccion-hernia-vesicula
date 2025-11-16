@@ -74,8 +74,12 @@ const fetchPatients = async (filters: PatientFilters): Promise<PaginatedResponse
 };
 
 const fetchPatientDetail = async (id: string): Promise<Patient> => {
-  const payload: any = await queryFetcher<any>(endpoints.patients.detail(id));
-  return (payload && payload.success === true && 'data' in payload) ? payload.data : payload;
+  const payload = await queryFetcher<Patient | { success: true; data: Patient }>(
+    endpoints.patients.detail(id)
+  );
+  return (payload && typeof payload === 'object' && 'success' in payload && payload.success === true && 'data' in payload)
+    ? payload.data
+    : payload as Patient;
 };
 
 const fetchPatientHistory = async (
@@ -97,9 +101,9 @@ const fetchPatientSurvey = async (patientId: string): Promise<PatientSurveyData 
       endpoints.surveys.byPatient(patientId)
     );
     return data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Handle 404 as no survey found
-    if (error?.status === 404) {
+    if (typeof error === 'object' && error !== null && 'status' in error && error.status === 404) {
       return null;
     }
     throw error;
@@ -297,18 +301,21 @@ export const useAdmitPatient = () => {
   
   return useMutation<AdmissionDBResponse, Error, AdmissionPayload>({
     mutationFn: async (payload) => {
-      const payloadResp: any = await fetchJson<any>(endpoints.admission.create(), {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      
+      const payloadResp = await fetchJson<{ success: true; data: AdmissionDBResponse; message?: string } | AdmissionDBResponse>(
+        endpoints.admission.create(),
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+
       // Desempaquetar createApiResponse
-      if (payloadResp && payloadResp.success === true && 'data' in payloadResp) {
-        const data = payloadResp.data as any;
+      if (payloadResp && typeof payloadResp === 'object' && 'success' in payloadResp && payloadResp.success === true && 'data' in payloadResp) {
+        const data = payloadResp.data;
         return {
           ...data,
           message: payloadResp.message ?? data?.message ?? 'Admisión creada exitosamente',
-        } as AdmissionDBResponse;
+        };
       }
       return payloadResp as AdmissionDBResponse;
     },
@@ -332,20 +339,24 @@ export const useAdmitPatient = () => {
         exact: false,
       });
     },
-    onError: (error: any) => {
-      const status = error?.status;
-      const payload: any = error?.details ?? {};
-      const code: string | undefined = typeof payload?.code === 'string' 
-        ? (payload.code as string).toUpperCase() 
+    onError: (error: unknown) => {
+      const appError = error as { status?: number; details?: Record<string, unknown> };
+      const status = appError?.status;
+      const details = appError?.details ?? {};
+      const code: string | undefined = typeof details?.code === 'string'
+        ? details.code.toUpperCase()
         : undefined;
-      const validationErrors: Array<{ field: string; message: string; code: string }> | undefined = 
-        Array.isArray(payload?.validation_errors) ? payload.validation_errors : undefined;
-      const suggestedActions: string[] | undefined = 
-        Array.isArray(payload?.suggested_actions) ? payload.suggested_actions : undefined;
-      const existing = payload?.details?.existing_patient || payload?.existing_patient;
-      const msg = error?.message || 'No se pudo completar el registro. Intente de nuevo.';
+      const validationErrors: Array<{ field: string; message: string; code: string }> | undefined =
+        Array.isArray(details?.validation_errors) ? details.validation_errors : undefined;
+      const suggestedActions: string[] | undefined =
+        Array.isArray(details?.suggested_actions) ? details.suggested_actions : undefined;
+      const existingDetails = typeof details?.existing_patient === 'object' ? details.existing_patient : null;
+      const existing = existingDetails || (typeof details?.details === 'object' && details.details !== null ? (details.details as Record<string, unknown>).existing_patient : null);
+      const msg = (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string')
+        ? error.message
+        : 'No se pudo completar el registro. Intente de nuevo.';
 
-      const isValidation = error.category === 'validation' && !!validationErrors;
+      const isValidation = typeof error === 'object' && error !== null && 'category' in error && error.category === 'validation' && !!validationErrors;
       const isDuplicatePhone = status === 400 && 
         (msg?.includes('patients_telefono_key') || /tel[eé]fono/i.test(msg));
       const isDuplicatePatient = status === 409 && (code === 'DUPLICATE_PATIENT');
@@ -392,8 +403,9 @@ export const useAdmitPatient = () => {
         duration: 6000,
       });
     },
-    retry: (failureCount, error: any) => {
-      if (error.category === 'validation' || error.status === 409) return false;
+    retry: (failureCount, error: unknown) => {
+      const e = error as { category?: string; status?: number };
+      if (e.category === 'validation' || e.status === 409) return false;
       return failureCount < 2;
     },
     retryDelay: (i) => Math.min(1000 * 2 ** i, 30000),
@@ -405,11 +417,14 @@ export const useUpdatePatient = () => {
   
   return useMutation<Patient, Error, PatientUpdateParams>({
     mutationFn: async ({ id, updates }) => {
-      const payload: any = await fetchJson<any>(endpoints.patients.update(id), {
-        method: 'PATCH',
-        body: JSON.stringify(updates),
-      });
-      return (payload && payload.success === true && 'data' in payload) 
+      const payload = await fetchJson<{ success: true; data: Patient } | Patient>(
+        endpoints.patients.update(id),
+        {
+          method: 'PATCH',
+          body: JSON.stringify(updates),
+        }
+      );
+      return (payload && typeof payload === 'object' && 'success' in payload && payload.success === true && 'data' in payload)
         ? payload.data 
         : payload;
     },
