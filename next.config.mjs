@@ -1,3 +1,33 @@
+// Security headers and CSP (computed at runtime when headers() is called)
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// Content Security Policy (permissive in dev to avoid breaking HMR)
+const cspHeader = [
+  "default-src 'self'",
+  IS_PROD
+    ? "script-src 'self' 'unsafe-inline' 'report-sample'"
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https: http:",
+  "style-src 'self' 'unsafe-inline' https:",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data: https:",
+  IS_PROD ? "connect-src 'self' https: wss:" : "connect-src 'self' blob: data: https: http: ws: wss:",
+  "frame-ancestors 'self'",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+].join('; ');
+
+const securityHeaders = [
+  { key: 'X-DNS-Prefetch-Control', value: 'on' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'Permissions-Policy', value: "camera=(), microphone=(), geolocation=()" },
+  ...(IS_PROD ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }] : []),
+  { key: 'Content-Security-Policy', value: cspHeader },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
@@ -70,34 +100,4 @@ const nextConfig = {
 };
 
 export default nextConfig
-
-// Security headers and CSP (computed at runtime when headers() is called)
-const IS_PROD = process.env.NODE_ENV === 'production';
-
-// Content Security Policy (permissive in dev to avoid breaking HMR)
-const cspHeader = [
-  "default-src 'self'",
-  IS_PROD
-    ? "script-src 'self' 'unsafe-inline' 'report-sample'"
-    : "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https: http:",
-  "style-src 'self' 'unsafe-inline' https:",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data: https:",
-  IS_PROD ? "connect-src 'self' https: wss:" : "connect-src 'self' blob: data: https: http: ws: wss:",
-  "frame-ancestors 'self'",
-  "form-action 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "upgrade-insecure-requests",
-].join('; ');
-
-const securityHeaders = [
-  { key: 'X-DNS-Prefetch-Control', value: 'on' },
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
-  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'X-Frame-Options', value: 'DENY' },
-  { key: 'Permissions-Policy', value: "camera=(), microphone=(), geolocation=()" },
-  ...(IS_PROD ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }] : []),
-  { key: 'Content-Security-Policy', value: cspHeader },
-];
 
