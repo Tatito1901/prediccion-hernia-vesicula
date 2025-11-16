@@ -5,15 +5,7 @@ import React, { useCallback, useState, useTransition, useId, useEffect, useRef }
 import { LockKeyhole, AtSign, LogIn, Eye, EyeOff, AlertCircle, Loader2, Clock } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useGlobalOverlay } from "@/components/providers"
-
-// Definición del tipo de respuesta para que el componente sea autónomo
-interface LoginResponse {
-  ok: boolean
-  redirectTo: string
-  message: string
-  code?: string
-  retryAfter?: number
-}
+import type { LoginResponse } from "@/components/auth/actions"
 
 // --- Constantes de Diseño y Configuración ---
 
