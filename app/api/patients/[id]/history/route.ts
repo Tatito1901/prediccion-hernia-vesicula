@@ -20,10 +20,10 @@ export async function GET(
     const supabase = anon;
     const { id: patientId } = await params;
     const { searchParams } = new URL(request.url);
-    
-    // Parámetros de consulta
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
+
+    // Parámetros de consulta con validación
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
+    const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10));
     const includeHistory = searchParams.get('includeHistory') === 'true';
 
 

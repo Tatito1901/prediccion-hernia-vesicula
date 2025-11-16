@@ -12,8 +12,8 @@ export const runtime = 'nodejs'
 
 // Helpers
 const validatePagination = (page?: string | null, pageSize?: string | null) => {
-  const p = page ? Math.max(1, parseInt(page)) : 1
-  const s = pageSize ? Math.min(100, Math.max(1, parseInt(pageSize))) : 15
+  const p = page ? Math.max(1, parseInt(page, 10)) : 1
+  const s = pageSize ? Math.min(100, Math.max(1, parseInt(pageSize, 10))) : 15
   return { page: p, pageSize: s }
 }
 

@@ -44,8 +44,8 @@ export async function GET(request: Request) {
     const searchTerm = searchParams.get('search'); // ✅ Búsqueda habilitada
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
-    let pageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE));
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    let pageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE), 10);
     pageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
 
     // Debug flag y metadatos de diagnóstico
