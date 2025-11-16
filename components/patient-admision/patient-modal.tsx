@@ -71,32 +71,35 @@ type ClinicAppointment = { estado_cita: AppointmentStatus; fecha_hora_cita: stri
  */
 function handleAdmissionError(error: AppError, setError: (field: keyof FormData, error: { type: string; message: string }) => void) {
   const details = error.details as Record<string, unknown> | undefined;
-  const code = (details?.code || error.code || '').toUpperCase();
+  const code = String(details?.code || error.code || '').toUpperCase();
 
   // Verificación de tipo segura para validation_errors
   const validationErrors = Array.isArray(details?.validation_errors) ? details.validation_errors : undefined;
   if (validationErrors && validationErrors.length > 0) {
     validationErrors.forEach((err: { field: string; message: string }) => {
       const fieldName = err.field === 'fecha_hora_cita' ? 'hora' : err.field;
-      setError(fieldName, { type: 'manual', message: err.message });
+      // Validar que el campo existe en FormData antes de setError
+      if (fieldName in { nombre: true, apellidos: true, genero: true, telefono: true, email: true, diagnostico_principal: true, fecha: true, hora: true }) {
+        setError(fieldName as keyof FormData, { type: 'manual', message: err.message });
+      }
     });
   }
 
   const message = error.message || 'Ocurrió un error inesperado.';
   switch (code) {
     case 'SCHEDULE_CONFLICT':
-      setError('hora', { message });
+      setError('hora', { type: 'manual', message });
       break;
     case 'INVALID_DATE':
-      setError('fecha', { message });
+      setError('fecha', { type: 'manual', message });
       break;
     case 'DUPLICATE_PATIENT':
-      setError('nombre', { message: 'Posible paciente duplicado.' });
-      setError('apellidos', { message: 'Verifique si el paciente ya existe.' });
+      setError('nombre', { type: 'manual', message: 'Posible paciente duplicado.' });
+      setError('apellidos', { type: 'manual', message: 'Verifique si el paciente ya existe.' });
       break;
     default:
       if (message.toLowerCase().includes('telefono')) {
-        setError('telefono', { message: 'Este teléfono ya está registrado.' });
+        setError('telefono', { type: 'manual', message: 'Este teléfono ya está registrado.' });
       }
       break;
   }

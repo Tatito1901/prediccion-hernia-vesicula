@@ -36,11 +36,11 @@ export function useOccupiedTimeSlots(date: Date | undefined) {
         AppointmentStatusEnum.PROGRAMADA,
         AppointmentStatusEnum.CONFIRMADA,
         AppointmentStatusEnum.PRESENTE,
-      ];
+      ] as const;
 
       const occupied = new Set<string>();
       response.data?.forEach((apt) => {
-        if (BLOCKING_STATUSES.includes(apt.estado_cita)) {
+        if ((BLOCKING_STATUSES as readonly string[]).includes(apt.estado_cita)) {
           const appointmentDate = new Date(apt.fecha_hora_cita);
           occupied.add(format(appointmentDate, 'HH:mm'));
         }
