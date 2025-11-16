@@ -39,11 +39,11 @@ const INITIAL_FILTERS: Filters = {
 
 const EstadisticasContent = memo(() => {
   // OPTIMIZADO: Usar hooks específicos en lugar de useClinicData que carga 4 queries innecesarias
-  const { data: patientsData, isLoading: patientsLoading } = usePatients({ pageSize: 100 });
-  const { data: allAppointmentsData, isLoading: appointmentsLoading } = useAppointments({ dateFilter: 'all', pageSize: 500 });
-  const { data: todayAppointments } = useAppointments({ dateFilter: 'today', pageSize: 100 });
-  const { data: futureAppointments } = useAppointments({ dateFilter: 'future', pageSize: 100 });
-  const { data: pastAppointments } = useAppointments({ dateFilter: 'past', pageSize: 100 });
+  const patientsData = usePatients({ pageSize: 100 });
+  const allAppointmentsData = useAppointments({ dateFilter: 'all', pageSize: 500 });
+  const todayAppointmentsData = useAppointments({ dateFilter: 'today', pageSize: 100 });
+  const futureAppointmentsData = useAppointments({ dateFilter: 'future', pageSize: 100 });
+  const pastAppointmentsData = useAppointments({ dateFilter: 'past', pageSize: 100 });
 
   const { analytics, chartData } = useClinicAnalytics({
     groupBy: 'month'
@@ -51,14 +51,14 @@ const EstadisticasContent = memo(() => {
   const statisticsQuery = useStatistics();
 
   // Extraer datos necesarios
-  const allPatients = patientsData?.data || [];
-  const allAppointments = allAppointmentsData?.data || [];
-  const appointments = {
-    today: todayAppointments?.data || [],
-    future: futureAppointments?.data || [],
-    past: pastAppointments?.data || []
-  };
-  const isLoading = patientsLoading || appointmentsLoading || statisticsQuery.isLoading;
+  const allPatients = patientsData.patients || [];
+  const allAppointments = useMemo(() => allAppointmentsData.appointments || [], [allAppointmentsData.appointments]);
+  const appointments = useMemo(() => ({
+    today: todayAppointmentsData.appointments || [],
+    future: futureAppointmentsData.appointments || [],
+    past: pastAppointmentsData.appointments || []
+  }), [todayAppointmentsData.appointments, futureAppointmentsData.appointments, pastAppointmentsData.appointments]);
+  const isLoading = patientsData.isLoading || allAppointmentsData.isLoading || statisticsQuery.isLoading;
   const error = statisticsQuery.error;
   const refetch = () => {
     // Refetch individual queries instead of all
