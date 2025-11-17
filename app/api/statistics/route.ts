@@ -16,20 +16,22 @@ export async function GET(req: Request) {
   const usedClient = 'server' as const;
   const supabase = await createServerClient();
 
-  console.log('🚀 [/api/statistics] Iniciando GET request');
-  console.log('🔑 [/api/statistics] Tipo de cliente Supabase:', usedClient);
-  console.log('🌍 [/api/statistics] Variables de entorno:', {
-    SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING',
-    SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'MISSING',
-    SUPABASE_SERVICE_ROLE: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING',
-    NODE_ENV: process.env.NODE_ENV
-  });
-
   try {
     const now = new Date().toISOString();
     const url = new URL(req.url);
     const debug = url.searchParams.get('debug') === '1' || url.searchParams.get('debug') === 'true';
     const inspect = url.searchParams.get('inspect') === '1' || url.searchParams.get('inspect') === 'true';
+
+    if (debug) {
+      console.log('🚀 [/api/statistics] Iniciando GET request');
+      console.log('🔑 [/api/statistics] Tipo de cliente Supabase:', usedClient);
+      console.log('🌍 [/api/statistics] Variables de entorno:', {
+        SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING',
+        SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'MISSING',
+        SUPABASE_SERVICE_ROLE: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING',
+        NODE_ENV: process.env.NODE_ENV
+      });
+    }
 
     const timings: Record<string, number> = {};
     const errors: Record<string, string | undefined> = {};

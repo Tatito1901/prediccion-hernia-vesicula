@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { z } from 'zod'
-import { getAvailableActions, suggestNextAction } from '@/lib/admission-business-rules'
+import { getAvailableActions, suggestNextAction, type AppointmentLike } from '@/lib/admission-business-rules'
 import { mxNow } from '@/utils/datetime'
+import type { AppointmentStatus } from '@/lib/types'
 
 export const runtime = 'nodejs'
 
@@ -15,8 +16,8 @@ const PatchSchema = z.object({
 })
 
 // Nota: el estado de la cita se actualiza en subruta dedicada `/status`
-function hasForbiddenStatusField(body: any): boolean {
-  return body && Object.prototype.hasOwnProperty.call(body, 'estado_cita')
+function hasForbiddenStatusField(body: unknown): boolean {
+  return body !== null && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'estado_cita')
 }
 
 // GET /api/appointments/[id] - devuelve una cita enriquecida con acciones calculadas
@@ -55,20 +56,21 @@ export async function GET(
 
     // Enriquecer con flags de acciones
     const now = mxNow()
-    const apptLike = {
-      fecha_hora_cita: (data as any).fecha_hora_cita,
-      estado_cita: (data as any).estado_cita,
-      updated_at: (data as any).updated_at ?? null,
+    const appointmentData = data as { fecha_hora_cita: string; estado_cita: AppointmentStatus; updated_at?: string | null }
+    const apptLike: AppointmentLike = {
+      fecha_hora_cita: appointmentData.fecha_hora_cita,
+      estado_cita: appointmentData.estado_cita,
+      updated_at: appointmentData.updated_at ?? null,
     }
-    const actionList = getAvailableActions(apptLike as any, now)
+    const actionList = getAvailableActions(apptLike, now)
     const available = actionList.filter(a => a.valid).map(a => a.action)
     const action_reasons = Object.fromEntries(
       actionList.filter(a => !a.valid && a.reason).map(a => [a.action, a.reason as string])
     )
-    const primary = suggestNextAction(apptLike as any, now)
+    const primary = suggestNextAction(apptLike, now)
 
     return NextResponse.json({
-      ...(data as any),
+      ...appointmentData,
       actions: {
         canCheckIn: available.includes('checkIn'),
         canComplete: available.includes('complete'),
@@ -81,8 +83,9 @@ export async function GET(
       action_reasons,
       suggested_action: primary,
     })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Error inesperado' }, { status: 500 })
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Error inesperado'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
 
@@ -121,11 +124,12 @@ export async function PATCH(
       p_es_primera_vez: parsed.data.es_primera_vez ?? undefined,
     }
 
-    const { data: rpcData, error: rpcError } = await (supabase as any).rpc('schedule_appointment', rpcArgs)
+    type RpcResponse = Array<{ success: boolean; appointment_id?: string; message?: string }>;
+    const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs) as { data: RpcResponse | null; error: unknown }
     if (rpcError) {
-      return NextResponse.json({ error: rpcError.message || 'Error al actualizar la cita' }, { status: 400 })
+      return NextResponse.json({ error: (rpcError as { message?: string })?.message || 'Error al actualizar la cita' }, { status: 400 })
     }
-    const result = (rpcData as any) && (rpcData as any)[0]
+    const result = rpcData?.[0]
     if (!result || !result.success) {
       const msg = result?.message || 'No se pudo actualizar la cita'
       const status = /no encontrada/i.test(msg)
@@ -164,17 +168,18 @@ export async function PATCH(
     // Enrich with backend-calculated business-rule action flags
     try {
       const now = mxNow()
-      const apptLike = {
-        fecha_hora_cita: (updated as any).fecha_hora_cita,
-        estado_cita: (updated as any).estado_cita,
-        updated_at: (updated as any).updated_at ?? null,
+      const updatedData = updated as { fecha_hora_cita: string; estado_cita: AppointmentStatus; updated_at?: string | null }
+      const apptLike: AppointmentLike = {
+        fecha_hora_cita: updatedData.fecha_hora_cita,
+        estado_cita: updatedData.estado_cita,
+        updated_at: updatedData.updated_at ?? null,
       }
-      const actionList = getAvailableActions(apptLike as any, now)
+      const actionList = getAvailableActions(apptLike, now)
       const available = actionList.filter(a => a.valid).map(a => a.action)
       const action_reasons = Object.fromEntries(
         actionList.filter(a => !a.valid && a.reason).map(a => [a.action, a.reason as string])
       )
-      const primary = suggestNextAction(apptLike as any, now)
+      const primary = suggestNextAction(apptLike, now)
       const actions = {
         canCheckIn: available.includes('checkIn'),
         canComplete: available.includes('complete'),
@@ -184,11 +189,13 @@ export async function PATCH(
         available,
         primary,
       }
-      return NextResponse.json({ ...(updated as any), actions, action_reasons, suggested_action: primary })
-    } catch {
+      return NextResponse.json({ ...updatedData, actions, action_reasons, suggested_action: primary })
+    } catch (error) {
+      console.error('Error enriching updated appointment:', error)
       return NextResponse.json(updated)
     }
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Error inesperado' }, { status: 500 })
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Error inesperado'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

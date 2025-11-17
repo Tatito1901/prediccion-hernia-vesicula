@@ -4,15 +4,16 @@ import { clinicYmd, clinicStartOfDayUtc, addClinicDaysAsUtcStart } from '@/lib/t
 import { z } from 'zod'
 import { ZDiagnosisDb, ZAppointmentStatus } from '@/lib/constants'
 import type { Database } from '@/lib/types/database.types'
-import { getAvailableActions, suggestNextAction } from '@/lib/admission-business-rules'
+import { getAvailableActions, suggestNextAction, type AppointmentLike } from '@/lib/admission-business-rules'
 import { mxNow } from '@/utils/datetime'
+import type { AppointmentStatus } from '@/lib/types'
 
 export const runtime = 'nodejs'
 
 // Helpers
 const validatePagination = (page?: string | null, pageSize?: string | null) => {
-  const p = page ? Math.max(1, parseInt(page)) : 1
-  const s = pageSize ? Math.min(100, Math.max(1, parseInt(pageSize))) : 15
+  const p = page ? Math.max(1, parseInt(page, 10)) : 1
+  const s = pageSize ? Math.min(100, Math.max(1, parseInt(pageSize, 10))) : 15
   return { page: p, pageSize: s }
 }
 
@@ -227,13 +228,13 @@ export async function GET(req: NextRequest) {
       fecha_hora_cita: row.fecha_hora_cita,
       estado_cita: row.estado_cita,
       updated_at: row.updated_at ?? null,
-    }
-    const actionList = getAvailableActions(apptLike as any, now)
+    } satisfies AppointmentLike
+    const actionList = getAvailableActions(apptLike, now)
     const available = actionList.filter(a => a.valid).map(a => a.action)
     const action_reasons = Object.fromEntries(
       actionList.filter(a => !a.valid && a.reason).map(a => [a.action, a.reason as string])
     )
-    const primary = suggestNextAction(apptLike as any, now)
+    const primary = suggestNextAction(apptLike, now)
     const actions = {
       canCheckIn: available.includes('checkIn'),
       canComplete: available.includes('complete'),
@@ -278,11 +279,12 @@ export async function POST(req: NextRequest) {
     ...(payload.notas_breves !== undefined ? { p_notas_breves: payload.notas_breves } : {}),
     ...(payload.es_primera_vez !== undefined ? { p_es_primera_vez: payload.es_primera_vez } : {}),
   }
-  const { data: rpcData, error: rpcError } = await (supabase as any).rpc('schedule_appointment', rpcArgs)
+  type RpcResponse = Array<{ success: boolean; appointment_id?: string; message?: string }>;
+  const { data: rpcData, error: rpcError } = await supabase.rpc('schedule_appointment', rpcArgs) as { data: RpcResponse | null; error: unknown }
   if (rpcError) {
-    return NextResponse.json({ message: rpcError.message || 'Error al programar la cita' }, { status: 400 })
+    return NextResponse.json({ message: (rpcError as { message?: string })?.message || 'Error al programar la cita' }, { status: 400 })
   }
-  const result = (rpcData as any) && (rpcData as any)[0]
+  const result = rpcData?.[0]
   if (!result || !result.success || !result.appointment_id) {
     const msg = result?.message || 'No se pudo programar la cita'
     const status = /horario no disponible/i.test(msg) ? 409 : 400
@@ -316,17 +318,18 @@ export async function POST(req: NextRequest) {
   // Enrich the single created appointment as well
   try {
     const now = mxNow()
-    const apptLike = {
-      fecha_hora_cita: (data as any).fecha_hora_cita,
-      estado_cita: (data as any).estado_cita,
-      updated_at: (data as any).updated_at ?? null,
+    const appointmentData = data as { fecha_hora_cita: string; estado_cita: AppointmentStatus; updated_at?: string | null }
+    const apptLike: AppointmentLike = {
+      fecha_hora_cita: appointmentData.fecha_hora_cita,
+      estado_cita: appointmentData.estado_cita,
+      updated_at: appointmentData.updated_at ?? null,
     }
-    const actionList = getAvailableActions(apptLike as any, now)
+    const actionList = getAvailableActions(apptLike, now)
     const available = actionList.filter(a => a.valid).map(a => a.action)
     const action_reasons = Object.fromEntries(
       actionList.filter(a => !a.valid && a.reason).map(a => [a.action, a.reason as string])
     )
-    const primary = suggestNextAction(apptLike as any, now)
+    const primary = suggestNextAction(apptLike, now)
     const actions = {
       canCheckIn: available.includes('checkIn'),
       canComplete: available.includes('complete'),
@@ -336,9 +339,10 @@ export async function POST(req: NextRequest) {
       available,
       primary,
     }
-    return NextResponse.json({ ...(data as any), actions, action_reasons, suggested_action: primary })
-  } catch {
+    return NextResponse.json({ ...appointmentData, actions, action_reasons, suggested_action: primary })
+  } catch (error) {
     // Fallback to raw data if enrichment fails for any reason
+    console.error('Error enriching appointment data:', error)
     return NextResponse.json(data)
   }
 }

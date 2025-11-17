@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
+import { fetchJson } from "@/lib/http";
+import { cn } from "@/lib/utils";
 
 const AVATARS: { key: string; label: string; src: string }[] = [
   { key: "doctor-m", label: "Doctor", src: "/avatars/doctor-male.svg" },
@@ -26,17 +29,16 @@ export function AvatarPicker({ currentAvatar }: { currentAvatar?: string | null 
   async function selectAvatar(avatarUrl: string | null) {
     try {
       setLoading(avatarUrl ?? "none");
-      const res = await fetch("/api/profile/avatar", {
+      await fetchJson("/api/profile/avatar", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatar_url: avatarUrl }),
       });
-      if (!res.ok) throw new Error("Error al actualizar avatar");
+      toast.success("Avatar actualizado correctamente");
       setOpen(false);
       router.refresh();
-    } catch (e) {
-      console.error(e);
-      alert("No se pudo actualizar el avatar. Intenta de nuevo.");
+    } catch (error) {
+      console.error("Error updating avatar:", error);
+      toast.error("No se pudo actualizar el avatar. Intenta de nuevo.");
     } finally {
       setLoading(null);
     }
@@ -58,15 +60,19 @@ export function AvatarPicker({ currentAvatar }: { currentAvatar?: string | null 
               key={a.key}
               onClick={() => selectAvatar(a.src)}
               disabled={!!loading}
-              className={`group relative rounded-md border p-2 bg-white/60 dark:bg-neutral-900/40 backdrop-blur-sm transition-all hover:border-medical-400 hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-medical-500 ring-1 ring-transparent ${
-                currentAvatar === a.src ? "border-medical-500 ring-2 ring-medical-500/60 shadow-medical-lg" : "border-muted"
-              }`}
+              className={cn(
+                "group relative rounded-md border p-2 bg-white/60 dark:bg-neutral-900/40 backdrop-blur-sm transition-all hover:border-medical-400 hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-medical-500 ring-1 ring-transparent",
+                currentAvatar === a.src
+                  ? "border-medical-500 ring-2 ring-medical-500/60 shadow-medical-lg"
+                  : "border-muted"
+              )}
               aria-label={a.label}
             >
               <span
-                className={`absolute right-1.5 top-1.5 inline-flex items-center justify-center rounded-full transition-opacity ${
+                className={cn(
+                  "absolute right-1.5 top-1.5 inline-flex items-center justify-center rounded-full transition-opacity",
                   currentAvatar === a.src ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                }`}
+                )}
                 aria-hidden="true"
               >
                 <CheckCircle2 className="h-5 w-5 text-medical-600" />
@@ -81,14 +87,18 @@ export function AvatarPicker({ currentAvatar }: { currentAvatar?: string | null 
           <button
             onClick={() => selectAvatar(null)}
             disabled={!!loading}
-            className={`group relative rounded-md border p-2 bg-white/60 dark:bg-neutral-900/40 backdrop-blur-sm transition-all hover:border-medical-400 hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-medical-500 ring-1 ring-transparent ${
-              !currentAvatar ? "border-medical-500 ring-2 ring-medical-500/60 shadow-medical-lg" : "border-muted"
-            }`}
+            className={cn(
+              "group relative rounded-md border p-2 bg-white/60 dark:bg-neutral-900/40 backdrop-blur-sm transition-all hover:border-medical-400 hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-medical-500 ring-1 ring-transparent",
+              !currentAvatar
+                ? "border-medical-500 ring-2 ring-medical-500/60 shadow-medical-lg"
+                : "border-muted"
+            )}
           >
             <span
-              className={`absolute right-1.5 top-1.5 inline-flex items-center justify-center rounded-full transition-opacity ${
+              className={cn(
+                "absolute right-1.5 top-1.5 inline-flex items-center justify-center rounded-full transition-opacity",
                 !currentAvatar ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-              }`}
+              )}
               aria-hidden="true"
             >
               <CheckCircle2 className="h-5 w-5 text-medical-600" />

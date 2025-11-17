@@ -10,6 +10,7 @@ import { Users, Calendar, CalendarCheck, CalendarClock, TrendingUp, Activity, Ch
 import { MetricsGrid, ChartContainer, type MetricValue, createMetric } from '@/components/ui/metrics-system';
 import { AppointmentStatusEnum } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 // Lazy load de gráficos pesados para mejorar rendimiento inicial
 const GenericLineChart = dynamic(() => import('@/components/charts/common/generic-line-chart').then(mod => ({ default: mod.GenericLineChart })), {
@@ -294,31 +295,34 @@ const EstadisticasContent = memo(() => {
           <nav className="flex space-x-8">
             <button
               onClick={() => handleSectionChange('overview')}
-              className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={cn(
+                "pb-3 px-1 border-b-2 font-medium text-sm transition-colors",
                 activeSection === 'overview'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+              )}
             >
               Vista General
             </button>
             <button
               onClick={() => handleSectionChange('appointments')}
-              className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={cn(
+                "pb-3 px-1 border-b-2 font-medium text-sm transition-colors",
                 activeSection === 'appointments'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+              )}
             >
               Análisis de Citas
             </button>
             <button
               onClick={() => handleSectionChange('surveys')}
-              className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={cn(
+                "pb-3 px-1 border-b-2 font-medium text-sm transition-colors",
                 activeSection === 'surveys'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+              )}
             >
               Encuestas de Salud
             </button>

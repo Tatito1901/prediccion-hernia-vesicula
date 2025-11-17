@@ -350,8 +350,8 @@ export const useAdmitPatient = () => {
         Array.isArray(details?.validation_errors) ? details.validation_errors : undefined;
       const suggestedActions: string[] | undefined =
         Array.isArray(details?.suggested_actions) ? details.suggested_actions : undefined;
-      const existingDetails = typeof details?.existing_patient === 'object' ? details.existing_patient : null;
-      const existing = existingDetails || (typeof details?.details === 'object' && details.details !== null ? (details.details as Record<string, unknown>).existing_patient : null);
+      const existingDetails = (typeof details?.existing_patient === 'object' ? details.existing_patient : null) as { nombre?: string; apellidos?: string } | null;
+      const existing = existingDetails || (typeof details?.details === 'object' && details.details !== null ? (details.details as Record<string, unknown>).existing_patient as { nombre?: string; apellidos?: string } | null : null);
       const msg = (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string')
         ? error.message
         : 'No se pudo completar el registro. Intente de nuevo.';
@@ -416,7 +416,7 @@ export const useUpdatePatient = () => {
   const queryClient = useQueryClient();
   
   return useMutation<Patient, Error, PatientUpdateParams>({
-    mutationFn: async ({ id, updates }) => {
+    mutationFn: async ({ id, updates }): Promise<Patient> => {
       const payload = await fetchJson<{ success: true; data: Patient } | Patient>(
         endpoints.patients.update(id),
         {
@@ -425,8 +425,8 @@ export const useUpdatePatient = () => {
         }
       );
       return (payload && typeof payload === 'object' && 'success' in payload && payload.success === true && 'data' in payload)
-        ? payload.data 
-        : payload;
+        ? payload.data
+        : payload as Patient;
     },
     onSuccess: (updated, variables) => {
       // Actualización directa del caché

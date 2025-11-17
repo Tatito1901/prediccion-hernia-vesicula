@@ -99,7 +99,7 @@ export const RescheduleDatePicker = memo<RescheduleProps>(({
   const canReschedule = rescheduleCheck.valid;
 
   // OPTIMIZADO: Usar hook compartido en lugar de useEffect con fetch manual
-  const { data: occupiedTimesRaw = new Set(), isLoading: isLoadingTimes } = useOccupiedTimeSlots(selectedDate);
+  const { data: occupiedTimesRaw = new Set(), isLoading: isLoadingTimes } = useOccupiedTimeSlots(selectedDate ?? undefined);
 
   // Filtrar el appointment actual de los horarios ocupados
   const occupiedTimes = useMemo(() => {
