@@ -29,6 +29,7 @@ import {
   ArrowUpRight,
   Stethoscope,
   ChevronDown,
+  TrendingUp,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -85,6 +86,15 @@ const RescheduleDatePicker = dynamic(() => import('./patient-admission-reschedul
 const PatientHistoryModal = dynamic(() => import('@/components/patients/patient-history-modal'), {
   ssr: false,
   loading: () => null,
+});
+
+const SurveyResultsAnalyzer = dynamic(() => import('@/components/surveys/survey-results-analyzer'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center p-8">
+      <Loader2 className="h-8 w-8 animate-spin text-sky-600" />
+    </div>
+  ),
 });
 
 // Configuración de acciones con tipado estricto
@@ -166,12 +176,20 @@ const SecondaryActionsMenu = memo(function SecondaryActionsMenu({
   actions,
   onAction,
   disabled,
+  onViewPrediction,
+  patientId,
 }: {
   actions: AdmissionAction[];
   onAction: (a: AdmissionAction) => void;
   disabled: boolean;
+  onViewPrediction?: () => void;
+  patientId?: string;
 }) {
-  if (actions.length === 0) return null;
+  const hasActions = actions.length > 0;
+  const showPredictionOption = !!onViewPrediction && !!patientId;
+
+  if (!hasActions && !showPredictionOption) return null;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -200,6 +218,15 @@ const SecondaryActionsMenu = memo(function SecondaryActionsMenu({
             </React.Fragment>
           );
         })}
+        {showPredictionOption && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onViewPrediction} className="gap-2 cursor-pointer text-sky-600 dark:text-sky-400 font-medium" aria-label="Ver Análisis Predictivo">
+              <TrendingUp className="h-4 w-4" />
+              Ver Predicción
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -253,21 +280,12 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
   const [confirmDialog, setConfirmDialog] = useState<AdmissionAction | null>(null);
   const [showReschedule, setShowReschedule] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showPrediction, setShowPrediction] = useState(false);
   const [infoDialog, setInfoDialog] = useState<null | { kind: InfoDialogKind; message?: string }>(null);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  // Ticker para recalcular ventanas de check-in sin recargar - solo cuando es necesario
-  const [clockTick, setClockTick] = useState(0);
 
-  useEffect(() => {
-    // Solo activar el ticker si la cita está en estado que requiere actualización de tiempo
-    const needsTicker = appointment.estado_cita === AppointmentStatusEnum.PROGRAMADA || 
-                       appointment.estado_cita === AppointmentStatusEnum.CONFIRMADA;
-    
-    if (!needsTicker) return;
-    
-    const id = setInterval(() => setClockTick((t) => t + 1), 30_000); // cada 30s
-    return () => clearInterval(id);
-  }, [appointment.estado_cita]);
+  // ✅ OPTIMIZACIÓN: Eliminado timer de 30s que causaba re-renders innecesarios
+  // El tiempo relativo se calcula cuando hay cambios naturales en el estado
 
   // Derivados (optimizados)
   const open = controlledOpen ?? uncontrolledOpen;
@@ -276,9 +294,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
   const statusConfig = useMemo(() => getStatusConfig(appointment.estado_cita), [appointment.estado_cita]);
   const fullName = useMemo(() => getPatientFullName(patient || null), [patient]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run on clockTick to keep relative time fresh
   const dateTime = useMemo<DateTimeState | null>(() => {
-    void clockTick; // tick-driven invalidation
     try {
       const date = parseISO(appointment.fecha_hora_cita);
       if (!isValid(date)) return null;
@@ -286,7 +302,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
       const isToday = isMxToday(appointment.fecha_hora_cita);
       const isPast = date < now;
       const timeDiff = date.getTime() - now.getTime();
-      
+
       return {
         date: formatMx(appointment.fecha_hora_cita, 'EEE d MMM'),
         time: formatMx(appointment.fecha_hora_cita, 'HH:mm'),
@@ -298,7 +314,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
     } catch {
       return null;
     }
-  }, [appointment.fecha_hora_cita, clockTick]);
+  }, [appointment.fecha_hora_cita]);
 
   const timePillClass = useMemo(() => {
     if (!dateTime) return '';
@@ -331,9 +347,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
     }
   }, [appointment.fecha_hora_cita]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- tick-driven recomputation keeps actions in sync with time
   const availableActions = useMemo(() => {
-    void clockTick; // tick-driven invalidation
     // Preferir las acciones calculadas por el backend si están presentes
     if (appointment.actions?.available && Array.isArray(appointment.actions.available)) {
       return appointment.actions.available as AdmissionAction[];
@@ -344,11 +358,9 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
     const list = getAdmissionAvailableActions(appointment, now);
     const validActions = list.filter((a) => a.valid).map((a) => a.action as AdmissionAction);
     return validActions;
-  }, [appointment, clockTick]);
+  }, [appointment]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- tick ensures timely updates to suggested action
   const primaryAction = useMemo<AdmissionAction | null>(() => {
-    void clockTick; // tick-driven invalidation
     // 1) Preferir sugerencia del backend si existe
     if (typeof appointment.suggested_action !== 'undefined') {
       return appointment.suggested_action as AdmissionAction | null;
@@ -361,7 +373,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
     const now = mxNow();
     const suggested = suggestNextAction(appointment, now) as AdmissionAction | null;
     return suggested;
-  }, [appointment, clockTick]);
+  }, [appointment]);
 
   const isPrimaryDisabled = useMemo(() => {
     if (!primaryAction) return false;
@@ -478,7 +490,7 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
           appointmentId: appointment.id,
           newFechaHora: newIso,
           expectedUpdatedAt: appointment.updated_at ?? undefined,
-          doctorId: (appointment as any).doctor_id ?? null,
+          doctorId: appointment.doctor_id ?? null,
           notasBreves: 'Reagendamiento de cita',
         },
         {
@@ -552,7 +564,13 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
                   {dateTime.time}
                 </span>
                 {!disableActions && (
-                  <SecondaryActionsMenu actions={secondaryActions} onAction={handleAction} disabled={isBusy} />
+                  <SecondaryActionsMenu
+                    actions={secondaryActions}
+                    onAction={handleAction}
+                    disabled={isBusy}
+                    onViewPrediction={() => setShowPrediction(true)}
+                    patientId={appointment.patient_id}
+                  />
                 )}
               </div>
             </div>
@@ -720,6 +738,27 @@ function PatientCard({ appointment, onAction, disableActions = false, className,
       )}
       {showHistory && (
         <PatientHistoryModal patientId={appointment.patient_id} isOpen={showHistory} onClose={() => setShowHistory(false)} />
+      )}
+      {showPrediction && patient && (
+        <AlertDialog open={showPrediction} onOpenChange={(open) => !open && setShowPrediction(false)}>
+          <AlertDialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-xl flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-sky-600" />
+                Análisis Predictivo - {fullName}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Probabilidad de conversión quirúrgica y recomendaciones personalizadas
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="mt-4">
+              <SurveyResultsAnalyzer patientData={patient as any} />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setShowPrediction(false)}>Cerrar</AlertDialogCancel>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </>
   );

@@ -395,7 +395,7 @@ export const useUpdateAppointmentStatus = () => {
         // Si viene una nueva fecha/hora (reagendar), reflejarla inmediatamente
         ...(nuevaFechaHora ? { fecha_hora_cita: nuevaFechaHora } : {}),
         // Marcar updated_at localmente para coherencia visual
-        updated_at: new Date().toISOString() as any,
+        updated_at: new Date().toISOString(),
       });
 
       // 1) Actualizar caché de detalle si existe

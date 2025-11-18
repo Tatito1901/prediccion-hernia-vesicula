@@ -96,7 +96,7 @@ const PatientDetailsDialog = memo<PatientDetailsDialogProps>(({ isOpen, patient,
   const patientData = useMemo(() => {
     const fullName = `${patient.nombre} ${patient.apellidos}`
     const status = patient.estado_paciente ?? PatientStatusEnum.POTENCIAL
-    const statusConfig = getPatientStatusConfig(status as any)
+    const statusConfig = getPatientStatusConfig(status)
     
     return {
       fullName,

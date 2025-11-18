@@ -252,14 +252,29 @@ export interface AppointmentFormData {
 // --- Tipos Deprecados para Compatibilidad ---
 
 /**
- * @deprecated Use `PatientSurvey` or specific survey types instead.
+ * Tipo para respuestas individuales de encuesta
  */
-export type PatientSurveyData = {
+export interface SurveyAnswer {
+  question?: {
+    text?: string;
+    id?: string;
+  };
+  answer_text?: string;
+  answer_value?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * @deprecated Use `PatientSurvey` or specific survey types instead.
+ * Mantenido temporalmente para compatibilidad con código existente.
+ */
+export interface PatientSurveyData {
   id: string;
   patient_id: string;
   submitted_at: string | null;
-  [key: string]: any;
-};
+  answers?: SurveyAnswer[];
+  [key: string]: unknown;
+}
 
 /**
  * @deprecated Usar el tipo `Appointment` y transformar los datos en el componente si es necesario.
@@ -300,7 +315,7 @@ export interface AppointmentActions {
 // --- Error Types ---
 export interface AppError extends Error {
   code?: string;
-  details?: any;
+  details?: Record<string, unknown>;
   status?: number;
 }
 

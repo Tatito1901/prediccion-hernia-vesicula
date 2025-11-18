@@ -54,7 +54,7 @@ import {
 // ❌ ELIMINADO: import { usePatient } - Ya no es necesario, recibimos datos vía props
 import { useCreateAppointment } from '@/hooks/core/use-appointments';
 import { usePatientSurvey } from '@/hooks/core/use-patients';
-import { AppointmentStatusEnum, type Appointment, type Patient, type PatientSurveyData } from '@/lib/types';
+import { AppointmentStatusEnum, type Appointment, type Patient, type PatientSurveyData, type SurveyAnswer } from '@/lib/types';
 import { 
   calculateConversionScore, 
   generateInsights, 
@@ -182,13 +182,13 @@ export default function SurveyResultsAnalyzer({ patientData }: SurveyResultsAnal
     if (!survey || !survey.answers) return points
 
     // Analizar respuestas para generar puntos persuasivos
-    const severityAnswer = survey.answers.find((a: any) => 
+    const severityAnswer = survey.answers.find((a: SurveyAnswer) =>
       a.question?.text?.toLowerCase().includes('severidad')
     )
-    const impactAnswer = survey.answers.find((a: any) => 
+    const impactAnswer = survey.answers.find((a: SurveyAnswer) =>
       a.question?.text?.toLowerCase().includes('actividad')
     )
-    const durationAnswer = survey.answers.find((a: any) => 
+    const durationAnswer = survey.answers.find((a: SurveyAnswer) =>
       a.question?.text?.toLowerCase().includes('tiempo')
     )
 

@@ -1,4 +1,4 @@
-import { Patient, PatientSurveyData } from "@/lib/types"
+import { Patient, PatientSurveyData, SurveyAnswer } from "@/lib/types"
 import { 
   Activity, 
   AlertCircle, 
@@ -46,7 +46,7 @@ export function calculateConversionScore(
   let factorCount = 0
 
   // Analizar respuestas de la encuesta
-  survey.answers.forEach((answer: any) => {
+  survey.answers.forEach((answer: SurveyAnswer) => {
     const questionText = answer.question?.text?.toLowerCase() || ''
     const answerText = answer.answer_text?.toLowerCase() || ''
     
@@ -116,13 +116,13 @@ export function generateInsights(
   }
 
   // Analizar patrones en las respuestas
-  const severityAnswer = survey.answers.find((a: any) => 
+  const severityAnswer = survey.answers.find((a: SurveyAnswer) =>
     a.question?.text?.toLowerCase().includes('severidad')
   )
-  const impactAnswer = survey.answers.find((a: any) => 
+  const impactAnswer = survey.answers.find((a: SurveyAnswer) =>
     a.question?.text?.toLowerCase().includes('actividad')
   )
-  const durationAnswer = survey.answers.find((a: any) => 
+  const durationAnswer = survey.answers.find((a: SurveyAnswer) =>
     a.question?.text?.toLowerCase().includes('tiempo')
   )
 
@@ -304,7 +304,7 @@ export function calculateSurgeryProbability(
   let factorWeight = 0
 
   // Analizar cada respuesta
-  survey.answers.forEach((answer: any) => {
+  survey.answers.forEach((answer: SurveyAnswer) => {
     const questionText = answer.question?.text?.toLowerCase() || ''
     const answerText = answer.answer_text?.toLowerCase() || ''
     
@@ -382,7 +382,7 @@ export function calculateBenefitRiskRatio(
   let riskScore = 1 // Base risk
 
   // Calcular beneficios potenciales
-  survey.answers.forEach((answer: any) => {
+  survey.answers.forEach((answer: SurveyAnswer) => {
     const questionText = answer.question?.text?.toLowerCase() || ''
     const answerText = answer.answer_text?.toLowerCase() || ''
     
