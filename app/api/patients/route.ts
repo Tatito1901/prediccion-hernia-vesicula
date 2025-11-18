@@ -125,7 +125,7 @@ export async function GET(request: Request) {
         const stats = page === 1
           ? { totalPatients: 0, surveyRate: 0, pendingConsults: 0, operatedPatients: 0, all: 0 }
           : null;
-        const successResponse = createApiResponse<any[]>([], {
+        const successResponse = createApiResponse<Patient[]>([], {
           pagination,
           stats: stats ?? undefined,
           meta: debug ? meta : undefined,
@@ -142,11 +142,20 @@ export async function GET(request: Request) {
 
     // 3. Enriquecer datos en el backend
     // Intentar recuperar la última encuesta asignada por paciente (sin romper en entornos donde la tabla no exista)
-    let surveysByPatient: Record<string, any> = {};
+    interface SurveyInfo {
+      id: string;
+      status: string;
+      completed_at: string | null;
+      assigned_at: string;
+      template_id: string;
+      patient_id: string;
+    }
+
+    const surveysByPatient: Record<string, SurveyInfo> = {};
     try {
       const patientIds: string[] = (patients || [])
-        .map((p: any) => p?.id)
-        .filter((id: any) => typeof id === 'string' && id);
+        .map((p: Patient) => p?.id)
+        .filter((id: string | undefined): id is string => typeof id === 'string' && id.length > 0);
 
       if (patientIds.length > 0) {
         const { data: assigned, error: assignedError } = await supabase
@@ -165,10 +174,14 @@ export async function GET(request: Request) {
           }
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
+      // Silenciosamente ignorar si la tabla no existe en este entorno
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[API /patients] Error al cargar encuestas asignadas:', e);
+      }
     }
 
-    const enrichedPatients = patients?.map((patient: any) => {
+    const enrichedPatients = patients?.map((patient: Patient) => {
       const lastSurvey = surveysByPatient[patient.id];
       const encuestaCompletada = !!(lastSurvey && (lastSurvey.status === 'completed' || lastSurvey.completed_at));
 

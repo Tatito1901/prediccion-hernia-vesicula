@@ -33,12 +33,18 @@ export interface RecommendationCategory {
 
 /**
  * Calcula el puntaje de conversión basado en datos del paciente y encuesta
+ *
+ * @param patient - Datos del paciente
+ * @param survey - Datos de la encuesta del paciente (puede ser null)
+ * @returns Puntaje de conversión entre 0-100. Retorna 0 si no hay datos de encuesta.
+ *          El valor por defecto de 0 (en vez de 50) indica explícitamente que no hay información suficiente.
  */
 export function calculateConversionScore(
   patient: Patient,
   survey: PatientSurveyData | null
 ): number {
   if (!survey || !survey.answers || survey.answers.length === 0) {
+    // Retornar 0 en vez de valor arbitrario cuando no hay datos
     return 0
   }
 
@@ -49,8 +55,8 @@ export function calculateConversionScore(
   survey.answers.forEach((answer: SurveyAnswer) => {
     const questionText = answer.question?.text?.toLowerCase() || ''
     const answerText = answer.answer_text?.toLowerCase() || ''
-    
-    // Factor: Severidad de síntomas
+
+    // Factor: Severidad de síntomas (peso: 25 puntos)
     if (questionText.includes('severidad') || questionText.includes('dolor')) {
       factorCount++
       if (answerText.includes('severo') || answerText.includes('muy')) {
@@ -61,8 +67,8 @@ export function calculateConversionScore(
         score += 5
       }
     }
-    
-    // Factor: Impacto en actividades diarias
+
+    // Factor: Impacto en actividades diarias (peso: 25 puntos)
     if (questionText.includes('actividad') || questionText.includes('diaria')) {
       factorCount++
       if (answerText.includes('mucho') || answerText.includes('completamente')) {
@@ -73,8 +79,8 @@ export function calculateConversionScore(
         score += 5
       }
     }
-    
-    // Factor: Tiempo con síntomas
+
+    // Factor: Tiempo con síntomas (peso: 20 puntos)
     if (questionText.includes('tiempo') || questionText.includes('duración')) {
       factorCount++
       if (answerText.includes('año') || answerText.includes('mucho')) {
@@ -85,8 +91,8 @@ export function calculateConversionScore(
         score += 5
       }
     }
-    
-    // Factor: Tratamientos previos
+
+    // Factor: Tratamientos previos (peso: 20 puntos)
     if (questionText.includes('tratamiento') || questionText.includes('medicamento')) {
       factorCount++
       if (answerText.includes('varios') || answerText.includes('múltiples')) {
@@ -99,11 +105,25 @@ export function calculateConversionScore(
 
   // Normalizar el score (0-100)
   const maxPossibleScore = factorCount * 25
-  return maxPossibleScore > 0 ? Math.min(100, Math.round((score / maxPossibleScore) * 100)) : 50
+  const normalizedScore = maxPossibleScore > 0
+    ? Math.min(100, Math.round((score / maxPossibleScore) * 100))
+    : 0; // Cambio: retornar 0 en vez de 50 arbitrario
+
+  // Validar que el resultado sea un número válido
+  if (!Number.isFinite(normalizedScore) || Number.isNaN(normalizedScore)) {
+    console.warn('[calculateConversionScore] Resultado inválido, retornando 0', { score, maxPossibleScore });
+    return 0;
+  }
+
+  return normalizedScore;
 }
 
 /**
  * Genera insights basados en el análisis del paciente y encuesta
+ *
+ * @param patient - Datos del paciente
+ * @param survey - Datos de la encuesta del paciente (puede ser null)
+ * @returns Array de insights con recomendaciones accionables. Retorna array vacío si no hay datos.
  */
 export function generateInsights(
   patient: Patient,
@@ -291,24 +311,38 @@ export function generateRecommendationCategories(
 
 /**
  * Calcula la probabilidad de cirugía basada en múltiples factores
+ *
+ * **IMPORTANTE**: Esta función retorna 0 (en vez de 0.3) cuando no hay datos de encuesta.
+ * Un valor de 0 indica explícitamente que no hay información suficiente para hacer una predicción.
+ *
+ * @param patient - Datos del paciente
+ * @param survey - Datos de la encuesta del paciente (puede ser null)
+ * @returns Probabilidad entre 0-1 (0% a 100%). Retorna 0 si no hay datos de encuesta.
+ *          La función aplica una fórmula de regresión ajustada cuando hay pocos factores.
  */
 export function calculateSurgeryProbability(
   patient: Patient,
   survey: PatientSurveyData | null
 ): number {
   if (!survey || !survey.answers || survey.answers.length === 0) {
-    return 0.3 // Probabilidad base sin datos
+    // Sin datos de encuesta, no podemos hacer predicción confiable
+    console.warn('[calculateSurgeryProbability] Sin datos de encuesta para paciente', patient.id);
+    return 0;
   }
 
-  let probability = 0.3 // Probabilidad base
-  let factorWeight = 0
+  // Constantes de probabilidad base
+  const BASE_PROBABILITY = 0.3; // 30% probabilidad base sin factores adicionales
+  const MIN_FACTORS_FOR_HIGH_CONFIDENCE = 2; // Mínimo de factores para alta confianza
+
+  let probability = BASE_PROBABILITY;
+  let factorWeight = 0;
 
   // Analizar cada respuesta
   survey.answers.forEach((answer: SurveyAnswer) => {
     const questionText = answer.question?.text?.toLowerCase() || ''
     const answerText = answer.answer_text?.toLowerCase() || ''
-    
-    // Factor: Severidad (peso alto)
+
+    // Factor: Severidad (peso alto: +25%)
     if (questionText.includes('severidad') || questionText.includes('dolor')) {
       if (answerText.includes('severo') || answerText.includes('muy')) {
         probability += 0.25
@@ -318,8 +352,8 @@ export function calculateSurgeryProbability(
         factorWeight += 0.5
       }
     }
-    
-    // Factor: Impacto funcional (peso alto)
+
+    // Factor: Impacto funcional (peso alto: +20%)
     if (questionText.includes('actividad') || questionText.includes('diaria')) {
       if (answerText.includes('mucho') || answerText.includes('completamente')) {
         probability += 0.2
@@ -329,16 +363,16 @@ export function calculateSurgeryProbability(
         factorWeight += 0.5
       }
     }
-    
-    // Factor: Falla de tratamiento conservador (peso medio)
+
+    // Factor: Falla de tratamiento conservador (peso medio: +15%)
     if (questionText.includes('tratamiento') || questionText.includes('medicamento')) {
       if (answerText.includes('no funciona') || answerText.includes('sin mejora')) {
         probability += 0.15
         factorWeight += 0.7
       }
     }
-    
-    // Factor: Duración de síntomas (peso medio)
+
+    // Factor: Duración de síntomas (peso medio: +10%)
     if (questionText.includes('tiempo') || questionText.includes('duración')) {
       if (answerText.includes('año') || answerText.includes('mucho')) {
         probability += 0.1
@@ -347,72 +381,113 @@ export function calculateSurgeryProbability(
     }
   })
 
-  // Ajustar por edad del paciente
-  if (patient.edad) {
+  // Ajustar por edad del paciente (validación añadida)
+  if (patient.edad && Number.isFinite(patient.edad)) {
     if (patient.edad >= 40 && patient.edad <= 65) {
-      probability += 0.05 // Edad óptima para cirugía
+      probability += 0.05 // Edad óptima para cirugía (+5%)
     } else if (patient.edad > 70) {
-      probability -= 0.1 // Mayor riesgo quirúrgico
+      probability -= 0.1 // Mayor riesgo quirúrgico (-10%)
     }
   }
 
+  // Aplicar fórmula de regresión si hay pocos factores de decisión
+  // Esto reduce la confianza cuando hay datos insuficientes
+  if (factorWeight < MIN_FACTORS_FOR_HIGH_CONFIDENCE) {
+    // Factor de confianza: 0.7 (70% del valor) + ajuste base
+    const CONFIDENCE_FACTOR = 0.7;
+    const LOW_CONFIDENCE_ADJUSTMENT = BASE_PROBABILITY * 0.3; // 9% adicional
+    probability = probability * CONFIDENCE_FACTOR + LOW_CONFIDENCE_ADJUSTMENT;
+  }
+
   // Normalizar probabilidad (0-1)
-  probability = Math.max(0, Math.min(1, probability))
-  
-  // Si hay pocos factores evaluados, reducir confianza
-  if (factorWeight < 2) {
-    probability = probability * 0.7 + 0.3 * 0.3 // Regresión hacia la media
+  probability = Math.max(0, Math.min(1, probability));
+
+  // Validación crítica: verificar que el resultado sea un número válido
+  if (!Number.isFinite(probability) || Number.isNaN(probability)) {
+    console.error('[calculateSurgeryProbability] Resultado inválido detectado', {
+      patient_id: patient.id,
+      probability,
+      factorWeight,
+      patient_edad: patient.edad
+    });
+    // Retornar 0 en caso de cálculo inválido (no hay predicción confiable)
+    return 0;
   }
 
   return probability
 }
 
 /**
- * Calcula la relación beneficio/riesgo
+ * Calcula la relación beneficio/riesgo para la decisión quirúrgica
+ *
+ * @param patient - Datos del paciente
+ * @param survey - Datos de la encuesta del paciente (puede ser null)
+ * @returns Ratio beneficio/riesgo. Valores > 1 indican que los beneficios superan los riesgos.
+ *          Retorna 1 (neutral) si no hay datos de encuesta.
+ *          Valores típicos: 0.1 (muy riesgoso) a 10 (muy beneficioso).
  */
 export function calculateBenefitRiskRatio(
   patient: Patient,
   survey: PatientSurveyData | null
 ): number {
   if (!survey || !survey.answers) {
-    return 1 // Ratio neutral sin datos
+    console.warn('[calculateBenefitRiskRatio] Sin datos de encuesta, retornando ratio neutral');
+    return 1; // Ratio neutral sin datos
   }
 
-  let benefitScore = 0
-  let riskScore = 1 // Base risk
+  let benefitScore = 0;
+  let riskScore = 1; // Score de riesgo base (evita división por cero)
 
   // Calcular beneficios potenciales
   survey.answers.forEach((answer: SurveyAnswer) => {
     const questionText = answer.question?.text?.toLowerCase() || ''
     const answerText = answer.answer_text?.toLowerCase() || ''
     
-    // Beneficios aumentan con severidad de síntomas
+    // Beneficios aumentan con severidad de síntomas (peso: +3)
     if ((questionText.includes('severidad') || questionText.includes('dolor')) &&
         (answerText.includes('severo') || answerText.includes('mucho'))) {
       benefitScore += 3
     }
-    
-    // Beneficios aumentan con impacto funcional
+
+    // Beneficios aumentan con impacto funcional (peso: +3)
     if (questionText.includes('actividad') && answerText.includes('mucho')) {
       benefitScore += 3
     }
-    
-    // Riesgos aumentan con comorbilidades
+
+    // Riesgos aumentan con comorbilidades (peso: +0.5 por condición)
     if (questionText.includes('condicion') || questionText.includes('enfermedad')) {
-      const conditions = answerText.split(',').length
-      riskScore += conditions * 0.5
+      // Validar que answerText exista antes de split
+      if (answerText && answerText.length > 0) {
+        const conditions = answerText.split(',').length;
+        riskScore += conditions * 0.5;
+      }
     }
   })
 
-  // Ajustar riesgo por edad
-  if (patient.edad) {
-    if (patient.edad > 70) {
-      riskScore += 1
-    } else if (patient.edad > 80) {
-      riskScore += 2
+  // Ajustar riesgo por edad (validación añadida)
+  if (patient.edad && Number.isFinite(patient.edad)) {
+    if (patient.edad > 80) {
+      riskScore += 2; // Mayor riesgo para > 80 años
+    } else if (patient.edad > 70) {
+      riskScore += 1; // Riesgo moderado para > 70 años
     }
   }
 
-  // Calcular ratio
-  return Math.max(0.1, benefitScore / Math.max(1, riskScore))
+  // Calcular ratio con validación
+  const ratio = benefitScore / Math.max(1, riskScore);
+
+  // Validación crítica: verificar que el resultado sea un número válido
+  if (!Number.isFinite(ratio) || Number.isNaN(ratio)) {
+    console.error('[calculateBenefitRiskRatio] Resultado inválido detectado', {
+      patient_id: patient.id,
+      benefitScore,
+      riskScore,
+      ratio
+    });
+    // Retornar ratio neutral en caso de error
+    return 1;
+  }
+
+  // Retornar ratio con límite mínimo de 0.1 (muy riesgoso)
+  return Math.max(0.1, ratio);
 }
